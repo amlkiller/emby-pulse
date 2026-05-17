@@ -3,10 +3,10 @@
 CSRF Protection Middleware
 """
 
-import secrets
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
+from app.core.jwt_token import verify_api_token
 
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
 
@@ -14,8 +14,9 @@ CSRF_EXEMPT_PATHS = {
     "/api/v1/webhook",
     "/api/telegram",
     "/api/bot",
-    "/api/auth/login",
-    "/api/auth/register",
+    "/api/login",
+    "/api/register",
+    "/api/requests/auth",
 }
 
 
@@ -35,19 +36,13 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         # 豁免有效的 API Token 请求
         auth_header = request.headers.get("Authorization", "")
         if auth_header.startswith("Bearer "):
-            token = auth_header.replace("Bearer ", "")
-            from app.core.jwt_token import verify_api_token
+            token = auth_header[7:]
             payload = verify_api_token(token)
             if payload:
                 return await call_next(request)
 
-        # 豁免已登录用户的 session 请求（SameSite cookie 已提供 CSRF 保护）
-        session = request.scope.get("session", {})
-        if session.get("user"):
-            return await call_next(request)
-
         # 未登录用户的非豁免 POST 请求 → 拒绝
         return JSONResponse(
             status_code=403,
-            content={"detail": "CSRF 验证失败：请先登录"}
+            content={"detail": "CSRF 验证失败"}
         )

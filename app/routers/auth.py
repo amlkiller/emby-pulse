@@ -16,6 +16,7 @@ import re
 import os
 from io import BytesIO
 from fastapi import APIRouter, Request, Depends
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from app.core.database import query_db, SYSTEM_DB_PATH
 from app.core.config import cfg
@@ -718,7 +719,6 @@ async def get_avatar(request: Request, user_id: int):
                 return Response(content=base64.b64decode(data), media_type=mime)
             else:
                 # 仅允许相对路径重定向，防止 Open Redirect
-                from fastapi.responses import RedirectResponse
                 if avatar.startswith('/') and not avatar.startswith('//'):
                     return RedirectResponse(avatar)
                 else:
@@ -755,7 +755,7 @@ async def update_avatar(request: Request, data: AvatarUpdate):
         return {"status": "success", "message": "头像更新成功"}
     except Exception as e:
         logging.error(f"[头像更新失败] {str(e)}")
-        return {"status": "error", "message": f"更新失败: {str(e)}"}
+        return {"status": "error", "message": safe_error_message(e, "更新失败")}
 
 
 # ==================== 权限管理 API ====================

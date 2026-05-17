@@ -81,7 +81,7 @@
     </div>
 </div>
 
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 // 加载状态
 async function refreshStatus() {
     try {

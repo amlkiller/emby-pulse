@@ -158,16 +158,34 @@ async def user_portal_app(scope, receive, send):
             "/manifest.json",
             "/sw.js",
             "/apple-touch-icon.png",
-            "/api/auth/login",
-            "/api/auth/register",
+            "/api/login",
+            "/api/register",
             "/api/auth/settings",
             "/api/auth/avatar",
-            "/api/media-requests",
-            "/api/messages",
-            "/api/wallpaper",
+            "/api/requests",
+            "/api/user/messages",
+            "/api/user/announcements",
+            "/api/user/my_series",
+            "/api/user/request_update",
+            "/api/user/points",
+            "/api/user/avatar",
+            "/api/user/password",
+            "/api/user/libraries",
             "/api/user/image",
+            "/api/announcements",
+            "/api/wallpaper",
+            "/api/proxy/",
+            "/api/library/",
             "/api/pro/status",
+            "/api/pro/activate",
             "/api/notifications",
+            "/api/pwa/",
+            "/api/live",
+            "/api/slot/",
+            "/api/scratch/",
+            "/api/wheel/",
+            "/api/guess/",
+            "/api/lottery/",
             "/invite",
         )
         # 明确禁止的敏感路径（即使前缀匹配也拦截）
@@ -182,6 +200,9 @@ async def user_portal_app(scope, receive, send):
             "/api/audit",
             "/api/tasks",
             "/api/db",
+            "/api/requests/refresh_cache",
+            "/api/requests/clear_cache",
+            "/api/requests/pending_notify",
         )
         if not scope["path"].startswith(allowed) or scope["path"].startswith(blocked):
             async def send_404():
@@ -347,10 +368,10 @@ if _cors_env:
 else:
     allowed_origins = []
     print("🔒 [安全] CORS 未配置跨域来源，已拒绝所有跨域请求（如需开放请设置 CORS_ORIGINS 环境变量）")
-app.add_middleware(CORSMiddleware, allow_origins=allowed_origins, allow_credentials=True, allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"], allow_headers=["Content-Type", "Authorization", "X-Requested-With", "X-Telegram-Bot-Api-Secret-Token"])
-
 from app.core.csrf_middleware import CSRFMiddleware
 app.add_middleware(CSRFMiddleware)
+
+app.add_middleware(CORSMiddleware, allow_origins=allowed_origins, allow_credentials=True, allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"], allow_headers=["Content-Type", "Authorization", "X-Requested-With", "X-Telegram-Bot-Api-Secret-Token"])
 
 # 🔥 禁用浏览器缓存中间件（解决手机端缓存问题）
 from starlette.middleware.base import BaseHTTPMiddleware

@@ -46,7 +46,7 @@
         </div>
     </div>
 </div>
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
     window.fallbackBackdrop = async function(imgEl, title) {
         if (!title || imgEl.getAttribute('data-fallback-done')) return;
         imgEl.setAttribute('data-fallback-done', 'true');
