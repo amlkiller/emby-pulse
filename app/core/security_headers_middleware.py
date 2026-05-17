@@ -53,4 +53,6 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "frame-ancestors 'self';"
         )
 
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+
         return response

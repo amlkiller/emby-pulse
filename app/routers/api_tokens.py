@@ -32,7 +32,12 @@ async def create_token(request: Request, data: CreateTokenRequest):
     user = request.session.get("user")
     if not user:
         raise HTTPException(status_code=401, detail="未登录")
-    
+
+    # 检查过期时间上限
+    MAX_TOKEN_EXPIRE_HOURS = 24 * 365  # 最大 1 年
+    if data.expires_hours and data.expires_hours > MAX_TOKEN_EXPIRE_HOURS:
+        raise HTTPException(status_code=400, detail=f"过期时间不能超过 {MAX_TOKEN_EXPIRE_HOURS // 24} 天")
+
     # 检查是否为管理员
     is_admin = user.get("is_admin", False)
     

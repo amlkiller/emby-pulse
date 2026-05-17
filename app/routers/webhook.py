@@ -136,14 +136,7 @@ async def emby_webhook(request: Request):
     # 🔒 安全：仅从 Header 获取 Token
     token = request.headers.get("X-Webhook-Token")
     if not token:
-        # 向后兼容：URL 参数方式已废弃，打印警告
-        query_token = request.query_params.get("token")
-        if query_token:
-            import logging
-            logging.getLogger("uvicorn").warning("[Webhook] ⚠️ 通过 URL 参数传递 Token 已废弃，请使用 X-Webhook-Token Header")
-            token = query_token
-        else:
-            raise HTTPException(status_code=401, detail="缺少 Webhook Token")
+        raise HTTPException(status_code=401, detail="缺少 Webhook Token，请使用 X-Webhook-Token Header")
 
     if token != cfg.get("webhook_token"):
         raise HTTPException(status_code=403, detail="Invalid Token")

@@ -30,8 +30,13 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             if path.startswith(exempt):
                 return await call_next(request)
 
-        if request.headers.get("Authorization"):
-            return await call_next(request)
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header.replace("Bearer ", "")
+            from app.core.jwt_token import verify_api_token
+            payload = verify_api_token(token)
+            if payload:
+                return await call_next(request)
 
         csrf_token = request.headers.get("X-CSRF-Token")
         session = request.scope.get("session", {})

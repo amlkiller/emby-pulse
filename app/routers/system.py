@@ -44,9 +44,9 @@ def api_diag_config(request: Request):
             "length": len(env_val) if env_val else 0
         }
         result["config_values"][config_key] = {
-            "value": config_val[:10] + "..." if len(config_val) > 10 else config_val,
             "length": len(config_val) if config_val else 0,
-            "is_empty": not bool(config_val)
+            "is_empty": not bool(config_val),
+            "preview": "****" if config_val else "(空)"
         }
         result["env_source"][config_key] = source
         
@@ -256,7 +256,13 @@ def api_get_settings(request: Request):
         result_data["webhook_token_masked"] = mask_sensitive(webhook_token)
     
     result_data["env_override_fields"] = env_override_fields
-    result_data["webhook_url"] = f"{cfg.get('emby_public_url', '') or cfg.get('emby_host', '')}/api/v1/webhook?token={webhook_token}"
+    webhook_source = cfg.get_env_source("webhook_token")
+    if webhook_source == "env":
+        result_data["webhook_url"] = "（Webhook Token 由环境变量管理，请在 Emby 中配置 Header）"
+    else:
+        result_data["webhook_url"] = f"{cfg.get('emby_public_url', '') or cfg.get('emby_host', '')}/api/v1/webhook"
+    result_data["webhook_header_name"] = "X-Webhook-Token"
+    result_data["webhook_token_available"] = bool(webhook_token and webhook_token != "embypulse")
     
     return {"status": "success", "data": result_data}
 
@@ -456,12 +462,19 @@ async def test_moviepilot(request: Request):
     data = await request.json()
     mp_url = data.get("mp_url", "").strip().rstrip('/')
     mp_token = data.get("mp_token", "").strip().strip("'\"")
-    
+
     # 🔒 如果前端发送的是脱敏值，从配置中读取真实值
     if not mp_token or "****" in mp_token:
         mp_token = cfg.get("moviepilot_token", "")
-    
+
     if not mp_url or not mp_token: return {"status": "error", "message": "请填写 MoviePilot 信息"}
+
+    # 🔒 SSRF 防护：验证 MoviePilot URL 不指向内网
+    from app.utils.url_validator import validate_url
+    mp_validation = validate_url(mp_url, allow_internal=False)
+    if not mp_validation["valid"]:
+        return {"status": "error", "message": f"MoviePilot 地址不合法: {mp_validation['error']}"}
+
     try:
         res = requests.get(f"{mp_url}/api/v1/site/", headers={"X-API-KEY": mp_token, "User-Agent": "Mozilla/5.0"}, timeout=8)
         if res.status_code == 200: return {"status": "success", "message": "🎉 MoviePilot 连通测试成功！"}
@@ -522,10 +535,27 @@ async def test_proxy(request: Request):
     data = await request.json()
     proxy_url = data.get("proxy_url", "").strip()
     if not proxy_url: return {"status": "error", "message": "请填写代理地址"}
-    
+
     # 验证代理格式
     if not proxy_url.startswith(('http://', 'https://', 'socks5://')):
         return {"status": "error", "message": "❌ 代理格式错误，需以 http:// 或 socks5:// 开头"}
+
+    # 🔒 SSRF 防护：检查代理地址是否指向内网
+    import ipaddress as _ipaddress
+    from urllib.parse import urlparse as _urlparse
+    try:
+        parsed = _urlparse(proxy_url)
+        host = parsed.hostname
+        if host:
+            try:
+                ip = _ipaddress.ip_address(host)
+                if ip.is_private or ip.is_loopback or ip.is_link_local:
+                    return {"status": "error", "message": "不允许使用内网代理地址"}
+            except ValueError:
+                if host.lower() in ('localhost', '127.0.0.1', '::1'):
+                    return {"status": "error", "message": "不允许使用内网代理地址"}
+    except Exception:
+        pass
     
     try:
         # 测试连接 Google（需要代理才能访问）

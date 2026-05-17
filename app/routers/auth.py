@@ -12,6 +12,8 @@ import secrets
 import base64
 import time
 import logging
+import re
+import os
 from io import BytesIO
 from fastapi import APIRouter, Request, Depends
 from pydantic import BaseModel
@@ -20,6 +22,19 @@ from app.core.config import cfg
 from app.core.security import verify_pro_status
 from app.core.security_utils import sanitize_html, safe_error_message
 import sqlite3
+
+
+def validate_password_strength(password: str) -> tuple:
+    """验证密码强度，返回 (is_valid, error_message)"""
+    if len(password) < 8:
+        return False, "密码至少需要 8 个字符"
+    if len(password) > 128:
+        return False, "密码不能超过 128 个字符"
+    if not re.search(r'[a-z]', password):
+        return False, "密码需要包含小写字母"
+    if not re.search(r'[A-Z0-9]', password):
+        return False, "密码需要包含大写字母或数字"
+    return True, ""
 
 logger = logging.getLogger("uvicorn")
 
@@ -154,6 +169,18 @@ def _cleanup_expired_locks():
     except Exception as e:
         logger.error(f"[登录锁定] 清理失败: {e}")
         return 0
+
+# 定期清理过期锁定记录（每 10 分钟）
+def _start_lock_cleanup():
+    import threading
+    def cleanup():
+        _cleanup_expired_locks()
+        timer = threading.Timer(600, cleanup)
+        timer.daemon = True
+        timer.start()
+    cleanup()
+
+_start_lock_cleanup()
 
 # ==================== 权限常量 ====================
 
@@ -478,9 +505,10 @@ async def create_local_user(request: Request, data: LocalUserCreate):
     if not username or len(username) < 3:
         return {"status": "error", "message": "用户名至少需要 3 个字符"}
 
-    # 验证密码
-    if len(data.password) < 6:
-        return {"status": "error", "message": "密码至少需要 6 个字符"}
+    # 验证密码强度
+    pw_valid, pw_error = validate_password_strength(data.password)
+    if not pw_valid:
+        return {"status": "error", "message": pw_error}
 
     # 验证角色
     if data.role not in ["admin", "sub_admin"]:
@@ -542,6 +570,8 @@ async def update_local_user(request: Request, user_id: int, data: LocalUserUpdat
         updates.append("is_enabled = ?")
         params.append(data.is_enabled)
     if data.role:
+        if data.role not in ["admin", "sub_admin"]:
+            return {"status": "error", "message": "无效的角色"}
         updates.append("role = ?")
         params.append(data.role)
     if data.permissions is not None:
@@ -586,9 +616,10 @@ async def change_local_user_password(request: Request, user_id: int, data: Passw
         if current_user_id != user_id:
             return {"status": "error", "message": "子账号只能修改自己的密码"}
 
-    # 验证密码长度
-    if len(data.new_password) < 6:
-        return {"status": "error", "message": "密码至少需要 6 个字符"}
+    # 验证密码强度
+    pw_valid, pw_error = validate_password_strength(data.new_password)
+    if not pw_valid:
+        return {"status": "error", "message": pw_error}
 
     # 检查用户是否存在
     user = query_db("SELECT id FROM local_users WHERE id = ?", (user_id,), one=True)
@@ -869,11 +900,12 @@ async def api_login(data: LoginModel, request: Request):
     password = data.password
     auth_type = data.auth_type
     
-    # 🔒 端口隔离检查：后台登录只能从管理端口访问
-    host = request.headers.get("host", "")
-    is_admin_port = ":10307" in host or host.endswith(":10307")
-    is_user_port = ":10308" in host or host.endswith(":10308")
-    
+    # 🔒 端口隔离检查：使用服务器实际端口判断，防止 Host 头伪造
+    _SERVER_PORT = int(os.getenv("PORT", "10307"))
+    _USER_PORT = int(os.getenv("REQUEST_PORT", "10308"))
+    server_port = request.url.port or _SERVER_PORT
+    is_user_port = server_port == _USER_PORT
+
     # 如果从用户社区端口访问，拒绝后台登录
     if is_user_port and auth_type != "local":
         return {"status": "error", "message": "请从管理端口(10307)登录后台"}

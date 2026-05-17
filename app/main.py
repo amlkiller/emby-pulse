@@ -254,6 +254,28 @@ async def lifespan(app: FastAPI):
             _refresh_community_cache()
     threading.Thread(target=_start_community_cache_refresh, daemon=True).start()
     
+    # 🔒 安全：启动时清理过期会话，并启动定时清理（每小时）
+    from app.core.session import cleanup_expired_sessions
+    try:
+        deleted = cleanup_expired_sessions()
+        if deleted > 0:
+            print(f"[Session] 已清理 {deleted} 个过期会话")
+    except Exception as e:
+        print(f"[Session] 清理失败: {e}")
+
+    def _session_cleanup_loop():
+        _logger = logging.getLogger("uvicorn")
+        while True:
+            try:
+                deleted = cleanup_expired_sessions()
+                if deleted > 0:
+                    _logger.info(f"[Session] 已清理 {deleted} 个过期会话")
+            except Exception as e:
+                _logger.error(f"[Session] 清理失败: {e}")
+            threading.Event().wait(3600)
+
+    threading.Thread(target=_session_cleanup_loop, daemon=True).start()
+
     # 🔥 拿掉 sleep，把面板一口气打印完，绝对整齐！
     print("\n" + "="*55)
     print("🚀 [系统启动] EmbyPulse 双引擎初始化成功！")
@@ -287,7 +309,7 @@ app = FastAPI(
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(DatabaseSessionMiddleware)
 app.add_middleware(RateLimitMiddleware)  # 🔒 速率限制
-allowed_origins = os.getenv("CORS_ORIGINS", "").split(",") if os.getenv("CORS_ORIGINS") else ["*"]
+allowed_origins = os.getenv("CORS_ORIGINS", "").split(",") if os.getenv("CORS_ORIGINS") else []
 app.add_middleware(CORSMiddleware, allow_origins=allowed_origins, allow_credentials=False, allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"], allow_headers=["Content-Type", "Authorization", "X-Requested-With", "X-Telegram-Bot-Api-Secret-Token"])
 
 from app.core.csrf_middleware import CSRFMiddleware
