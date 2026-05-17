@@ -1950,6 +1950,7 @@ def api_update_user_req_permission(data: UserReqPermissionModel, request: Reques
     """更新用户求片权限"""
     if not request.session.get("user"):
         return {"status": "error", "message": "未登录"}
+    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
 
     try:
         conn = sqlite3.connect(SYSTEM_DB_PATH)
@@ -1978,6 +1979,7 @@ def api_get_user_req_permission(user_id: str, request: Request):
     """获取用户求片权限"""
     if not request.session.get("user"):
         return {"status": "error", "message": "未登录"}
+    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
 
     try:
         conn = sqlite3.connect(SYSTEM_DB_PATH)
@@ -2037,6 +2039,7 @@ def api_create_tag(data: TagCreateModel, request: Request):
     """创建标签"""
     if not request.session.get("user"):
         return {"status": "error", "message": "未登录"}
+    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
 
     try:
         conn = sqlite3.connect(SYSTEM_DB_PATH)
@@ -2055,9 +2058,10 @@ def api_create_tag(data: TagCreateModel, request: Request):
 @router.delete("/api/manage/tags/{tag_id}")
 def api_delete_tag(tag_id: int, request: Request):
     """删除标签（通过ID）"""
-    if not request.session.get("user"): 
+    if not request.session.get("user"):
         return {"status": "error", "message": "未登录"}
-    
+    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+
     try:
         conn = sqlite3.connect(SYSTEM_DB_PATH)
         c = conn.cursor()
@@ -2073,9 +2077,10 @@ def api_delete_tag(tag_id: int, request: Request):
 @router.delete("/api/manage/tags/name/{tag_name}")
 def api_delete_tag_by_name(tag_name: str, request: Request):
     """删除标签（通过名称）"""
-    if not request.session.get("user"): 
+    if not request.session.get("user"):
         return {"status": "error", "message": "未登录"}
-    
+    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+
     try:
         conn = sqlite3.connect(SYSTEM_DB_PATH)
         c = conn.cursor()

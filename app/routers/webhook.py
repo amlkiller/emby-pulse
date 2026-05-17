@@ -103,12 +103,11 @@ def intercept_illegal_client(data: dict):
         blacklist = [r['app_name'].lower() for r in blacklist_rows]
         if client_lower in blacklist:
             # 🔥 检查是否为白名单用户
-            if user_id:
-                whitelist_rows = query_db("SELECT user_id FROM client_whitelist")
-                whitelist_user_ids = set(r['user_id'] for r in whitelist_rows) if whitelist_rows else set()
-                if user_id in whitelist_user_ids:
-                    logger.info(f"[白名单跳过] 用户 {user.get('Name', user_id)} 在白名单中，允许使用 {client}")
-                    return False  # 白名单用户不拦截
+            whitelist_rows = query_db("SELECT user_id FROM client_whitelist")
+            whitelist_user_ids = set(r['user_id'] for r in whitelist_rows) if whitelist_rows else set()
+            if user_id and user_id in whitelist_user_ids:
+                logger.info(f"[白名单跳过] 用户 {user.get('Name', user_id)} 在白名单中，允许使用 {client}")
+                return False  # 白名单用户不拦截
             if session_id:
                 msg_cmd = {
                     "Name": "DisplayMessage",

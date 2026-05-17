@@ -387,7 +387,6 @@ def api_update_settings(data: SettingsModel, request: Request):
     cfg["welcome_message"] = data.welcome_message
     cfg["client_download_url"] = data.client_download_url
     cfg["moviepilot_url"] = data.moviepilot_url
-    cfg["moviepilot_token"] = data.moviepilot_token
     cfg["pulse_url"] = data.pulse_url
     cfg["user_portal_url"] = getattr(data, "user_portal_url", "")
     cfg["register_redirect_to_community"] = getattr(data, "register_redirect_to_community", "false")
@@ -396,9 +395,7 @@ def api_update_settings(data: SettingsModel, request: Request):
     cfg["notify_item_deleted"] = getattr(data, "notify_item_deleted", False)
     cfg["weather_greeting"] = getattr(data, "weather_greeting", "")
     cfg["weather_source"] = getattr(data, "weather_source", "wttr")
-    cfg["weather_qweather_key"] = getattr(data, "weather_qweather_key", "")
     cfg["weather_qweather_host"] = getattr(data, "weather_qweather_host", "")
-    cfg["weather_amap_key"] = getattr(data, "weather_amap_key", "")
     
     save_config()
     
