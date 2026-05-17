@@ -15,6 +15,7 @@ from typing import List, Optional
 from app.plugins.base import PluginBase
 from app.core.config import cfg
 from app.core.media_adapter import media_api
+from app.routers.auth import is_admin_user
 
 logger = logging.getLogger("uvicorn")
 
@@ -106,6 +107,8 @@ class LibraryCoverPlugin(PluginBase):
             """上传单张封面图片"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             
             try:
                 # 读取文件内容
@@ -154,6 +157,8 @@ class LibraryCoverPlugin(PluginBase):
             """批量上传封面图片"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             
             results = []
             for file in files:

@@ -7,7 +7,7 @@ import json
 import threading
 import logging
 from datetime import datetime
-from fastapi import APIRouter
+from fastapi import APIRouter, Request, HTTPException, Depends
 from app.core.database import SYSTEM_DB_PATH
 
 logger = logging.getLogger("uvicorn")
@@ -34,7 +34,11 @@ class PluginBase:
         return perm in self.permissions
 
     def __init__(self):
-        self.router = APIRouter(prefix=f"/api/plugins/{self.id}", tags=[f"Plugin: {self.name}"])
+        self.router = APIRouter(
+            prefix=f"/api/plugins/{self.id}",
+            tags=[f"Plugin: {self.name}"],
+            dependencies=[Depends(self._enabled_guard_dependency)],
+        )
         self._enabled = False
         self._init_logs_table()
         # 初始化时加载配置到缓存
@@ -89,6 +93,11 @@ class PluginBase:
     def on_disable(self):
         """子类可覆盖：禁用时的清理逻辑"""
         pass
+
+    async def _enabled_guard_dependency(self):
+        """FastAPI 依赖：禁用的插件路由返回 404"""
+        if not self._enabled:
+            raise HTTPException(status_code=404, detail="插件未启用")
 
     def get_config_schema(self):
         """子类可覆盖：返回配置项定义列表"""

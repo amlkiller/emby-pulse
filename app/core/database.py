@@ -828,12 +828,23 @@ def _interpolate_sql(query: str, args) -> str:
         elif arg is None: val = "NULL"
         else:
             s = str(arg)
+            # 转义反斜杠（必须最先处理）
             s = s.replace('\\', '\\\\')
+            # 转义单引号
             s = s.replace("'", "''")
+            # 移除 NULL 字节（所有变体）
             s = s.replace('\x00', '')
+            s = s.replace('�', '')
+            # 转义控制字符
             s = s.replace('\n', '\\n')
             s = s.replace('\r', '\\r')
+            s = s.replace('\t', '\\t')
             s = s.replace('\x1a', '\\Z')
+            # 移除 SQL 注释序列
+            s = s.replace('/*', '')
+            s = s.replace('*/', '')
+            # 移除反引号（防止标识符注入）
+            s = s.replace('`', '')
             val = f"'{s}'"
         res += val + parts[i+1]
     return res
