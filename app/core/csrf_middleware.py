@@ -41,8 +41,13 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             if payload:
                 return await call_next(request)
 
+        # 豁免已登录用户的 session 请求（SameSite cookie 已提供 CSRF 保护）
+        session = request.scope.get("session", {})
+        if session.get("user"):
+            return await call_next(request)
+
         # 未登录用户的非豁免 POST 请求 → 拒绝
         return JSONResponse(
             status_code=403,
-            content={"detail": "CSRF 验证失败"}
+            content={"detail": "CSRF 验证失败：请先登录"}
         )

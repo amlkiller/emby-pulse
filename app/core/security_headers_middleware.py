@@ -57,8 +57,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # CSP with nonce-based script execution (no 'unsafe-inline')
         response.headers["Content-Security-Policy"] = (
             f"default-src 'self'; "
-            f"script-src 'self' 'nonce-{nonce}' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
-            f"style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com; "
+            f"script-src 'self' 'nonce-{nonce}' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://cdn.quilljs.com https://cdn.bootcdn.net https://html2canvas.hertzen.com; "
+            f"style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com https://cdn.quilljs.com; "
             f"img-src 'self' data: blob: https:; "
             f"font-src 'self' data: https://fonts.gstatic.com; "
             f"connect-src 'self'; "
