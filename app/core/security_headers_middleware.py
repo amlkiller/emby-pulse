@@ -54,10 +54,14 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "usb=()"
         )
 
-        # CSP with nonce-based script execution (no 'unsafe-inline')
+        # CSP policy
+        # Note: 'unsafe-inline' is required for the 1000+ inline event handlers (onclick, onchange, etc.)
+        # across all templates. The nonce is kept on <script> tags for future migration to addEventListener.
+        # 'unsafe-hashes' was considered but rejected: each unique handler content produces a different
+        # SHA-256 hash, so 897+ hashes would be needed (~48KB header), exceeding practical HTTP header limits.
         response.headers["Content-Security-Policy"] = (
             f"default-src 'self'; "
-            f"script-src 'self' 'nonce-{nonce}' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://cdn.quilljs.com https://cdn.bootcdn.net https://html2canvas.hertzen.com; "
+            f"script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://cdn.quilljs.com https://cdn.bootcdn.net https://html2canvas.hertzen.com; "
             f"style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com https://cdn.quilljs.com; "
             f"img-src 'self' data: blob: https:; "
             f"font-src 'self' data: https://fonts.gstatic.com; "
