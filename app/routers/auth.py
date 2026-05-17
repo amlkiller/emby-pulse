@@ -340,6 +340,8 @@ def ensure_local_users_table():
             c.execute("ALTER TABLE local_users ADD COLUMN totp_secret TEXT DEFAULT ''")  # TOTP 密钥
         if 'totp_enabled' not in columns:
             c.execute("ALTER TABLE local_users ADD COLUMN totp_enabled INTEGER DEFAULT 0")  # 是否启用 TOTP
+        if 'totp_pending_secret' not in columns:
+            c.execute("ALTER TABLE local_users ADD COLUMN totp_pending_secret TEXT DEFAULT ''")  # TOTP 待验证密钥
         conn.commit()
         conn.close()
     except Exception as e:
@@ -1172,8 +1174,8 @@ async def totp_setup(request: Request):
     img.save(buffer, format="PNG")
     img_base64 = base64.b64encode(buffer.getvalue()).decode()
     
-    # 临时保存 secret（用户验证成功后才正式启用）
-    query_db("UPDATE local_users SET totp_secret = ? WHERE id = ?", (secret, user_id))
+    # 保存到待验证字段（不覆盖已启用的密钥）
+    query_db("UPDATE local_users SET totp_pending_secret = ? WHERE id = ?", (secret, user_id))
     
     return {
         "status": "success",
@@ -1202,13 +1204,14 @@ async def totp_verify(request: Request, data: TOTPVerifyModel):
     
     user_id = user.get("id")
     
-    # 获取用户当前的 TOTP secret
-    row = query_db("SELECT totp_secret FROM local_users WHERE id = ?", (user_id,), one=True)
-    if not row or not row['totp_secret']:
+    # 获取用户当前的 TOTP secret（优先使用待验证密钥）
+    row = query_db("SELECT totp_pending_secret, totp_secret FROM local_users WHERE id = ?", (user_id,), one=True)
+    secret = (row['totp_pending_secret'] or row['totp_secret']) if row else ''
+    if not secret:
         return {"status": "error", "message": "请先生成验证器密钥"}
-    
+
     # 验证验证码
-    totp = pyotp.TOTP(row['totp_secret'])
+    totp = pyotp.TOTP(secret)
     if totp.verify(data.code, valid_window=1):
         return {"status": "success", "message": "验证成功"}
     else:
@@ -1236,10 +1239,11 @@ async def totp_enable(request: Request, data: TOTPEnableModel):
         return {"status": "error", "message": "验证码错误或已过期"}
     
     # 启用 TOTP
-    query_db(
-        "UPDATE local_users SET totp_secret = ?, totp_enabled = 1 WHERE id = ?",
-        (data.secret, user_id)
-    )
+    pending = query_db("SELECT totp_pending_secret FROM local_users WHERE id = ?", (user_id,), one=True)
+    if not pending or not pending['totp_pending_secret']:
+        return {"status": "error", "message": "请先调用 TOTP setup 生成密钥"}
+    query_db("UPDATE local_users SET totp_secret = ?, totp_enabled = 1, totp_pending_secret = '' WHERE id = ?",
+             (pending['totp_pending_secret'], user_id))
     
     return {"status": "success", "message": "两步验证已启用"}
 
@@ -1270,7 +1274,7 @@ async def totp_disable(request: Request, data: TOTPVerifyModel):
         return {"status": "error", "message": "验证码错误或已过期"}
     
     # 禁用 TOTP
-    query_db("UPDATE local_users SET totp_secret = '', totp_enabled = 0 WHERE id = ?", (user_id,))
+    query_db("UPDATE local_users SET totp_secret = '', totp_pending_secret = '', totp_enabled = 0 WHERE id = ?", (user_id,))
     
     return {"status": "success", "message": "两步验证已禁用"}
 

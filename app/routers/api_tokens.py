@@ -6,11 +6,16 @@ from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 import sqlite3
+import hashlib
 from app.core.database import SYSTEM_DB_PATH
 from app.core.jwt_token import create_api_token, verify_api_token
 from app.core.config import cfg
 
 router = APIRouter()
+
+
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
 
 
 class CreateTokenRequest(BaseModel):
@@ -58,12 +63,13 @@ async def create_token(request: Request, data: CreateTokenRequest):
         expires_at = datetime.utcnow() + timedelta(hours=data.expires_hours)
         created_at = datetime.utcnow()
         
+        token_hash = _hash_token(token)
         c.execute("""
             INSERT INTO api_tokens (user_id, token, name, expires_at, created_at)
             VALUES (?, ?, ?, ?, ?)
         """, (
             user.get("id"),
-            token,
+            token_hash,
             data.name,
             expires_at.isoformat(),
             created_at.isoformat()
@@ -163,11 +169,12 @@ async def verify_token(request: Request):
     try:
         conn = sqlite3.connect(SYSTEM_DB_PATH)
         c = conn.cursor()
+        token_hash = _hash_token(token)
         c.execute("""
-            UPDATE api_tokens 
+            UPDATE api_tokens
             SET last_used_at = datetime('now')
             WHERE token = ?
-        """, (token,))
+        """, (token_hash,))
         conn.commit()
         conn.close()
     except:

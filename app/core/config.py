@@ -363,7 +363,7 @@ class ConfigManager:
         return self.get_env_source(key) == "env"
 
 cfg = ConfigManager()
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory="templates", autoescape=True)
 
 # 🔒 安全：SECRET_KEY 每次启动随机生成（存储在内存中）
 import secrets

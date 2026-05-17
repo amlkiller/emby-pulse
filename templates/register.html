@@ -6,6 +6,7 @@
     <title>加入媒体库</title>
     <link rel="icon" type="image/png" href="/static/img/favicon.png">
     <script nonce="{{ request.state.csp_nonce }}" src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;500;700&display=swap');
@@ -235,13 +236,19 @@
             // 创建 toast 元素
             const toast = document.createElement('div');
             toast.className = `${colors[type] || 'bg-gray-500'} text-white px-4 py-3 rounded-xl shadow-lg flex items-center gap-3 animate-slide-in max-w-sm`;
-            toast.innerHTML = `
-                <i class="fa-solid ${icons[type] || 'fa-info-circle'} text-lg"></i>
-                <div>
-                    <div class="font-bold text-sm">${title}</div>
-                    <div class="text-xs opacity-90">${message}</div>
-                </div>
-            `;
+            const _icon = document.createElement('i');
+_icon.className = `fa-solid ${icons[type] || 'fa-info-circle'} text-lg`;
+const _textDiv = document.createElement('div');
+const _titleDiv = document.createElement('div');
+_titleDiv.className = 'font-bold text-sm';
+_titleDiv.textContent = title;
+const _msgDiv = document.createElement('div');
+_msgDiv.className = 'text-xs opacity-90';
+_msgDiv.textContent = message;
+_textDiv.appendChild(_titleDiv);
+_textDiv.appendChild(_msgDiv);
+toast.appendChild(_icon);
+toast.appendChild(_textDiv);
             
             container.appendChild(toast);
             
@@ -383,7 +390,9 @@
                     
                     if (json.welcome_message) {
                         // Quill 编辑器保存的是 HTML，直接显示
-                        document.getElementById('res-msg').innerHTML = json.welcome_message;
+                        document.getElementById('res-msg').innerHTML = typeof DOMPurify !== 'undefined'
+        ? DOMPurify.sanitize(json.welcome_message, {ALLOWED_TAGS: ['p','br','strong','em','u','s','a','ul','ol','li','h1','h2','h3','img','span','div'], ALLOWED_ATTR: ['href','src','alt','title','target','style','class']})
+        : json.welcome_message;
                         document.getElementById('welcome-msg-box').classList.remove('hidden');
                     }
 

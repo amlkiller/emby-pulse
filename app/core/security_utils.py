@@ -127,87 +127,38 @@ def validate_redirect_url(url: str) -> str:
 
 
 def sanitize_rich_html(text: str, max_length: int = 50000) -> str:
-    """
-    Sanitize rich text HTML from Quill editor
-    Allows safe HTML tags while removing dangerous content
-    
-    Args:
-        text: Input HTML text to sanitize
-        max_length: Maximum allowed length (default 50000)
-    
-    Returns:
-        Sanitized HTML safe for storage and display
-    """
     if not text:
         return ""
-    
     text = str(text)
-    
-    # Truncate to max length
     if len(text) > max_length:
         text = text[:max_length]
-    
-    # First decode any HTML entities to get raw HTML
-    text = html.unescape(text)
-    
-    # Remove dangerous patterns
-    dangerous_patterns = [
-        r'javascript\s*:',
-        r'vbscript\s*:',
-        r'data\s*:\s*text/html',
-    ]
-    
-    for pattern in dangerous_patterns:
-        text = re.sub(pattern, '', text, flags=re.IGNORECASE)
-    
-    # Remove all event handlers (onclick, onload, onerror, etc.)
-    text = re.sub(r'\s+on\w+\s*=\s*["\'][^"\']*["\']', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'\s+on\w+\s*=\s*[^\s>]+', '', text, flags=re.IGNORECASE)
-    
-    # Remove script and style tags completely
-    text = re.sub(r'<script[^>]*>.*?</script>', '', text, flags=re.IGNORECASE | re.DOTALL)
-    text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.IGNORECASE | re.DOTALL)
-    text = re.sub(r'<script[^>]*/?>', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'<style[^>]*/?>', '', text, flags=re.IGNORECASE)
-    
-    # Remove iframe, embed, object tags
-    text = re.sub(r'<iframe[^>]*>.*?</iframe>', '', text, flags=re.IGNORECASE | re.DOTALL)
-    text = re.sub(r'<embed[^>]*/?>', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'<object[^>]*>.*?</object>', '', text, flags=re.IGNORECASE | re.DOTALL)
-    
-    # Remove form tags
-    text = re.sub(r'<form[^>]*>.*?</form>', '', text, flags=re.IGNORECASE | re.DOTALL)
-    text = re.sub(r'<input[^>]*/?>', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'<button[^>]*>.*?</button>', '', text, flags=re.IGNORECASE | re.DOTALL)
-    
-    # Clean href attributes - only allow safe protocols
-    def clean_href(match):
-        href = match.group(1)
-        # Check for dangerous protocols
-        href_lower = href.lower().strip()
-        if href_lower.startswith(('javascript:', 'vbscript:', 'data:')):
-            return 'href="#"'
-        return f'href="{href}"'
-    
-    text = re.sub(r'href\s*=\s*["\']([^"\']*)["\']', clean_href, text, flags=re.IGNORECASE)
-    
-    # Clean src attributes - only allow safe protocols
-    def clean_src(match):
-        src = match.group(1)
-        src_lower = src.lower().strip()
-        if src_lower.startswith(('javascript:', 'vbscript:')):
-            return 'src="#"'
-        return f'src="{src}"'
-    
-    text = re.sub(r'src\s*=\s*["\']([^"\']*)["\']', clean_src, text, flags=re.IGNORECASE)
-    
-    # Fix unclosed tags
     try:
-        text = fix_unclosed_html_tags(text)
-    except Exception:
-        pass  # If fixing fails, return as is
-    
-    return text
+        import bleach
+        allowed_tags = [
+            'p', 'br', 'strong', 'em', 'u', 's', 'a', 'ul', 'ol', 'li',
+            'blockquote', 'code', 'pre', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+            'img', 'span', 'div', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
+            'hr', 'sub', 'sup', 'mark',
+        ]
+        allowed_attrs = {
+            'a': ['href', 'title', 'target'],
+            'img': ['src', 'alt', 'width', 'height'],
+            'span': ['style'],
+            'div': ['style'],
+            'td': ['colspan', 'rowspan'],
+            'th': ['colspan', 'rowspan'],
+        }
+        return bleach.clean(
+            text,
+            tags=allowed_tags,
+            attributes=allowed_attrs,
+            protocols=['http', 'https', 'mailto'],
+            strip=True,
+        )
+    except ImportError:
+        # bleach 未安装时降级到基本转义
+        import html as _html
+        return _html.escape(text)
 
 
 def fix_unclosed_html_tags(text: str) -> str:

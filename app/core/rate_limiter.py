@@ -40,6 +40,12 @@ RATE_LIMITS = {
     "/api/auth/totp/setup": {"limit": 3, "window": 300},
     # 邀请码生成：每分钟最多 10 次
     "/api/manage/user/invite": {"limit": 10, "window": 60},
+    "/api/user/points/checkin": {"limit": 3, "window": 60},
+    "/api/user/points/buy": {"limit": 10, "window": 60},
+    "/api/user/renew": {"limit": 5, "window": 60},
+    "/api/user/points/transfer": {"limit": 5, "window": 60},
+    "/api/requests/auth": {"limit": 10, "window": 60},
+    "/api/register": {"limit": 5, "window": 300},
 }
 
 # 白名单路径（不受速率限制）

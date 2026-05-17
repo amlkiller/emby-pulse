@@ -10,7 +10,7 @@ import json
 import os
 
 router = APIRouter()
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory="templates", autoescape=True)
 APP_VERSION = os.environ.get("APP_VERSION", "1.3.0.Dev")
 
 def ensure_notify_rules_table():

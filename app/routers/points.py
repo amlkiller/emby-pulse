@@ -452,8 +452,9 @@ def user_checkin(request: Request):
     if not user: return {"status": "error", "message": "未登录"}
     try:
         conn = sqlite3.connect(SYSTEM_DB_PATH); c = conn.cursor()
+        conn.execute("BEGIN IMMEDIATE")
         if c.execute("SELECT 1 FROM point_logs WHERE user_id = ? AND action LIKE '每日签到%' AND date(created_at, 'localtime') = date('now', 'localtime')", (user['Id'],)).fetchone():
-            conn.close(); return {"status": "error", "message": "今天已经签到过了，明天再来吧！"}
+            conn.rollback(); conn.close(); return {"status": "error", "message": "今天已经签到过了，明天再来吧！"}
         
         config = {r[0]: r[1] for r in c.execute("SELECT key, value FROM point_config").fetchall()}
         reward = random.randint(int(config.get('checkin_min', 10)), int(config.get('checkin_max', 30)))
@@ -738,16 +739,17 @@ def user_use_renew_code(data: RenewCodeModel, request: Request):
     try:
         conn = sqlite3.connect(SYSTEM_DB_PATH)
         c = conn.cursor()
+        conn.execute("BEGIN IMMEDIATE")
         row = c.execute("SELECT days, used_count, max_uses, type FROM invitations WHERE code = ? AND status = 0", (code,)).fetchone()
         if not row:
-            conn.close()
+            conn.rollback(); conn.close()
             return {"status": "error", "message": "续费码无效或已被使用"}
         days, used, max_uses, code_type = row
         if code_type != "renew":
-            conn.close()
+            conn.rollback(); conn.close()
             return {"status": "error", "message": "这不是续费码，请使用正确的续费码"}
         if used >= max_uses:
-            conn.close()
+            conn.rollback(); conn.close()
             return {"status": "error", "message": "该续费码已达使用上限"}
 
         # 计算新到期时间

@@ -376,9 +376,12 @@ async def api_db_migrate(
         }
     
     # 解析要迁移的表
+    from app.core.db_schemas import SYSTEM_TABLES
     tables_list = None
     if tables:
-        tables_list = [t.strip() for t in tables.split(",") if t.strip()]
+        tables_list = [t.strip() for t in tables.split(",") if t.strip() and t.strip() in SYSTEM_TABLES]
+        if not tables_list:
+            return {"success": False, "error": "指定的表名均不在系统表列表中"}
     
     # 先备份目标数据库
     backup_result = None

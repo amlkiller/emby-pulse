@@ -212,8 +212,9 @@ def api_get_audit_logs(request: Request, page: int = 1, limit: int = 20,
 @router.get("/api/manage/audit_logs/stats")
 def api_get_audit_stats(request: Request, days: int = 7):
     """获取审计日志统计"""
-    if not request.session.get("user"):
-        return {"status": "error", "message": "未登录"}
+    if not is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限"}
+    days = max(1, min(days, 365))
 
     try:
         conn = sqlite3.connect(SYSTEM_DB_PATH)
@@ -256,8 +257,8 @@ def api_get_audit_stats(request: Request, days: int = 7):
 @router.delete("/api/manage/audit_logs/{log_id}")
 def api_delete_audit_log(log_id: int, request: Request):
     """删除单条审计日志"""
-    if not request.session.get("user"):
-        return {"status": "error", "message": "未登录"}
+    if not is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限"}
 
     try:
         conn = sqlite3.connect(SYSTEM_DB_PATH)
@@ -507,7 +508,7 @@ def check_expired_users():
 
 @router.get("/api/manage/libraries")
 def api_get_libraries(request: Request):
-    if not request.session.get("user"): return {"status": "error"}
+    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
         res = media_api.get("/Library/VirtualFolders", timeout=5)
         if res.status_code == 200:
@@ -613,7 +614,7 @@ def api_manage_users(request: Request, refresh: bool = False):
 
 @router.get("/api/manage/user/{user_id}")
 def api_get_single_user(user_id: str, request: Request):
-    if not request.session.get("user"): return {"status": "error"}
+    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
         res = media_api.get(f"/Users/{user_id}", timeout=5)
         if res.status_code == 200:

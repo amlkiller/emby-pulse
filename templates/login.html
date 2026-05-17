@@ -383,7 +383,10 @@
                 
                 const toast = document.createElement('div');
                 toast.className = 'fixed top-10 left-1/2 transform -translate-x-1/2 bg-white/90 dark:bg-[#2C2C2E]/90 backdrop-blur-xl text-red-500 border border-red-200 dark:border-red-500/20 px-6 py-3.5 rounded-full shadow-2xl z-50 text-[13px] font-bold flex items-center animate-bounce whitespace-nowrap';
-                toast.innerHTML = `<i class="fa-solid fa-triangle-exclamation mr-2.5 text-lg"></i> ${err.message}`;
+                const _icon = document.createElement('i');
+_icon.className = 'fa-solid fa-triangle-exclamation mr-2.5 text-lg';
+toast.appendChild(_icon);
+toast.appendChild(document.createTextNode(' ' + err.message));
                 document.body.appendChild(toast);
                 setTimeout(() => toast.remove(), 3000);
             }

@@ -41,9 +41,17 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             if payload:
                 return await call_next(request)
 
-        # 豁免已登录用户的 session 请求（SameSite cookie 已提供 CSRF 保护）
+        # 已登录用户的 session 请求 — 验证 Origin/Referer 防 CSRF
         session = request.scope.get("session", {})
         if session.get("user"):
+            if request.method in ("POST", "PUT", "DELETE", "PATCH"):
+                origin = request.headers.get("origin", "")
+                referer = request.headers.get("referer", "")
+                host = str(request.base_url).rstrip("/")
+                if origin and not origin.startswith(host):
+                    return JSONResponse(status_code=403, content={"detail": "CSRF 验证失败：Origin 不匹配"})
+                if not origin and referer and not referer.startswith(host):
+                    return JSONResponse(status_code=403, content={"detail": "CSRF 验证失败：Referer 不匹配"})
             return await call_next(request)
 
         # 未登录用户的非豁免 POST 请求 → 拒绝

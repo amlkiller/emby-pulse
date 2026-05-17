@@ -440,6 +440,12 @@ def migrate_tables(
     
     # 要迁移的表
     tables_to_migrate = tables if tables else SYSTEM_TABLES
+
+    if tables:
+        from app.core.db_schemas import SYSTEM_TABLES as _STS
+        invalid = [t for t in tables if t not in _STS]
+        if invalid:
+            raise ValueError(f"非法表名: {invalid}")
     
     try:
         old_conn = sqlite3.connect(DB_PATH)

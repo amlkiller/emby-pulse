@@ -18,7 +18,7 @@ import logging
 import random
 
 logger = logging.getLogger("uvicorn")
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory="templates", autoescape=True)
 router = APIRouter()
 
 APP_VERSION = os.environ.get("APP_VERSION", "1.3.0.Dev")
@@ -114,7 +114,8 @@ def check_page_permission(request: Request, path: str):
     perm_id = PAGE_PERMISSION_MAP.get(path)
     if perm_id and not check_permission(request, perm_id):
         # 没有权限，返回错误提示页面
-        user_name = user.get("name", "用户")
+        import html as _html
+        user_name = _html.escape(str(user.get("name", "用户")))
         return HTMLResponse(
             content=f'''<!DOCTYPE html>
 <html lang="zh-CN">
