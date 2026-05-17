@@ -2,11 +2,15 @@
 速率限制中间件 - 防止暴力破解和滥用
 只限制敏感接口，不影响正常使用
 """
+import os
 import time
 from collections import defaultdict
 from threading import Lock
 from fastapi import Request, HTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
+
+# 可信代理列表（从环境变量读取，逗号分隔）
+TRUSTED_PROXIES = set(os.getenv("TRUSTED_PROXIES", "127.0.0.1").split(","))
 
 # 速率限制配置
 RATE_LIMITS = {
@@ -124,21 +128,18 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return response
     
     def _get_client_ip(self, request: Request) -> str:
-        """获取客户端真实 IP"""
-        # 检查代理头
-        forwarded = request.headers.get("X-Forwarded-For")
-        if forwarded:
-            return forwarded.split(",")[0].strip()
-        
-        real_ip = request.headers.get("X-Real-IP")
-        if real_ip:
-            return real_ip.strip()
-        
-        # 直接连接
-        if request.client:
-            return request.client.host
-        
-        return "unknown"
+        """获取客户端真实 IP，仅从可信代理获取"""
+        client_ip = request.client.host if request.client else "unknown"
+
+        if client_ip in TRUSTED_PROXIES:
+            forwarded = request.headers.get("X-Forwarded-For")
+            if forwarded:
+                return forwarded.split(",")[0].strip()
+            real_ip = request.headers.get("X-Real-IP")
+            if real_ip:
+                return real_ip.strip()
+
+        return client_ip
 
 
 # 定期清理过期记录

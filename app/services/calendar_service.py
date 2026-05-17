@@ -280,7 +280,7 @@ class CalendarService:
             sys_res = requests.get(f"{host}/emby/System/Info?api_key={key}", timeout=5)
             if sys_res.status_code == 200:
                 server_id = sys_res.json().get("Id", "")
-        except: pass
+        except Exception: pass
 
         result = {
             "days": final_days, 
@@ -451,7 +451,7 @@ class CalendarService:
                         # 3. 物理路径校验：必须有文件路径或媒体流信息
                         if item.get("Path") or item.get("MediaSources"):
                             return True
-        except: pass
+        except Exception: pass
         return False
 
     def _clean_deleted_series_cache(self):

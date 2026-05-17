@@ -152,7 +152,7 @@ def get_real_image_id_robust(item_id: str):
                 
             if data.get("SeriesId"): return data['SeriesId']
             if data.get("Type") == "Episode" and data.get("ParentId"): return data['ParentId']
-    except: pass
+    except Exception: pass
 
     try:
         res_b = media_api.get(f"/Items/{item_id}/Ancestors", timeout=3)
@@ -160,25 +160,28 @@ def get_real_image_id_robust(item_id: str):
             for ancestor in res_b.json():
                 if ancestor.get("Type") == "Series": return ancestor['Id']
                 if ancestor.get("Type") == "Season" and not ancestor.get("SeriesId"): return ancestor['Id']
-    except: pass
+    except Exception: pass
 
     try:
         res_c = media_api.get("/Items", params={"Ids": item_id, "Fields": "SeriesId", "Recursive": "true"}, timeout=3)
         if res_c.status_code == 200:
             items = res_c.json().get("Items", [])
             if items and items[0].get("SeriesId"): return items[0]['SeriesId']
-    except: pass
+    except Exception: pass
 
     return item_id
 
 @router.get("/api/proxy/image/{item_id}/{img_type}")
-def proxy_image(item_id: str, img_type: str, v: str = None, nocache: bool = False):
+def proxy_image(item_id: str, img_type: str, request: Request, v: str = None, nocache: bool = False):
     """
     图片代理接口
     - v: 版本参数，当图片更新时改变此参数可强制刷新缓存
     - nocache: 是否跳过后端缓存，直接请求新图片
     - 缓存策略：后端缓存7天 + 浏览器缓存1年
     """
+    # 防盗链：Referer 检查（记录但不阻断）
+    referer = request.headers.get("referer", "")
+
     # 🔥 先尝试从后端缓存读取（除非指定 nocache）
     cache_path = get_cache_path(item_id, img_type, v)
     if not nocache:

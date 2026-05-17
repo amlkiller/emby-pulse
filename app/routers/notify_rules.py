@@ -39,7 +39,7 @@ async def get_emby_users(request: Request):
         res = requests.get(f"{host}/emby/Users?api_key={key}", timeout=5)
         if res.status_code == 200:
             return {"success": True, "data": [{"id": u["Id"], "name": u["Name"]} for u in res.json()]}
-    except: pass
+    except Exception: pass
     return {"success": False, "data": []}
 
 @router.get("/mutes")

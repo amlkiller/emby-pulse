@@ -258,7 +258,7 @@ def global_library_search(query: str, request: Request):
                     first_ep_res = media_api.get(f"/Shows/{item['Id']}/Episodes", params={"UserId": admin_id, "Limit": 1, "Fields": "MediaSources"}, timeout=3).json()
                     if first_ep_res.get("Items"):
                         info["badges"].extend(extract_media_badges(first_ep_res["Items"][0]))
-                except: pass
+                except Exception: pass
             
             results.append(info)
             

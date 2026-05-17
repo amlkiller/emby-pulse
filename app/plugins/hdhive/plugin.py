@@ -508,7 +508,7 @@ class HDHivePlugin(PluginBase):
                 me = requests.get(f"{HDHIVE_BASE}/me", headers=h, proxies=self._proxies(), timeout=10)
                 if me.status_code == 200:
                     user_info = me.json().get("data", {})
-            except: pass
+            except Exception: pass
 
             return {"status": "success", "data": {
                 "ping": ping_data.get("data", {}),
@@ -1207,7 +1207,7 @@ class HDHivePlugin(PluginBase):
                 # 发布到事件总线让115插件处理
                 bus.publish("bot.admin_message", full_link, chat_id, platform)
                 return
-        except: pass
+        except Exception: pass
 
         # 没有115插件，直接展示链接
         link_display = f"<code>{url}</code>"

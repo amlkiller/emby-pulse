@@ -151,12 +151,15 @@ async def user_portal_app(scope, receive, send):
             
         # 铁血隔离白名单：放行求片页面、邀请注册、静态资源、以及所有受密码保护的底层 API
         allowed = (
-            "/request", 
-            "/request_login", 
-            "/static", 
+            "/request",
+            "/request_login",
+            "/static",
             "/favicon.ico",
-            "/api",
-            "/invite"
+            "/api/auth/login",
+            "/api/auth/register",
+            "/api/media-requests",
+            "/api/messages",
+            "/invite",
         )
         if not scope["path"].startswith(allowed):
             async def send_404():
@@ -277,7 +280,10 @@ app = FastAPI(
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(DatabaseSessionMiddleware)
 app.add_middleware(RateLimitMiddleware)  # 🔒 速率限制
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"], allow_headers=["Content-Type", "Authorization", "X-Requested-With", "X-Telegram-Bot-Api-Secret-Token"])
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=False, allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"], allow_headers=["Content-Type", "Authorization", "X-Requested-With", "X-Telegram-Bot-Api-Secret-Token"])
+
+from app.core.csrf_middleware import CSRFMiddleware
+app.add_middleware(CSRFMiddleware)
 
 # 🔥 禁用浏览器缓存中间件（解决手机端缓存问题）
 from starlette.middleware.base import BaseHTTPMiddleware

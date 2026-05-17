@@ -432,14 +432,14 @@ def search_emby(keyword):
         url = f"{host}/emby/Items?api_key={key}&Recursive=true&SearchTerm={keyword}&IncludeItemTypes=Movie,Series&Limit=5"
         res = requests.get(url, timeout=5)
         if res.status_code == 200: return res.json().get("Items", [])
-    except: pass
+    except Exception: pass
     return []
 
 def send_tg_msg(chat_id, text):
     token = cfg.get("tg_bot_token"); proxy = cfg.get("proxy_url")
     proxies = {"http": proxy, "https": proxy} if proxy else None
     try: requests.post(f"https://api.telegram.org/bot{token}/sendMessage", json={"chat_id": chat_id,"text": text,"parse_mode": "HTML"}, proxies=proxies, timeout=10)
-    except: pass
+    except Exception: pass
 
 # ================= 🔥 企微 API 回调交互 (增强查错与防护版) =================
 def decrypt_wecom_data(encrypt_msg):
@@ -572,7 +572,7 @@ async def api_remove_user_blacklist(request: Request):
         conn.execute("DELETE FROM tg_user_blacklist WHERE tg_user_id = ?", (tg_id,))
         conn.commit()
         conn.close()
-    except: pass
+    except Exception: pass
     return {"status": "success"}
 
 

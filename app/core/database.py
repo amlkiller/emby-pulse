@@ -320,29 +320,29 @@ def _create_system_tables(c):
 
     # 风控字段
     try: c.execute("ALTER TABLE users_meta ADD COLUMN max_concurrent INTEGER")
-    except: pass
+    except Exception: pass
     try: c.execute("ALTER TABLE users_meta ADD COLUMN risk_level TEXT DEFAULT 'safe'")
-    except: pass
+    except Exception: pass
     try: c.execute("ALTER TABLE users_meta ADD COLUMN is_vip INTEGER DEFAULT 0")
-    except: pass
+    except Exception: pass
     try: c.execute("ALTER TABLE users_meta ADD COLUMN points INTEGER DEFAULT 0")
-    except: pass
+    except Exception: pass
     try: c.execute("ALTER TABLE users_meta ADD COLUMN block_routes TEXT DEFAULT ''")
-    except: pass
+    except Exception: pass
     try: c.execute("ALTER TABLE users_meta ADD COLUMN allow_routes TEXT DEFAULT ''")
-    except: pass
+    except Exception: pass
     try: c.execute("ALTER TABLE users_meta ADD COLUMN remark TEXT DEFAULT ''")
-    except: pass
+    except Exception: pass
     try: c.execute("ALTER TABLE users_meta ADD COLUMN admin_disabled INTEGER DEFAULT 0")
-    except: pass
+    except Exception: pass
     # 🔥 求片权限字段
     try: c.execute("ALTER TABLE users_meta ADD COLUMN req_free INTEGER DEFAULT 0")  # 0=跟随全局, 1=免费, 2=付费
-    except: pass
+    except Exception: pass
     try: c.execute("ALTER TABLE users_meta ADD COLUMN req_free_count INTEGER DEFAULT -1")  # -1=无限次, >=0=剩余次数
-    except: pass
+    except Exception: pass
     # 🔥 用户标签字段
     try: c.execute("ALTER TABLE users_meta ADD COLUMN tags TEXT DEFAULT ''")  # 用户标签，逗号分隔
-    except: pass
+    except Exception: pass
 
     # 🔒 安全：登录失败锁定表（持久化，防止重启后丢失）
     c.execute('''CREATE TABLE IF NOT EXISTS login_failures (
@@ -355,11 +355,11 @@ def _create_system_tables(c):
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )''')
     try: c.execute("CREATE INDEX IF NOT EXISTS idx_login_failures_key ON login_failures(lock_key)")
-    except: pass
+    except Exception: pass
     try: c.execute("CREATE INDEX IF NOT EXISTS idx_login_failures_type ON login_failures(lock_type)")
-    except: pass
+    except Exception: pass
     try: c.execute("CREATE INDEX IF NOT EXISTS idx_login_failures_locked ON login_failures(locked_until)")
-    except: pass
+    except Exception: pass
 
     # 🔑 API Token 表（用于第三方应用调用）
     c.execute('''CREATE TABLE IF NOT EXISTS api_tokens (
@@ -373,19 +373,19 @@ def _create_system_tables(c):
         FOREIGN KEY (user_id) REFERENCES users_meta(user_id)
     )''')
     try: c.execute("CREATE INDEX IF NOT EXISTS idx_api_tokens_user ON api_tokens(user_id)")
-    except: pass
+    except Exception: pass
     try: c.execute("CREATE INDEX IF NOT EXISTS idx_api_tokens_token ON api_tokens(token)")
-    except: pass
+    except Exception: pass
 
     c.execute('''CREATE TABLE IF NOT EXISTS invitations (code TEXT PRIMARY KEY, days INTEGER, used_count INTEGER DEFAULT 0, max_uses INTEGER DEFAULT 1, created_at TEXT, used_at DATETIME, used_by TEXT, status INTEGER DEFAULT 0, template_user_id TEXT, type TEXT DEFAULT 'register', routes TEXT)''')
     try: c.execute("ALTER TABLE invitations ADD COLUMN template_user_id TEXT")
-    except: pass
+    except Exception: pass
     try: c.execute("ALTER TABLE invitations ADD COLUMN type TEXT DEFAULT 'register'")
-    except: pass
+    except Exception: pass
     try: c.execute("ALTER TABLE invitations ADD COLUMN routes TEXT")
-    except: pass
+    except Exception: pass
     try: c.execute("ALTER TABLE invitations ADD COLUMN route_mode TEXT DEFAULT 'block'")
-    except: pass
+    except Exception: pass
 
     c.execute('''CREATE TABLE IF NOT EXISTS sys_license (license_key TEXT, machine_id TEXT, pro_token TEXT, status TEXT DEFAULT 'free', expire_date DATETIME, last_checked DATETIME DEFAULT CURRENT_TIMESTAMP)''')
 
@@ -401,15 +401,15 @@ def _create_system_tables(c):
     c.execute('''CREATE TABLE IF NOT EXISTS risk_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, username TEXT, action TEXT, reason TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
     c.execute('''CREATE TABLE IF NOT EXISTS sys_notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT, title TEXT, message TEXT, is_read INTEGER DEFAULT 0, action_url TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
     try: c.execute("ALTER TABLE sys_notifications ADD COLUMN is_cleared INTEGER DEFAULT 0")
-    except: pass
+    except Exception: pass
     c.execute('''CREATE TABLE IF NOT EXISTS tg_user_bindings (tg_user_id TEXT PRIMARY KEY, tg_username TEXT DEFAULT '', emby_user_id TEXT, emby_username TEXT, init_password TEXT DEFAULT '', bound_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
     c.execute('''CREATE TABLE IF NOT EXISTS tg_user_blacklist (tg_user_id TEXT PRIMARY KEY, reason TEXT DEFAULT '', created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
     # 🔥 迁移：添加 tg_username 字段
     try: c.execute("ALTER TABLE tg_user_bindings ADD COLUMN tg_username TEXT DEFAULT ''")
-    except: pass
+    except Exception: pass
     # 🔥 迁移：添加 tg_display_name 字段（TG显示名称/中文名）
     try: c.execute("ALTER TABLE tg_user_bindings ADD COLUMN tg_display_name TEXT DEFAULT ''")
-    except: pass
+    except Exception: pass
     c.execute('''CREATE TABLE IF NOT EXISTS plugin_state (plugin_id TEXT PRIMARY KEY, enabled INTEGER DEFAULT 0, config TEXT DEFAULT '{}')''')
     c.execute('''CREATE TABLE IF NOT EXISTS sys_dashboard (id INTEGER PRIMARY KEY DEFAULT 1, layout_json TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS point_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, username TEXT, action TEXT, amount INTEGER, balance INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
@@ -456,9 +456,9 @@ def _create_system_tables(c):
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )''')
     try: c.execute("ALTER TABLE scratch_cards ADD COLUMN chat_id TEXT DEFAULT ''")
-    except: pass
+    except Exception: pass
     try: c.execute("ALTER TABLE scratch_cards ADD COLUMN message_id INTEGER DEFAULT 0")
-    except: pass
+    except Exception: pass
     c.execute('''CREATE TABLE IF NOT EXISTS scratch_card_slots (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         card_id INTEGER NOT NULL,
@@ -612,23 +612,23 @@ def _create_system_tables(c):
     # 🔥 性能优化：创建索引（大幅提升查询速度）
     # 用户元数据索引
     try: c.execute("CREATE INDEX IF NOT EXISTS idx_users_meta_expire ON users_meta(expire_date)")
-    except: pass
+    except Exception: pass
     # 风控日志索引
     try: c.execute("CREATE INDEX IF NOT EXISTS idx_risk_logs_user ON risk_logs(user_id)")
-    except: pass
+    except Exception: pass
     try: c.execute("CREATE INDEX IF NOT EXISTS idx_risk_logs_time ON risk_logs(created_at)")
-    except: pass
+    except Exception: pass
     # 积分日志索引
     try: c.execute("CREATE INDEX IF NOT EXISTS idx_point_logs_user ON point_logs(user_id)")
-    except: pass
+    except Exception: pass
     # 媒体请求索引
     try: c.execute("CREATE INDEX IF NOT EXISTS idx_media_requests_status ON media_requests(status)")
-    except: pass
+    except Exception: pass
     # 消息索引
     try: c.execute("CREATE INDEX IF NOT EXISTS idx_msg_conversations_user ON msg_conversations(user_id)")
-    except: pass
+    except Exception: pass
     try: c.execute("CREATE INDEX IF NOT EXISTS idx_msg_items_conv ON msg_items(conversation_id)")
-    except: pass
+    except Exception: pass
 
 
 def init_db(skip_migration=False):
@@ -660,25 +660,25 @@ def init_db(skip_migration=False):
 
         # 🔥 风控模块：为老数据库无损新增"并发控制"和"风控等级"字段
         try: c.execute("ALTER TABLE users_meta ADD COLUMN max_concurrent INTEGER")
-        except: pass
+        except Exception: pass
         try: c.execute("ALTER TABLE users_meta ADD COLUMN risk_level TEXT DEFAULT 'safe'")
-        except: pass
+        except Exception: pass
         # 👇 添加这一行：新增 VIP 独立字段
         try: c.execute("ALTER TABLE users_meta ADD COLUMN is_vip INTEGER DEFAULT 0")
-        except: pass
+        except Exception: pass
         # 👇 新增：admin_disabled 字段，区分过期禁用和管理员禁用
         try: c.execute("ALTER TABLE users_meta ADD COLUMN admin_disabled INTEGER DEFAULT 0")
-        except: pass
+        except Exception: pass
 
         c.execute('''CREATE TABLE IF NOT EXISTS invitations (code TEXT PRIMARY KEY, days INTEGER, used_count INTEGER DEFAULT 0, max_uses INTEGER DEFAULT 1, created_at TEXT, used_at DATETIME, used_by TEXT, status INTEGER DEFAULT 0, template_user_id TEXT, type TEXT DEFAULT 'register', routes TEXT)''')
         try: c.execute("ALTER TABLE invitations ADD COLUMN template_user_id TEXT")
-        except: pass
+        except Exception: pass
         try: c.execute("ALTER TABLE invitations ADD COLUMN type TEXT DEFAULT 'register'")
-        except: pass
+        except Exception: pass
         try: c.execute("ALTER TABLE invitations ADD COLUMN routes TEXT")
-        except: pass
+        except Exception: pass
         try: c.execute("ALTER TABLE invitations ADD COLUMN route_mode TEXT DEFAULT 'block'")
-        except: pass
+        except Exception: pass
 
 # 👇 商业化模块：新建本地凭证库，存储 Pro 激活码和状态
         c.execute('''CREATE TABLE IF NOT EXISTS sys_license (
@@ -707,7 +707,7 @@ def init_db(skip_migration=False):
         c.execute('''CREATE TABLE IF NOT EXISTS tg_user_blacklist (tg_user_id TEXT PRIMARY KEY, reason TEXT DEFAULT '', created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
         # 🔥 迁移：添加 tg_username 字段
         try: c.execute("ALTER TABLE tg_user_bindings ADD COLUMN tg_username TEXT DEFAULT ''")
-        except: pass
+        except Exception: pass
 
         # 🧩 插件系统
         c.execute('''CREATE TABLE IF NOT EXISTS plugin_state (plugin_id TEXT PRIMARY KEY, enabled INTEGER DEFAULT 0, config TEXT DEFAULT '{}')''')
@@ -721,36 +721,36 @@ def init_db(skip_migration=False):
         # 🤖 开放注册日志表
         c.execute('''CREATE TABLE IF NOT EXISTS tg_reg_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, tg_user_id TEXT, emby_username TEXT, emby_user_id TEXT, reg_type TEXT DEFAULT 'open', created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
         try: c.execute("ALTER TABLE users_meta ADD COLUMN points INTEGER DEFAULT 0")
-        except: pass
+        except Exception: pass
         # 🔥 屏蔽线路功能：新增用户专属屏蔽线路字段
         try: c.execute("ALTER TABLE users_meta ADD COLUMN block_routes TEXT DEFAULT ''")
-        except: pass
+        except Exception: pass
         # 🔥 允许线路功能：新增用户专属允许线路字段（可覆盖屏蔽设置）
         try: c.execute("ALTER TABLE users_meta ADD COLUMN allow_routes TEXT DEFAULT ''")
-        except: pass
+        except Exception: pass
         # 🔥 备注字段（忽略已存在的错误）
         try: c.execute("ALTER TABLE users_meta ADD COLUMN remark TEXT DEFAULT ''")
-        except: pass
+        except Exception: pass
 
         # 🔥 播放历史增强：新增 IP、归属地、运营商字段（兼容旧数据库）
         try: c.execute("ALTER TABLE PlaybackActivity ADD COLUMN RemoteEndPoint TEXT")
-        except: pass
+        except Exception: pass
         try: c.execute("ALTER TABLE PlaybackActivity ADD COLUMN Location TEXT")
-        except: pass
+        except Exception: pass
         try: c.execute("ALTER TABLE PlaybackActivity ADD COLUMN ISP TEXT")
-        except: pass
+        except Exception: pass
 
         # 🔥 性能优化：创建索引（大幅提升查询速度）
         # 播放历史表索引
         try: c.execute("CREATE INDEX IF NOT EXISTS idx_playback_user_date ON PlaybackActivity(UserId, DateCreated)")
-        except: pass
+        except Exception: pass
         try: c.execute("CREATE INDEX IF NOT EXISTS idx_playback_date ON PlaybackActivity(DateCreated)")
-        except: pass
+        except Exception: pass
         try: c.execute("CREATE INDEX IF NOT EXISTS idx_playback_item ON PlaybackActivity(ItemId)")
-        except: pass
+        except Exception: pass
         # 用户元数据索引
         try: c.execute("CREATE INDEX IF NOT EXISTS idx_users_meta_expire ON users_meta(expire_date)")
-        except: pass
+        except Exception: pass
 
         conn.commit()
         conn.close()
@@ -817,6 +817,7 @@ class APIRow(dict):
         return None
 
 def _interpolate_sql(query: str, args) -> str:
+    """将参数化查询转为拼接查询（仅用于 API 模式下提交给 Emby）"""
     if not args: return query
     parts = query.split('?')
     if len(parts) - 1 != len(args): return query
@@ -830,6 +831,9 @@ def _interpolate_sql(query: str, args) -> str:
             s = s.replace('\\', '\\\\')
             s = s.replace("'", "''")
             s = s.replace('\x00', '')
+            s = s.replace('\n', '\\n')
+            s = s.replace('\r', '\\r')
+            s = s.replace('\x1a', '\\Z')
             val = f"'{s}'"
         res += val + parts[i+1]
     return res

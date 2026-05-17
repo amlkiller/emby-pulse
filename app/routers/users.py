@@ -495,7 +495,7 @@ def check_expired_users():
                                 c.execute("UPDATE users_meta SET admin_disabled = 0 WHERE user_id = ?", (uid,))
                                 conn.commit()
                                 conn.close()
-                            except: pass
+                            except Exception: pass
                 except Exception as e: pass
     except Exception as e: pass
 
@@ -658,7 +658,7 @@ async def api_update_user_image(request: Request, user_id: str = Form(...), url:
             u_res = media_api.get(f"/Users/{user_id}", timeout=5)
             if u_res.status_code == 200:
                 target_name = u_res.json().get("Name", "")
-        except: pass
+        except Exception: pass
 
         img_data = None; c_type = "image/png"
         if url:
@@ -1105,7 +1105,7 @@ def api_manage_user_library(data: UserUpdateModelEx, request: Request):
                 
                 conn.commit()
                 conn.close()
-            except: pass
+            except Exception: pass
             
             # 更新 Emby Policy
             media_api.post(f"/Users/{data.user_id}/Policy", json=p)
@@ -1210,7 +1210,7 @@ def api_manage_user_update(data: UserUpdateModelEx, request: Request):
                             
                             conn.commit()
                             conn.close()
-                        except: pass
+                        except Exception: pass
 
             if data.is_disabled is not None:
                 p['IsDisabled'] = data.is_disabled
@@ -1227,7 +1227,7 @@ def api_manage_user_update(data: UserUpdateModelEx, request: Request):
                         c.execute("UPDATE users_meta SET admin_disabled = 0 WHERE user_id = ?", (data.user_id,))
                     conn.commit()
                     conn.close()
-                except: pass
+                except Exception: pass
             if data.enable_all_folders is not None:
                 # 🔥 检测媒体库权限是否真的有变化
                 old_enable_all = old_policy.get('EnableAllFolders', True)
@@ -1279,7 +1279,7 @@ def api_manage_user_update(data: UserUpdateModelEx, request: Request):
                         
                         conn.commit()
                         conn.close()
-                    except: pass
+                    except Exception: pass
             if data.excluded_sub_folders is not None: p['ExcludedSubFolders'] = data.excluded_sub_folders
             if data.enable_downloading is not None: p['EnableContentDownloading'] = data.enable_downloading; p['EnableSyncTranscoding'] = data.enable_downloading
             if data.enable_video_transcoding is not None: p['EnableVideoPlaybackTranscoding'] = data.enable_video_transcoding; p['EnablePlaybackRemuxing'] = data.enable_video_transcoding
@@ -1314,7 +1314,7 @@ def api_manage_user_update(data: UserUpdateModelEx, request: Request):
             u_res = media_api.get(f"/Users/{data.user_id}", timeout=5)
             if u_res.status_code == 200:
                 target_name = u_res.json().get("Name", "")
-        except: pass
+        except Exception: pass
         old_meta = exist or {}
 
         # 构建详细变更记录(只记录真正变更的字段)
@@ -1645,7 +1645,7 @@ def api_manage_users_batch(data: BatchActionModelLocal, request: Request):
                             c.execute("UPDATE users_meta SET admin_disabled = 0 WHERE user_id = ?", (uid,))
                         conn.commit()
                         conn.close()
-                    except: pass
+                    except Exception: pass
             elif data.action == "renew":
                 # 获取用户名
                 try:
@@ -1654,7 +1654,7 @@ def api_manage_users_batch(data: BatchActionModelLocal, request: Request):
                         user_name = user_res.json().get("Name", "")
                         if user_name:
                             operated_names.append(user_name)
-                except: pass
+                except Exception: pass
 
                 new_date = None
                 if data.value.startswith('+'):
@@ -1701,7 +1701,7 @@ def api_manage_users_batch(data: BatchActionModelLocal, request: Request):
                         user_name = user_res.json().get("Name", "")
                         if user_name:
                             operated_names.append(user_name)
-                except: pass
+                except Exception: pass
 
                 exist = query_db("SELECT 1 FROM users_meta WHERE user_id = ?", (uid,), one=True)
                 if exist:
@@ -1722,7 +1722,7 @@ def api_manage_users_batch(data: BatchActionModelLocal, request: Request):
                         user_name = user_res.json().get("Name", "")
                         if user_name:
                             operated_names.append(user_name)
-                except: pass
+                except Exception: pass
 
                 exist = query_db("SELECT 1 FROM users_meta WHERE user_id = ?", (uid,), one=True)
                 if exist:

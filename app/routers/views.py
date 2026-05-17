@@ -309,7 +309,7 @@ def get_common_vars(request: Request, active_page: str, extra_vars: dict = None)
             raw_id = sys_res.json().get("Id", "")
             if raw_id:
                 server_id = str(raw_id).replace('\r', '').replace('\n', '').strip()
-    except: pass
+    except Exception: pass
 
     # ================= 🔥 新增：查询 Pro 状态 =================
     is_pro = False
@@ -792,7 +792,7 @@ async def get_wallpaper():
                     title = item.get("title") or item.get("name") or "TMDB 热门"
                     url = f"https://image.tmdb.org/t/p/original{item['backdrop_path']}"
                     return {"status": "success", "url": url, "title": f"今日热门: {title}"}
-        except: pass
+        except Exception: pass
     item = random.choice(fallback_wallpapers)
     return {"status": "success", "url": item["url"], "title": item["title"]}
 

@@ -559,7 +559,7 @@ async def get_results(request: Request):
                 raw_id_2 = item_res["Items"][0].get("ServerId", "")
                 if raw_id_2:
                     server_id = str(raw_id_2).replace('\r', '').replace('\n', '').strip()
-    except: pass
+    except Exception: pass
     
     return {"success": True, "data": result_tree, "emby_url": base_url, "server_id": server_id}
 

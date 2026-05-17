@@ -227,7 +227,7 @@ async def points_page(request: Request):
         row = conn.execute("SELECT status FROM sys_license LIMIT 1").fetchone()
         conn.close()
         if row and row[0] == 'pro': is_pro = True
-    except: pass
+    except Exception: pass
 
     return templates.TemplateResponse("points.html", get_common_vars(request, "points", {
         "user": request.session.get("user"),
@@ -265,7 +265,7 @@ async def save_points_config(request: Request):
         conn = sqlite3.connect(SYSTEM_DB_PATH)
         row = conn.execute("SELECT status FROM sys_license LIMIT 1").fetchone()
         is_pro = True if row and row[0] == 'pro' else False
-    except: pass
+    except Exception: pass
 
     conn = sqlite3.connect(SYSTEM_DB_PATH)
     c = conn.cursor()
@@ -591,7 +591,7 @@ def user_redeem(data: RedeemModel, request: Request):
                         policy = user_data.get('Policy', {})
                         policy['IsDisabled'] = False
                         requests.post(f"{cfg.get('emby_host')}/emby/Users/{user['Id']}/Policy?api_key={cfg.get('emby_api_key')}", json=policy, timeout=3)
-                except: pass
+                except Exception: pass
         
         elif target_item.get("type") == "random_renew":
             # 🎲 随机定价延期模式
@@ -646,7 +646,7 @@ def user_redeem(data: RedeemModel, request: Request):
                         policy = user_data.get('Policy', {})
                         policy['IsDisabled'] = False
                         requests.post(f"{cfg.get('emby_host')}/emby/Users/{user['Id']}/Policy?api_key={cfg.get('emby_api_key')}", json=policy, timeout=3)
-                except: pass
+                except Exception: pass
         else: 
             action_desc = f"商城兑换: {target_item.get('name')}"
 
@@ -669,7 +669,7 @@ def user_redeem(data: RedeemModel, request: Request):
             
             bot.send_message("sys_notify", msg, platform="all")
             add_sys_notification("points", f"商城订单: {target_item.get('name')}", f"用户 {user['Name']} 兑换了该商品", "/points")
-        except: pass
+        except Exception: pass
 
         if target_item.get("type") == "manual":
             return {"status": "success", "message": f"兑换成功！已提醒管理员，请凭账号名主动联系服主领取奖励！"}

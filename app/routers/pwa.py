@@ -67,8 +67,17 @@ def save_pwa_config(key: str, value: str):
 async def get_pwa_icon(filename: str):
     """获取上传的 PWA 图标"""
     from fastapi.responses import FileResponse
-    
-    filepath = f"data/pwa_icons/{filename}"
+
+    # 路径穿越防护
+    if ".." in filename or "/" in filename or "\\" in filename:
+        raise HTTPException(status_code=400, detail="非法文件名")
+
+    base_dir = os.path.abspath("data/pwa_icons")
+    filepath = os.path.abspath(os.path.join(base_dir, filename))
+
+    if not filepath.startswith(base_dir):
+        raise HTTPException(status_code=400, detail="非法路径")
+
     if os.path.exists(filepath):
         return FileResponse(filepath, media_type="image/png")
     else:
@@ -284,7 +293,16 @@ async def delete_custom_icon(icon_id: str, request: Request):
     if icon_id in [icon["id"] for icon in DEFAULT_ICONS]:
         raise HTTPException(status_code=400, detail="不能删除内置图标")
     
-    filepath = f"data/pwa_icons/{icon_id}.png"
+    # 路径穿越防护
+    if ".." in icon_id or "/" in icon_id or "\\" in icon_id:
+        raise HTTPException(status_code=400, detail="非法图标 ID")
+
+    base_dir = os.path.abspath("data/pwa_icons")
+    filepath = os.path.abspath(os.path.join(base_dir, f"{icon_id}.png"))
+
+    if not filepath.startswith(base_dir):
+        raise HTTPException(status_code=400, detail="非法路径")
+
     if os.path.exists(filepath):
         os.remove(filepath)
         return {"status": "success", "message": "图标已删除"}

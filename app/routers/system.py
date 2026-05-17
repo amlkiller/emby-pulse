@@ -627,7 +627,7 @@ def api_get_dashboard_layout(request: Request):
         row = conn.execute("SELECT layout_json FROM sys_dashboard WHERE id = 1").fetchone()
         conn.close()
         if row and row[0]: return {"status": "success", "data": json.loads(row[0])}
-    except: pass
+    except Exception: pass
     return {"status": "success", "data": None}
 
 @router.post("/api/dashboard/layout")

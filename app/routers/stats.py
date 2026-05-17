@@ -130,7 +130,7 @@ def get_admin_user_id():
             for u in users:
                 if u.get("Policy", {}).get("IsAdministrator"): return u['Id']
             if users: return users[0]['Id']
-    except: pass
+    except Exception: pass
     return None
 
 def get_user_map_local():
@@ -140,7 +140,7 @@ def get_user_map_local():
         res = media_api.get("/Users", timeout=2)
         if res.status_code == 200:
             for u in res.json(): user_map[u['Id']] = u['Name']
-    except: pass
+    except Exception: pass
     return user_map
 
 @router.get("/api/stats/dashboard")
@@ -170,7 +170,7 @@ def api_dashboard(request: Request, user_id: Optional[str] = None):
             if res.status_code == 200:
                 d = res.json()
                 lib = {"movie": d.get("MovieCount", 0), "series": d.get("SeriesCount", 0), "episode": d.get("EpisodeCount", 0)}
-        except: pass
+        except Exception: pass
         
         result = {"status": "success", "data": {**base, "library": lib}}
         # 🔥 缓存结果
@@ -403,7 +403,7 @@ def api_live_sessions(request: Request):
         # 🚀 替换为 media_api
         res = media_api.get("/Sessions", timeout=5)
         if res.status_code == 200: return {"status": "success", "data": [s for s in res.json() if s.get("NowPlayingItem")]}
-    except: pass
+    except Exception: pass
     return {"status": "success", "data": []}
 
 @router.get("/api/live")
@@ -671,7 +671,7 @@ def api_user_details(request: Request, user_id: Optional[str] = None):
                                     earliest_dt = dt
                     if earliest_dt:
                         overview['account_age_days'] = max(1, (datetime.datetime.now() - earliest_dt).days)
-        except: pass
+        except Exception: pass
                 
         return {"status": "success", "data": {
             "hourly": h_data, "devices": devices, "clients": clients, 
@@ -795,7 +795,7 @@ def api_poster_data(request: Request, user_id: Optional[str] = None, period: str
                         sorted_genres = sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:3]
                         genres = [k for k, v in sorted_genres]
                         favorite_type = sorted_genres[0][0] if sorted_genres else None
-        except: pass
+        except Exception: pass
 
         # 🔥 计算连续观影天数
         streak_days = 0
@@ -1049,7 +1049,7 @@ async def _fetch_dashboard_core(user_id: str) -> dict:
             if res.status_code == 200:
                 d = res.json()
                 lib = {"movie": d.get("MovieCount", 0), "series": d.get("SeriesCount", 0), "episode": d.get("EpisodeCount", 0)}
-        except: pass
+        except Exception: pass
 
         return {
             "total_plays": plays,

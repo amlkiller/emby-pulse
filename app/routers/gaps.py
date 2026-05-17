@@ -118,7 +118,7 @@ def process_single_series(series, lock_map, host, tmdb_key, proxies, today, glob
     else:
         if tmdb_status in ["Ended", "Canceled"]:
             try: query_db("INSERT OR IGNORE INTO gap_perfect_series (series_id, tmdb_id, series_name) VALUES (?, ?, ?)", (series_id, tmdb_id, series_name))
-            except: pass
+            except Exception: pass
         return None
 
 # 🔥 定时任务：后台自动刷新缺集缓存
@@ -204,7 +204,7 @@ def run_scan_task():
             try:
                 excluded_libs = set(json.loads(config_rows[0]['value']))
                 logger.info(f"[缺集扫描] 屏蔽媒体库: {excluded_libs}")
-            except: pass
+            except Exception: pass
 
         # 使用 /Library/VirtualFolders API 获取媒体库
         lib_res = media_api.get("/Library/VirtualFolders", timeout=10)
@@ -275,7 +275,7 @@ def run_scan_task():
         logger.info(f"[缺集扫描] 扫描完成，发现 {len(results)} 部有缺集的剧集")
         with state_lock: scan_state["results"] = results
         try: query_db("INSERT OR REPLACE INTO gap_scan_cache (id, result_json, updated_at) VALUES (1, ?, datetime('now', 'localtime'))", (json.dumps(results),))
-        except: pass
+        except Exception: pass
     except Exception as e:
         logger.error(f"[缺集扫描] 扫描异常: {e}")
         with state_lock: scan_state["error"] = str(e)
@@ -306,12 +306,12 @@ def get_progress(request: Request):
                 try:
                     row = query_db("SELECT result_json FROM gap_scan_cache WHERE id = 1")
                     if row: scan_state["results"] = json.loads(row[0]['result_json'])
-                except: pass
+                except Exception: pass
             try:
                 ignores = query_db("SELECT series_id FROM gap_records WHERE status=1 AND season_number=-1")
                 ignore_ids = set([r['series_id'] for r in ignores]) if ignores else set()
                 scan_state["results"] = [s for s in scan_state["results"] if s.get('series_id') not in ignore_ids]
-            except: pass
+            except Exception: pass
         return {"status": "success", "data": scan_state}
 
 def run_verify_task():
@@ -346,7 +346,7 @@ def run_verify_task():
                     if f"{gap['season']}_{gap['episode']}" in local_eps:
                         changed = True
                         try: query_db("DELETE FROM gap_records WHERE series_id=? AND season_number=? AND episode_number=?", (s_id, gap['season'], gap['episode']))
-                        except: pass
+                        except Exception: pass
                     else:
                         new_gaps.append(gap)
                 s["gaps"] = new_gaps
@@ -354,16 +354,16 @@ def run_verify_task():
                 if len(new_gaps) == 0 and changed:
                     if s.get("tmdb_status") in ["Ended", "Canceled"]:
                         try: query_db("INSERT OR IGNORE INTO gap_perfect_series (series_id, tmdb_id, series_name) VALUES (?, ?, ?)", (s_id, s.get("tmdb_id"), s.get("series_name")))
-                        except: pass
-            except: pass
+                        except Exception: pass
+            except Exception: pass
                 
         if changed:
             with state_lock:
                 if not scan_state["is_scanning"]:
                     scan_state["results"] = [s for s in results_copy if len(s.get("gaps", [])) > 0]
                     try: query_db("INSERT OR REPLACE INTO gap_scan_cache (id, result_json, updated_at) VALUES (1, ?, datetime('now', 'localtime'))", (json.dumps(scan_state["results"]),))
-                    except: pass
-    except: pass
+                    except Exception: pass
+    except Exception: pass
 
 @router.post("/scan/verify")
 def trigger_verify_gaps(request: Request, bg_tasks: BackgroundTasks):
@@ -775,7 +775,7 @@ def search_mp_for_gap(request: Request = None, payload: dict = None):
                     elif v.get("Width", 0) >= 1900: genes.append("1080P")
                     if "HDR" in v.get("VideoRange", "") or "HDR" in v.get("DisplayTitle", "").upper(): genes.append("HDR")
                     if "DOVI" in v.get("DisplayTitle", "").upper() or "DOLBY VISION" in v.get("DisplayTitle", "").upper(): genes.append("DoVi")
-        except: pass
+        except Exception: pass
     if not genes: genes = ["无明显特效"]
     
     headers = {"X-API-KEY": mp_token.strip().strip("'\""), "User-Agent": "Mozilla/5.0", "Accept": "application/json"}

@@ -118,7 +118,7 @@ DEFAULT_CONFIG = {
     "enable_library_notify": False,
     "notify_user_login": False,
     "notify_item_deleted": False,
-    "webhook_token": "embypulse",
+    "webhook_token": "",
     "calendar_cache_ttl": 86400,
     "scheduled_tasks": [],
     "emby_public_url": "",

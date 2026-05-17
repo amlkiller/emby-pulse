@@ -183,7 +183,7 @@ def ensure_db_schema():
     feed_cols = [col[1] for col in c.fetchall()]
     if 'poster_path' not in feed_cols:
         try: c.execute("ALTER TABLE media_feedback ADD COLUMN poster_path TEXT")
-        except: pass
+        except Exception: pass
 
     conn.commit()
     conn.close()
@@ -401,7 +401,7 @@ def check_auth(request: Request):
                             is_expired = True
                     except:
                         pass
-            except: pass
+            except Exception: pass
             
         # 返回用户可见的线路（根据权限过滤）
         user_routes = cfg.get_user_routes(user.get("Id"))
@@ -955,7 +955,7 @@ def batch_manage_action(data: BulkAdminActionModel, request: Request):
                 payload = { "name": row["title"], "tmdbid": int(tid), "year": str(row["year"]), "type": "电影" if row["media_type"]=="movie" else "电视剧" }
                 if row["media_type"] == "tv": payload["season"] = sn
                 try: requests.post(f"{mp_url.rstrip('/')}/api/v1/subscribe/", json=payload, headers={"X-API-KEY": mp_token.strip().strip("'\"")}, timeout=10)
-                except: pass
+                except Exception: pass
             execute_sql("UPDATE media_requests SET status = 1 WHERE tmdb_id = ? AND season = ?", (tid, sn))
             
         elif data.action == "manual":

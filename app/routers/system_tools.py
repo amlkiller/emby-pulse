@@ -82,7 +82,7 @@ def _fetch_weather_from_api(city: str) -> dict:
             # 🔥 显式设置编码为 UTF-8，避免中文乱码
             res.encoding = 'utf-8'
             return {"success": True, "data": res.json()}
-    except: pass
+    except Exception: pass
     if proxies:
         try:
             res = requests.get(f"https://wttr.in/{encoded_city}?format=j1&lang=zh", proxies=proxies, headers=headers, timeout=6)
@@ -90,7 +90,7 @@ def _fetch_weather_from_api(city: str) -> dict:
                 # 🔥 显式设置编码为 UTF-8，避免中文乱码
                 res.encoding = 'utf-8'
                 return {"success": True, "data": res.json()}
-        except: pass
+        except Exception: pass
 
     return {"success": False, "message": "天气获取失败"}
 
@@ -375,10 +375,14 @@ async def network_check(request: Request):
 @router.get("/logs")
 async def get_logs(request: Request, lines: int = 150):
     """直接从内存环形队列中读取最新日志"""
-    # 🔒 安全检查：必须登录
-    if not request.session.get("user"):
+    # 🔒 安全检查：必须登录且为管理员
+    user = request.session.get("user")
+    if not user:
         return {"success": False, "msg": "未授权"}
-    
+    is_admin = user.get("is_admin") or user.get("Policy", {}).get("IsAdministrator", False)
+    if not is_admin:
+        return {"success": False, "msg": "需要管理员权限"}
+
     try:
         if not hasattr(sys, '_emby_pulse_log_queue'):
             return {"success": False, "msg": "日志服务未初始化"}
@@ -391,10 +395,14 @@ async def get_logs(request: Request, lines: int = 150):
 @router.post("/debug")
 async def toggle_debug(req: Request):
     """动态热切换全局日志等级"""
-    # 🔒 安全检查：必须登录
-    if not req.session.get("user"):
+    # 🔒 安全检查：必须登录且为管理员
+    user = req.session.get("user")
+    if not user:
         return {"success": False, "msg": "未授权"}
-    
+    is_admin = user.get("is_admin") or user.get("Policy", {}).get("IsAdministrator", False)
+    if not is_admin:
+        return {"success": False, "msg": "需要管理员权限"}
+
     data = await req.json()
     enable = data.get("enable", False)
 
@@ -423,10 +431,14 @@ async def toggle_debug(req: Request):
 @router.post("/restart")
 async def restart_system(req: Request):
     """重启 EmbyPulse 服务（Docker 环境下退出进程，由容器自动重启）"""
-    # 🔒 安全检查：必须登录
-    if not req.session.get("user"):
+    # 🔒 安全检查：必须登录且为管理员
+    user = req.session.get("user")
+    if not user:
         return {"success": False, "msg": "未授权"}
-    
+    is_admin = user.get("is_admin") or user.get("Policy", {}).get("IsAdministrator", False)
+    if not is_admin:
+        return {"success": False, "msg": "需要管理员权限"}
+
     import os, signal, threading
     print("🔄 [系统重启] 收到重启指令，3秒后退出进程...")
     def _delayed_exit():

@@ -42,5 +42,15 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "payment=(), "
             "usb=()"
         )
-        
+
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: blob: https:; "
+            "font-src 'self' data:; "
+            "connect-src 'self'; "
+            "frame-ancestors 'self';"
+        )
+
         return response

@@ -125,7 +125,7 @@ def get_user_concurrent_limit(user_id: str) -> tuple:
                 return (-1, True)
             if row[0] is not None:
                 return (int(row[0]), False)
-    except: pass
+    except Exception: pass
     return (int(cfg.get("default_max_concurrent", 2)), False)
 
 _alerted_sessions = set()
@@ -336,7 +336,7 @@ def _on_playback_start(data):
 def _risk_monitor_loop():
     while True:
         try: scan_playbacks_and_alert()
-        except: pass
+        except Exception: pass
         time.sleep(60) 
 
 def _on_risk_alert_for_web(data):

@@ -14,6 +14,9 @@ class DatabaseSessionMiddleware(BaseHTTPMiddleware):
         session_dict = session_manager.get_or_create_session(session_id)
         # Set session in scope so request.session property works
         request.scope["session"] = session_dict
+        if "csrf_token" not in session_dict:
+            import secrets
+            session_dict["csrf_token"] = secrets.token_urlsafe(32)
         response = await call_next(request)
         session_manager.save_modified()
         current_session_id = session_dict._session_id

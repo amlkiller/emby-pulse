@@ -30,15 +30,15 @@ def ensure_pro_schema():
                     )''')
         # 增量更新：添加缺失字段
         try: c.execute("ALTER TABLE sys_license ADD COLUMN pro_token TEXT")
-        except: pass
+        except Exception: pass
         try: c.execute("ALTER TABLE sys_license ADD COLUMN expire_date DATETIME")
-        except: pass
+        except Exception: pass
         try: c.execute("ALTER TABLE sys_license ADD COLUMN last_checked DATETIME DEFAULT CURRENT_TIMESTAMP")
-        except: pass
+        except Exception: pass
         try: c.execute("ALTER TABLE sys_license ADD COLUMN max_devices INTEGER")
-        except: pass
+        except Exception: pass
         try: c.execute("ALTER TABLE sys_license ADD COLUMN current_devices INTEGER")
-        except: pass
+        except Exception: pass
         conn.commit()
         conn.close()
     except Exception as e:

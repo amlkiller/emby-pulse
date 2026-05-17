@@ -3,14 +3,24 @@ JWT Token 工具
 使用 SECRET_KEY 签名，用于 API 认证
 """
 import jwt
+import os
+import secrets as _secrets
+import logging
 import time
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from app.core.config import SECRET_KEY
 
+logger = logging.getLogger("uvicorn")
+
 # Token 配置
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_HOURS = 24  # Token 有效期：24 小时
+
+JWT_SECRET = os.getenv("JWT_SECRET_KEY", "") or SECRET_KEY
+if not JWT_SECRET:
+    JWT_SECRET = _secrets.token_urlsafe(32)
+    logger.warning("JWT_SECRET_KEY 未设置，使用自动生成的密钥（重启后失效）")
 
 
 def create_token(payload: Dict[str, Any], expires_hours: int = JWT_EXPIRE_HOURS) -> str:
@@ -35,7 +45,7 @@ def create_token(payload: Dict[str, Any], expires_hours: int = JWT_EXPIRE_HOURS)
     })
     
     # 编码 Token
-    token = jwt.encode(data, SECRET_KEY, algorithm=JWT_ALGORITHM)
+    token = jwt.encode(data, JWT_SECRET, algorithm=JWT_ALGORITHM)
     return token
 
 
@@ -51,7 +61,7 @@ def verify_token(token: str) -> Optional[Dict[str, Any]]:
     """
     try:
         # 解码 Token
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         return payload
     except jwt.ExpiredSignatureError:
         # Token 已过期

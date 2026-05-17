@@ -9,6 +9,7 @@ import requests
 import json
 import logging
 import os
+import ipaddress
 
 logger = logging.getLogger("uvicorn")
 router = APIRouter()
@@ -47,13 +48,13 @@ def _save_playback_ip_data(data, user_id, user_name, item, ip):
 
         # 添加新列（如果不存在）
         try: c.execute("ALTER TABLE PlaybackActivity ADD COLUMN RemoteEndPoint TEXT")
-        except: pass
+        except Exception: pass
         try: c.execute("ALTER TABLE PlaybackActivity ADD COLUMN ItemType TEXT")
-        except: pass
+        except Exception: pass
         try: c.execute("ALTER TABLE PlaybackActivity ADD COLUMN Location TEXT")
-        except: pass
+        except Exception: pass
         try: c.execute("ALTER TABLE PlaybackActivity ADD COLUMN ISP TEXT")
-        except: pass
+        except Exception: pass
 
         # 🔥 使用共享模块获取归属地和运营商
         location = get_location(ip)
@@ -118,16 +119,16 @@ def intercept_illegal_client(data: dict):
                     }
                 }
                 try: requests.post(f"{host}/emby/Sessions/{session_id}/Command?api_key={key}", json=msg_cmd, timeout=2)
-                except: pass
+                except Exception: pass
                 try: requests.post(f"{host}/emby/Sessions/{session_id}/Playing/Stop?api_key={key}", timeout=2)
-                except: pass
+                except Exception: pass
             
             try: requests.delete(f"{host}/emby/Devices?Id={device_id}&api_key={key}", timeout=3)
-            except: pass
+            except Exception: pass
             
             logger.warning(f"💥 [主动防御] 已秒踢违规客户端: {client}")
             return True
-    except: pass
+    except Exception: pass
     return False
 
 @router.post("/api/v1/webhook")

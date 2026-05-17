@@ -389,7 +389,7 @@ def get_user_map_internal():
             res = requests.get(f"{host}/emby/Users?api_key={key}", timeout=2)
             if res.status_code == 200:
                 for u in res.json(): user_map[u['Id']] = u['Name']
-        except: pass
+        except Exception: pass
     return user_map
 
 

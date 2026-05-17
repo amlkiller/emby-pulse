@@ -198,11 +198,11 @@ def _ensure_user_bot_tables():
             bound_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )""")
         try: conn.execute("ALTER TABLE tg_user_bindings ADD COLUMN init_password TEXT DEFAULT ''")
-        except: pass
+        except Exception: pass
         try: conn.execute("ALTER TABLE tg_user_bindings ADD COLUMN tg_username TEXT")
-        except: pass
+        except Exception: pass
         try: conn.execute("ALTER TABLE tg_user_bindings ADD COLUMN tg_display_name TEXT")
-        except: pass
+        except Exception: pass
         conn.execute("""CREATE TABLE IF NOT EXISTS tg_user_blacklist (
             tg_user_id TEXT PRIMARY KEY,
             reason TEXT DEFAULT '',
@@ -697,7 +697,7 @@ def _add_to_blacklist(tg_user_id, reason=""):
         conn.execute("INSERT OR REPLACE INTO tg_user_blacklist (tg_user_id, reason) VALUES (?, ?)", (str(tg_user_id), reason))
         conn.commit()
         conn.close()
-    except: pass
+    except Exception: pass
 
 
 def _check_emby_account(binding):
@@ -895,7 +895,7 @@ def _do_register(chat_id, tg_user_id, custom_name, tg_username="", tg_display_na
                 if count >= max_reg:
                     _send(chat_id, "❌ 注册名额已满，请联系管理员")
                     return
-            except: pass
+            except Exception: pass
 
         # 验证用户名格式
         # 检查用户名长度限制
@@ -945,11 +945,11 @@ def _do_register(chat_id, tg_user_id, custom_name, tg_username="", tg_display_na
                             policy["IsAdministrator"] = False
                             policy["IsDisabled"] = False
                             media_api.post(f"/Users/{uid}/Policy", json=policy, timeout=5)
-                    except: pass
+                    except Exception: pass
                 else:
                     try:
                         media_api.post(f"/Users/{uid}/Policy", json={"IsDisabled": False}, timeout=3)
-                    except: pass
+                    except Exception: pass
 
                 reg_days = int(cfg.get("user_bot_reg_days", 30))
                 expire = (datetime.date.today() + datetime.timedelta(days=reg_days)).strftime("%Y-%m-%d")
@@ -967,7 +967,7 @@ def _do_register(chat_id, tg_user_id, custom_name, tg_username="", tg_display_na
                             template_meta = query_db("SELECT allow_routes, block_routes FROM users_meta WHERE user_id = ?", (template_id,), one=True)
                             if template_meta and (template_meta.get('allow_routes') or template_meta.get('block_routes')):
                                 template_routes = template_meta
-                        except: pass
+                        except Exception: pass
 
                     if template_routes:
                         query_db("INSERT OR REPLACE INTO users_meta (user_id, expire_date, allow_routes, block_routes, created_at) VALUES (?, ?, ?, ?, datetime('now','localtime'))",
@@ -1004,7 +1004,7 @@ def _do_register(chat_id, tg_user_id, custom_name, tg_username="", tg_display_na
                             cfg.set("user_bot_open_reg", False)
                             logger.info(f"[UserBot] 用户总数已达上限({len(normal_users)}/{quota})，开放注册已自动关闭")
                             _send_open_reg_closed_notify("用户总数已达上限")
-                    except: pass
+                    except Exception: pass
 
                 _send(chat_id, f"🎉 <b>注册成功！</b>\n\n"
                       f"👤 用户名：<code>{safe_name}</code>\n"
@@ -1122,11 +1122,11 @@ def _do_code_register(chat_id, tg_user_id, custom_name, code, days, tpl_id, rout
                             policy["IsAdministrator"] = False
                             policy["IsDisabled"] = False
                             media_api.post(f"/Users/{uid}/Policy", json=policy, timeout=5)
-                    except: pass
+                    except Exception: pass
                 else:
                     try:
                         media_api.post(f"/Users/{uid}/Policy", json={"IsDisabled": False}, timeout=3)
-                    except: pass
+                    except Exception: pass
 
                 if days == -1 or days == 0 or days >= 36500:
                     expire = None  # 永久有效用 None 表示
@@ -1178,7 +1178,7 @@ def _do_code_register(chat_id, tg_user_id, custom_name, code, days, tpl_id, rout
                     msg = f"🎟️ <b>新用户注册</b>\n\n👤 {safe_name}\n📅 有效期：{days_display}\n🔗 邀请码：{code}\n📱 注册渠道：TG机器人\n🆔 TG：{tg_user_id}"
                     bot.send_message("sys_notify", msg, platform="all")
                     add_sys_notification("user", f"新用户注册: {safe_name}", f"TG机器人注册，有效期 {days_display}", "/users_manage")
-                except: pass
+                except Exception: pass
             except Exception as e:
                 _send(chat_id, f"❌ 注册码使用失败：{e}")
     finally:
@@ -2886,12 +2886,12 @@ def cmd_grab(chat_id, tg_user_id, text, is_group=False, tg_name="", user_msg_id=
         
     except ValueError:
         try: conn.rollback()
-        except: pass
+        except Exception: pass
         return _send(chat_id, "❌ 红包ID必须是数字")
     except Exception as e:
         logger.error(f"[UserBot] 抢红包失败: {e}")
         try: conn.rollback()
-        except: pass
+        except Exception: pass
         return _send(chat_id, f"❌ 抢红包失败：{str(e)}")
 
 def cmd_lottery(chat_id, tg_user_id, text, is_group=False, user_msg_id=None):
@@ -3411,7 +3411,7 @@ def _handle_scratch(chat_id, tg_user_id, card_id, slot_number, tg_name=""):
     except Exception as e:
         logger.error(f"[刮刮乐] 刮奖失败: {e}")
         try: conn.rollback()
-        except: pass
+        except Exception: pass
         conn.close()
         _send(chat_id, f"❌ 刮奖失败：{str(e)}")
 
@@ -3524,7 +3524,7 @@ def _scratch_draw_result(chat_id, card_id):
     except Exception as e:
         logger.error(f"[刮刮乐] 开奖失败: {e}")
         try: conn.rollback()
-        except: pass
+        except Exception: pass
         conn.close()
 
 
@@ -3629,7 +3629,7 @@ def cmd_redeem_callback(chat_id, tg_user_id, item_id, cq_id):
             new_exp = (exp_date + datetime.timedelta(days=days)).strftime("%Y-%m-%d")
             c.execute("UPDATE users_meta SET expire_date = ? WHERE user_id = ?", (new_exp, uid))
             try: media_api.post(f"/Users/{uid}/Policy", json={"IsDisabled": False}, timeout=3)
-            except: pass
+            except Exception: pass
             result_msg = f"📅 账号已续期至 {new_exp}"
             
         elif target.get("type") == "random_renew":
@@ -3666,7 +3666,7 @@ def cmd_redeem_callback(chat_id, tg_user_id, item_id, cq_id):
             new_exp = (exp_date + datetime.timedelta(days=actual_days)).strftime("%Y-%m-%d")
             c.execute("UPDATE users_meta SET expire_date = ? WHERE user_id = ?", (new_exp, uid))
             try: media_api.post(f"/Users/{uid}/Policy", json={"IsDisabled": False}, timeout=3)
-            except: pass
+            except Exception: pass
             
             bonus_text = f"+{random_bonus}" if random_bonus >= 0 else str(random_bonus)
             
@@ -3717,7 +3717,7 @@ def cmd_redeem_callback(chat_id, tg_user_id, item_id, cq_id):
                 notify_msg += f"\n🎲 随机结果：{actual_days}天"
             bot.send_message("sys_notify", notify_msg, platform="all")
             add_sys_notification("points", f"商城订单: {target['name']}", f"用户 {uname} 通过TG机器人兑换", "/points")
-        except: pass
+        except Exception: pass
     except Exception as e:
         _send(chat_id, f"❌ 兑换失败：{e}")
 
@@ -3924,7 +3924,7 @@ def _submit_request(chat_id, tg_user_id, media_type, tmdb_id, season):
             ]}
             poster_url = f"https://image.tmdb.org/t/p/w500{poster}" if poster else REPORT_COVER_URL
             bot.send_photo("sys_notify", poster_url, msg, reply_markup=keyboard, platform="all")
-        except: pass
+        except Exception: pass
     except Exception as e:
         _send(chat_id, f"❌ 求片提交失败：{e}")
 

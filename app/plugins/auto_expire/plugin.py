@@ -242,7 +242,7 @@ class AutoExpirePlugin(PluginBase):
             try:
                 from app.services.bot_service import bot
                 bot.send_message("sys_notify", "\n".join(lines), platform="all")
-            except: pass
+            except Exception: pass
 
         if expiring_users:
             print(f"[到期提醒] {'检测到' if manual else '已提醒'} {len(expiring_users)} 位即将到期用户")
