@@ -3,6 +3,8 @@ PWA 自定义图标和主题 API
 """
 import sqlite3
 import os
+import io
+import hashlib
 import base64
 import json
 from fastapi import APIRouter, Request, UploadFile, File, HTTPException
@@ -203,25 +205,54 @@ async def upload_custom_icon(request: Request, file: UploadFile = File(...)):
     if not is_admin:
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
-    if not file.content_type.startswith("image/"):
+    if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="只支持图片文件")
-    
+
+    # 🔒 文件扩展名白名单
+    ALLOWED_EXT = {".png", ".jpg", ".jpeg", ".webp"}
+    filename_ext = os.path.splitext(file.filename or "")[1].lower()
+    if filename_ext not in ALLOWED_EXT:
+        raise HTTPException(status_code=400, detail="不支持的扩展名（仅 png/jpg/jpeg/webp）")
+
     try:
         content = await file.read()
-        
+
+        # 🔒 大小限制（2MB）
+        if len(content) > 2 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="图片不能超过 2MB")
+
+        # 🔒 Magic bytes 校验（防止伪装文件类型）
+        if not (
+            content.startswith(b"\x89PNG\r\n\x1a\n")           # PNG
+            or content.startswith(b"\xff\xd8\xff")              # JPEG
+            or (content[:4] == b"RIFF" and content[8:12] == b"WEBP")  # WEBP
+        ):
+            raise HTTPException(status_code=400, detail="文件头校验失败")
+
+        # 🔒 PIL 二次解析校验（防止恶意构造的图片）
+        try:
+            from PIL import Image
+            img = Image.open(io.BytesIO(content))
+            img.verify()
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=400, detail="图片解析失败")
+
         upload_dir = "data/pwa_icons"
         os.makedirs(upload_dir, exist_ok=True)
-        
-        import time
-        filename = f"custom_icon_{int(time.time() * 1000)}.png"
+
+        # 🔒 使用 hash 文件名，避免使用 timestamp 给攻击者可预测的命名
+        digest = hashlib.sha256(content).hexdigest()[:24]
+        filename = f"custom_icon_{digest}.png"
         filepath = os.path.join(upload_dir, filename)
-        
+
         with open(filepath, "wb") as f:
             f.write(content)
-        
+
         icon_url = f"/api/pwa/icon/{filename}"
         icon_id = filename.replace(".png", "")
-        
+
         return {
             "status": "success",
             "message": "图标上传成功",
@@ -231,6 +262,8 @@ async def upload_custom_icon(request: Request, file: UploadFile = File(...)):
                 "url": icon_url
             }
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"上传失败: {str(e)}")
 

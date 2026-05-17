@@ -153,8 +153,10 @@ def api_get_audit_logs(request: Request, page: int = 1, limit: int = 20,
         params = []
 
         if action:
-            conditions.append("action LIKE ?")
-            params.append(f"%{action}%")
+            # 🔒 转义 LIKE 通配符，防止注入 %/_ 引发数据过度匹配
+            safe_action = action.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            conditions.append("action LIKE ? ESCAPE '\\'")
+            params.append(f"%{safe_action}%")
         if start_date:
             conditions.append("created_at >= ?")
             params.append(start_date)
@@ -162,8 +164,10 @@ def api_get_audit_logs(request: Request, page: int = 1, limit: int = 20,
             conditions.append("created_at <= ?")
             params.append(end_date + "T23:59:59")
         if target_user_id:
-            conditions.append("target_user_id LIKE ?")
-            params.append(f"%{target_user_id}%")
+            # 🔒 转义 LIKE 通配符
+            safe_uid = target_user_id.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            conditions.append("target_user_id LIKE ? ESCAPE '\\'")
+            params.append(f"%{safe_uid}%")
 
         where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
 

@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Response, Request
+from fastapi import APIRouter, Response, Request, Depends, HTTPException
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.core.security import require_login  # 🔒 统一登录依赖
 from app.core.config import cfg
 from app.core.media_adapter import media_api  # 🔥 引入核心适配器
 import requests
@@ -171,14 +172,23 @@ def get_real_image_id_robust(item_id: str):
 
     return item_id
 
+# 🔒 合法的 Emby 图片类型白名单（防止 img_type 路径逃逸到非图片端点）
+ALLOWED_IMG_TYPES = {"Primary", "Backdrop", "Thumb", "Banner", "Logo", "Art", "Disc", "Box", "Menu"}
+
 @router.get("/api/proxy/image/{item_id}/{img_type}")
-def proxy_image(item_id: str, img_type: str, request: Request, v: str = None, nocache: bool = False):
+def proxy_image(item_id: str, img_type: str, request: Request, v: str = None, nocache: bool = False, _user: dict = Depends(require_login)):
     """
     图片代理接口
     - v: 版本参数，当图片更新时改变此参数可强制刷新缓存
     - nocache: 是否跳过后端缓存，直接请求新图片
     - 缓存策略：后端缓存7天 + 浏览器缓存1年
     """
+    # 🔒 img_type 白名单校验，防止路径逃逸至 Emby 其他端点
+    if img_type not in ALLOWED_IMG_TYPES:
+        return Response(status_code=400)
+    # 🔒 item_id 严格字符集校验（GUID/UUID/数字）
+    if not item_id or not all(c.isalnum() or c == '-' for c in item_id) or len(item_id) > 64:
+        return Response(status_code=400)
     # 防盗链：Referer 检查（记录但不阻断）
     referer = request.headers.get("referer", "")
 
@@ -243,10 +253,7 @@ def proxy_image(item_id: str, img_type: str, request: Request, v: str = None, no
     return Response(status_code=404)
 
 @router.get("/api/proxy/smart_image")
-def proxy_smart_image(request: Request, item_id: str, name: str = "", year: str = "", type: str = "Primary"):
-    # 🔒 安全：需要登录才能使用智能图片代理
-    if not request.session.get("user"):
-        return Response(status_code=401)
+def proxy_smart_image(request: Request, item_id: str, name: str = "", year: str = "", type: str = "Primary", _user: dict = Depends(require_login)):
     # 参数验证
     if not item_id or item_id == "undefined" or item_id == "null":
         return Response(status_code=404)
@@ -345,16 +352,13 @@ def proxy_smart_image(request: Request, item_id: str, name: str = "", year: str 
     return Response(status_code=404)
 
 @router.get("/api/proxy/user_image/{user_id}")
-def proxy_user_image(request: Request, user_id: str, tag: str = None):
+def proxy_user_image(request: Request, user_id: str, tag: str = None, _user: dict = Depends(require_login)):
     """
     用户头像代理接口
     - tag: 图片版本标签，用于缓存控制
     - 缓存策略：长期缓存（1年）
-    - 如果用户没有头像，返回默认头像
+    - 如果用户没有头像，返回默认头像（本地静态资源，避免泄露 IP 到第三方）
     """
-    # 🔒 安全：需要登录
-    if not request.session.get("user"):
-        return Response(status_code=401)
     # 参数验证
     if not user_id or user_id == "undefined" or user_id == "null":
         return Response(status_code=404)
@@ -371,16 +375,16 @@ def proxy_user_image(request: Request, user_id: str, tag: str = None):
             if tag:
                 cache_headers["ETag"] = f'"{tag}"'
             return Response(content=resp.content, media_type=resp.headers.get("Content-Type", "image/jpeg"), headers=cache_headers)
-        # 404 表示用户没有头像，返回默认头像
+        # 404 表示用户没有头像，返回默认头像（本地）
         elif resp.status_code == 404:
             from fastapi.responses import RedirectResponse
-            return RedirectResponse(url="https://img.hotimg.com/a444d32a033994d5b.png", status_code=302)
-    except Exception as e:
+            return RedirectResponse(url="/static/img/logo-app.png", status_code=302)
+    except Exception:
         # 超时或连接失败，返回默认头像
         pass
-    # 🔥 用户没有头像或请求失败时，返回重定向到默认头像
+    # 🔥 用户没有头像或请求失败时，返回本地默认头像，避免第三方泄露用户 IP
     from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="https://img.hotimg.com/a444d32a033994d5b.png", status_code=302)
+    return RedirectResponse(url="/static/img/logo-app.png", status_code=302)
 
 @router.post("/api/proxy/clear_cache")
 def clear_image_cache(request: Request, item_ids: list = None):

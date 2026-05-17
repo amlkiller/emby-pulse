@@ -55,13 +55,18 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         )
 
         # CSP policy
-        # Note: 'unsafe-inline' is required for the 1000+ inline event handlers (onclick, onchange, etc.)
-        # across all templates. The nonce is kept on <script> tags for future migration to addEventListener.
-        # 'unsafe-hashes' was considered but rejected: each unique handler content produces a different
-        # SHA-256 hash, so 897+ hashes would be needed (~48KB header), exceeding practical HTTP header limits.
+        # 现代浏览器使用 script-src-elem (强制 nonce) + script-src-attr (允许 inline 事件处理器)。
+        # script-src 作为旧浏览器兜底，保留 'unsafe-inline' 以兼容 1000+ 内联事件处理器。
+        # 现代浏览器优先使用细化指令，nonce 对 <script> 标签生效，inline handler 通过 -attr 单独允许。
+        cdn_sources = (
+            "https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com "
+            "https://cdn.quilljs.com https://cdn.bootcdn.net https://html2canvas.hertzen.com"
+        )
         response.headers["Content-Security-Policy"] = (
             f"default-src 'self'; "
-            f"script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://cdn.quilljs.com https://cdn.bootcdn.net https://html2canvas.hertzen.com; "
+            f"script-src 'self' 'unsafe-inline' {cdn_sources}; "
+            f"script-src-elem 'self' 'nonce-{nonce}' {cdn_sources}; "
+            f"script-src-attr 'unsafe-inline'; "
             f"style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com https://cdn.quilljs.com; "
             f"img-src 'self' data: blob: https:; "
             f"font-src 'self' data: https://fonts.gstatic.com; "

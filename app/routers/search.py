@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Depends
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.core.security import require_login  # 🔒 统一登录依赖
 from fastapi.responses import StreamingResponse
 import requests
 import io
@@ -110,7 +111,13 @@ def get_emby_admin():
         return None
 
 @router.get("/api/library/image/{item_id}")
-def proxy_emby_image(item_id: str, type: str = "Primary", width: int = 400):
+def proxy_emby_image(item_id: str, type: str = "Primary", width: int = 400, _user: dict = Depends(require_login)):
+    # 🔒 类型白名单（防 path 逃逸）
+    if type not in {"Primary", "Backdrop", "Thumb", "Banner", "Logo", "Art", "Disc", "Box", "Menu"}:
+        return {"status": "error"}
+    # 🔒 item_id 字符集校验
+    if not item_id or not all(c.isalnum() or c == '-' for c in item_id) or len(item_id) > 64:
+        return {"status": "error"}
     try:
         # 🚀 替换为 media_api (支持 stream)
         res = media_api.get(f"/Items/{item_id}/Images/{type}", params={"MaxWidth": width}, stream=True, timeout=5)

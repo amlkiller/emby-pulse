@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Depends
 from pydantic import BaseModel
 from typing import Optional
 from app.core.database import query_db, SYSTEM_DB_PATH
 from app.core.media_adapter import media_api
 from app.core.security_utils import sanitize_html, sanitize_rich_html
+from app.core.security import require_admin
 from app.routers.auth import is_admin_user
 import sqlite3
 import datetime
@@ -47,13 +48,8 @@ class UserSendMessageModel(BaseModel):
 # ==================== 管理端 API ====================
 
 @router.get("/api/users/all")
-def get_all_users(request: Request):
-    """获取所有用户列表（用于发起对话）"""
-    user = request.session.get("user")
-    if not user:
-        log_msg("[消息中心] get_all_users: 未登录")
-        return {"status": "error", "message": "未登录"}
-    
+def get_all_users(request: Request, _admin: dict = Depends(require_admin)):
+    """获取所有用户列表（用于发起对话） - 仅管理员"""
     log_msg(f"[消息中心] get_all_users: 开始获取用户列表")
     log_msg(f"[消息中心] get_all_users: media_api.host = {media_api.host}")
     log_msg(f"[消息中心] get_all_users: media_api.api_key = {'***' if media_api.api_key else 'None'}")

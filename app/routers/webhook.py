@@ -9,10 +9,14 @@ import requests
 import json
 import logging
 import os
+import secrets
 import ipaddress
 
 logger = logging.getLogger("uvicorn")
 router = APIRouter()
+
+# 🔒 Webhook payload 上限（1MB），防止 DoS
+MAX_WEBHOOK_PAYLOAD = 1024 * 1024
 
 
 def _save_playback_ip_data(data, user_id, user_name, item, ip):
@@ -132,12 +136,22 @@ def intercept_illegal_client(data: dict):
 
 @router.post("/api/v1/webhook")
 async def emby_webhook(request: Request):
+    # 🔒 Payload size 上限（防 DoS）
+    cl = request.headers.get("content-length")
+    try:
+        if cl is not None and int(cl) > MAX_WEBHOOK_PAYLOAD:
+            raise HTTPException(status_code=413, detail="Payload too large")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid Content-Length")
+
     # 🔒 安全：仅从 Header 获取 Token
     token = request.headers.get("X-Webhook-Token")
     if not token:
         raise HTTPException(status_code=401, detail="缺少 Webhook Token，请使用 X-Webhook-Token Header")
 
-    if token != cfg.get("webhook_token"):
+    # 🔒 常量时间比对，防止时序攻击
+    expected = cfg.get("webhook_token") or ""
+    if not expected or not secrets.compare_digest(str(token), str(expected)):
         raise HTTPException(status_code=403, detail="Invalid Token")
 
     try:

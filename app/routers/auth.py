@@ -698,9 +698,20 @@ class AvatarUpdate(BaseModel):
 async def get_avatar(request: Request, user_id: int):
     """获取本地用户头像"""
     # 🔒 安全：需要登录才能访问
-    if not request.session.get("user"):
+    session_user = request.session.get("user")
+    if not session_user:
         return RedirectResponse("/static/img/logo-app.png")
-    
+
+    # 🔒 IDOR 防护：非管理员仅可访问自己的头像
+    if not is_admin_user(request):
+        own_id = get_current_user_id(request)
+        try:
+            own_id_int = int(own_id) if own_id is not None else None
+        except (TypeError, ValueError):
+            own_id_int = None
+        if own_id_int != user_id:
+            return RedirectResponse("/static/img/logo-app.png")
+
     try:
         user = query_db("SELECT avatar FROM local_users WHERE id = ?", (user_id,), one=True)
         if user and user['avatar']:
@@ -825,11 +836,11 @@ def verify_local_user(username: str, password: str, client_ip: str = None, totp_
     
     if not user:
         return False, "用户名或密码错误"
-    
-    # 检查是否启用
+
+    # 🔒 用户枚举防护：禁用状态不能在密码校验前泄露，统一报"用户名或密码错误"
     if not user['is_enabled']:
-        return False, "账号已被禁用"
-    
+        return False, "用户名或密码错误"
+
     # 验证密码
     if not verify_password(password, user['password_hash']):
         return False, "用户名或密码错误"
@@ -1010,10 +1021,11 @@ async def api_login(data: LoginModel, request: Request):
 
         # 检查是否是管理员
         if not matched_user.get("Policy", {}).get("IsAdministrator", False):
+            # 🔒 用户枚举防护：统一返回"账号或密码错误"，不暴露用户存在
             _record_login_failure(ip_key, "ip")
             _record_login_failure(user_key, "user")
             remaining = min(_get_remaining_attempts(ip_key), _get_remaining_attempts(user_key))
-            return {"status": "error", "message": "权限不足：仅限 Emby 管理员登录", "remaining_attempts": remaining}
+            return {"status": "error", "message": "账号或密码错误", "remaining_attempts": remaining}
 
         # 验证密码（如果有设置）
         has_password = matched_user.get("HasPassword", False)

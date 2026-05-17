@@ -28,7 +28,7 @@ class DatabaseSessionMiddleware(BaseHTTPMiddleware):
                 value=current_session_id,
                 max_age=7 * 24 * 3600,
                 httponly=True,
-                samesite="lax",
+                samesite="strict",
                 secure=is_https,  # Secure only on HTTPS
                 path="/"
             )

@@ -46,13 +46,17 @@ RATE_LIMITS = {
     "/api/user/points/transfer": {"limit": 5, "window": 60},
     "/api/requests/auth": {"limit": 10, "window": 60},
     "/api/register": {"limit": 5, "window": 300},
+    # Token 校验：暴破/枚举防护
+    "/api/tokens/verify": {"limit": 30, "window": 60},
+    # 图片缓存清理（管理操作）
+    "/api/proxy/clear_cache": {"limit": 5, "window": 60},
+    # 头像查询
+    "/api/auth/avatar": {"limit": 60, "window": 60},
 }
 
 # 白名单路径（不受速率限制）
+# 仅保留真正的静态资源/路由发现端点
 WHITELIST = [
-    "/api/settings",
-    "/api/bot/settings",
-    "/api/me",
     "/api/routes",
     "/static",
     "/favicon.ico",
