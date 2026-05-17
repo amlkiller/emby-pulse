@@ -262,20 +262,13 @@ async def lifespan(app: FastAPI):
         print(f"⚠️ proxy_helper 启动自检失败（忽略）: {_e}")
 
     bot.start()
-    # 🧩 Pro 专属：用户 TG 机器人（自动启动，无需手动保存配置）
+    # 用户 TG 机器人（自动启动，无需手动保存配置）
     try:
-        import sqlite3 as _sql
-        _conn = _sql.connect(SYSTEM_DB_PATH)  # 🔥 使用系统数据库
-        try:
-            _pro_row = _conn.execute("SELECT status FROM sys_license LIMIT 1").fetchone()
-        except:
-            _pro_row = None
-        _conn.close()
         _token = cfg.get("tg_user_bot_token")
-        if _pro_row and _pro_row[0] == 'pro' and _token:
+        if _token:
             user_bot.start()
     except Exception as _e:
-        print(f"⚠️ 用户机器人启动检查异常: {_e}")
+        print(f"⚠️ 用户机器人启动异常: {_e}")
     # 唤醒 10308 独立守护引擎
     threading.Thread(target=start_10308_server, daemon=True).start()
     # 🔥 唤醒风控天眼
@@ -285,13 +278,6 @@ async def lifespan(app: FastAPI):
     from app.routers.stats import preload_dashboard_cache, start_dashboard_cache_refresh_loop
     asyncio.create_task(preload_dashboard_cache())
     asyncio.create_task(start_dashboard_cache_refresh_loop())
-    
-    # 🔒 Pro 授权在线验证（启动时验证 + 定时心跳）
-    try:
-        from app.core.license_verification import init_license_verification
-        init_license_verification()
-    except Exception as e:
-        print(f"⚠️ Pro 授权验证初始化失败: {e}")
     
     # 🔥 启动用户社区首页缓存刷新（后台定时刷新）
     def _start_community_cache_refresh():

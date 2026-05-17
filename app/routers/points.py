@@ -13,7 +13,7 @@ from app.core.config import cfg, templates
 from app.core.database import DB_PATH, SYSTEM_DB_PATH, query_db, add_sys_notification
 from app.core.media_adapter import media_api
 from app.services.bot_service import bot
-from app.core.security import verify_pro_status # 🔥 引入你的 Pro 拦截器
+
 from app.routers.auth import check_permission
 
 from app.routers.views import get_common_vars
@@ -221,17 +221,9 @@ async def points_page(request: Request):
     if not check_permission(request, "points"):
         return RedirectResponse("/?no_permission=1", status_code=303)
 
-    is_pro = False
-    try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        row = conn.execute("SELECT status FROM sys_license LIMIT 1").fetchone()
-        conn.close()
-        if row and row[0] == 'pro': is_pro = True
-    except Exception: pass
-
     return templates.TemplateResponse("points.html", get_common_vars(request, "points", {
         "user": request.session.get("user"),
-        "is_pro": is_pro
+        "is_pro": True
     }))
 
 @router.get("/api/points/config")
@@ -242,14 +234,7 @@ def get_points_config(request: Request):
     rows = query_db("SELECT key, value FROM point_config")
     config = {r['key']: r['value'] for r in rows} if rows else {}
     
-    # 🔥 读取系统的 Pro 状态并下发给前端，用于渲染遮罩
-    try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        row = conn.execute("SELECT status FROM sys_license LIMIT 1").fetchone()
-        conn.close()
-        config['is_pro'] = True if row and row[0] == 'pro' else False
-    except:
-        config['is_pro'] = False
+    config['is_pro'] = True
         
     return {"status": "success", "data": config}
 
@@ -259,20 +244,9 @@ async def save_points_config(request: Request):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     data = await request.json()
     
-    # 🔥 拦截器：后端查底细，判断是不是 Pro
-    is_pro = False
-    try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        row = conn.execute("SELECT status FROM sys_license LIMIT 1").fetchone()
-        is_pro = True if row and row[0] == 'pro' else False
-    except Exception: pass
-
     conn = sqlite3.connect(SYSTEM_DB_PATH)
     c = conn.cursor()
     for k, v in data.get('configs', {}).items():
-        # 🛡️ 核心防线：如果你不是 Pro，强行屏蔽这些高级字段的入库请求！
-        if not is_pro and k in ['enable_req_cost', 'req_cost', 'req_cost_mode', 'store_items', 'enable_update_cost', 'update_cost', 'update_cost_mode']:
-            continue
             
         if isinstance(v, (dict, list)): v = json.dumps(v, ensure_ascii=False)
         c.execute("INSERT OR REPLACE INTO point_config (key, value) VALUES (?, ?)", (k, str(v)))
@@ -314,7 +288,7 @@ def get_users_points(request: Request, page: int = 1, page_size: int = 20):
     except Exception as e: return {"status": "error", "message": str(e)}
 
 # 👇 批量发钱功能依然严格锁死！
-@router.post("/api/points/batch_update", dependencies=[Depends(verify_pro_status)])
+@router.post("/api/points/batch_update")
 def batch_update_points(data: BatchPointsModel, request: Request):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:

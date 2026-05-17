@@ -4291,13 +4291,7 @@ def cmd_calendar(chat_id, tg_user_id, msg_id=None):
 
 def _is_pro():
     """检查是否为 Pro 用户"""
-    try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        row = conn.execute("SELECT status FROM sys_license LIMIT 1").fetchone()
-        conn.close()
-        return row and row[0] == 'pro'
-    except:
-        return False
+    return True
 
 
 # ==========================================

@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from app.core.config import cfg
 from app.core.database import DB_PATH, SYSTEM_DB_PATH, query_db, get_playback_column_name
 from app.core.media_adapter import media_api
-from app.core.security import verify_pro_status  # 🔥 引入 Pro 拦截器
+
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 
 router = APIRouter()
@@ -57,7 +57,7 @@ async def get_blacklist(request: Request):
     return {"status": "success", "data": [dict(r) for r in rows] if rows else []}
 
 # 👇 🔥 PRO 功能：添加设备到黑名单
-@router.post("/api/clients/blacklist", dependencies=[Depends(verify_pro_status)])
+@router.post("/api/clients/blacklist")
 async def add_blacklist(data: BlacklistModel, request: Request):
     app_name = data.app_name.strip()
     if not app_name: 
@@ -83,7 +83,7 @@ async def add_blacklist(data: BlacklistModel, request: Request):
         return {"status": "error", "message": f"[{app_name}] 已存在于黑名单中"}
 
 # 👇 🔥 PRO 功能：从黑名单移除设备
-@router.delete("/api/clients/blacklist/{app_name}", dependencies=[Depends(verify_pro_status)])
+@router.delete("/api/clients/blacklist/{app_name}")
 async def delete_blacklist(app_name: str, request: Request):
     query_db("DELETE FROM client_blacklist WHERE app_name = ?", (app_name,))
     
@@ -115,7 +115,7 @@ async def get_whitelist(request: Request):
     return {"status": "success", "data": [dict(r) for r in rows] if rows else []}
 
 # 👇 🔥 PRO 功能：添加用户到白名单
-@router.post("/api/clients/whitelist", dependencies=[Depends(verify_pro_status)])
+@router.post("/api/clients/whitelist")
 async def add_whitelist(data: WhitelistModel, request: Request):
     user_id = data.user_id.strip()
     user_name = data.user_name.strip()
@@ -143,7 +143,7 @@ async def add_whitelist(data: WhitelistModel, request: Request):
         return {"status": "error", "message": f"用户 [{user_name}] 已存在于白名单中"}
 
 # 👇 🔥 PRO 功能：从白名单移除用户
-@router.delete("/api/clients/whitelist/{user_id}", dependencies=[Depends(verify_pro_status)])
+@router.delete("/api/clients/whitelist/{user_id}")
 async def delete_whitelist(user_id: str, request: Request):
     query_db("DELETE FROM client_whitelist WHERE user_id = ?", (user_id,))
     
@@ -163,7 +163,7 @@ async def delete_whitelist(user_id: str, request: Request):
     return {"status": "success"}
 
 # 👇 🔥 PRO 功能：批量添加用户到白名单
-@router.post("/api/clients/whitelist/batch", dependencies=[Depends(verify_pro_status)])
+@router.post("/api/clients/whitelist/batch")
 async def batch_add_whitelist(request: Request):
     data = await request.json()
     users = data.get("users", [])
@@ -201,7 +201,7 @@ async def batch_add_whitelist(request: Request):
     return {"status": "success", "added": added_count, "skipped": skipped_count}
 
 # 👇 🔥 PRO 功能：批量移除白名单用户
-@router.post("/api/clients/whitelist/batch-delete", dependencies=[Depends(verify_pro_status)])
+@router.post("/api/clients/whitelist/batch-delete")
 async def batch_delete_whitelist(request: Request):
     data = await request.json()
     user_ids = data.get("user_ids", [])
@@ -407,7 +407,7 @@ async def get_clients_data(request: Request):
     return result
 
 # 👇 🔥 PRO 功能：全网阻断扫描
-@router.post("/api/clients/execute_block", dependencies=[Depends(verify_pro_status)])
+@router.post("/api/clients/execute_block")
 async def execute_block(request: Request):
     """执行一次阻断扫描"""
     result = _do_block_devices()  # 不是异步函数，不需要 await

@@ -4,7 +4,7 @@ from typing import Optional, List
 from app.core.config import cfg
 from app.core.database import query_db, SYSTEM_DB_PATH
 from app.core.media_adapter import media_api
-from app.core.security import verify_pro_status  # 🔥 引入 Pro 拦截器
+
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 import requests
 import datetime
@@ -942,7 +942,7 @@ def api_update_hidden_libraries(data: HiddenLibrariesModel, request: Request):
 
 
 @router.post("/api/manage/invite/gen")
-def api_gen_invite(data: InviteGenModelLocal, request: Request, _pro=Depends(verify_pro_status)):
+def api_gen_invite(data: InviteGenModelLocal, request: Request):
     if not request.session.get("user"): return {"status": "error"}
     try:
         admin_user = request.session.get("user", {})
@@ -981,7 +981,7 @@ def api_gen_invite(data: InviteGenModelLocal, request: Request, _pro=Depends(ver
     except Exception as e: return {"status": "error", "message": str(e)}
 
 @router.get("/api/manage/invites")
-def api_get_invites(request: Request, code_type: str = "all", _pro=Depends(verify_pro_status)):
+def api_get_invites(request: Request, code_type: str = "all"):
     if not request.session.get("user"): return {"status": "error"}
     try:
         if code_type in ("register", "renew"):
@@ -1015,7 +1015,7 @@ def api_get_invites(request: Request, code_type: str = "all", _pro=Depends(verif
     except Exception as e: return {"status": "error", "message": str(e)}
 
 @router.get("/api/manage/invites/export")
-def api_export_invites(request: Request, code_type: str = "all", _pro=Depends(verify_pro_status)):
+def api_export_invites(request: Request, code_type: str = "all"):
     """导出邀请码/续费码为CSV"""
     if not request.session.get("user"): return {"status": "error"}
     try:
@@ -1041,7 +1041,7 @@ def api_export_invites(request: Request, code_type: str = "all", _pro=Depends(ve
     except Exception as e: return {"status": "error", "message": str(e)}
 
 @router.post("/api/manage/invites/batch")
-def api_manage_invites_batch(data: InviteBatchModelLocal, request: Request, _pro=Depends(verify_pro_status)):
+def api_manage_invites_batch(data: InviteBatchModelLocal, request: Request):
     if not request.session.get("user"): return {"status": "error"}
     try:
         admin_user = request.session.get("user", {})
@@ -1584,8 +1584,7 @@ def api_manage_user_delete(user_id: str, request: Request):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-# 👇 🔥 只有这个批量管理接口,才挂载了 Pro 门禁锁
-@router.post("/api/manage/users/batch", dependencies=[Depends(verify_pro_status)])
+@router.post("/api/manage/users/batch")
 def api_manage_users_batch(data: BatchActionModelLocal, request: Request):
     if not request.session.get("user"): return {"status": "error"}
     if len(data.user_ids) > 100:

@@ -115,13 +115,7 @@ def notify_admin_page(request: Request):
     user_name = user.get("name", "用户")
     user_avatar = user.get("avatar", "")
     
-    # 检查 Pro 状态
-    is_pro = False
-    try:
-        from app.routers.pro import check_pro_status
-        is_pro = check_pro_status()
-    except:
-        pass
+    is_pro = True
     
     return templates.TemplateResponse(
         "notify_admin.html",

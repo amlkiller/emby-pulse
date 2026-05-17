@@ -60,7 +60,7 @@ TABLE_SCHEMAS = {
         license_key TEXT,
         machine_id TEXT,
         pro_token TEXT,
-        status TEXT DEFAULT 'free',
+        status TEXT DEFAULT 'pro',
         expire_date DATETIME,
         last_checked DATETIME DEFAULT CURRENT_TIMESTAMP
     )""",

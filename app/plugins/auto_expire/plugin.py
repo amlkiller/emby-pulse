@@ -152,15 +152,7 @@ class AutoExpirePlugin(PluginBase):
         return get_plugin_config(self.id)
 
     def _is_pro(self):
-        try:
-            import sqlite3
-            from app.core.database import SYSTEM_DB_PATH
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            row = conn.execute("SELECT status FROM sys_license LIMIT 1").fetchone()
-            conn.close()
-            return row and row[0] == 'pro'
-        except:
-            return False
+        return True
 
     def _log(self, msg, level="info"):
         """记录日志（兼容旧代码）"""

@@ -20,7 +20,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from app.core.database import query_db, SYSTEM_DB_PATH
 from app.core.config import cfg
-from app.core.security import verify_pro_status
+
 from app.core.security_utils import sanitize_html, safe_error_message
 import sqlite3
 

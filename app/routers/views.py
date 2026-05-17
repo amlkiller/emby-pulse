@@ -313,18 +313,7 @@ def get_common_vars(request: Request, active_page: str, extra_vars: dict = None)
     except Exception: pass
 
     # ================= 🔥 新增：查询 Pro 状态 =================
-    is_pro = False
-    try:
-        import sqlite3
-        from app.core.database import SYSTEM_DB_PATH
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        # 查询数据库看是否激活
-        status_row = conn.execute("SELECT status FROM sys_license LIMIT 1").fetchone()
-        conn.close()
-        if status_row and status_row[0] == 'pro':
-            is_pro = True
-    except Exception as e:
-        logger.error(f"检查 Pro 状态失败: {e}")
+    is_pro = True
     # =========================================================
 
     # ================= 🔥 新增：用户权限信息 =================

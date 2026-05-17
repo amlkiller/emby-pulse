@@ -387,7 +387,7 @@ def _create_system_tables(c):
     try: c.execute("ALTER TABLE invitations ADD COLUMN route_mode TEXT DEFAULT 'block'")
     except Exception: pass
 
-    c.execute('''CREATE TABLE IF NOT EXISTS sys_license (license_key TEXT, machine_id TEXT, pro_token TEXT, status TEXT DEFAULT 'free', expire_date DATETIME, last_checked DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS sys_license (license_key TEXT, machine_id TEXT, pro_token TEXT, status TEXT DEFAULT 'pro', expire_date DATETIME, last_checked DATETIME DEFAULT CURRENT_TIMESTAMP)''')
 
     # 🔥 用户标签配置表
     c.execute('''CREATE TABLE IF NOT EXISTS user_tags (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, color TEXT DEFAULT 'blue', created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
@@ -685,7 +685,7 @@ def init_db(skip_migration=False):
             license_key TEXT,
             machine_id TEXT,
             pro_token TEXT,
-            status TEXT DEFAULT 'free',
+            status TEXT DEFAULT 'pro',
             expire_date DATETIME,
             last_checked DATETIME DEFAULT CURRENT_TIMESTAMP
         )''')

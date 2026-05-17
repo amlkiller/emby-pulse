@@ -26,15 +26,4 @@ def get_machine_id():
 
 def get_local_license_status():
     """读取本地授权状态"""
-    try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.row_factory = sqlite3.Row
-        c = conn.cursor()
-        row = c.execute("SELECT * FROM sys_license LIMIT 1").fetchone()
-        conn.close()
-        
-        if row:
-            return dict(row)
-        return {"status": "free", "license_key": None}
-    except:
-        return {"status": "free", "license_key": None}
+    return {"status": "pro", "license_key": None}

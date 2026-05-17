@@ -15,15 +15,7 @@ APP_VERSION = os.environ.get("APP_VERSION", "1.3.0.Dev")
 
 def is_pro_user() -> bool:
     """检查是否为 Pro 用户"""
-    try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        row = conn.execute("SELECT status FROM sys_license LIMIT 1").fetchone()
-        conn.close()
-        if row and row[0] == 'pro':
-            return True
-        return False
-    except Exception:
-        return False
+    return True
 
 # 全局 app 引用，用于动态注册路由
 _app = None

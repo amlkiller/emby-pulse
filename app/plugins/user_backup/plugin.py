@@ -77,13 +77,7 @@ class UserBackupPlugin(PluginBase):
 
     def _is_pro(self) -> bool:
         """检查 Pro 授权"""
-        try:
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            row = conn.execute("SELECT status FROM sys_license LIMIT 1").fetchone()
-            conn.close()
-            return row and row[0] == 'pro'
-        except:
-            return False
+        return True
 
     def _get_webdav_config(self) -> Dict:
         """获取 WebDAV 配置"""

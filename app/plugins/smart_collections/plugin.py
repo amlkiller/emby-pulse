@@ -499,13 +499,7 @@ class SmartCollectionsPlugin(PluginBase):
         return get_plugin_config(self.id)
     
     def _is_pro(self):
-        try:
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            row = conn.execute("SELECT status FROM sys_license LIMIT 1").fetchone()
-            conn.close()
-            return row and row[0] == 'pro'
-        except:
-            return False
+        return True
     
     def _sync_loop(self):
         """后台定时同步线程"""

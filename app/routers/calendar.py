@@ -18,18 +18,7 @@ APP_VERSION = os.environ.get("APP_VERSION", "1.3.0.Dev")
 
 def _check_pro_status():
     """检查 Pro 授权状态"""
-    is_pro = False
-    try:
-        import sqlite3
-        from app.core.database import SYSTEM_DB_PATH
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        status_row = conn.execute("SELECT status FROM sys_license LIMIT 1").fetchone()
-        conn.close()
-        if status_row and status_row[0] == 'pro':
-            is_pro = True
-    except Exception as e:
-        logger.error(f"检查 Pro 状态失败: {e}")
-    return is_pro
+    return True
 
 # 定义请求模型
 class CalendarConfigReq(BaseModel):
