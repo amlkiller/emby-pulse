@@ -124,44 +124,45 @@ class RateLimiter:
 rate_limiter = RateLimiter()
 
 
+def get_client_ip(request: Request) -> str:
+    """获取客户端真实 IP，仅从可信代理的 XFF/X-Real-IP 中提取"""
+    client_ip = request.client.host if request.client else "unknown"
+
+    if client_ip in TRUSTED_PROXIES:
+        forwarded = request.headers.get("X-Forwarded-For")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+        real_ip = request.headers.get("X-Real-IP")
+        if real_ip:
+            return real_ip.strip()
+
+    return client_ip
+
+
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """速率限制中间件"""
-    
+
     async def dispatch(self, request: Request, call_next):
         # 获取客户端 IP
-        client_ip = self._get_client_ip(request)
+        client_ip = get_client_ip(request)
         path = request.url.path
-        
+
         # 检查速率限制
         allowed, retry_after = rate_limiter.is_allowed(client_ip, path)
-        
+
         if not allowed:
             raise HTTPException(
                 status_code=429,
                 detail=f"请求过于频繁，请 {retry_after} 秒后再试",
                 headers={"Retry-After": str(retry_after)}
             )
-        
+
         response = await call_next(request)
-        
+
         # 添加速率限制头
         response.headers["X-RateLimit-Limit"] = str(RATE_LIMITS.get(path, {}).get("limit", 100))
-        
+
         return response
-    
-    def _get_client_ip(self, request: Request) -> str:
-        """获取客户端真实 IP，仅从可信代理获取"""
-        client_ip = request.client.host if request.client else "unknown"
-
-        if client_ip in TRUSTED_PROXIES:
-            forwarded = request.headers.get("X-Forwarded-For")
-            if forwarded:
-                return forwarded.split(",")[0].strip()
-            real_ip = request.headers.get("X-Real-IP")
-            if real_ip:
-                return real_ip.strip()
-
-        return client_ip
 
 
 # 定期清理过期记录

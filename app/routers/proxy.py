@@ -243,7 +243,10 @@ def proxy_image(item_id: str, img_type: str, request: Request, v: str = None, no
     return Response(status_code=404)
 
 @router.get("/api/proxy/smart_image")
-def proxy_smart_image(item_id: str, name: str = "", year: str = "", type: str = "Primary"):
+def proxy_smart_image(request: Request, item_id: str, name: str = "", year: str = "", type: str = "Primary"):
+    # 🔒 安全：需要登录才能使用智能图片代理
+    if not request.session.get("user"):
+        return Response(status_code=401)
     # 参数验证
     if not item_id or item_id == "undefined" or item_id == "null":
         return Response(status_code=404)

@@ -910,11 +910,9 @@ async def api_login(data: LoginModel, request: Request):
     if is_user_port and auth_type != "local":
         return {"status": "error", "message": "请从管理端口(10307)登录后台"}
     
-    # 获取客户端 IP
-    client_ip = request.client.host if request.client else "unknown"
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        client_ip = forwarded.split(",")[0].strip()
+    # 获取客户端 IP（复用可信代理逻辑，防止 XFF 伪造绕过锁定）
+    from app.core.rate_limiter import get_client_ip
+    client_ip = get_client_ip(request)
     
     user_agent = request.headers.get("user-agent", "")
     
