@@ -13,6 +13,7 @@ import logging
 from app.core.config import cfg
 from app.core.database import query_db, SYSTEM_DB_PATH
 from app.routers.search import get_emby_sys_info, is_new_emby_router
+from app.routers.auth import is_admin_user
 # 🔥 引入核心适配器
 from app.core.media_adapter import media_api
 import sqlite3
@@ -20,12 +21,6 @@ import sqlite3
 logger = logging.getLogger("uvicorn")
 
 router = APIRouter(prefix="/api/gaps", tags=["gaps"])
-
-# ==================== 安全检查 ====================
-
-def check_admin_login(request: Request) -> bool:
-    """检查是否为管理员登录（后台管理专用）"""
-    return request.session.get("user") is not None
 
 # 模块加载时确保表存在
 def _ensure_gap_tables():
@@ -286,7 +281,7 @@ def run_scan_task():
 @router.post("/scan/start")
 def start_scan(request: Request, bg_tasks: BackgroundTasks):
     # 🔒 管理员专用
-    if not check_admin_login(request):
+    if not is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     with state_lock:
         if scan_state["is_scanning"]: return {"status": "error"}
@@ -298,7 +293,7 @@ def start_scan(request: Request, bg_tasks: BackgroundTasks):
 @router.get("/scan/progress")
 def get_progress(request: Request):
     # 🔒 管理员专用
-    if not check_admin_login(request):
+    if not is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     with state_lock:
         if not scan_state["is_scanning"]:
@@ -368,7 +363,7 @@ def run_verify_task():
 @router.post("/scan/verify")
 def trigger_verify_gaps(request: Request, bg_tasks: BackgroundTasks):
     # 🔒 管理员专用
-    if not check_admin_login(request):
+    if not is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     with state_lock:
         if scan_state["is_scanning"]: return {"status": "success"}
@@ -380,7 +375,7 @@ def trigger_verify_gaps(request: Request, bg_tasks: BackgroundTasks):
 @router.post("/ignore")
 def ignore_gap(request: Request, payload: dict):
     # 🔒 管理员专用
-    if not check_admin_login(request):
+    if not is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     try:
         s_id = payload.get("series_id"); s_num = int(payload.get("season_number", 0)); e_num = int(payload.get("episode_number", 0))
@@ -395,7 +390,7 @@ def ignore_gap(request: Request, payload: dict):
 @router.post("/ignore/series")
 def ignore_entire_series(request: Request, payload: dict):
     # 🔒 管理员专用
-    if not check_admin_login(request):
+    if not is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     try:
         s_id = payload.get("series_id")
@@ -407,7 +402,7 @@ def ignore_entire_series(request: Request, payload: dict):
 @router.get("/ignores")
 def get_ignored_list(request: Request):
     # 🔒 管理员专用
-    if not check_admin_login(request):
+    if not is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     try:
         records = query_db("SELECT id, series_id, series_name, season_number, episode_number, created_at FROM gap_records WHERE status = 1 AND series_id != 'SYSTEM'")
@@ -434,7 +429,7 @@ def get_ignored_list(request: Request):
 @router.post("/unignore")
 def unignore_item(request: Request, payload: dict):
     # 🔒 管理员专用
-    if not check_admin_login(request):
+    if not is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     try:
         if payload.get("type") == "record": query_db("DELETE FROM gap_records WHERE id = ?", (payload.get("id"),))
@@ -445,7 +440,7 @@ def unignore_item(request: Request, payload: dict):
 @router.post("/ignore/delete")
 def delete_ignore_item(request: Request, payload: dict):
     # 🔒 管理员专用
-    if not check_admin_login(request):
+    if not is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     """彻底删除忽略记录"""
     try:
@@ -465,7 +460,7 @@ def delete_ignore_item(request: Request, payload: dict):
 @router.get("/config")
 def get_gap_config(request: Request):
     # 🔒 管理员专用
-    if not check_admin_login(request):
+    if not is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     rows = query_db("SELECT key, value FROM gap_config")
     conf = {r['key']: r['value'] for r in rows} if rows else {}
@@ -482,7 +477,7 @@ def get_gap_config(request: Request):
 @router.get("/libraries")
 def get_libraries(request: Request):
     # 🔒 管理员专用
-    if not check_admin_login(request):
+    if not is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     """获取所有媒体库列表（用于屏蔽设置）"""
     try:
@@ -527,7 +522,7 @@ def get_libraries(request: Request):
 @router.post("/config")
 def save_gap_config(request: Request, payload: dict):
     # 🔒 管理员专用
-    if not check_admin_login(request):
+    if not is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     for k, v in payload.items():
         query_db("INSERT OR REPLACE INTO gap_config (key, value) VALUES (?, ?)", (k, str(v).strip()))
@@ -537,7 +532,7 @@ def save_gap_config(request: Request, payload: dict):
 @router.post("/search_hdhive")
 def search_hdhive_for_gap(request: Request = None, payload: dict = None):
     # 🔒 管理员专用（内部调用时 request 为 None，跳过检查）
-    if request and not check_admin_login(request):
+    if request and not is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     """搜索影巢资源（仅115网盘）"""
     series_name = payload.get("series_name", "") if payload else ""
@@ -636,7 +631,7 @@ def search_hdhive_for_gap(request: Request = None, payload: dict = None):
 @router.post("/download_hdhive")
 def download_hdhive_for_gap(request: Request = None, payload: dict = None):
     # 🔒 管理员专用（内部调用时 request 为 None，跳过检查）
-    if request and not check_admin_login(request):
+    if request and not is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     """解锁影巢资源并转存到115"""
     import logging
@@ -726,7 +721,7 @@ def download_hdhive_for_gap(request: Request = None, payload: dict = None):
 @router.get("/115/folders")
 def get_115_folders(request: Request):
     # 🔒 管理员专用
-    if not check_admin_login(request):
+    if not is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     """获取115转存文件夹列表"""
     try:
@@ -749,7 +744,7 @@ def get_115_folders(request: Request):
 @router.post("/search_mp")
 def search_mp_for_gap(request: Request = None, payload: dict = None):
     # 🔒 管理员专用（内部调用时 request 为 None，跳过检查）
-    if request and not check_admin_login(request):
+    if request and not is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     series_id = payload.get("series_id") if payload else None
     series_name = payload.get("series_name") if payload else None
@@ -1248,7 +1243,7 @@ def hook_transmission(host, user, password, expected_size, target_episodes):
 @router.post("/download")
 def download_gap_item(request: Request = None, payload: dict = None):
     # 🔒 管理员专用（内部调用时 request 为 None，跳过检查）
-    if request and not check_admin_login(request):
+    if request and not is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     series_id = payload.get("series_id") if payload else None
     series_name = payload.get("series_name") if payload else None

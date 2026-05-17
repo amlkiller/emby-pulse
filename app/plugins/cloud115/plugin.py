@@ -39,12 +39,15 @@ class Cloud115Plugin(PluginBase):
     def _setup_routes(self):
         """注册插件 API 路由"""
         from fastapi import Request
+        from app.routers.auth import is_admin_user
 
         @self.router.get("/folders")
         def get_folders(request: Request):
             """获取配置的文件夹列表"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             config = self._get_config()
             folders = self._parse_folders(config)
             # 返回简化的文件夹列表
@@ -55,6 +58,8 @@ class Cloud115Plugin(PluginBase):
             """手动转存链接"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             try:
                 data = await request.json()
                 link = data.get("link", "").strip()
@@ -92,6 +97,8 @@ class Cloud115Plugin(PluginBase):
             """给影巢插件调用的转存接口"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             try:
                 data = await request.json()
                 link = data.get("link", "").strip()

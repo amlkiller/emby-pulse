@@ -175,6 +175,7 @@ def scan_library_quality(request: Request):
     """ 质量盘点核心引擎（分页并发获取 + 24小时缓存） """
     user = request.session.get("user")
     if not user: return {"status": "error", "message": "Unauthorized"}
+    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     
     force_refresh = request.query_params.get("force_refresh") == "true"
     current_time = time.time()

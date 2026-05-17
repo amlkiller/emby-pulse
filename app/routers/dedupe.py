@@ -11,15 +11,10 @@ from typing import Optional, List, Dict, Any
 
 from app.core.config import cfg
 from app.core.database import query_db, DB_PATH, SYSTEM_DB_PATH
+from app.routers.auth import is_admin_user
 
 logger = logging.getLogger("uvicorn")
 router = APIRouter(prefix="/api/dedupe", tags=["去重管理"])
-
-# ==================== 安全检查 ====================
-
-def check_admin_login(request: Request) -> bool:
-    """检查是否为管理员登录（后台管理专用）"""
-    return request.session.get("user") is not None
 
 scan_state = {
     "is_scanning": False,
@@ -464,7 +459,7 @@ class RemoveWhitelistReq(BaseModel):
 @router.post("/scan")
 async def trigger_scan(request: Request, req: ScanReq, bg_tasks: BackgroundTasks):
     # 🔒 管理员专用
-    if not check_admin_login(request):
+    if not is_admin_user(request):
         return {"success": False, "msg": "需要管理员权限"}
     if scan_state["is_scanning"]: return {"success": False, "msg": "系统正在扫描中，请勿重复提交"}
     bg_tasks.add_task(run_dedupe_scan, req.strategy, req.custom_weights, req.excluded_libraries)
@@ -473,7 +468,7 @@ async def trigger_scan(request: Request, req: ScanReq, bg_tasks: BackgroundTasks
 @router.get("/libraries")
 async def get_dedupe_libraries(request: Request):
     # 🔒 管理员专用
-    if not check_admin_login(request):
+    if not is_admin_user(request):
         return {"success": False, "msg": "需要管理员权限"}
     """获取所有媒体库列表（用于去重管理）"""
     try:
@@ -528,14 +523,14 @@ async def get_dedupe_libraries(request: Request):
 @router.get("/status")
 async def get_scan_status(request: Request):
     # 🔒 管理员专用
-    if not check_admin_login(request):
+    if not is_admin_user(request):
         return {"success": False, "msg": "需要管理员权限"}
     return {"success": True, "data": scan_state}
 
 @router.get("/results")
 async def get_results(request: Request):
     # 🔒 管理员专用
-    if not check_admin_login(request):
+    if not is_admin_user(request):
         return {"success": False, "msg": "需要管理员权限"}
     rows = query_db("SELECT * FROM dedupe_results ORDER BY group_key, score DESC")
     result_tree = defaultdict(list)
@@ -566,7 +561,7 @@ async def get_results(request: Request):
 @router.post("/ignore")
 async def ignore_groups(request: Request, req: IgnoreReq):
     # 🔒 管理员专用
-    if not check_admin_login(request):
+    if not is_admin_user(request):
         return {"success": False, "msg": "需要管理员权限"}
     try:
         conn = sqlite3.connect(SYSTEM_DB_PATH); c = conn.cursor()
@@ -580,7 +575,7 @@ async def ignore_groups(request: Request, req: IgnoreReq):
 @router.get("/whitelist")
 async def get_whitelist(request: Request):
     # 🔒 管理员专用
-    if not check_admin_login(request):
+    if not is_admin_user(request):
         return {"success": False, "msg": "需要管理员权限"}
     rows = query_db("SELECT * FROM dedupe_whitelist ORDER BY created_at DESC")
     return {"success": True, "data": [dict(r) for r in rows] if rows else []}
@@ -588,7 +583,7 @@ async def get_whitelist(request: Request):
 @router.post("/whitelist/remove")
 async def remove_whitelist(request: Request, req: RemoveWhitelistReq):
     # 🔒 管理员专用
-    if not check_admin_login(request):
+    if not is_admin_user(request):
         return {"success": False, "msg": "需要管理员权限"}
     try:
         conn = sqlite3.connect(SYSTEM_DB_PATH); c = conn.cursor()
@@ -600,7 +595,7 @@ async def remove_whitelist(request: Request, req: RemoveWhitelistReq):
 @router.post("/delete")
 async def delete_items(request: Request, req: DeleteReq):
     # 🔒 管理员专用
-    if not check_admin_login(request):
+    if not is_admin_user(request):
         return {"success": False, "msg": "需要管理员权限"}
     key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
     try:
@@ -638,7 +633,7 @@ async def delete_items(request: Request, req: DeleteReq):
 @router.get("/config")
 async def get_dedupe_config(request: Request):
     # 🔒 管理员专用
-    if not check_admin_login(request):
+    if not is_admin_user(request):
         return {"success": False, "msg": "需要管理员权限"}
     """获取保存的扫描配置"""
     try:
@@ -664,7 +659,7 @@ class SaveConfigReq(BaseModel):
 @router.post("/config")
 async def save_dedupe_config(request: Request, req: SaveConfigReq):
     # 🔒 管理员专用
-    if not check_admin_login(request):
+    if not is_admin_user(request):
         return {"success": False, "msg": "需要管理员权限"}
     """保存扫描配置"""
     try:

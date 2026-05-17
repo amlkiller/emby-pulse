@@ -643,7 +643,11 @@ def api_get_single_user(user_id: str, request: Request):
     except: return {"status": "error"}
 
 @router.get("/api/user/image/{user_id}")
-def get_user_avatar(user_id: str):
+def get_user_avatar(user_id: str, request: Request):
+    if not request.session.get("user"):
+        return Response(status_code=401)
+    if not is_admin_user(request):
+        return Response(status_code=403)
     try:
         res = media_api.get(f"/Users/{user_id}/Images/Primary", params={"quality": 90}, timeout=5, stream=True)
         if res.status_code == 200: return Response(content=res.content, media_type="image/jpeg", headers={"Cache-Control": "no-cache"})
@@ -673,7 +677,7 @@ async def api_update_user_image(request: Request, user_id: str = Form(...), url:
             validation = validate_url(url, allow_internal=False)
             if not validation["valid"]:
                 return {"status": "error", "message": f"URL 不安全: {validation['error']}"}
-            d_res = requests.get(url, timeout=10)
+            d_res = requests.get(url, timeout=10, allow_redirects=False, stream=True)
             if d_res.status_code == 200:
                 img_data = d_res.content
                 c_type = d_res.headers.get('Content-Type', 'image/png')

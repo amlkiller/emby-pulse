@@ -275,9 +275,11 @@ def ping_url(url, proxies=None):
 
 @router.get("/network_check")
 async def network_check(request: Request):
-    # 🔒 安全检查：必须登录
+    # 🔒 安全检查：必须登录且为管理员
     if not request.session.get("user"):
         return {"error": "未授权"}
+    if not is_admin_user(request):
+        return {"error": "需要管理员权限"}
     
     proxy_url = cfg.get("proxy_url")
     proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
@@ -451,9 +453,11 @@ async def restart_system(req: Request):
 @router.get("/weather")
 def api_weather(request: Request, city: str = "北京"):
     """天气接口（后端缓存，1小时自动刷新）"""
-    # 🔒 安全检查：必须登录
+    # 🔒 安全检查：必须登录且为管理员
     if not request.session.get("user"):
         return {"error": "未授权"}
+    if not is_admin_user(request):
+        return {"error": "需要管理员权限"}
     
     return get_weather_cache(city)
 
@@ -461,9 +465,11 @@ def api_weather(request: Request, city: str = "北京"):
 @router.post("/weather/refresh")
 def api_weather_refresh(request: Request, city: str = "北京"):
     """强制刷新天气缓存"""
-    # 🔒 安全检查：必须登录
+    # 🔒 安全检查：必须登录且为管理员
     if not request.session.get("user"):
         return {"success": False, "message": "未授权"}
+    if not is_admin_user(request):
+        return {"success": False, "message": "需要管理员权限"}
     
     success = refresh_weather_cache(city)
     if success:
@@ -474,9 +480,11 @@ def api_weather_refresh(request: Request, city: str = "北京"):
 @router.get("/weather/status")
 def api_weather_status(request: Request):
     """获取天气缓存状态"""
-    # 🔒 安全检查：必须登录
+    # 🔒 安全检查：必须登录且为管理员
     if not request.session.get("user"):
         return {"error": "未授权"}
+    if not is_admin_user(request):
+        return {"error": "需要管理员权限"}
     
     global _weather_cache
     now = time.time()

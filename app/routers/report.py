@@ -9,7 +9,8 @@ router = APIRouter()
 
 @router.get("/api/report/preview")
 async def api_preview_report(request: Request, user_id: str = 'all', period: str = 'day'):
-    if not request.session.get("user"): return Response(status_code=403)
+    if not request.session.get("user"): return Response(status_code=401)
+    if not is_admin_user(request): return Response(status_code=403)
     if not HAS_PIL: return Response(content="Pillow not installed", status_code=500)
     
     img_io = report_gen.generate_report(user_id, period)
