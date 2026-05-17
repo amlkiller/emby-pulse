@@ -658,9 +658,15 @@ async def api_ping(request: Request):
         return {"status": "error", "message": "权限不足"}
     try:
         import time
+        from app.utils.url_validator import validate_url
         data = await request.json()
         url = data.get("url", "").strip()
         if not url: return {"status": "error", "message": "URL 不能为空"}
+
+        # SSRF 防护
+        validation = validate_url(url, allow_internal=False)
+        if not validation["valid"]:
+            return {"status": "error", "message": validation["error"]}
 
         # 确保 URL 以 / 结尾，然后请求根路径
         ping_url = url.rstrip("/") + "/"

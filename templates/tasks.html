@@ -315,8 +315,13 @@
                     ? 'border border-blue-500 shadow-[0_8px_30px_rgba(59,130,246,0.15)] dark:shadow-[0_8px_30px_rgba(59,130,246,0.2)] ring-1 ring-blue-500 scale-[1.02] z-10' 
                     : 'border border-gray-100 dark:border-white/5 shadow-sm hover:shadow-[0_12px_32px_rgba(0,0,0,0.06)] dark:hover:shadow-[0_12px_32px_rgba(0,0,0,0.4)] hover:-translate-y-1 hover:border-gray-200 dark:hover:border-white/10';
 
-                const safeOrig = t.OriginalName.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-                const safeCurr = t.Name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                function escapeHtml(str) {
+                    if (!str) return '';
+                    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+                }
+                const safeOrig = escapeHtml(t.OriginalName);
+                const safeCurr = escapeHtml(t.Name);
+                const safeDesc = escapeHtml(t.Description || '');
 
                 html += `
                 <div class="${cardBaseClass} ${borderClass}">
@@ -326,13 +331,13 @@
                     <div class="flex justify-between items-start mb-3 relative z-20">
                         <div class="pr-3 overflow-hidden flex-1">
                             <div class="flex items-center gap-2 group/title">
-                                <div class="font-bold text-gray-900 dark:text-white text-[14px] truncate" title="${t.OriginalName}">${t.Name}</div>
+                                <div class="font-bold text-gray-900 dark:text-white text-[14px] truncate" title="${safeOrig}">${safeCurr}</div>
                                 <button onclick="renameTask('${safeOrig}', '${safeCurr}')" class="text-gray-300 hover:text-brand-500 dark:text-gray-600 dark:hover:text-brand-400 opacity-0 group-hover/title:opacity-100 transition-all cursor-pointer bg-gray-50 dark:bg-[#2C2C2E] w-5 h-5 rounded flex items-center justify-center border border-gray-200 dark:border-white/5" title="设置中文别名">
                                     <i class="fa-solid fa-pen text-[9px]"></i>
                                 </button>
                             </div>
-                            <div class="text-[11px] text-gray-500 dark:text-gray-400 mt-1.5 line-clamp-2 leading-relaxed" title="${t.Description || ''}">
-                                ${t.Description || '该任务暂无描述说明。'}
+                            <div class="text-[11px] text-gray-500 dark:text-gray-400 mt-1.5 line-clamp-2 leading-relaxed" title="${safeDesc}">
+                                ${safeDesc || '该任务暂无描述说明。'}
                             </div>
                         </div>
                         

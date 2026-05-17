@@ -1007,7 +1007,7 @@ class TempAccountPlugin(PluginBase):
             
             action = "手动刷新" if manual else "自动更新"
             self.log(f"{action}密码: {username} -> {new_password}")
-            logger.info(f"[临时账号] 密码刷新成功: {username}, 新密码: {new_password}")
+            logger.info(f"[临时账号] 密码刷新成功: {username}")
             
             return {
                 "success": True,

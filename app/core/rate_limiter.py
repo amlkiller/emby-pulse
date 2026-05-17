@@ -12,6 +12,16 @@ from starlette.middleware.base import BaseHTTPMiddleware
 # 可信代理列表（从环境变量读取，逗号分隔）
 TRUSTED_PROXIES = set(os.getenv("TRUSTED_PROXIES", "127.0.0.1").split(","))
 
+# Docker 环境自动添加默认网关
+def _detect_docker_gateway():
+    gateway = os.getenv("DOCKER_GATEWAY", "")
+    if gateway:
+        TRUSTED_PROXIES.add(gateway)
+    for gw in ["172.17.0.1", "172.18.0.1", "172.19.0.1"]:
+        TRUSTED_PROXIES.add(gw)
+
+_detect_docker_gateway()
+
 # 速率限制配置
 RATE_LIMITS = {
     # 登录接口：每分钟最多 10 次
@@ -24,6 +34,12 @@ RATE_LIMITS = {
     "/api/v1/webhook": {"limit": 50, "window": 1},
     # Telegram Webhook：每秒最多 10 次
     "/api/bot/webhook": {"limit": 10, "window": 1},
+    # Token 创建：每分钟最多 5 次
+    "/api/tokens/create": {"limit": 5, "window": 60},
+    # TOTP 设置：每 5 分钟最多 3 次
+    "/api/auth/totp/setup": {"limit": 3, "window": 300},
+    # 邀请码生成：每分钟最多 10 次
+    "/api/manage/user/invite": {"limit": 10, "window": 60},
 }
 
 # 白名单路径（不受速率限制）

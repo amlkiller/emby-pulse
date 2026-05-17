@@ -6,7 +6,12 @@ services:
     image: zeyu8023/embypulse-pro:latest
     container_name: emby-pulse
     restart: unless-stopped
-    network_mode: host #默认后台端口号为10307，用户后台端口号为10308
+    # 使用端口映射替代 host 网络模式（更安全）
+    # 如需 host 模式，取消下方注释并删除 ports 配置
+    # network_mode: host
+    ports:
+      - "10307:10307"
+      - "10308:10308"
 
     volumes:
       # --- 数据与配置 ---

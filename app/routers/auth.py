@@ -688,9 +688,12 @@ async def get_avatar(request: Request, user_id: int):
                     mime = 'image/gif'
                 return Response(content=base64.b64decode(data), media_type=mime)
             else:
-                # URL 或 emoji，重定向或返回
+                # 仅允许相对路径重定向，防止 Open Redirect
                 from fastapi.responses import RedirectResponse
-                return RedirectResponse(avatar)
+                if avatar.startswith('/') and not avatar.startswith('//'):
+                    return RedirectResponse(avatar)
+                else:
+                    return RedirectResponse("/static/img/logo-app.png")
         # 返回默认头像
         return RedirectResponse("/static/img/logo-app.png")
     except Exception as e:
@@ -918,6 +921,10 @@ async def api_login(data: LoginModel, request: Request):
             _clear_login_failure(user_key)
             # 🔒 安全：清除旧 Session，防止 Session 固定攻击
             request.session.clear()
+            # 重新生成 session_id
+            from app.core.session import create_session
+            new_session_id = create_session({})
+            request.session._session_id = new_session_id
             request.session["user"] = result
             request.session["login_time"] = time.time()
             log_audit("login", user_id=str(result.get("id")), user_name=username, ip_address=client_ip, user_agent=user_agent, details={"auth_type": "local"})
@@ -980,6 +987,15 @@ async def api_login(data: LoginModel, request: Request):
 
         # 验证密码（如果有设置）
         has_password = matched_user.get("HasPassword", False)
+        if not has_password:
+            _record_login_failure(ip_key, "ip")
+            _record_login_failure(user_key, "user")
+            remaining = min(_get_remaining_attempts(ip_key), _get_remaining_attempts(user_key))
+            return {
+                "status": "error",
+                "message": "安全要求：请先在 Emby 中为管理员账号设置密码",
+                "remaining_attempts": remaining
+            }
         if has_password:
             # 使用 Emby 认证接口验证密码
             auth_url = f"{emby_host}/Users/AuthenticateByName"
@@ -1026,6 +1042,10 @@ async def api_login(data: LoginModel, request: Request):
 
         # 🔒 安全：清除旧 Session，防止 Session 固定攻击
         request.session.clear()
+        # 重新生成 session_id
+        from app.core.session import create_session
+        new_session_id = create_session({})
+        request.session._session_id = new_session_id
         request.session["user"] = user_info
         request.session["login_time"] = time.time()
         return {"status": "success", "message": "登录成功"}

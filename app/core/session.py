@@ -11,7 +11,8 @@ from app.core.config import SYSTEM_DB_PATH
 
 SESSION_TABLE = "sessions"
 SESSION_COOKIE_NAME = "session_id"
-SESSION_MAX_AGE = 7 * 24 * 3600
+SESSION_MAX_AGE = 24 * 3600  # 24小时（空闲超时）
+SESSION_ABSOLUTE_MAX_AGE = 7 * 24 * 3600  # 7天（绝对超时）
 
 
 def _get_system_conn():
@@ -60,9 +61,9 @@ def get_session(session_id: str) -> Optional[Dict[str, Any]]:
     conn = _get_system_conn()
     cursor = conn.cursor()
     cursor.execute(f"""
-    SELECT data FROM {SESSION_TABLE}
-    WHERE session_id = ? AND expires_at > ?
-    """, (session_id, now))
+    SELECT data, created_at FROM {SESSION_TABLE}
+    WHERE session_id = ? AND expires_at > ? AND created_at > ?
+    """, (session_id, now, now - SESSION_ABSOLUTE_MAX_AGE))
     row = cursor.fetchone()
     conn.close()
     if row and row["data"]:

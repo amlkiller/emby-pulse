@@ -27,6 +27,11 @@ class PluginBase:
     version: str = "1.0.0"
     author: str = ""
     pro_only: bool = False    # 是否仅 Pro 用户可用
+    permissions: list = []    # 插件声明需要的权限，如 ["db:read", "config:read", "event:subscribe"]
+
+    def has_permission(self, perm: str) -> bool:
+        """检查插件是否拥有指定权限"""
+        return perm in self.permissions
 
     def __init__(self):
         self.router = APIRouter(prefix=f"/api/plugins/{self.id}", tags=[f"Plugin: {self.name}"])

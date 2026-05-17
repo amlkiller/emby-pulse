@@ -30,7 +30,7 @@ HDHIVE_BASE = "https://hdhive.com"
 
 
 def decode_jwt_payload(token: str) -> dict:
-    """解码 JWT token 的 payload 部分（不验证签名）"""
+    """解码 JWT token 的 payload 部分（⚠️ 不验证签名，仅用于读取非敏感 claims）"""
     try:
         # JWT 格式: header.payload.signature
         parts = token.split('.')

@@ -90,6 +90,8 @@ class Cloud115Plugin(PluginBase):
         @self.router.post("/transfer_link")
         async def transfer_link_api(request: Request):
             """给影巢插件调用的转存接口"""
+            if not request.session.get("user"):
+                return {"status": "error", "message": "未登录"}
             try:
                 data = await request.json()
                 link = data.get("link", "").strip()

@@ -2468,6 +2468,17 @@ class NotificationBot:
         try: requests.post(f"https://api.telegram.org/bot{token}/setMyCommands", json={"commands": cmds}, proxies=self._get_proxies(), timeout=10)
         except Exception: pass
 
+    def _is_admin(self, cid, platform="tg"):
+        """检查 chat_id 是否为配置的管理员"""
+        if platform == "tg":
+            raw_cids = str(cfg.get("tg_chat_id", ""))
+            admin_ids = [c.strip() for c in raw_cids.replace('，', ',').split(',') if c.strip()]
+            return bool(admin_ids and str(cid) in admin_ids)
+        elif platform == "wecom":
+            # 企业微信通过 touser 配置控制
+            return True  # WeCom 消息由 API 直接发送，已受限
+        return False
+
     def _handle_message(self, text, cid, platform="tg"):
         text = text.strip()
         
@@ -2490,7 +2501,10 @@ class NotificationBot:
         elif text.startswith("/emby_restart"): self._cmd_emby_restart(cid, text, platform)
         elif text.startswith("/help"): self._cmd_help(cid, platform)
         else:
-            # 非命令消息，发布到事件总线供插件监听
+            # 非命令消息，仅管理员可触发事件总线
+            if not self._is_admin(cid, platform):
+                logger.warning(f"[Bot] 非管理员用户尝试发送非命令消息: {cid}")
+                return
             logger.info(f"[Bot] 非命令消息，发布到事件总线: {text[:50]}...")
             bus.publish("bot.admin_message", text, cid, platform)
 

@@ -412,7 +412,18 @@ async def update_config(request: Request):
         data = await request.json()
     except:
         return {"status": "error", "message": "无效的请求数据"}
-    
+
+    # 配置验证
+    timeout = data.get("timeout")
+    if timeout is not None:
+        try:
+            timeout = int(timeout)
+            if timeout < 5 or timeout > 300:
+                return {"status": "error", "message": "超时时间必须在 5-300 秒之间"}
+            data["timeout"] = timeout
+        except (ValueError, TypeError):
+            return {"status": "error", "message": "超时时间必须为整数"}
+
     save_plugin_config(plugin.id, data)
     return {"status": "success", "message": "配置已更新"}
 

@@ -124,6 +124,8 @@ def api_get_admin_list(request: Request):
     """获取 Emby 管理员账号列表(用于密码验证选择)"""
     if not request.session.get("user"):
         return {"status": "error", "message": "未登录"}
+    if not is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限"}
 
     admin_list = get_emby_admin_users()
     return {"status": "success", "data": admin_list}
@@ -139,6 +141,8 @@ def api_get_audit_logs(request: Request, page: int = 1, limit: int = 20,
     """获取操作审计日志列表"""
     if not request.session.get("user"):
         return {"status": "error", "message": "未登录"}
+    if not is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限"}
 
     try:
         conn = sqlite3.connect(SYSTEM_DB_PATH)
@@ -269,6 +273,8 @@ def api_clear_audit_logs(request: Request, days: int = 30):
     """清理超过指定天数的审计日志"""
     if not request.session.get("user"):
         return {"status": "error", "message": "未登录"}
+    if not is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限"}
 
     try:
         conn = sqlite3.connect(SYSTEM_DB_PATH)
@@ -647,6 +653,7 @@ def get_user_avatar(user_id: str):
 @router.post("/api/manage/user/image")
 async def api_update_user_image(request: Request, user_id: str = Form(...), url: str = Form(None), file: UploadFile = File(None)):
     if not request.session.get("user"): return {"status": "error"}
+    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
         admin_user = request.session.get("user", {})
         admin_name = admin_user.get("name", admin_user.get("username", "未知"))
@@ -662,6 +669,10 @@ async def api_update_user_image(request: Request, user_id: str = Form(...), url:
 
         img_data = None; c_type = "image/png"
         if url:
+            from app.utils.url_validator import validate_url
+            validation = validate_url(url, allow_internal=False)
+            if not validation["valid"]:
+                return {"status": "error", "message": f"URL 不安全: {validation['error']}"}
             d_res = requests.get(url, timeout=10)
             if d_res.status_code == 200:
                 img_data = d_res.content
@@ -1568,6 +1579,8 @@ def api_manage_user_delete(user_id: str, request: Request):
 @router.post("/api/manage/users/batch", dependencies=[Depends(verify_pro_status)])
 def api_manage_users_batch(data: BatchActionModelLocal, request: Request):
     if not request.session.get("user"): return {"status": "error"}
+    if len(data.user_ids) > 100:
+        return {"status": "error", "message": "单次批量操作最多 100 个用户"}
 
     # 获取当前管理员账号
     admin_user = request.session.get("user", {})

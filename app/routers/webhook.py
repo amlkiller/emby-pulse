@@ -133,13 +133,18 @@ def intercept_illegal_client(data: dict):
 
 @router.post("/api/v1/webhook")
 async def emby_webhook(request: Request):
-    # 🔒 安全：优先从 Header 获取 Token，同时支持 URL 参数（向后兼容）
-    header_token = request.headers.get("X-Webhook-Token")
-    query_token = request.query_params.get("token")
-    
-    # 优先使用 Header
-    token = header_token or query_token
-    
+    # 🔒 安全：仅从 Header 获取 Token
+    token = request.headers.get("X-Webhook-Token")
+    if not token:
+        # 向后兼容：URL 参数方式已废弃，打印警告
+        query_token = request.query_params.get("token")
+        if query_token:
+            import logging
+            logging.getLogger("uvicorn").warning("[Webhook] ⚠️ 通过 URL 参数传递 Token 已废弃，请使用 X-Webhook-Token Header")
+            token = query_token
+        else:
+            raise HTTPException(status_code=401, detail="缺少 Webhook Token")
+
     if token != cfg.get("webhook_token"):
         raise HTTPException(status_code=403, detail="Invalid Token")
 

@@ -348,10 +348,10 @@ class ConfigManager:
         return self.config.get(key, DEFAULT_CONFIG.get(key))
 
     def __setitem__(self, key, value):
-        self.config[key] = value
-        self.save()
-
-    def set(self, key, value):
+        env_key = self.SENSITIVE_ENV_FIELDS.get(key)
+        if env_key and os.getenv(env_key, ""):
+            print(f"[Config] 🚫 拒绝修改环境变量字段 {key}(来自 {env_key})")
+            return
         self.config[key] = value
         self.save()
 

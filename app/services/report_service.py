@@ -707,14 +707,14 @@ class ReportGenerator:
             # 构建排除类型 SQL
             exclude_sql = ""
             if exclude_types:
-                exclude_placeholders = ', '.join([f"'{t}'" for t in exclude_types])
+                exclude_placeholders = ', '.join(['?' for _ in exclude_types])
                 exclude_sql = f" AND ItemType NOT IN ({exclude_placeholders})"
 
             # 🔥 从 pc 字典获取 where 条件
             where = pc.get("where", "")
 
             # 增加查询数量，确保有足够的封面
-            all_tops = query_db(f"SELECT ItemName, ItemId, ItemType, COUNT(*) as C, COALESCE(SUM(PlayDuration), 0) as Duration FROM PlaybackActivity {where}{exclude_sql} GROUP BY ItemName ORDER BY Duration DESC LIMIT 100")
+            all_tops = query_db(f"SELECT ItemName, ItemId, ItemType, COUNT(*) as C, COALESCE(SUM(PlayDuration), 0) as Duration FROM PlaybackActivity {where}{exclude_sql} GROUP BY ItemName ORDER BY Duration DESC LIMIT 100", tuple(exclude_types) if exclude_types else None)
             if not all_tops:
                 return None
             

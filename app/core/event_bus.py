@@ -1,6 +1,7 @@
 # app/core/event_bus.py
 import threading
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 import logging
 
 logger = logging.getLogger("uvicorn")
@@ -9,6 +10,7 @@ class EventBus:
     def __init__(self):
         self.subscribers = defaultdict(list)
         self.lock = threading.Lock()
+        self.executor = ThreadPoolExecutor(max_workers=10, thread_name_prefix="event_bus")
 
     def subscribe(self, event_type: str, handler):
         with self.lock:
@@ -18,10 +20,9 @@ class EventBus:
     def publish(self, event_type: str, *args, **kwargs):
         with self.lock:
             handlers = self.subscribers[event_type][:]
-        # 多线程并发分发，确保发布者（如 Webhook）瞬间返回，绝不阻塞
         for handler in handlers:
             try:
-                threading.Thread(target=handler, args=args, kwargs=kwargs, daemon=True).start()
+                self.executor.submit(handler, *args, **kwargs)
             except Exception as e:
                 logger.error(f"事件总线分发异常 [{event_type}]: {e}")
 

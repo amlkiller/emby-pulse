@@ -19,5 +19,8 @@ COPY run.py ./run.py
 COPY templates ./templates
 COPY static ./static
 
+RUN useradd -m -r appuser && chown -R appuser:appuser /workspace
+USER appuser
+
 EXPOSE 10307
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "10307"]

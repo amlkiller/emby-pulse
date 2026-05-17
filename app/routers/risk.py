@@ -26,9 +26,11 @@ class ConfigRequest(BaseModel):
 @router.get("/online")
 def get_online_status(request: Request):
     """获取所有在线用户的风控大盘数据"""
-    # 🔒 安全检查：必须登录
+    # 🔒 安全检查：必须管理员
     if not request.session.get("user"):
         return {"error": "未授权"}
+    if not is_admin_user(request):
+        return {"error": "需要管理员权限"}
     
     host = cfg.get("emby_host", "").rstrip('/')
     api_key = cfg.get("emby_api_key", "")
@@ -111,9 +113,11 @@ def get_online_status(request: Request):
 @router.post("/kick")
 def api_kick_session(req: ActionRequest, request: Request):
     """🔥 真·物理拔网线：直接注销第三方播放器的设备 Token"""
-    # 🔒 安全检查：必须登录
+    # 🔒 安全检查：必须管理员
     if not request.session.get("user"):
         raise HTTPException(status_code=401, detail="未授权")
+    if not is_admin_user(request):
+        raise HTTPException(status_code=403, detail="需要管理员权限")
     
     host = cfg.get("emby_host", "").rstrip('/')
     api_key = cfg.get("emby_api_key", "")
@@ -132,9 +136,11 @@ def api_kick_session(req: ActionRequest, request: Request):
 
 @router.post("/ban")
 def api_ban_user(req: ActionRequest, request: Request):
-    # 🔒 安全检查：必须登录
+    # 🔒 安全检查：必须管理员
     if not request.session.get("user"):
         raise HTTPException(status_code=401, detail="未授权")
+    if not is_admin_user(request):
+        raise HTTPException(status_code=403, detail="需要管理员权限")
     
     if ban_user(req.user_id):
         log_risk_action(req.user_id, req.username, "ban", req.reason)
@@ -144,9 +150,11 @@ def api_ban_user(req: ActionRequest, request: Request):
 @router.post("/unban")
 def api_unban_user(req: ActionRequest, request: Request):
     """解封用户"""
-    # 🔒 安全检查：必须登录
+    # 🔒 安全检查：必须管理员
     if not request.session.get("user"):
         raise HTTPException(status_code=401, detail="未授权")
+    if not is_admin_user(request):
+        raise HTTPException(status_code=403, detail="需要管理员权限")
     
     if unban_user(req.user_id):
         log_risk_action(req.user_id, req.username, "unban", "管理员解封")
@@ -156,9 +164,11 @@ def api_unban_user(req: ActionRequest, request: Request):
 @router.get("/user_status/{user_id}")
 def get_user_status(user_id: str, request: Request):
     """获取用户封禁状态"""
-    # 🔒 安全检查：必须登录
+    # 🔒 安全检查：必须管理员
     if not request.session.get("user"):
         return {"error": "未授权"}
+    if not is_admin_user(request):
+        return {"error": "需要管理员权限"}
     
     try:
         host = cfg.get("emby_host", "").rstrip('/')
@@ -178,9 +188,11 @@ def get_user_status(user_id: str, request: Request):
 @router.get("/logs")
 def get_risk_logs(request: Request):
     """获取历史审计日志"""
-    # 🔒 安全检查：必须登录
+    # 🔒 安全检查：必须管理员
     if not request.session.get("user"):
         return {"error": "未授权"}
+    if not is_admin_user(request):
+        return {"error": "需要管理员权限"}
     
     try:
         conn = sqlite3.connect(SYSTEM_DB_PATH)
@@ -195,9 +207,11 @@ def get_risk_logs(request: Request):
 @router.get("/config")
 def get_risk_config(request: Request):
     """获取风控设置"""
-    # 🔒 安全检查：必须登录
+    # 🔒 安全检查：必须管理员
     if not request.session.get("user"):
         return {"error": "未授权"}
+    if not is_admin_user(request):
+        return {"error": "需要管理员权限"}
     
     return {
         "enable_risk_control": cfg.get("enable_risk_control", False),
@@ -209,9 +223,11 @@ def get_risk_config(request: Request):
 @router.post("/config")
 def update_risk_config(req: ConfigRequest, request: Request):
     """保存风控设置"""
-    # 🔒 安全检查：必须登录
+    # 🔒 安全检查：必须管理员
     if not request.session.get("user"):
         raise HTTPException(status_code=401, detail="未授权")
+    if not is_admin_user(request):
+        raise HTTPException(status_code=403, detail="需要管理员权限")
     
     cfg["enable_risk_control"] = req.enable_risk_control
     cfg["default_max_concurrent"] = req.default_max_concurrent
@@ -223,9 +239,11 @@ def update_risk_config(req: ConfigRequest, request: Request):
 @router.get("/summary")
 def get_risk_summary(request: Request):
     """空闲状态下的风控战报简报"""
-    # 🔒 安全检查：必须登录
+    # 🔒 安全检查：必须管理员
     if not request.session.get("user"):
         return {"error": "未授权"}
+    if not is_admin_user(request):
+        return {"error": "需要管理员权限"}
     
     try:
         conn = sqlite3.connect(SYSTEM_DB_PATH)

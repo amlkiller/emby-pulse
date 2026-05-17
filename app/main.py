@@ -204,6 +204,13 @@ def start_10308_server():
 # ==============================================================================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # 🔒 安全：Webhook Token 默认值自动生成
+    if cfg.get("webhook_token") == "embypulse":
+        import secrets as _secrets
+        new_token = _secrets.token_urlsafe(32)
+        cfg.set("webhook_token", new_token)
+        print(f"⚠️ [安全] Webhook Token 已自动生成，请更新 Emby Webhook 配置: {new_token}")
+
     bot.start()
     # 🧩 Pro 专属：用户 TG 机器人（自动启动，无需手动保存配置）
     try:
@@ -280,7 +287,8 @@ app = FastAPI(
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(DatabaseSessionMiddleware)
 app.add_middleware(RateLimitMiddleware)  # 🔒 速率限制
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=False, allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"], allow_headers=["Content-Type", "Authorization", "X-Requested-With", "X-Telegram-Bot-Api-Secret-Token"])
+allowed_origins = os.getenv("CORS_ORIGINS", "").split(",") if os.getenv("CORS_ORIGINS") else ["*"]
+app.add_middleware(CORSMiddleware, allow_origins=allowed_origins, allow_credentials=False, allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"], allow_headers=["Content-Type", "Authorization", "X-Requested-With", "X-Telegram-Bot-Api-Secret-Token"])
 
 from app.core.csrf_middleware import CSRFMiddleware
 app.add_middleware(CSRFMiddleware)
