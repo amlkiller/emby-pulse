@@ -465,7 +465,7 @@
 
 {% include 'modal_pro.html' %}
 
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 let pieChartInstance = null;
 let barChartInstance = null;
 let allDevicesData = []; 

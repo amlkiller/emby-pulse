@@ -1710,7 +1710,7 @@
 
 {% include 'modal_pro.html' %}
 
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 let users = [];
 let allLibraries = [];
 let allRoutes = [];  // 全部线路列表

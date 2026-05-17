@@ -1260,7 +1260,7 @@
 
 </div>
 
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 let allUsers = [];
 let hiddenUsers = [];
 let routesData = [];
@@ -3231,7 +3231,7 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
 <!-- Quill Editor JS -->
-<script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
+<script nonce="{{ request.state.csp_nonce }}" src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
 
 <!-- Quill 暗色模式样式 -->
 <style>
@@ -3391,7 +3391,7 @@ html.dark .ql-snow .ql-picker.ql-expanded .ql-picker-options {
     </div>
 </div>
 
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 // 🔥 PWA 设置相关函数
 let pwaIcons = [];
 let selectedPwaIcon = 'default';

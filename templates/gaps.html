@@ -2,8 +2,8 @@
 {% block title %}缺集管理 - EmbyPulse{% endblock %}
 
 {% block head %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/color-thief/2.3.0/color-thief.umd.js"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<script nonce="{{ request.state.csp_nonce }}" src="https://cdnjs.cloudflare.com/ajax/libs/color-thief/2.3.0/color-thief.umd.js"></script>
+<script nonce="{{ request.state.csp_nonce }}" defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 
 <style>
     /* === 🔥 Apple 级极简卡片质感 === */
@@ -798,7 +798,7 @@
     </template>
 </div>
 
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 const globalColorThief = new ColorThief();
 window.applyThemeColor = function(imgElement, cardId) {
     if (imgElement.complete && imgElement.getAttribute('data-color-done') !== 'true') {

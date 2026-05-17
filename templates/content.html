@@ -363,7 +363,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
     let state = { user: 'all', category: 'all', sortBy: 'count', period: 'all', excludeTypes: [] };
     let currentData = [];  // 🔥 缓存当前数据用于导出
 

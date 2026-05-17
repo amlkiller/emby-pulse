@@ -23,7 +23,7 @@
     </div>
 </div>
 
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 window.addEventListener('show-pro-modal', () => {
     const modal = document.getElementById('pro-activation-modal');
     modal.classList.remove('hidden');

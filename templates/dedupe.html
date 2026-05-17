@@ -328,7 +328,7 @@
     .strategy-card { border-color: transparent; }
 </style>
 
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
     let pollInterval = null;
     let selectedItems = new Map(); 
     let allGroups = {};

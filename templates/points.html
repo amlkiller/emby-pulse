@@ -775,7 +775,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
     let isPro = false; // 🔥 全局变量判断权限
 
     function openModal(id) {

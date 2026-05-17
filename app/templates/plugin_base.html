@@ -31,7 +31,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
     // 通用工具函数
     function showToast(type, title, message) {
         // 简单的 toast 提示

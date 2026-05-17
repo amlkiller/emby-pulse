@@ -180,7 +180,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
     // 🔥 侧边栏特效：确保效果与 users_manage 100% 一致
     function setActiveNavLink() {
         const navItems = document.querySelectorAll('.nav-item');

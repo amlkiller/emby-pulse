@@ -18,12 +18,12 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="EmbyPulse">
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script nonce="{{ request.state.csp_nonce }}" src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <script nonce="{{ request.state.csp_nonce }}" src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script nonce="{{ request.state.csp_nonce }}" src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
     
-    <script>
+    <script nonce="{{ request.state.csp_nonce }}">
         tailwind.config = {
             darkMode: 'class',
             theme: {
@@ -107,7 +107,7 @@
 <body class="bg-apple-bgLight dark:bg-apple-bgDark text-gray-900 dark:text-gray-100 min-h-screen flex overflow-hidden transition-colors duration-300">
     
     <!-- 🔥 全局 Toast & Confirm 函数 - 必须在其他脚本之前定义 -->
-    <script>
+    <script nonce="{{ request.state.csp_nonce }}">
     function showToast(type, title, message) {
         const toast = document.getElementById('global-toast');
         if (!toast) { console.warn('Toast container not found'); return; }
@@ -170,7 +170,7 @@
     </script>
     
     <!-- 🔥 权限控制脚本 - 必须在 body 开始后立即执行 -->
-    <script>
+    <script nonce="{{ request.state.csp_nonce }}">
     (function() {
         // 权限 ID 到菜单选择器的映射
         const PERM_NAV_MAP = {
@@ -752,7 +752,7 @@
 
     {% block scripts %}{% endblock %}
     
-    <script>
+    <script nonce="{{ request.state.csp_nonce }}">
         // 🔥 禁用 Service Worker（PWA 功能已移除）
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.getRegistrations().then(registrations => {
@@ -761,7 +761,7 @@
         }
     </script>
     
-    <script>
+    <script nonce="{{ request.state.csp_nonce }}">
         // ==========================================
         // 全局基础逻辑 (底栏、侧栏、搜索)
         // ==========================================
@@ -1813,7 +1813,7 @@
         </div>
     </div>
 
-    <script>
+    <script nonce="{{ request.state.csp_nonce }}">
     // 头像相关功能
     let currentAvatar = '';
     

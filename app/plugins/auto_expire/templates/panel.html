@@ -134,7 +134,7 @@
 <!-- Toast -->
 <div id="toast" class="fixed top-4 left-1/2 -translate-x-1/2 z-[200] px-6 py-3 rounded-full shadow-xl text-[13px] font-bold transition-all opacity-0 pointer-events-none bg-gray-900 text-white dark:bg-gray-200 dark:text-black"></div>
 
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
 async function loadConfig() {
     try {
         const res = await fetch('/api/plugins/auto_expire/config');

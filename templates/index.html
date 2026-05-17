@@ -1,7 +1,7 @@
 {% extends "layout.html" %}
 {% block title %}仪表盘 - EmbyPulse{% endblock %}
 {% block head %}
-<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<script nonce="{{ request.state.csp_nonce }}" src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <link rel="stylesheet" href="/static/css/dashboard.css?v=20260325h">
 {% endblock %}
 
@@ -261,11 +261,11 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/js/dashboard/state.js?v=20260411b"></script>
-<script src="/static/js/dashboard/utils.js?v=20260411b"></script>
-<script src="/static/js/dashboard/layout.js?v=20260411b"></script>
-<script src="/static/js/dashboard/widgets.js?v=20260511a"></script>
-<script src="/static/js/dashboard/charts.js?v=20260411b"></script>
-<script src="/static/js/dashboard/init.js?v=20260411b"></script>
-<script>setEmbyConfig("{{ emby_url }}", "{{ server_id }}");</script>
+<script nonce="{{ request.state.csp_nonce }}" src="/static/js/dashboard/state.js?v=20260411b"></script>
+<script nonce="{{ request.state.csp_nonce }}" src="/static/js/dashboard/utils.js?v=20260411b"></script>
+<script nonce="{{ request.state.csp_nonce }}" src="/static/js/dashboard/layout.js?v=20260411b"></script>
+<script nonce="{{ request.state.csp_nonce }}" src="/static/js/dashboard/widgets.js?v=20260511a"></script>
+<script nonce="{{ request.state.csp_nonce }}" src="/static/js/dashboard/charts.js?v=20260411b"></script>
+<script nonce="{{ request.state.csp_nonce }}" src="/static/js/dashboard/init.js?v=20260411b"></script>
+<script nonce="{{ request.state.csp_nonce }}">setEmbyConfig("{{ emby_url }}", "{{ server_id }}");</script>
 {% endblock %}

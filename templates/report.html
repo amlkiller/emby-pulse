@@ -2,7 +2,7 @@
 {% block title %}映迹工坊 - EmbyPulse{% endblock %}
 
 {% block head %}
-<script src="https://cdn.bootcdn.net/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
+<script nonce="{{ request.state.csp_nonce }}" src="https://cdn.bootcdn.net/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
 <style>
     /* === 自定义下拉菜单样式 === */
     .custom-select { position: relative; }
@@ -413,10 +413,10 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
     window.onerror = function(msg) { showToast('error', '发生错误', msg); return false; };
 </script>
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
     let currentUserId = '';
     let currentUserName = 'User';
     let currentPeriod = 'month';

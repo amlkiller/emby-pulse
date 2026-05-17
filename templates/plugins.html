@@ -1467,7 +1467,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
     let currentPluginId = null;
 
     async function loadPlugins() {

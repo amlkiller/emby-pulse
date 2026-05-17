@@ -11,9 +11,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="EmbyPulse">
     <meta name="theme-color" content="#4f46e5">
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script nonce="{{ request.state.csp_nonce }}" src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script>
+    <script nonce="{{ request.state.csp_nonce }}">
         tailwind.config = {
             darkMode: 'class',
             theme: {
@@ -182,7 +182,7 @@
         <p class="text-[10px] text-white/80 font-mono tracking-tight bg-black/20 inline-block px-3 py-1 rounded-full backdrop-blur-sm" id="bg-source">Wallpaper loading...</p>
     </div>
 
-    <script>
+    <script nonce="{{ request.state.csp_nonce }}">
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/sw.js');
@@ -190,7 +190,7 @@
         }
     </script>
 
-    <script>
+    <script nonce="{{ request.state.csp_nonce }}">
         // 认证类型
         let currentAuthType = 'emby';
         

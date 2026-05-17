@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>登录 - EmbyPulse 求片中心</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
+    <script nonce="{{ request.state.csp_nonce }}" src="https://cdn.tailwindcss.com"></script>
+    <script nonce="{{ request.state.csp_nonce }}">
         tailwind.config = {
             darkMode: 'class',
             theme: { extend: { colors: { gray: { 850: '#1f2937', 900: '#111827', 950: '#030712' } } } }
@@ -68,8 +68,8 @@
         <span x-text="toast.message"></span>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-    <script>
+    <script nonce="{{ request.state.csp_nonce }}" src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script nonce="{{ request.state.csp_nonce }}">
         document.addEventListener('alpine:init', () => {
             Alpine.data('loginApp', () => ({
                 username: '',

@@ -280,7 +280,7 @@
     </div>
 </div>
 
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
     let charts = { trend: null, hour: null, device: null, client: null };
     let currentChartDim = 'month';
 

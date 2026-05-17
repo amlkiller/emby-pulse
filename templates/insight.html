@@ -168,7 +168,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
+<script nonce="{{ request.state.csp_nonce }}">
     let globalMoviesData = {};
     let currentView = '4k';
     let selectedIgnores = new Set();

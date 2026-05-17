@@ -309,7 +309,22 @@ app = FastAPI(
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(DatabaseSessionMiddleware)
 app.add_middleware(RateLimitMiddleware)  # 🔒 速率限制
-allowed_origins = os.getenv("CORS_ORIGINS", "").split(",") if os.getenv("CORS_ORIGINS") else []
+# 🔒 安全：CORS 默认拒绝所有跨域，需显式设置 CORS_ORIGINS 环境变量
+_cors_env = os.getenv("CORS_ORIGINS", "").strip()
+if _cors_env:
+    allowed_origins = [o.strip() for o in _cors_env.split(",") if o.strip()]
+    # 安全检查：拒绝通配符和过于宽松的配置
+    _dangerous = [o for o in allowed_origins if o in ("*", "null")]
+    if _dangerous:
+        print(f"🔒 [安全] CORS_ORIGINS 包含危险值 {_dangerous}，已忽略")
+        allowed_origins = [o for o in allowed_origins if o not in ("*", "null")]
+    if allowed_origins:
+        print(f"🔒 [安全] CORS 已配置允许的来源: {allowed_origins}")
+    else:
+        print("🔒 [安全] CORS_ORIGINS 无有效值，已拒绝所有跨域请求")
+else:
+    allowed_origins = []
+    print("🔒 [安全] CORS 未配置跨域来源，已拒绝所有跨域请求（如需开放请设置 CORS_ORIGINS 环境变量）")
 app.add_middleware(CORSMiddleware, allow_origins=allowed_origins, allow_credentials=False, allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"], allow_headers=["Content-Type", "Authorization", "X-Requested-With", "X-Telegram-Bot-Api-Secret-Token"])
 
 from app.core.csrf_middleware import CSRFMiddleware

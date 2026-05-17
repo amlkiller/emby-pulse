@@ -15,12 +15,12 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <!-- 🔥 Tailwind 需要同步加载，否则页面会先显示无样式 -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script nonce="{{ request.state.csp_nonce }}" src="https://cdn.tailwindcss.com"></script>
     <!-- 🔥 Chart.js 和 html2canvas 使用 defer，避免阻塞 -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
-    <script src="https://cdn.bootcdn.net/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
+    <script nonce="{{ request.state.csp_nonce }}" src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
+    <script nonce="{{ request.state.csp_nonce }}" src="https://cdn.bootcdn.net/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
     
-    <script>
+    <script nonce="{{ request.state.csp_nonce }}">
         tailwind.config = {
             darkMode: 'class',
             theme: { extend: { colors: { brand: { 50: '#f0fdfa', 100: '#ccfbf1', 500: '#14b8a6', 600: '#0d9488', 900: '#134e4a' } } } }
@@ -35,7 +35,7 @@
     </style>
     
     <!-- 🔥 只加载 request_app.js，Alpine.js 由 JS 文件内部动态加载 -->
-    <script src="/static/js/request_app.js?v=1.3.53"></script>
+    <script nonce="{{ request.state.csp_nonce }}" src="/static/js/request_app.js?v=1.3.53"></script>
 </head>
 
 <body class="antialiased min-h-screen relative overflow-x-hidden transition-colors duration-500 bg-slate-50 text-slate-800 dark:bg-black dark:text-zinc-100" 

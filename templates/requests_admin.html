@@ -854,8 +854,8 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-<script>
+<script nonce="{{ request.state.csp_nonce }}" src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+<script nonce="{{ request.state.csp_nonce }}">
 // ========== 工单大厅通知设置相关函数 ==========
 
 async function openRequestNotifyModal() {
