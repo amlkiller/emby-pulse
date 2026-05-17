@@ -1,4 +1,4 @@
-FROM python:3.9-slim as builder
+FROM python:3.9-slim AS builder
 WORKDIR /build
 COPY app/ ./app/
 RUN python -m compileall -b app/
@@ -18,9 +18,13 @@ COPY --from=builder /build/app ./app
 COPY run.py ./run.py
 COPY templates ./templates
 COPY static ./static
+COPY public ./public
 
-RUN useradd -m -r appuser && chown -R appuser:appuser /workspace
+# 预创建数据目录（volume 挂载点）
+RUN mkdir -p /workspace/config /workspace/data && \
+    useradd -m -r appuser && \
+    chown -R appuser:appuser /workspace
 USER appuser
 
-EXPOSE 10307
+EXPOSE 10307 10308
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "10307"]

@@ -41,7 +41,7 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            zeyu8023/embypulse-pro:${{ steps.version.outputs.tag_suffix }}
+            amlkiller/embypulse-pro:${{ steps.version.outputs.tag_suffix }}
             zeyu8023/embypulse-pro:${{ steps.version.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
