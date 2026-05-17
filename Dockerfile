@@ -18,7 +18,6 @@ COPY --from=builder /build/app ./app
 COPY run.py ./run.py
 COPY templates ./templates
 COPY static ./static
-COPY public ./public
 
 # 预创建数据目录（volume 挂载点）
 RUN mkdir -p /workspace/config /workspace/data && \
