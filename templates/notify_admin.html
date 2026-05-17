@@ -1,0 +1,399 @@
+{% extends "layout.html" %}
+{% block title %}通知管理 - EmbyPulse{% endblock %}
+{% block head %}
+<style>
+    .channel-checkbox:checked + label { background-color: #10b981; color: white; }
+    .channel-checkbox:not(:checked) + label { background-color: #f3f4f6; color: #6b7280; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="w-full max-w-[1200px] mx-auto py-4 pb-32 px-4 sm:px-6 md:px-8 space-y-6">
+
+    <!-- 页面标题 -->
+    <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg">
+                <i class="fa-solid fa-bell text-white text-xl"></i>
+            </div>
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900 dark:text-white">通知管理</h1>
+                <p class="text-sm text-gray-500 dark:text-gray-400">统一管理所有通知类型和推送渠道</p>
+            </div>
+        </div>
+        <button onclick="saveAllRules()" class="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl font-bold shadow-lg hover:shadow-xl transition-all active:scale-[0.98]">
+            <i class="fa-solid fa-save mr-2"></i>保存配置
+        </button>
+    </div>
+
+    <!-- Tab 切换 -->
+    <div class="flex gap-2 mb-6">
+        <button onclick="switchTab('rules')" id="tab-rules" class="tab-btn px-4 py-2 rounded-xl font-bold text-sm transition-all bg-amber-500 text-white">
+            <i class="fa-solid fa-sliders mr-2"></i>通知规则
+        </button>
+        <button onclick="switchTab('channels')" id="tab-channels" class="tab-btn px-4 py-2 rounded-xl font-bold text-sm transition-all bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+            <i class="fa-solid fa-paper-plane mr-2"></i>推送渠道
+        </button>
+        <button onclick="switchTab('history')" id="tab-history" class="tab-btn px-4 py-2 rounded-xl font-bold text-sm transition-all bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+            <i class="fa-solid fa-clock-rotate-left mr-2"></i>发送历史
+        </button>
+    </div>
+
+    <!-- Tab 1: 通知规则 -->
+    <div id="panel-rules" class="space-y-4">
+        <!-- 通知类型列表 -->
+        <div class="apple-card overflow-hidden">
+            <div class="px-6 py-4 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border-b border-amber-100 dark:border-amber-800/30">
+                <h3 class="font-bold text-gray-800 dark:text-gray-200 flex items-center gap-2">
+                    <i class="fa-solid fa-list-check text-amber-500"></i>
+                    通知规则矩阵
+                    <span class="text-xs text-gray-500 dark:text-gray-400 ml-2">勾选每种通知发送到哪些渠道</span>
+                </h3>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gray-50 dark:bg-gray-800/50">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">通知类型</th>
+                            <th class="px-4 py-3 text-center text-xs font-bold text-gray-500 dark:text-gray-400 uppercase w-[80px]">启用</th>
+                            <th class="px-4 py-3 text-center text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">TG机器人</th>
+                            <th class="px-4 py-3 text-center text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">TG频道</th>
+                            <th class="px-4 py-3 text-center text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">企业微信</th>
+                            <th class="px-4 py-3 text-center text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Web通知</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rules-table-body" class="divide-y divide-gray-100 dark:divide-gray-700/50">
+                        <!-- JS 动态渲染 -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tab 2: 推送渠道配置 -->
+    <div id="panel-channels" class="hidden space-y-4">
+        <!-- TG 管理机器人 -->
+        <div class="apple-card">
+            <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700/50">
+                <h3 class="font-bold text-gray-800 dark:text-gray-200 flex items-center gap-2">
+                    <i class="fa-solid fa-telegram text-blue-500"></i>
+                    TG 管理机器人
+                </h3>
+            </div>
+            <div class="p-6 space-y-4">
+                <div class="flex items-center gap-4">
+                    <label class="text-sm font-bold text-gray-600 dark:text-gray-300 w-[100px]">启用</label>
+                    <input type="checkbox" id="tg-bot-enabled" class="w-5 h-5 rounded text-blue-500">
+                </div>
+                <div class="flex items-center gap-4">
+                    <label class="text-sm font-bold text-gray-600 dark:text-gray-300 w-[100px]">Bot Token</label>
+                    <input type="text" id="tg-bot-token" class="flex-1 px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-sm" placeholder="123456:ABC-DEF...">
+                </div>
+                <div class="flex items-center gap-4">
+                    <label class="text-sm font-bold text-gray-600 dark:text-gray-300 w-[100px]">Chat ID</label>
+                    <input type="text" id="tg-bot-chat-id" class="flex-1 px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-sm" placeholder="-100123456789">
+                </div>
+            </div>
+        </div>
+
+        <!-- TG 频道列表 -->
+        <div class="apple-card">
+            <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700/50 flex items-center justify-between">
+                <h3 class="font-bold text-gray-800 dark:text-gray-200 flex items-center gap-2">
+                    <i class="fa-solid fa-bullhorn text-purple-500"></i>
+                    TG 频道（入库通知）
+                </h3>
+                <button onclick="addTgChannel()" class="px-3 py-1.5 bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 rounded-lg text-xs font-bold hover:bg-purple-100 dark:hover:bg-purple-900/40 transition-all">
+                    <i class="fa-solid fa-plus mr-1"></i>添加频道
+                </button>
+            </div>
+            <div id="tg-channels-list" class="p-6 space-y-3">
+                <!-- JS 动态渲染 -->
+            </div>
+        </div>
+
+        <!-- 企业微信 -->
+        <div class="apple-card">
+            <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700/50">
+                <h3 class="font-bold text-gray-800 dark:text-gray-200 flex items-center gap-2">
+                    <i class="fa-solid fa-weixin text-green-500"></i>
+                    企业微信群机器人
+                </h3>
+            </div>
+            <div class="p-6 space-y-4">
+                <div class="flex items-center gap-4">
+                    <label class="text-sm font-bold text-gray-600 dark:text-gray-300 w-[100px]">启用</label>
+                    <input type="checkbox" id="wecom-enabled" class="w-5 h-5 rounded text-green-500">
+                </div>
+                <div class="flex items-center gap-4">
+                    <label class="text-sm font-bold text-gray-600 dark:text-gray-300 w-[100px]">Webhook URL</label>
+                    <input type="text" id="wecom-webhook" class="flex-1 px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-sm" placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tab 3: 发送历史 -->
+    <div id="panel-history" class="hidden">
+        <div class="apple-card overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-100 dark:border-gray-700/50">
+                <h3 class="font-bold text-gray-800 dark:text-gray-200 flex items-center gap-2">
+                    <i class="fa-solid fa-clock-rotate-left text-gray-500"></i>
+                    最近通知记录
+                </h3>
+            </div>
+            <div id="history-list" class="p-4 space-y-2 max-h-[500px] overflow-y-auto">
+                <!-- JS 动态渲染 -->
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+let NOTIFY_TYPES = [];
+let CHANNEL_OPTIONS = [];
+let rulesData = {};
+let tgChannels = [];
+
+// 初始化
+async function init() {
+    // 获取通知类型定义
+    const typesRes = await fetch('/api/notify/types');
+    const typesJson = await typesRes.json();
+    if (typesJson.status === 'success') {
+        NOTIFY_TYPES = typesJson.data;
+        CHANNEL_OPTIONS = typesJson.channels;
+    }
+
+    // 获取规则配置
+    const rulesRes = await fetch('/api/notify/rules');
+    const rulesJson = await rulesRes.json();
+    if (rulesJson.status === 'success') {
+        rulesData = rulesJson.data;
+    }
+
+    // 获取渠道配置
+    const channelsRes = await fetch('/api/notify/channels_config');
+    const channelsJson = await channelsRes.json();
+    if (channelsJson.status === 'success') {
+        const config = channelsJson.data;
+        document.getElementById('tg-bot-enabled').checked = config.tg_bot?.enabled || false;
+        document.getElementById('tg-bot-token').value = config.tg_bot?.token || '';
+        document.getElementById('tg-bot-chat-id').value = config.tg_bot?.chat_id || '';
+        tgChannels = config.tg_channels || [];
+        document.getElementById('wecom-enabled').checked = config.wecom?.enabled || false;
+        document.getElementById('wecom-webhook').value = config.wecom?.webhook || '';
+    }
+
+    renderRulesTable();
+    renderTgChannels();
+    loadHistory();
+}
+
+// 渲染规则表格
+function renderRulesTable() {
+    const tbody = document.getElementById('rules-table-body');
+    let html = '';
+
+    NOTIFY_TYPES.forEach(t => {
+        const rule = rulesData[t.type] || { channels: t.default_channels, enabled: 1 };
+        const channels = rule.channels || [];
+
+        html += `
+        <tr class="hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
+            <td class="px-4 py-3">
+                <div class="font-bold text-gray-800 dark:text-gray-200 text-sm">${t.name}</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400">${t.desc}</div>
+            </td>
+            <td class="px-4 py-3 text-center">
+                <input type="checkbox" class="rule-enabled w-5 h-5 rounded text-amber-500" data-type="${t.type}" ${rule.enabled ? 'checked' : ''}>
+            </td>
+            <td class="px-4 py-3 text-center">
+                <input type="checkbox" class="rule-channel w-4 h-4 rounded text-blue-500" data-type="${t.type}" data-channel="tg_bot" ${channels.includes('tg_bot') ? 'checked' : ''}>
+            </td>
+            <td class="px-4 py-3 text-center">
+                <input type="checkbox" class="rule-channel w-4 h-4 rounded text-purple-500" data-type="${t.type}" data-channel="tg_channel" ${channels.includes('tg_channel') ? 'checked' : ''}>
+            </td>
+            <td class="px-4 py-3 text-center">
+                <input type="checkbox" class="rule-channel w-4 h-4 rounded text-green-500" data-type="${t.type}" data-channel="wecom" ${channels.includes('wecom') ? 'checked' : ''}>
+            </td>
+            <td class="px-4 py-3 text-center">
+                <input type="checkbox" class="rule-channel w-4 h-4 rounded text-amber-500" data-type="${t.type}" data-channel="web" ${channels.includes('web') ? 'checked' : ''}>
+            </td>
+        </tr>`;
+    });
+
+    tbody.innerHTML = html;
+}
+
+// 渲染 TG 频道列表
+function renderTgChannels() {
+    const container = document.getElementById('tg-channels-list');
+    if (tgChannels.length === 0) {
+        container.innerHTML = '<p class="text-gray-400 text-sm text-center py-4"><i class="fa-solid fa-bullhorn mr-2 opacity-50"></i>暂无配置频道，点击上方按钮添加</p>';
+        return;
+    }
+
+    let html = '';
+    tgChannels.forEach((ch, idx) => {
+        html += `
+        <div class="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl">
+            <input type="text" value="${ch.chat_id || ''}" onchange="updateTgChannel(${idx}, 'chat_id', this.value)" class="flex-1 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm" placeholder="频道 ID">
+            <select onchange="updateTgChannel(${idx}, 'platform', this.value)" class="px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm">
+                <option value="tg" ${ch.platform === 'tg' ? 'selected' : ''}>Telegram</option>
+                <option value="wecom" ${ch.platform === 'wecom' ? 'selected' : ''}>企业微信</option>
+            </select>
+            <div class="flex gap-1">
+                <input type="checkbox" class="w-4 h-4" ${ch.notify_types?.includes('movie') ? 'checked' : ''} onchange="toggleTgChannelType(${idx}, 'movie', this.checked)" title="电影">
+                <span class="text-xs text-gray-500">电影</span>
+            </div>
+            <div class="flex gap-1">
+                <input type="checkbox" class="w-4 h-4" ${ch.notify_types?.includes('series') ? 'checked' : ''} onchange="toggleTgChannelType(${idx}, 'series', this.checked)" title="剧集">
+                <span class="text-xs text-gray-500">剧集</span>
+            </div>
+            <button onclick="removeTgChannel(${idx})" class="w-8 h-8 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/40 transition-all">
+                <i class="fa-solid fa-trash-can"></i>
+            </button>
+        </div>`;
+    });
+    container.innerHTML = html;
+}
+
+function addTgChannel() {
+    tgChannels.push({ chat_id: '', platform: 'tg', notify_types: ['movie', 'series'] });
+    renderTgChannels();
+}
+
+function updateTgChannel(idx, key, value) {
+    if (tgChannels[idx]) tgChannels[idx][key] = value;
+}
+
+function toggleTgChannelType(idx, type, checked) {
+    if (!tgChannels[idx]) return;
+    if (!tgChannels[idx].notify_types) tgChannels[idx].notify_types = [];
+    if (checked && !tgChannels[idx].notify_types.includes(type)) {
+        tgChannels[idx].notify_types.push(type);
+    } else if (!checked) {
+        tgChannels[idx].notify_types = tgChannels[idx].notify_types.filter(t => t !== type);
+    }
+}
+
+function removeTgChannel(idx) {
+    tgChannels.splice(idx, 1);
+    renderTgChannels();
+}
+
+// 切换 Tab
+function switchTab(tab) {
+    ['rules', 'channels', 'history'].forEach(t => {
+        const panel = document.getElementById(`panel-${t}`);
+        const btn = document.getElementById(`tab-${t}`);
+        if (t === tab) {
+            panel.classList.remove('hidden');
+            btn.className = 'tab-btn px-4 py-2 rounded-xl font-bold text-sm transition-all bg-amber-500 text-white';
+        } else {
+            panel.classList.add('hidden');
+            btn.className = 'tab-btn px-4 py-2 rounded-xl font-bold text-sm transition-all bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300';
+        }
+    });
+}
+
+// 加载历史记录
+async function loadHistory() {
+    const res = await fetch('/api/notifications');
+    const json = await res.json();
+    const container = document.getElementById('history-list');
+    
+    if (!json.success || !json.items || json.items.length === 0) {
+        container.innerHTML = '<p class="text-gray-400 text-sm text-center py-8"><i class="fa-solid fa-clock mr-2 opacity-50"></i>暂无通知记录</p>';
+        return;
+    }
+
+    let html = '';
+    json.items.slice(0, 50).forEach(item => {
+        const typeIcons = {
+            'request': 'fa-file-circle-plus text-blue-500',
+            'user': 'fa-user-plus text-green-500',
+            'system': 'fa-gear text-gray-500',
+            'points': 'fa-coins text-amber-500',
+            'plugin': 'fa-puzzle-piece text-purple-500',
+            'risk': 'fa-shield-halved text-red-500'
+        };
+        const icon = typeIcons[item.type] || 'fa-bell text-gray-500';
+        
+        html += `
+        <div class="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800/30 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800/50 transition-colors">
+            <div class="w-10 h-10 rounded-xl bg-gray-200 dark:bg-gray-700 flex items-center justify-center shrink-0">
+                <i class="fa-solid ${icon}"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+                <div class="font-bold text-gray-800 dark:text-gray-200 text-sm truncate">${item.title}</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400 truncate">${item.message}</div>
+                <div class="text-xs text-gray-400 mt-1">${item.created_at || item.DateCreated || ''}</div>
+            </div>
+            <span class="text-xs px-2 py-1 rounded-lg ${item.is_read ? 'bg-gray-200 dark:bg-gray-700 text-gray-500' : 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'}">${item.is_read ? '已读' : '未读'}</span>
+        </div>`;
+    });
+    container.innerHTML = html;
+}
+
+// 保存所有配置
+async function saveAllRules() {
+    // 收集规则数据
+    const rules = {};
+    NOTIFY_TYPES.forEach(t => {
+        const enabledEl = document.querySelector(`.rule-enabled[data-type="${t.type}"]`);
+        const channels = [];
+        document.querySelectorAll(`.rule-channel[data-type="${t.type}"]`).forEach(el => {
+            if (el.checked) channels.push(el.dataset.channel);
+        });
+        rules[t.type] = {
+            notify_type: t.type,
+            notify_name: t.name,
+            enabled: enabledEl?.checked ? 1 : 0,
+            channels: channels
+        };
+    });
+
+    // 收集渠道配置
+    const channelsConfig = {
+        tg_bot: {
+            enabled: document.getElementById('tg-bot-enabled').checked,
+            token: document.getElementById('tg-bot-token').value,
+            chat_id: document.getElementById('tg-bot-chat-id').value
+        },
+        tg_channels: tgChannels,
+        wecom: {
+            enabled: document.getElementById('wecom-enabled').checked,
+            webhook: document.getElementById('wecom-webhook').value
+        }
+    };
+
+    // 保存规则
+    const rulesRes = await fetch('/api/notify/rules', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({rules})
+    });
+
+    // 保存渠道配置
+    const channelsRes = await fetch('/api/notify/channels_config', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(channelsConfig)
+    });
+
+    const rulesJson = await rulesRes.json();
+    const channelsJson = await channelsRes.json();
+
+    if (rulesJson.status === 'success' && channelsJson.status === 'success') {
+        showToast('success', '保存成功', '通知配置已更新');
+    } else {
+        showToast('error', '保存失败', rulesJson.message || channelsJson.message || '未知错误');
+    }
+}
+
+init();
+</script>
+{% endblock %}

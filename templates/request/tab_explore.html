@@ -1,0 +1,271 @@
+<div class="w-full pb-6">
+    
+    <!-- 公告滚动条 -->
+    <div x-show="announcements.length > 0" x-transition.opacity.duration.300ms class="mb-6 overflow-hidden">
+        <div class="relative rounded-2xl overflow-hidden shadow-sm border border-slate-200/50 dark:border-white/5" style="background: linear-gradient(135deg, rgba(6, 182, 212, 0.08) 0%, rgba(168, 85, 247, 0.08) 100%);">
+            <!-- 装饰背景 -->
+            <div class="absolute inset-0 opacity-30 pointer-events-none">
+                <div class="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-gradient-to-br from-cyan-400/20 to-purple-400/20 blur-2xl"></div>
+                <div class="absolute -bottom-10 -left-10 w-32 h-32 rounded-full bg-gradient-to-br from-purple-400/20 to-pink-400/20 blur-2xl"></div>
+            </div>
+            <div class="relative flex items-center gap-3 px-4 py-3">
+                <!-- 图标 -->
+                <div class="flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-500 to-purple-500 text-white shrink-0 shadow-lg shadow-cyan-500/20">
+                    <i class="fa-solid fa-bullhorn text-sm"></i>
+                </div>
+                <!-- 滚动内容区 -->
+                <div class="flex-1 overflow-hidden relative h-6">
+                    <div class="announcement-scroll-wrapper h-full">
+                        <template x-for="(ann, index) in announcements" :key="ann.id">
+                            <div class="announcement-item h-6 flex items-center gap-2 cursor-pointer group"
+                                 @click="openAnnouncementDetail(ann)">
+                                <!-- 标题 - 固定宽度不滚动 -->
+                                <span class="font-semibold text-slate-800 dark:text-white group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors shrink-0 max-w-[80px] sm:max-w-[120px] truncate" x-text="ann.title"></span>
+                                <!-- 分隔线 -->
+                                <span class="w-px h-3.5 bg-slate-300 dark:bg-white/20 shrink-0"></span>
+                                <!-- 内容预览 - 独立滚动区域 -->
+                                <div class="flex-1 overflow-hidden relative h-6">
+                                    <div class="announcement-content-inner h-full flex items-center whitespace-nowrap animate-marquee-auto">
+                                        <span class="text-sm text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors pr-12"
+                                              x-text="getAnnouncementPreview(ann.content)"></span>
+                                        <span class="text-sm text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors"
+                                              x-text="getAnnouncementPreview(ann.content)"></span>
+                                    </div>
+                                </div>
+                                <!-- 时间 -->
+                                <span class="text-[11px] text-slate-400 dark:text-slate-500 shrink-0 pl-2" x-text="formatAnnouncementTime(ann.created_at)"></span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+                <!-- 切换按钮 -->
+                <div x-show="announcements.length > 1" class="flex items-center gap-0.5 shrink-0">
+                    <button @click="prevAnnouncement()" class="w-7 h-7 rounded-lg hover:bg-white/50 dark:hover:bg-white/10 flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
+                        <i class="fa-solid fa-chevron-up text-xs"></i>
+                    </button>
+                    <button @click="nextAnnouncement()" class="w-7 h-7 rounded-lg hover:bg-white/50 dark:hover:bg-white/10 flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
+                        <i class="fa-solid fa-chevron-down text-xs"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 公告详情浮窗 -->
+    <div x-show="announcementDetail.show" x-transition.opacity.duration.200ms x-cloak
+         class="fixed inset-0 z-[100] flex items-center justify-center p-4"
+         @click.self="closeAnnouncementDetail()">
+        <div class="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
+        <div class="relative w-full max-w-md bg-white dark:bg-[#0a0a0a] rounded-3xl shadow-2xl overflow-hidden border border-slate-200 dark:border-white/10"
+             @click.stop>
+            <!-- 头部 -->
+            <div class="relative px-6 py-5" style="background: linear-gradient(135deg, #06b6d4 0%, #a855f7 100%);">
+                <div class="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
+                <div class="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2"></div>
+                <div class="relative flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-11 h-11 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center text-white shadow-lg">
+                            <i class="fa-solid fa-bullhorn text-lg"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-white text-lg leading-tight" x-text="announcementDetail.data?.title || '公告详情'"></h3>
+                            <p class="text-white/70 text-xs mt-0.5" x-text="formatAnnouncementTime(announcementDetail.data?.created_at)"></p>
+                        </div>
+                    </div>
+                    <button @click="closeAnnouncementDetail()" class="w-9 h-9 rounded-xl bg-white/20 hover:bg-white/30 flex items-center justify-center text-white transition-colors">
+                        <i class="fa-solid fa-times"></i>
+                    </button>
+                </div>
+            </div>
+            <!-- 内容 -->
+            <div class="px-6 py-5 max-h-[60vh] overflow-y-auto select-text">
+                <div class="text-slate-700 dark:text-slate-300 text-[15px] leading-relaxed announcement-content" x-html="parseMarkdown(announcementDetail.data?.content)"></div>
+            </div>
+            <!-- 底部 -->
+            <div class="px-6 py-3 border-t border-slate-100 dark:border-white/5 flex items-center justify-between text-xs text-slate-400">
+                <div class="flex items-center gap-3">
+                    <span><i class="fa-solid fa-eye mr-1.5"></i><span x-text="announcementDetail.data?.view_count || 0"></span> 次浏览</span>
+                    <button @click="copyAnnouncementContent()" class="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 text-slate-500 hover:text-brand-500 dark:hover:text-brand-400 transition-colors" title="复制公告内容">
+                        <i class="fa-regular fa-copy text-xs"></i>
+                        <span>复制</span>
+                    </button>
+                </div>
+                <span x-show="announcements.length > 1" class="text-slate-400">
+                    <span x-text="announcementDetail.index + 1"></span> / <span x-text="announcements.length"></span>
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-10">
+        <div class="relative p-5 rounded-3xl overflow-hidden shadow-lg bg-gradient-to-br from-blue-500 to-indigo-600 text-white group">
+            <i class="fa-solid fa-film absolute -right-4 -bottom-4 text-7xl opacity-20 group-hover:scale-110 transition-transform duration-500"></i>
+            <div class="relative z-10">
+                <div class="text-3xl sm:text-4xl font-black font-mono drop-shadow-md" x-text="serverDashboard?.library?.movie || '-'"></div>
+                <div class="text-[11px] sm:text-xs font-bold tracking-widest mt-1 opacity-90 uppercase">收录电影</div>
+            </div>
+        </div>
+
+        <div class="relative p-5 rounded-3xl overflow-hidden shadow-lg bg-gradient-to-br from-orange-400 to-rose-500 text-white group">
+            <i class="fa-solid fa-tv absolute -right-4 -bottom-4 text-7xl opacity-20 group-hover:scale-110 transition-transform duration-500"></i>
+            <div class="relative z-10">
+                <div class="text-3xl sm:text-4xl font-black font-mono drop-shadow-md" x-text="serverDashboard?.library?.series || '-'"></div>
+                <div class="text-[11px] sm:text-xs font-bold tracking-widest mt-1 opacity-90 uppercase">收录剧集</div>
+            </div>
+        </div>
+
+        <div class="relative p-5 rounded-3xl overflow-hidden shadow-lg bg-gradient-to-br from-emerald-400 to-teal-500 text-white group">
+            <i class="fa-solid fa-layer-group absolute -right-4 -bottom-4 text-7xl opacity-20 group-hover:scale-110 transition-transform duration-500"></i>
+            <div class="relative z-10">
+                <div class="text-3xl sm:text-4xl font-black font-mono drop-shadow-md" x-text="serverDashboard?.library?.episode || '-'"></div>
+                <div class="text-[11px] sm:text-xs font-bold tracking-widest mt-1 opacity-90 uppercase">海量单集</div>
+            </div>
+        </div>
+
+        <div class="relative p-5 rounded-3xl overflow-hidden shadow-lg bg-gradient-to-br from-purple-500 to-fuchsia-600 text-white group">
+            <i class="fa-solid fa-play absolute -right-4 -bottom-4 text-7xl opacity-20 group-hover:scale-110 transition-transform duration-500"></i>
+            <div class="relative z-10">
+                <div class="text-3xl sm:text-4xl font-black font-mono drop-shadow-md" x-text="serverDashboard?.total_plays || '-'"></div>
+                <div class="text-[11px] sm:text-xs font-bold tracking-widest mt-1 opacity-90 uppercase">历史总播放</div>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="serverGenres.length > 0" class="mb-10 glass-panel p-5 sm:p-6 rounded-3xl shadow-sm border border-slate-200/50 dark:border-white/5">
+        <h3 class="text-base sm:text-lg font-bold mb-4 flex items-center gap-2 text-slate-800 dark:text-white">
+            <i class="fa-solid fa-chart-pie text-brand-500"></i> 媒体库流派构成分析
+        </h3>
+        <div class="space-y-4">
+            <div class="flex h-3 sm:h-4 rounded-full overflow-hidden shadow-inner bg-slate-100 dark:bg-white/5">
+                <template x-for="(g, index) in serverGenres" :key="g.name">
+                    <div class="h-full transition-all duration-500 hover:opacity-80 cursor-pointer" 
+                         :class="['bg-blue-500', 'bg-indigo-500', 'bg-purple-500', 'bg-rose-500', 'bg-orange-500', 'bg-emerald-500'][index % 6]"
+                         :style="`width: ${g.pct}%`" :title="`${g.name}: ${g.pct}%`"></div>
+                </template>
+            </div>
+            <div class="flex flex-wrap gap-2.5">
+                <template x-for="(g, index) in serverGenres" :key="g.name">
+                    <div class="flex items-center gap-1.5 text-[10px] sm:text-xs font-bold text-slate-600 dark:text-zinc-300 bg-white dark:bg-white/5 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-white/10 shadow-sm">
+                        <span class="w-2 h-2 rounded-full" :class="['bg-blue-500', 'bg-indigo-500', 'bg-purple-500', 'bg-rose-500', 'bg-orange-500', 'bg-emerald-500'][index % 6]"></span>
+                        <span x-text="g.name"></span>
+                        <span class="text-slate-400 font-mono ml-0.5" x-text="g.pct + '%'"></span>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="serverLatest.length > 0" class="mb-10">
+        <div class="flex items-center justify-between mb-4 px-1">
+            <h3 class="text-lg sm:text-xl font-bold flex items-center gap-2 text-slate-800 dark:text-white">
+                <i class="fa-solid fa-bolt text-blue-500"></i> 最新收录资源
+            </h3>
+            <button @click="loadServerData(); showToast('已同步最新数据')" class="text-xs text-slate-400 hover:text-brand-500 transition-colors">
+                <i class="fa-solid fa-rotate-right"></i> 刷新
+            </button>
+        </div>
+        <div x-data="dragScroll" @mousedown="start" @mouseleave="end" @mouseup="end" @mousemove="move" 
+             class="flex overflow-x-auto hide-scrollbar gap-4 pb-6 pt-2 -mx-4 px-4 cursor-grab active:cursor-grabbing select-none">
+            <template x-for="item in serverLatest" :key="item.Id">
+                <div class="poster-card flex-none w-32 md:w-48 relative rounded-2xl overflow-hidden bg-slate-200 dark:bg-[#111] aspect-[2/3] ring-1 ring-black/5 dark:ring-white/5 group shadow-md" 
+                     @click="if(!isDragging) openShowcaseModal(item.Id, item)">
+                    <img :src="getSafePosterUrl(item)" 
+                         @error="window.fallbackPoster($el, item.Name)" 
+                         class="w-full h-full object-cover pointer-events-none" loading="lazy">
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-3 pointer-events-none">
+                        <div class="text-[10px] font-bold px-1.5 py-0.5 bg-blue-500 rounded text-white self-start mb-1" x-text="item.Type === 'Movie' ? '电影' : '剧集'"></div>
+                        <h4 class="font-bold text-white text-sm line-clamp-2 leading-tight mb-1" x-text="item.Name"></h4>
+                        <!-- 🔥 显示集数：多集显示范围，单集显示具体 -->
+                        <span class="text-xs text-zinc-300" x-show="item.Type === 'Series' && item.EpisodeCount > 1">
+                            <span x-text="`S${String(item.SeasonIndex || 1).padStart(2,'0')}E${String(item.EpisodeMin).padStart(2,'0')}-E${String(item.EpisodeMax).padStart(2,'0')}`"></span>
+                        </span>
+                        <span class="text-xs text-zinc-300" x-show="item.Type === 'Series' && item.EpisodeCount === 1">
+                            <span x-text="`S${String(item.SeasonIndex || 1).padStart(2,'0')}E${String(item.EpisodeMin).padStart(2,'0')}`"></span>
+                        </span>
+                        <span class="text-xs text-zinc-300 flex items-center gap-1 text-yellow-400 font-bold" x-show="item.Rating">★ <span x-text="item.Rating"></span></span>
+                    </div>
+                    <!-- 🔥 纠错按钮 -->
+                    <button @click.stop="openFeedbackModal(item.Name, getSafePosterUrl(item))"
+                            class="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/50 hover:bg-rose-500 text-white text-[10px] opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center z-20"
+                            title="纠错反馈">
+                        <i class="fa-solid fa-exclamation-circle"></i>
+                    </button>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <div x-show="serverTopRated.length > 0" class="mb-10">
+        <h3 class="text-lg sm:text-xl font-bold mb-4 flex items-center gap-2 text-slate-800 dark:text-white px-1">
+            <i class="fa-solid fa-crown text-yellow-500"></i> 镇站之宝 (神作典藏)
+        </h3>
+        <div x-data="dragScroll" @mousedown="start" @mouseleave="end" @mouseup="end" @mousemove="move" 
+             class="flex overflow-x-auto hide-scrollbar gap-4 pb-6 pt-2 -mx-4 px-4 cursor-grab active:cursor-grabbing select-none">
+            <template x-for="(item, index) in serverTopRated" :key="item.Id">
+                <div class="poster-card flex-none w-32 md:w-48 relative rounded-2xl overflow-hidden bg-slate-200 dark:bg-[#111] aspect-[2/3] ring-1 ring-black/5 dark:ring-white/5 group shadow-md" 
+                     @click="if(!isDragging) openShowcaseModal(item.Id, item)">
+                    <img :src="`/api/proxy/smart_image?item_id=${item.Id}&type=Primary`" 
+                         @error="window.fallbackPoster($el, item.Name)" 
+                         class="w-full h-full object-cover pointer-events-none" loading="lazy">
+                    <div class="absolute top-0 right-0 bg-yellow-400 text-yellow-900 text-[11px] font-black px-2 py-1 rounded-bl-xl backdrop-blur-md z-10 shadow-sm flex items-center gap-1">
+                        <i class="fa-solid fa-star"></i> <span x-text="item.CommunityRating.toFixed(1)"></span>
+                    </div>
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-3 pointer-events-none">
+                        <div class="text-[10px] font-bold px-1.5 py-0.5 bg-indigo-500 rounded text-white self-start mb-1" x-text="item.Type === 'Movie' ? '电影' : '剧集'"></div>
+                        <h4 class="font-bold text-white text-sm line-clamp-2 leading-tight" x-text="item.Name"></h4>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <div x-show="serverTopMovies.length > 0" class="mb-10">
+        <h3 class="text-lg sm:text-xl font-bold mb-4 flex items-center gap-2 text-slate-800 dark:text-white px-1">
+            <i class="fa-solid fa-fire text-rose-500"></i> 电影热播榜 Top 10
+        </h3>
+        <div x-data="dragScroll" @mousedown="start" @mouseleave="end" @mouseup="end" @mousemove="move" 
+             class="flex overflow-x-auto hide-scrollbar gap-4 pb-6 pt-2 -mx-4 px-4 cursor-grab active:cursor-grabbing select-none">
+            <template x-for="(item, index) in serverTopMovies" :key="item.ItemId">
+                <div class="poster-card flex-none w-32 md:w-48 relative rounded-2xl overflow-hidden bg-slate-200 dark:bg-[#111] aspect-[2/3] ring-1 ring-black/5 dark:ring-white/5 group shadow-md" 
+                     @click="if(!isDragging) openShowcaseModal(item.ItemId, item)">
+                    <img :src="`/api/proxy/smart_image?item_id=${item.ItemId}&type=Primary`" 
+                         @error="window.fallbackPoster($el, item.ItemName)" 
+                         class="w-full h-full object-cover pointer-events-none" loading="lazy">
+                    <div class="absolute top-0 left-0 bg-black/60 text-white text-xs font-black px-2 py-1 rounded-br-lg backdrop-blur-md z-10" 
+                         :class="index < 3 ? 'text-rose-400' : ''">
+                        TOP <span x-text="index + 1"></span>
+                    </div>
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-3 pointer-events-none">
+                        <h4 class="font-bold text-white text-sm line-clamp-2 leading-tight" x-text="item.ItemName"></h4>
+                        <div class="text-[10px] text-zinc-300 mt-1 font-mono">播放: <span x-text="item.PlayCount"></span> 次</div>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <div x-show="serverTopSeries.length > 0" class="mb-6">
+        <h3 class="text-lg sm:text-xl font-bold mb-4 flex items-center gap-2 text-slate-800 dark:text-white px-1">
+            <i class="fa-solid fa-fire text-orange-500"></i> 剧集热播榜 Top 10
+        </h3>
+        <div x-data="dragScroll" @mousedown="start" @mouseleave="end" @mouseup="end" @mousemove="move" 
+             class="flex overflow-x-auto hide-scrollbar gap-4 pb-6 pt-2 -mx-4 px-4 cursor-grab active:cursor-grabbing select-none">
+            <template x-for="(item, index) in serverTopSeries" :key="item.ItemId">
+                <div class="poster-card flex-none w-32 md:w-48 relative rounded-2xl overflow-hidden bg-slate-200 dark:bg-[#111] aspect-[2/3] ring-1 ring-black/5 dark:ring-white/5 group shadow-md" 
+                     @click="if(!isDragging) openShowcaseModal(item.ItemId, item)">
+                    <img :src="`/api/proxy/smart_image?item_id=${item.ItemId}&type=Primary`" 
+                         @error="window.fallbackPoster($el, item.ItemName)" 
+                         class="w-full h-full object-cover pointer-events-none" loading="lazy">
+                    <div class="absolute top-0 left-0 bg-black/60 text-white text-xs font-black px-2 py-1 rounded-br-lg backdrop-blur-md z-10" 
+                         :class="index < 3 ? 'text-orange-400' : ''">
+                        TOP <span x-text="index + 1"></span>
+                    </div>
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-3 pointer-events-none">
+                        <h4 class="font-bold text-white text-sm line-clamp-2 leading-tight" x-text="item.ItemName"></h4>
+                        <div class="text-[10px] text-zinc-300 mt-1 font-mono">播放: <span x-text="item.PlayCount"></span> 次</div>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+</div>

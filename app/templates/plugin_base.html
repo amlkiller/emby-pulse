@@ -1,0 +1,47 @@
+{% extends "layout.html" %}
+{% block title %}{{ plugin_name }} - EmbyPulse{% endblock %}
+{% block content %}
+<div class="w-full py-2 pb-32 px-2 sm:px-4 md:px-8 flex flex-col gap-6 md:gap-8">
+    <!-- 页面头部 -->
+    <div class="bg-white dark:bg-[#1C1C1E] rounded-3xl shadow-sm border border-gray-100 dark:border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-6 w-full p-5 md:p-6 shrink-0">
+        <div class="flex items-center gap-4 pl-1 shrink-0">
+            <div class="w-12 h-12 rounded-[14px] bg-gradient-to-br from-purple-500 to-pink-600 text-white flex items-center justify-center text-[22px] shadow-lg shadow-purple-500/30 shrink-0">
+                <i class="fa-solid {{ plugin_icon }}"></i>
+            </div>
+            <div>
+                <h2 class="text-xl md:text-[22px] font-bold tracking-tight text-gray-900 dark:text-white">{{ plugin_name }}</h2>
+                <div class="text-[12px] text-gray-500 mt-1 font-medium flex items-center gap-1.5">
+                    <i class="fa-solid fa-puzzle-piece opacity-70"></i>
+                    <span>{{ plugin_description }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="/plugins" class="px-4 py-2 bg-gray-100 dark:bg-[#2C2C2E] text-gray-700 dark:text-gray-300 rounded-xl text-[13px] font-bold hover:bg-gray-200 dark:hover:bg-[#3A3A3C] transition-colors flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+                </svg>
+                返回插件列表
+            </a>
+        </div>
+    </div>
+
+    {% block plugin_content %}{% endblock %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // 通用工具函数
+    function showToast(type, title, message) {
+        // 简单的 toast 提示
+        const bgClass = type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500';
+        const toast = document.createElement('div');
+        toast.className = `fixed top-4 right-4 ${bgClass} text-white px-6 py-3 rounded-lg shadow-lg z-50 flex items-center gap-2`;
+        toast.innerHTML = `<i class="fa-solid ${type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle'}"></i><span>${title}: ${message}</span>`;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+    }
+</script>
+{% block plugin_scripts %}{% endblock %}
+{% endblock %}

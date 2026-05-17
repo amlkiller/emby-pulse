@@ -1,0 +1,206 @@
+<!-- 🔥 我的追剧弹窗 - 独立 modal，继承 requestApp scope -->
+<template x-teleport="body">
+    <div x-show="mySeriesModalOpen" class="fixed inset-0 z-[300] flex items-center justify-center p-4" x-cloak>
+        <div x-show="mySeriesModalOpen" x-transition.opacity @click="mySeriesModalOpen = false; selectedSeries = null;" class="absolute inset-0 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm"></div>
+        <div x-show="mySeriesModalOpen" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-10 scale-95" x-transition:enter-end="opacity-100 translate-y-0 scale-100" 
+             class="relative w-full max-w-md bg-white dark:bg-[#111] border border-slate-200 dark:border-white/5 rounded-3xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
+            
+            <!-- 标题 -->
+            <div class="p-5 border-b border-slate-100 dark:border-white/5 flex justify-between items-center shrink-0 bg-slate-50/50 dark:bg-white/5">
+                <div>
+                    <h3 class="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
+                        <i class="fa-solid fa-tv text-orange-500"></i> 我的追剧
+                    </h3>
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">选择剧集请求更新缺失集数</p>
+                </div>
+                <button @click="mySeriesModalOpen = false; selectedSeries = null;" class="w-8 h-8 rounded-full bg-slate-200/50 dark:bg-white/10 text-slate-500 hover:text-rose-500 flex justify-center items-center transition-colors">
+                    <i class="fa-solid fa-xmark text-sm"></i>
+                </button>
+            </div>
+            
+            <!-- 缓存状态提示 -->
+            <div x-show="mySeriesCacheInfo.updated_at" class="px-4 py-2 bg-slate-50 dark:bg-white/5 border-b border-slate-100 dark:border-white/5 flex items-center justify-between text-[10px]">
+                <span class="text-slate-500 dark:text-slate-400">
+                    <i class="fa-solid fa-clock mr-1"></i> 数据更新: <span x-text="mySeriesCacheInfo.updated_at"></span>
+                </span>
+                <span x-show="mySeriesCacheInfo.expired" class="text-rose-500 font-bold">
+                    <i class="fa-solid fa-exclamation-triangle mr-1"></i> 数据可能已过期
+                </span>
+                <span x-show="!mySeriesCacheInfo.expired && mySeriesCacheInfo.exists" class="text-emerald-500 font-bold">
+                    <i class="fa-solid fa-check-circle mr-1"></i> 有效
+                </span>
+            </div>
+            
+            <!-- 内容区 -->
+            <div class="flex-1 h-0 overflow-y-auto p-4 bg-slate-50 dark:bg-[#0a0a0a]">
+                <!-- 加载中 -->
+                <div x-show="mySeriesLoading" class="flex flex-col items-center justify-center py-12 gap-3">
+                    <i class="fa-solid fa-circle-notch fa-spin text-2xl text-orange-500"></i>
+                    <div class="text-sm text-slate-500">加载追剧列表...</div>
+                </div>
+                
+                <!-- 空状态 -->
+                <div x-show="!mySeriesLoading && mySeries.length === 0" class="text-center py-12 text-slate-400">
+                    <i class="fa-solid fa-tv text-4xl mb-3 opacity-30"></i>
+                    <p class="text-sm">暂无追剧记录</p>
+                    <p class="text-xs mt-1 text-slate-400 dark:text-slate-500" x-show="mySeriesCacheInfo.exists">观看剧集后这里会显示</p>
+                    <p class="text-xs mt-1 text-rose-500" x-show="!mySeriesCacheInfo.exists || mySeriesCacheInfo.expired">数据暂时不可用，请稍后再试</p>
+                </div>
+                
+                <!-- 剧集列表 -->
+                <div x-show="!mySeriesLoading && mySeries.length > 0 && !selectedSeries" class="space-y-3">
+                    <template x-for="series in mySeries" :key="series.series_id">
+                        <div class="bg-white dark:bg-white/5 rounded-2xl p-4 border border-slate-100 dark:border-white/5 shadow-sm">
+                            <div class="flex gap-3">
+                                <img :src="series.poster || 'https://via.placeholder.com/100x150'" class="w-16 h-24 rounded-xl object-cover bg-slate-200 dark:bg-slate-700 shrink-0">
+                                <div class="flex-1 min-w-0">
+                                    <h4 class="font-bold text-slate-800 dark:text-white text-sm truncate" x-text="series.series_name"></h4>
+                                    <div class="text-[10px] text-slate-500 mt-1">共 <span x-text="series.total_seasons"></span> 季</div>
+                                    
+                                    <!-- 季信息 -->
+                                    <div class="mt-2 space-y-1">
+                                        <template x-for="s in series.seasons" :key="s.season">
+                                            <div class="flex items-center justify-between text-[11px]">
+                                                <span class="text-slate-600 dark:text-slate-400">第 <span x-text="s.season"></span> 季</span>
+                                                <div class="flex items-center gap-2">
+                                                    <span class="text-slate-400" x-text="s.local_count + '/' + s.tmdb_total + ' 集'"></span>
+                                                    <span x-show="s.missing_eps && s.missing_eps.length > 0" class="text-orange-500 font-bold">
+                                                        缺 <span x-text="s.missing_eps.length"></span> 集
+                                                    </span>
+                                                    <span x-show="!s.missing_eps || s.missing_eps.length === 0" class="text-emerald-500">
+                                                        ✓ 完整
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 操作按钮 -->
+                            <div x-show="series.seasons && series.seasons.some(s => s.missing_eps && s.missing_eps.length > 0)" class="mt-3 pt-3 border-t border-slate-100 dark:border-white/5">
+                                <button @click="selectSeriesForUpdate(series)" class="w-full py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5">
+                                    <i class="fa-solid fa-plus"></i> 请求追新
+                                </button>
+                            </div>
+                            
+                            <!-- 追新状态显示 -->
+                            <template x-for="s in series.seasons" :key="'status-'+s.season">
+                                <div x-show="s.request_status" class="mt-2 text-[10px]">
+                                    <div class="flex items-center gap-1.5">
+                                        <span class="text-slate-500">追新状态:</span>
+                                        <span class="px-1.5 py-0.5 rounded-full font-bold" 
+                                              :class="getRequestStatusClass(s.request_status?.status)">
+                                            <span x-text="getRequestStatusText(s.request_status?.status)"></span>
+                                            <!-- 🔥 显示 S季号E集数 -->
+                                            <span x-show="s.request_status?.episodes" x-text="(s.season ? 'S' + s.season : '') + '(E' + (s.request_status?.episodes || '').replace(',', '-') + ')'"></span>
+                                        </span>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </div>
+                
+                <!-- 选择集数 - 直接显示所有季的缺集 -->
+                <div x-show="selectedSeries" class="space-y-3">
+                    <button @click="selectedSeries = null; selectedEpisodesBySeason = {};" class="text-xs text-slate-500 hover:text-brand-500 font-bold flex items-center gap-1">
+                        <i class="fa-solid fa-arrow-left"></i> 返回列表
+                    </button>
+                    
+                    <div class="bg-white dark:bg-white/5 rounded-2xl p-4 border border-slate-100 dark:border-white/5">
+                        <h4 class="font-bold text-slate-800 dark:text-white text-sm" x-text="selectedSeries?.series_name"></h4>
+                        
+                        <!-- 直接显示每季缺集 -->
+                        <div class="mt-3 space-y-3">
+                            <template x-for="s in (selectedSeries?.seasons || [])" :key="s.season">
+                                <div class="border-b border-slate-100 dark:border-white/5 pb-3 last:border-0">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <span class="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                                            第 <span x-text="s.season"></span> 季
+                                        </span>
+                                        <span class="text-[10px] text-slate-500">
+                                            <span x-text="s.local_count"></span>/<span x-text="s.tmdb_total"></span> 集
+                                        </span>
+                                    </div>
+                                    
+                                    <!-- 有缺集时显示选择按钮 -->
+                                    <div x-show="s.missing_eps?.length > 0" class="flex items-center justify-between mb-1.5">
+                                        <span class="text-[10px] text-orange-500 font-bold">缺 <span x-text="s.missing_eps?.length"></span> 集</span>
+                                        <div class="flex gap-2">
+                                            <button @click="clearSeasonEpisodes(s.season)" class="text-[9px] text-slate-400 hover:text-slate-600 font-bold">清空</button>
+                                            <button @click="selectAllSeasonEpisodes(s.season, s.missing_eps)" class="text-[9px] text-brand-500 hover:text-brand-600 font-bold">
+                                                <span x-text="isSeasonAllSelected(s.season, s.missing_eps) ? '取消全选' : '全选'"></span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- 集数按钮 -->
+                                    <div x-show="s.missing_eps?.length > 0" class="flex flex-wrap gap-1">
+                                        <template x-for="ep in (s.missing_eps || [])" :key="s.season + '-' + ep">
+                                            <button @click="canSelectEpisode(s, ep) && toggleEpisodeBySeason(s.season, ep)"
+                                                    class="w-9 h-9 rounded-lg text-[11px] font-bold transition-all relative"
+                                                    :class="getEpisodeButtonClass(s, ep)">
+                                                E<span x-text="ep"></span>
+                                                <!-- 🔥 已追新的集数显示标记 -->
+                                                <span x-show="isEpisodeAlreadyRequested(s, ep)" class="absolute -top-1 -right-1 w-3 h-3 bg-amber-400 rounded-full flex items-center justify-center">
+                                                    <i class="fa-solid fa-clock text-[6px] text-white"></i>
+                                                </span>
+                                            </button>
+                                        </template>
+                                    </div>
+                                    
+                                    <!-- 🔥 已追新集数提示 -->
+                                    <div x-show="getAlreadyRequestedEpisodes(s).length > 0" class="text-[10px] text-amber-600 dark:text-amber-400 mt-1.5 flex items-center gap-1">
+                                        <i class="fa-solid fa-clock"></i>
+                                        <span>E<span x-text="getAlreadyRequestedEpisodes(s).join(',')"></span> 已在追新中</span>
+                                    </div>
+                                    
+                                    <!-- 无缺集提示 -->
+                                    <div x-show="!s.missing_eps?.length" class="text-[10px] text-emerald-500 text-center py-2">
+                                        <i class="fa-solid fa-check-circle mr-1"></i> 该季完整
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                    
+                    <!-- 已选集数汇总 -->
+                    <div x-show="getTotalSelectedEpisodes() > 0" class="bg-orange-50 dark:bg-orange-500/10 rounded-xl p-3 text-[11px]">
+                        <div class="font-bold text-orange-600 dark:text-orange-400 mb-1">
+                            <i class="fa-solid fa-check-circle mr-1"></i> 已选 <span x-text="getTotalSelectedEpisodes()"></span> 集
+                        </div>
+                        <div class="text-orange-500 text-[10px]">
+                            <template x-for="(eps, sn) in selectedEpisodesBySeason" :key="sn">
+                                <span x-show="eps?.length > 0">
+                                    第<span x-text="sn"></span>季 E<span x-text="eps.join('-')"></span>
+                                    <span x-show="Object.keys(selectedEpisodesBySeason).filter(k => selectedEpisodesBySeason[k]?.length > 0).lastIndexOf(sn.toString()) !== Object.keys(selectedEpisodesBySeason).findIndex(k => k.toString() === sn.toString())">、</span>
+                                </span>
+                            </template>
+                        </div>
+                    </div>
+                    
+                    <!-- 积分消耗提示 -->
+                    <div x-show="updateCostInfo.enabled && getTotalSelectedEpisodes() > 0" class="text-center text-xs font-bold">
+                        <span class="inline-flex items-center gap-1 px-2 py-1 bg-orange-100 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400 rounded-lg">
+                            <i class="fa-solid fa-coins"></i> 本次追新将消耗 
+                            <span x-text="calculateUpdateCost()"></span> 积分
+                            <span x-show="updateCostInfo.mode === 'per_episode'" x-text="'(' + getTotalSelectedEpisodes() + '集×' + updateCostInfo.base_cost + ')'"></span>
+                            <span x-show="updateCostInfo.mode === 'per_season'" x-text="'(' + Object.keys(selectedEpisodesBySeason).filter(k => selectedEpisodesBySeason[k]?.length > 0).length + '季×' + updateCostInfo.base_cost + ')'"></span>
+                        </span>
+                    </div>
+                    
+                    <!-- 提交按钮 -->
+                    <button @click="submitMultiSeasonUpdateRequest()" 
+                            :disabled="getTotalSelectedEpisodes() === 0 || submittingUpdate"
+                            class="w-full py-3 bg-orange-500 hover:bg-orange-600 disabled:bg-slate-300 dark:disabled:bg-slate-700 text-white rounded-xl text-sm font-bold transition flex items-center justify-center gap-2">
+                        <i x-show="!submittingUpdate" class="fa-solid fa-paper-plane"></i>
+                        <i x-show="submittingUpdate" class="fa-solid fa-spinner fa-spin"></i>
+                        <span x-text="submittingUpdate ? '提交中...' : '提交追新请求 (' + getTotalSelectedEpisodes() + ' 集)'"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</template>

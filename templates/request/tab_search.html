@@ -1,0 +1,64 @@
+<style>body { overflow-x: hidden; }</style>
+<div class="w-full pb-6">
+    <div class="text-center py-6 space-y-3 mb-8">
+        <h2 class="text-3xl md:text-5xl font-extrabold tracking-tight text-slate-900 dark:text-white">星愿补给站</h2>
+        <p class="text-slate-500 dark:text-zinc-400 text-sm">搜索全网影视库，点击一键向服主许愿</p>
+    </div>
+    <div class="max-w-2xl mx-auto relative group mb-12">
+        <div class="absolute -inset-0.5 bg-gradient-to-r from-brand-400 to-blue-500 rounded-full blur opacity-20 group-hover:opacity-40 dark:opacity-30 transition duration-500"></div>
+        <form @submit.prevent="searchMedia()" class="relative flex items-center bg-white/80 dark:bg-black/60 backdrop-blur-xl border border-slate-200 dark:border-white/10 rounded-full p-2 shadow-sm focus-within:ring-2 focus-within:ring-brand-500/50 transition-all">
+            <input type="text" x-model="searchQuery" placeholder="输入你想看的电影或剧集名..." class="w-full bg-transparent border-none focus:ring-0 text-slate-900 dark:text-white placeholder-slate-400 px-6 py-3 outline-none text-lg">
+            <button type="submit" class="bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-zinc-200 text-white dark:text-zinc-900 p-3 rounded-full transition-transform active:scale-90 shadow-md">
+                <svg x-show="!isSearching" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                <svg x-show="isSearching" class="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            </button>
+        </form>
+    </div>
+
+    <div x-show="searchResults.length > 0" class="mb-10">
+        <div class="flex items-center justify-between mb-6">
+            <h3 class="text-xl font-bold flex items-center gap-2 text-slate-800 dark:text-white"><i class="fa-solid fa-magnifying-glass text-brand-500"></i> 搜索结果</h3>
+            <button @click="searchResults = []; searchQuery = ''" class="text-sm font-bold text-slate-400 hover:text-brand-500 transition-colors bg-white/50 dark:bg-white/5 px-3 py-1 rounded-full border border-slate-200 dark:border-white/5">清除结果</button>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6">
+            <template x-for="item in searchResults" :key="item.tmdb_id">
+                <div @click="openModal(item)" class="poster-card relative rounded-2xl overflow-hidden cursor-pointer bg-slate-200 dark:bg-[#111] aspect-[2/3] ring-1 ring-black/5 dark:ring-white/5 group shadow-md flex flex-col">
+                    <img :src="item.poster_path || '/static/img/logo-app-2.png'" class="w-full h-full object-cover" :class="item.poster_path ? '' : 'p-6 opacity-30 object-contain'">
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4 pointer-events-none">
+                        <div class="text-xs font-bold px-2 py-1 bg-brand-500 rounded text-white self-start mb-2" x-text="item.media_type === 'movie' ? '电影' : '剧集'"></div>
+                        <h4 class="font-bold text-white line-clamp-2" x-text="item.title"></h4>
+                        <div class="flex items-center justify-between mt-1 text-sm text-zinc-300">
+                            <span x-text="item.year"></span><span class="flex items-center gap-1 text-yellow-400 font-bold">★ <span x-text="item.vote_average"></span></span>
+                        </div>
+                    </div>
+                    <div x-show="item.local_status === 1" class="absolute top-2 left-2 px-2 py-1 bg-green-500 text-white text-[10px] font-bold rounded shadow-md z-10">✅ 已在库</div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <div x-show="searchResults.length === 0 && !isSearching && recommendResults.length > 0" class="mt-4 pb-4 relative z-0" x-cloak>
+        <div class="text-center mb-6">
+            <h3 class="text-[11px] font-black text-slate-400 dark:text-zinc-500 uppercase tracking-[0.4em]">
+                Trending Now 全球热播趋势
+            </h3>
+        </div>
+        <div class="marquee-wrapper">
+            <div class="marquee-track scroll-left">
+                <template x-for="(item, index) in [...recommendRow1, ...recommendRow1]" :key="'r1'+index">
+                    <img :src="item.poster_path" @click="openModal(item)" class="marquee-poster bg-slate-200 dark:bg-[#111]">
+                </template>
+            </div>
+            <div class="marquee-track scroll-right" style="animation-duration: 85s;">
+                <template x-for="(item, index) in [...recommendRow2, ...recommendRow2]" :key="'r2'+index">
+                    <img :src="item.poster_path" @click="openModal(item)" class="marquee-poster bg-slate-200 dark:bg-[#111]">
+                </template>
+            </div>
+            <div class="marquee-track scroll-left" style="animation-duration: 65s;">
+                <template x-for="(item, index) in [...recommendRow3, ...recommendRow3]" :key="'r3'+index">
+                    <img :src="item.poster_path" @click="openModal(item)" class="marquee-poster bg-slate-200 dark:bg-[#111]">
+                </template>
+            </div>
+        </div>
+    </div>
+</div>

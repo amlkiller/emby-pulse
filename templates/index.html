@@ -1,0 +1,271 @@
+{% extends "layout.html" %}
+{% block title %}仪表盘 - EmbyPulse{% endblock %}
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<link rel="stylesheet" href="/static/css/dashboard.css?v=20260325h">
+{% endblock %}
+
+{% block content %}
+<div class="w-full py-2 pb-32 px-2 sm:px-4 md:px-8 flex flex-col gap-6 md:gap-8">
+
+    {# ===== 顶部控制栏 ===== #}
+    <div class="apple-card flex flex-col md:flex-row md:items-center justify-between gap-4 w-full shrink-0 relative z-20">
+        <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-[14px] bg-gradient-to-br from-brand-500 to-indigo-600 text-white flex items-center justify-center text-xl shadow-lg shadow-brand-500/30">
+                <i class="fa-solid fa-chart-pie"></i>
+            </div>
+            <div>
+                <h2 class="text-xl md:text-[22px] font-bold tracking-tight text-gray-900 dark:text-white">控制台</h2>
+                <div class="text-[12px] text-gray-500 dark:text-gray-400 mt-1 font-medium flex items-center gap-1.5">
+                    <i class="fa-regular fa-calendar-days opacity-70"></i> <span id="current-date">...</span>
+                </div>
+            </div>
+        </div>
+        <div class="flex items-center gap-3 w-full md:w-auto">
+            <div class="relative flex-1 md:w-56">
+                <button id="dash-user-btn" onclick="toggleUserDropdown()" class="w-full flex items-center gap-2.5 bg-gray-100/80 hover:bg-gray-200 dark:bg-black/20 dark:hover:bg-black/40 border border-transparent dark:border-white/5 text-gray-800 dark:text-gray-200 py-2.5 pl-4 pr-10 rounded-xl text-[13px] font-bold transition-colors cursor-pointer shadow-sm text-left">
+                    <i class="fa-solid fa-earth-americas text-brand-500"></i>
+                    <span id="dash-user-label" class="truncate">全站统计 (All Users)</span>
+                </button>
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-400 z-10"><i class="fa-solid fa-chevron-down text-[10px]"></i></div>
+                <select id="dash-user-select" onchange="changeUser()" class="hidden">
+                    <option value="all">全站统计 (All Users)</option>
+                </select>
+                <div id="user-dropdown-panel" class="absolute top-full left-0 right-0 mt-2 bg-white/80 dark:bg-[#1C1C1E]/80 backdrop-blur-2xl rounded-2xl shadow-[0_16px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_16px_40px_rgba(0,0,0,0.5)] border border-white/60 dark:border-white/10 overflow-hidden z-[60] hidden opacity-0 scale-95 transition-all duration-200 origin-top max-h-[320px] flex flex-col">
+                    <div class="p-2 overflow-y-auto mac-scrollbar flex-1" id="user-dropdown-list"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# ===== Widget 网格 ===== #}
+    <div id="dashboard-grid" class="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-5 relative z-10">
+        {# -- 天气 -- #}
+        <div class="apple-card widget-item stat-card-mobile relative flex flex-col justify-between min-h-[160px] group" data-id="widget-weather" data-default-size="1x3">
+            <div class="widget-drag-handle absolute top-3 left-3 w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors z-30 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100"><i class="fa-solid fa-grip-vertical text-[12px]"></i></div>
+            <button onclick="toggleWidgetMenu(event, 'widget-weather')" class="widget-menu-btn absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 dark:text-gray-600 hover:text-brand-500 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors z-20"><i class="fa-solid fa-ellipsis text-[12px]"></i></button>
+            <div class="absolute -top-8 -right-8 w-32 h-32 rounded-full bg-gradient-to-br from-sky-200/40 to-blue-300/20 dark:from-sky-600/15 dark:to-blue-700/10 blur-2xl weather-float"></div>
+            <div class="absolute -bottom-6 -left-6 w-24 h-24 rounded-full bg-gradient-to-tr from-amber-200/30 to-orange-200/20 dark:from-amber-600/10 dark:to-orange-600/5 blur-xl weather-float-slow"></div>
+            <div class="relative z-10 flex justify-between items-start">
+                <div class="flex flex-col">
+                    <h3 class="text-[15px] font-bold tracking-wide text-gray-800 dark:text-gray-200 flex items-center gap-2">
+                        <span id="weather-greeting" class="cursor-pointer hover:text-brand-500 transition-colors" onclick="setWeatherGreeting()" title="点击修改称呼">你好</span>
+                    </h3>
+                    <div class="flex items-center gap-2 mt-1">
+                        <div class="flex items-center gap-1.5 cursor-pointer group/loc" onclick="setWeatherCity()">
+                            <i class="fa-solid fa-location-dot text-brand-500 text-[10px]"></i>
+                            <span class="text-[11px] font-medium text-gray-500 group-hover/loc:text-brand-500 transition-colors" id="weather-city">点击设置地点</span>
+                        </div>
+                        <button onclick="refreshWeatherBtn(this)" class="w-5 h-5 flex items-center justify-center rounded-full hover:bg-gray-200/60 dark:hover:bg-white/10 transition-colors" title="刷新天气"><i class="fa-solid fa-arrows-rotate text-[9px] text-gray-400 hover:text-brand-500 transition-colors"></i></button>
+                    </div>
+                </div>
+                <div class="w-14 h-14 flex items-center justify-center text-5xl drop-shadow-lg weather-icon-bounce" id="weather-icon">🌤️</div>
+            </div>
+            <div class="relative z-10 mt-4 flex items-end justify-between">
+                <div>
+                    <div class="text-[36px] font-black tracking-tighter leading-none text-gray-900 dark:text-white font-mono" id="weather-temp">--°</div>
+                    <div class="text-[12px] font-medium text-gray-500 mt-1" id="weather-desc">正在拉取气象数据...</div>
+                </div>
+                <div class="text-right flex flex-col items-end gap-1">
+                    <div class="flex items-center gap-1.5"><i class="fa-solid fa-droplet text-[9px] text-sky-400"></i><span class="text-[12px] font-bold text-gray-700 dark:text-gray-300 font-mono" id="weather-humidity">--%</span></div>
+                </div>
+            </div>
+        </div>
+
+        {# -- 服务器状态 -- #}
+        <div class="apple-card widget-item stat-card-mobile relative group flex flex-col justify-center min-h-[160px]" data-id="widget-sysmon" data-default-size="1x3">
+            <div class="widget-drag-handle absolute top-3 left-3 w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors z-30 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100"><i class="fa-solid fa-grip-vertical text-[12px]"></i></div>
+            <button onclick="toggleWidgetMenu(event, 'widget-sysmon')" class="widget-menu-btn absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 dark:text-gray-600 hover:text-brand-500 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors z-20"><i class="fa-solid fa-ellipsis text-[12px]"></i></button>
+            <h3 class="text-[15px] font-bold tracking-wide mb-4 text-gray-800 dark:text-gray-200 flex items-center gap-2"><i class="fa-solid fa-microchip text-indigo-500"></i> 服务器状态</h3>
+            <div class="space-y-3.5 flex-1 flex flex-col justify-center">
+                {% for bar_id, bar_label, bar_color in [('sys-cpu', 'CPU 使用率', 'bg-indigo-500'), ('sys-ram', '内存占用', 'bg-emerald-500'), ('sys-disk', '系统盘空间', 'bg-amber-500')] %}
+                <div>
+                    <div class="flex justify-between text-[11px] font-bold mb-1.5"><span class="text-gray-500 uppercase tracking-wider">{{ bar_label }}</span><span id="{{ bar_id }}-val" class="text-gray-800 dark:text-gray-200 font-mono">--%</span></div>
+                    <div class="w-full bg-gray-100 dark:bg-black/40 rounded-full h-1.5 shadow-inner overflow-hidden"><div id="{{ bar_id }}-bar" class="{{ bar_color }} h-1.5 rounded-full transition-all duration-1000 ease-out" style="width: 0%"></div></div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        {# -- 入库汇总 -- #}
+        <div class="apple-card widget-item stat-card-mobile relative group flex flex-col justify-between min-h-[160px]" data-id="widget-added-stats" data-default-size="1x3">
+            <div class="widget-drag-handle absolute top-3 left-3 w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors z-30 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100"><i class="fa-solid fa-grip-vertical text-[12px]"></i></div>
+            <button onclick="toggleWidgetMenu(event, 'widget-added-stats')" class="widget-menu-btn absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 dark:text-gray-600 hover:text-brand-500 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors z-20"><i class="fa-solid fa-ellipsis text-[12px]"></i></button>
+            <div>
+                <h3 class="text-[15px] font-bold tracking-wide text-gray-800 dark:text-gray-200 flex items-center gap-2"><i class="fa-solid fa-box-open text-orange-500"></i> 本周入库汇总</h3>
+                <div class="flex items-end gap-1 mt-2">
+                    <span class="text-[32px] font-black text-gray-900 dark:text-white leading-none font-mono" id="added-week-total">--</span>
+                    <span class="text-[12px] font-medium text-gray-500 mb-1">部媒体</span>
+                </div>
+            </div>
+            <div class="h-[60px] w-full mt-2 relative -mx-1"><canvas id="addedStatsChart"></canvas></div>
+        </div>
+
+        {# -- 媒体库储量 -- #}
+        <div class="apple-card widget-item stat-card-mobile relative group flex flex-col justify-center" data-id="widget-storage" data-default-size="2x3">
+            <div class="widget-drag-handle absolute top-3 left-3 w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors z-30 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100"><i class="fa-solid fa-grip-vertical text-[12px]"></i></div>
+            <button onclick="toggleWidgetMenu(event, 'widget-storage')" class="widget-menu-btn absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 dark:text-gray-600 hover:text-brand-500 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors z-20"><i class="fa-solid fa-ellipsis text-[12px]"></i></button>
+            <h3 class="text-[15px] font-semibold tracking-wide mb-4 md:mb-5 text-gray-800 dark:text-gray-200">媒体库储量</h3>
+            <div class="grid grid-cols-3 gap-3 md:gap-4">
+                {% for item_id, item_label, item_icon, item_color in [('lib-movies','电影','fa-solid fa-film','blue'), ('lib-series','剧集','fa-solid fa-tv','purple'), ('lib-episodes','总集数','fa-solid fa-layer-group','orange')] %}
+                <div class="relative overflow-hidden rounded-2xl bg-{{ item_color }}-50 dark:bg-{{ item_color }}-500/10 p-4 md:p-5 group/card border border-transparent dark:border-{{ item_color }}-500/5">
+                    <i class="{{ item_icon }} absolute -right-3 -bottom-3 text-[50px] md:text-[70px] text-{{ item_color }}-500/10 dark:text-{{ item_color }}-500/20 transform group-hover/card:scale-110 group-hover/card:-rotate-6 transition-all duration-500"></i>
+                    <div class="relative z-10">
+                        <p class="text-[11px] font-semibold text-{{ item_color }}-600 dark:text-{{ item_color }}-400 mb-1 opacity-80">{{ item_label }}</p>
+                        <p class="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white tracking-tight font-mono" id="{{ item_id }}">-</p>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        {# -- 核心运营指标 -- #}
+        <div class="apple-card widget-item stat-card-mobile relative group flex flex-col justify-center" data-id="widget-stats" data-default-size="2x3">
+            <div class="widget-drag-handle absolute top-3 left-3 w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors z-30 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100"><i class="fa-solid fa-grip-vertical text-[12px]"></i></div>
+            <button onclick="toggleWidgetMenu(event, 'widget-stats')" class="widget-menu-btn absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 dark:text-gray-600 hover:text-brand-500 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors z-20"><i class="fa-solid fa-ellipsis text-[12px]"></i></button>
+            <h3 class="text-[15px] font-semibold tracking-wide mb-4 md:mb-5 text-gray-800 dark:text-gray-200">核心运营指标</h3>
+            <div class="grid grid-cols-3 gap-3 md:gap-4">
+                {% for item_id, item_label, item_icon, item_color in [('stat-plays','播放次数','fa-solid fa-play','green'), ('stat-users','活跃观众','fa-solid fa-users','indigo'), ('stat-duration','总长(h)','fa-solid fa-clock','pink')] %}
+                <div class="relative overflow-hidden rounded-2xl bg-{{ item_color }}-50 dark:bg-{{ item_color }}-500/10 p-4 md:p-5 group/card border border-transparent dark:border-{{ item_color }}-500/5">
+                    <i class="{{ item_icon }} absolute -right-3 -bottom-3 text-[50px] md:text-[70px] text-{{ item_color }}-500/10 dark:text-{{ item_color }}-500/20 transform group-hover/card:scale-110 group-hover/card:-rotate-6 transition-all duration-500"></i>
+                    <div class="relative z-10">
+                        <p class="text-[11px] font-semibold text-{{ item_color }}-600 dark:text-{{ item_color }}-400 mb-1 opacity-80">{{ item_label }}</p>
+                        <p class="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white tracking-tight font-mono" id="{{ item_id }}">-</p>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        {# -- 我的媒体库 -- #}
+        <div class="apple-card widget-item stat-card-mobile relative group flex flex-col" data-id="widget-library" data-default-size="4x4">
+            <div class="widget-drag-handle absolute top-3 left-3 w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors z-30 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100"><i class="fa-solid fa-grip-vertical text-[12px]"></i></div>
+            <button onclick="toggleWidgetMenu(event, 'widget-library')" class="widget-menu-btn absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 dark:text-gray-600 hover:text-brand-500 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors z-20"><i class="fa-solid fa-ellipsis text-[12px]"></i></button>
+            <h3 class="text-[15px] font-semibold tracking-wide mb-4 md:mb-6 text-gray-800 dark:text-gray-200 shrink-0">我的媒体库<button onclick="refreshLibraries(event)" class="ml-2 w-5 h-5 inline-flex items-center justify-center rounded-full hover:bg-gray-200 dark:hover:bg-white/10 transition-colors" title="刷新媒体库"><i class="fa-solid fa-arrows-rotate text-[9px] text-gray-400 hover:text-brand-500 transition-colors" id="libraries-refresh-icon"></i></button></h3>
+            <div id="library-container" class="widget-scroll flex-1 min-h-0 hide-scrollbar adaptive-grid-lib relative z-10">
+                <div class="w-full py-10 text-center text-sm text-gray-400 flex-shrink-0 col-span-full"><i class="fa-solid fa-spinner fa-spin mr-2"></i> 正在加载数据...</div>
+            </div>
+        </div>
+
+        {# -- 最近入库 / 最近播放 -- #}
+        {% for wid, wtitle, wsize in [('widget-latest','最近入库媒体','2x5'), ('widget-recent-play','全站最近播放','2x5')] %}
+        <div class="apple-card widget-item stat-card-mobile relative group flex flex-col" data-id="{{ wid }}" data-default-size="{{ wsize }}">
+            <div class="widget-drag-handle absolute top-3 left-3 w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors z-30 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100"><i class="fa-solid fa-grip-vertical text-[12px]"></i></div>
+            <button onclick="toggleWidgetMenu(event, '{{ wid }}')" class="widget-menu-btn absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 dark:text-gray-600 hover:text-brand-500 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors z-20"><i class="fa-solid fa-ellipsis text-[12px]"></i></button>
+            <h3 class="text-[15px] font-semibold tracking-wide mb-4 md:mb-5 text-gray-800 dark:text-gray-200 shrink-0">{{ wtitle }}</h3>
+            <div id="{{ 'latest-container' if wid == 'widget-latest' else 'recent-container' }}" class="widget-scroll flex-1 min-h-0 hide-scrollbar adaptive-grid-poster relative z-10">
+                <div class="w-full py-10 text-center text-sm text-gray-400 md:col-span-full flex-shrink-0"><i class="fa-solid fa-spinner fa-spin mr-2"></i> 数据处理中...</div>
+            </div>
+        </div>
+        {% endfor %}
+        {# -- 趋势追踪 -- #}
+        <div class="apple-card widget-item stat-card-mobile relative group flex flex-col" data-id="widget-trend" data-default-size="3x7">
+            <div class="widget-drag-handle absolute top-3 left-3 w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors z-30 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100"><i class="fa-solid fa-grip-vertical text-[12px]"></i></div>
+            <button onclick="toggleWidgetMenu(event, 'widget-trend')" class="widget-menu-btn absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 dark:text-gray-600 hover:text-brand-500 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors z-20"><i class="fa-solid fa-ellipsis text-[12px]"></i></button>
+            <div class="flex justify-between items-center mb-4 md:mb-6 pr-6 relative z-10">
+                <h3 class="text-[15px] font-semibold tracking-wide text-gray-800 dark:text-gray-200">趋势追踪</h3>
+                <div class="flex bg-gray-100 dark:bg-apple-hoverDark rounded-lg p-1 text-[11px] font-medium">
+                    <button onclick="switchTrend('day')" id="trend-btn-day" class="px-3.5 py-1.5 rounded-md bg-white dark:bg-gray-600 shadow-sm text-gray-900 dark:text-white transition font-medium">30天</button>
+                    <button onclick="switchTrend('week')" id="trend-btn-week" class="px-3.5 py-1.5 rounded-md text-gray-500 hover:text-gray-900 dark:hover:text-white transition">12周</button>
+                    <button onclick="switchTrend('month')" id="trend-btn-month" class="px-3.5 py-1.5 rounded-md text-gray-500 hover:text-gray-900 dark:hover:text-white transition">12月</button>
+                </div>
+            </div>
+            <div class="relative flex-1 w-full min-h-0 z-10"><canvas id="trendChart"></canvas></div>
+        </div>
+
+        {# -- 白金观影榜 -- #}
+        <div class="apple-card widget-item stat-card-mobile relative group flex flex-col" data-id="widget-top-users" data-default-size="1x6">
+            <div class="widget-drag-handle absolute top-3 left-3 w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors z-30 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100"><i class="fa-solid fa-grip-vertical text-[12px]"></i></div>
+            <button onclick="toggleWidgetMenu(event, 'widget-top-users')" class="widget-menu-btn absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 dark:text-gray-600 hover:text-brand-500 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors z-20"><i class="fa-solid fa-ellipsis text-[12px]"></i></button>
+            <div class="flex justify-between items-center mb-4 shrink-0 pr-6 relative z-10">
+                <h3 class="text-[15px] font-semibold tracking-wide text-gray-800 dark:text-gray-200">白金观影榜</h3>
+                <div class="flex bg-gray-100 dark:bg-apple-hoverDark rounded-lg p-1 text-[11px] font-medium">
+                    <button onclick="switchTopUsers('yesterday')" id="top-btn-yesterday" class="px-2 py-1 rounded text-gray-500 hover:text-gray-900 dark:hover:text-white transition">昨日</button>
+                    <button onclick="switchTopUsers('day')" id="top-btn-day" class="px-2 py-1 rounded text-gray-500 hover:text-gray-900 dark:hover:text-white transition">今日</button>
+                    <button onclick="switchTopUsers('week')" id="top-btn-week" class="px-2 py-1 rounded text-gray-500 hover:text-gray-900 dark:hover:text-white transition">本周</button>
+                    <button onclick="switchTopUsers('month')" id="top-btn-month" class="px-2 py-1 rounded text-gray-500 hover:text-gray-900 dark:hover:text-white transition">本月</button>
+                    <button onclick="switchTopUsers('all')" id="top-btn-all" class="px-2 py-1 rounded bg-white dark:bg-gray-600 shadow-sm text-gray-900 dark:text-white transition font-medium">总榜</button>
+                </div>
+            </div>
+            <div class="flex-1 overflow-y-auto space-y-1 hide-scrollbar pr-1 relative z-10 min-h-0" id="top-users-container">
+                <div class="flex justify-center items-center h-full"><i class="fa-solid fa-spinner fa-spin text-gray-300"></i></div>
+            </div>
+        </div>
+
+        {# -- 简单容器类 widget（日历/质量/终端/后台任务） -- #}
+        {% for wid, wtitle, wicon, wcolor, wsize, wcid, wextra in [
+            ('widget-calendar', '今日追剧日历', 'fa-solid fa-calendar-day', 'text-rose-500', '2x4', 'calendar-today-container', 'flex-1 overflow-y-auto hide-scrollbar space-y-1.5 pr-1 min-h-0'),
+            ('widget-quality', '媒体库质量', 'fa-solid fa-gem', 'text-cyan-500', '1x4', 'quality-container', 'flex-1 flex flex-col items-center justify-center'),
+            ('widget-clients', '终端分布', 'fa-solid fa-mobile-screen', 'text-violet-500', '1x4', 'clients-container', 'flex-1 flex flex-col items-center justify-center'),
+            ('widget-tasks', '后台任务', 'fa-solid fa-list-check', 'text-amber-500', '1x4', 'tasks-health-container', 'flex-1 overflow-y-auto hide-scrollbar space-y-1 pr-1 min-h-0')
+        ] %}
+        <div class="apple-card widget-item stat-card-mobile relative group flex flex-col" data-id="{{ wid }}" data-default-size="{{ wsize }}">
+            <div class="widget-drag-handle absolute top-3 left-3 w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors z-30 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100"><i class="fa-solid fa-grip-vertical text-[12px]"></i></div>
+            <button onclick="toggleWidgetMenu(event, '{{ wid }}')" class="widget-menu-btn absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 dark:text-gray-600 hover:text-brand-500 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors z-20"><i class="fa-solid fa-ellipsis text-[12px]"></i></button>
+            <h3 class="text-[15px] font-semibold tracking-wide mb-3 text-gray-800 dark:text-gray-200 shrink-0"><i class="{{ wicon }} {{ wcolor }} mr-1.5"></i>{{ wtitle }}</h3>
+            <div id="{{ wcid }}" class="{{ wextra }}">
+                <div class="flex justify-center items-center h-20"><i class="fa-solid fa-spinner fa-spin text-gray-300"></i></div>
+            </div>
+        </div>
+        {% endfor %}
+        
+        {# -- 外部服务（单独处理，带刷新按钮） -- #}
+        <div class="apple-card widget-item stat-card-mobile relative group flex flex-col overflow-hidden" data-id="widget-connectivity" data-default-size="1x4">
+            <div class="widget-drag-handle absolute top-3 left-3 w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 dark:text-gray-600 hover:text-gray-500 dark:hover:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors z-30 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100"><i class="fa-solid fa-grip-vertical text-[12px]"></i></div>
+            <button onclick="toggleWidgetMenu(event, 'widget-connectivity')" class="widget-menu-btn absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 dark:text-gray-600 hover:text-brand-500 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors z-20"><i class="fa-solid fa-ellipsis text-[12px]"></i></button>
+            <h3 class="text-[15px] font-semibold tracking-wide mb-3 text-gray-800 dark:text-gray-200 shrink-0"><i class="fa-solid fa-satellite-dish text-teal-500 mr-1.5"></i>外部服务<button onclick="refreshConnectivity(event)" class="ml-2 w-5 h-5 inline-flex items-center justify-center rounded-full hover:bg-gray-200 dark:hover:bg-white/10 transition-colors" title="刷新"><i class="fa-solid fa-arrows-rotate text-[9px] text-gray-400 hover:text-brand-500 transition-colors" id="connectivity-refresh-icon"></i></button></h3>
+            <div id="connectivity-container" class="flex-1 flex flex-col justify-center gap-3">
+                <div class="flex justify-center items-center h-20"><i class="fa-solid fa-spinner fa-spin text-gray-300"></i></div>
+            </div>
+        </div>
+    </div>
+</div>
+{# ===== 悬浮编辑按钮 (FAB) ===== #}
+<button onclick="openDashManager()" class="dash-fab" title="自定义看板布局">
+    <i class="fa-solid fa-sliders"></i>
+</button>
+
+{# ===== 卡片菜单弹窗 ===== #}
+<div id="widget-menu-popup" class="fixed z-[100] hidden">
+    <div class="bg-white dark:bg-apple-cardDark rounded-xl shadow-xl border border-gray-100 dark:border-white/10 p-2 min-w-[140px]">
+        <div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-2 py-1">卡片宽度</div>
+        <div class="flex gap-1 px-1 py-1" id="widget-menu-width-btns">
+            <button data-w="1" onclick="setWidgetSizeFromMenu(1)" class="w-btn px-2.5 py-1.5 rounded-lg text-[12px] font-bold transition-all">1列</button>
+            <button data-w="2" onclick="setWidgetSizeFromMenu(2)" class="w-btn px-2.5 py-1.5 rounded-lg text-[12px] font-bold transition-all">2列</button>
+            <button data-w="3" onclick="setWidgetSizeFromMenu(3)" class="w-btn px-2.5 py-1.5 rounded-lg text-[12px] font-bold transition-all">3列</button>
+            <button data-w="4" onclick="setWidgetSizeFromMenu(4)" class="w-btn px-2.5 py-1.5 rounded-lg text-[12px] font-bold transition-all">4列</button>
+        </div>
+        <div class="border-t border-gray-100 dark:border-white/5 mt-2 pt-2">
+            <button onclick="hideWidgetFromMenu()" class="w-full text-left px-2 py-1.5 rounded-lg text-[12px] font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"><i class="fa-solid fa-eye-slash mr-2 text-[10px]"></i>隐藏此卡片</button>
+        </div>
+    </div>
+</div>
+
+{# ===== 看板管理 Modal ===== #}
+<div id="dash-manager-modal" class="fixed inset-0 z-[200] hidden items-center justify-center p-4 backdrop-blur-sm transition-opacity duration-300 opacity-0" onclick="if(event.target===this) closeDashManager()">
+    <div class="bg-white dark:bg-apple-cardDark w-full max-w-md rounded-2xl shadow-2xl flex flex-col transform transition-transform duration-300 scale-95 border border-gray-100 dark:border-white/10" id="dash-manager-content">
+        <div class="px-6 py-4 border-b border-gray-100 dark:border-white/5 flex justify-between items-center bg-gray-50/50 dark:bg-black/20 rounded-t-2xl shrink-0">
+            <h3 class="text-[16px] font-black text-gray-800 dark:text-gray-100"><i class="fa-solid fa-sliders text-brand-500 mr-2"></i>自定义看板</h3>
+            <button onclick="closeDashManager()" class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-200 dark:bg-gray-800 text-gray-500 hover:text-gray-700 dark:hover:text-white transition-colors"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="p-6 space-y-4 max-h-[60vh] overflow-y-auto mac-scrollbar">
+            <p class="text-[13px] text-gray-500 dark:text-gray-400 font-medium leading-relaxed mb-4">通过拖拽主界面右上角的手柄可以排序卡片。在此处您可以自由隐藏或显示特定模块。</p>
+            <div class="space-y-2" id="widget-toggle-list"></div>
+        </div>
+        <div class="px-6 py-4 border-t border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-black/20 rounded-b-2xl shrink-0 flex justify-end gap-3">
+            <button onclick="resetDashboardLayout()" class="px-5 py-2 rounded-xl text-[13px] font-bold text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors mr-auto">恢复默认</button>
+            <button onclick="closeDashManager()" class="px-6 py-2 bg-brand-500 text-white font-bold rounded-xl hover:bg-brand-600 transition-colors shadow-lg shadow-brand-500/20 active:scale-95 text-[14px]">完成</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/dashboard/state.js?v=20260411b"></script>
+<script src="/static/js/dashboard/utils.js?v=20260411b"></script>
+<script src="/static/js/dashboard/layout.js?v=20260411b"></script>
+<script src="/static/js/dashboard/widgets.js?v=20260511a"></script>
+<script src="/static/js/dashboard/charts.js?v=20260411b"></script>
+<script src="/static/js/dashboard/init.js?v=20260411b"></script>
+<script>setEmbyConfig("{{ emby_url }}", "{{ server_id }}");</script>
+{% endblock %}

@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>审计日志 - EmbyPulse</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .audit-table { font-size: 13px; }
+        .audit-table th { position: sticky; top: 0; background: #1f2937; z-index: 10; }
+        .action-badge { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+        .action-success { background: #10b98120; color: #10b981; }
+        .action-failed { background: #ef444420; color: #ef4444; }
+        .stat-card { background: linear-gradient(135deg, #1f2937 0%, #111827 100%); }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-6 max-w-7xl">
+        <!-- 页面标题 -->
+        <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-3">
+                <i class="fas fa-shield-alt text-2xl text-orange-500"></i>
+                <h1 class="text-2xl font-bold">审计日志</h1>
+            </div>
+            <a href="/" class="text-gray-400 hover:text-white">
+                <i class="fas fa-arrow-left mr-2"></i>返回
+            </a>
+        </div>
+
+        <!-- 统计卡片 -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6" id="stats-cards">
+            <div class="stat-card rounded-xl p-4">
+                <div class="text-gray-400 text-sm mb-1">总操作数</div>
+                <div class="text-2xl font-bold text-white" id="stat-total">-</div>
+            </div>
+            <div class="stat-card rounded-xl p-4">
+                <div class="text-gray-400 text-sm mb-1">失败操作</div>
+                <div class="text-2xl font-bold text-red-400" id="stat-failed">-</div>
+            </div>
+            <div class="stat-card rounded-xl p-4">
+                <div class="text-gray-400 text-sm mb-1">登录次数</div>
+                <div class="text-2xl font-bold text-green-400" id="stat-login">-</div>
+            </div>
+            <div class="stat-card rounded-xl p-4">
+                <div class="text-gray-400 text-sm mb-1">配置变更</div>
+                <div class="text-2xl font-bold text-yellow-400" id="stat-config">-</div>
+            </div>
+        </div>
+
+        <!-- 筛选条件 -->
+        <div class="bg-gray-800 rounded-xl p-4 mb-6">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">时间范围</label>
+                    <select id="filter-days" class="w-full bg-gray-700 rounded-lg px-3 py-2 text-sm">
+                        <option value="1">今天</option>
+                        <option value="7" selected>最近 7 天</option>
+                        <option value="30">最近 30 天</option>
+                        <option value="90">最近 90 天</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">操作类型</label>
+                    <select id="filter-action" class="w-full bg-gray-700 rounded-lg px-3 py-2 text-sm">
+                        <option value="">全部</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">用户</label>
+                    <input type="text" id="filter-user" placeholder="用户名或ID" 
+                           class="w-full bg-gray-700 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div class="flex items-end">
+                    <button onclick="loadLogs()" 
+                            class="w-full bg-orange-500 hover:bg-orange-600 rounded-lg px-4 py-2 text-sm font-medium transition">
+                        <i class="fas fa-search mr-2"></i>查询
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 日志列表 -->
+        <div class="bg-gray-800 rounded-xl overflow-hidden">
+            <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
+                <table class="w-full audit-table">
+                    <thead>
+                        <tr class="text-left text-gray-400 border-b border-gray-700">
+                            <th class="px-4 py-3">时间</th>
+                            <th class="px-4 py-3">用户</th>
+                            <th class="px-4 py-3">操作</th>
+                            <th class="px-4 py-3">资源</th>
+                            <th class="px-4 py-3">IP 地址</th>
+                            <th class="px-4 py-3">状态</th>
+                            <th class="px-4 py-3">详情</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logs-body">
+                        <tr>
+                            <td colspan="7" class="px-4 py-8 text-center text-gray-500">
+                                <i class="fas fa-spinner fa-spin mr-2"></i>加载中...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 分页 -->
+        <div class="flex items-center justify-between mt-4">
+            <div class="text-sm text-gray-400" id="page-info">显示 0 条记录</div>
+            <div class="flex gap-2">
+                <button onclick="prevPage()" id="btn-prev" disabled
+                        class="px-4 py-2 bg-gray-700 rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-600 transition">
+                    上一页
+                </button>
+                <button onclick="nextPage()" id="btn-next" disabled
+                        class="px-4 py-2 bg-gray-700 rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-600 transition">
+                    下一页
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentPage = 0;
+        const pageSize = 50;
+        let actions = {};
+
+        // 加载操作类型
+        async function loadActions() {
+            try {
+                const res = await fetch('/api/audit/actions');
+                const data = await res.json();
+                if (data.status === 'success') {
+                    actions = data.data;
+                    const select = document.getElementById('filter-action');
+                    for (const [key, name] of Object.entries(actions)) {
+                        const opt = document.createElement('option');
+                        opt.value = key;
+                        opt.textContent = name;
+                        select.appendChild(opt);
+                    }
+                }
+            } catch (e) {
+                console.error('加载操作类型失败:', e);
+            }
+        }
+
+        // 加载统计
+        async function loadStats() {
+            const days = document.getElementById('filter-days').value;
+            try {
+                const res = await fetch(`/api/audit/stats?days=${days}`);
+                const data = await res.json();
+                if (data.status === 'success') {
+                    const stats = data.data;
+                    document.getElementById('stat-total').textContent = stats.total.toLocaleString();
+                    
+                    const failedCount = stats.failed.reduce((sum, f) => sum + f.count, 0);
+                    document.getElementById('stat-failed').textContent = failedCount;
+                    
+                    const loginStat = stats.by_action.find(a => a.action === 'login');
+                    document.getElementById('stat-login').textContent = loginStat ? loginStat.count : 0;
+                    
+                    const configActions = ['config_update', 'bot_token_update', 'api_key_update', 'webhook_token_update'];
+                    const configCount = stats.by_action
+                        .filter(a => configActions.includes(a.action))
+                        .reduce((sum, a) => sum + a.count, 0);
+                    document.getElementById('stat-config').textContent = configCount;
+                }
+            } catch (e) {
+                console.error('加载统计失败:', e);
+            }
+        }
+
+        // 加载日志
+        async function loadLogs() {
+            const days = document.getElementById('filter-days').value;
+            const action = document.getElementById('filter-action').value;
+            const user = document.getElementById('filter-user').value.trim();
+
+            const params = new URLSearchParams({
+                days: days,
+                limit: pageSize,
+                offset: currentPage * pageSize
+            });
+            if (action) params.append('action', action);
+            if (user) params.append('user_id', user);
+
+            try {
+                const res = await fetch(`/api/audit/logs?${params}`);
+                const data = await res.json();
+                
+                if (data.status === 'success') {
+                    renderLogs(data.data);
+                    loadStats();
+                }
+            } catch (e) {
+                console.error('加载日志失败:', e);
+                document.getElementById('logs-body').innerHTML = `
+                    <tr>
+                        <td colspan="7" class="px-4 py-8 text-center text-red-400">
+                            <i class="fas fa-exclamation-circle mr-2"></i>加载失败
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+        // 渲染日志
+        function renderLogs(logs) {
+            const tbody = document.getElementById('logs-body');
+            
+            if (!logs || logs.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="px-4 py-8 text-center text-gray-500">
+                            <i class="fas fa-inbox mr-2"></i>暂无记录
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = logs.map(log => `
+                <tr class="border-b border-gray-700/50 hover:bg-gray-700/30">
+                    <td class="px-4 py-3 text-gray-300">${log.datetime || '-'}</td>
+                    <td class="px-4 py-3">
+                        <div class="font-medium">${log.user_name || '-'}</div>
+                        ${log.user_id ? `<div class="text-xs text-gray-500">${log.user_id}</div>` : ''}
+                    </td>
+                    <td class="px-4 py-3">
+                        <span class="action-badge ${log.status === 'success' ? 'action-success' : 'action-failed'}">
+                            ${actions[log.action] || log.action}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3 text-gray-400">
+                        ${log.resource_type ? `${log.resource_type}${log.resource_id ? ': ' + log.resource_id : ''}` : '-'}
+                    </td>
+                    <td class="px-4 py-3 font-mono text-sm text-gray-400">${log.ip_address || '-'}</td>
+                    <td class="px-4 py-3">
+                        ${log.status === 'success' 
+                            ? '<i class="fas fa-check-circle text-green-400"></i>' 
+                            : '<i class="fas fa-times-circle text-red-400"></i>'}
+                    </td>
+                    <td class="px-4 py-3">
+                        ${log.details ? `<button onclick="showDetails('${encodeURIComponent(JSON.stringify(log.details))}')" 
+                            class="text-blue-400 hover:text-blue-300 text-sm">
+                            <i class="fas fa-info-circle"></i>
+                        </button>` : '-'}
+                    </td>
+                </tr>
+            `).join('');
+
+            // 更新分页
+            document.getElementById('page-info').textContent = `显示 ${logs.length} 条记录`;
+            document.getElementById('btn-prev').disabled = currentPage === 0;
+            document.getElementById('btn-next').disabled = logs.length < pageSize;
+        }
+
+        // 显示详情
+        function showDetails(encoded) {
+            const details = JSON.parse(decodeURIComponent(encoded));
+            alert(JSON.stringify(details, null, 2));
+        }
+
+        // 分页
+        function prevPage() {
+            if (currentPage > 0) {
+                currentPage--;
+                loadLogs();
+            }
+        }
+
+        function nextPage() {
+            currentPage++;
+            loadLogs();
+        }
+
+        // 初始化
+        loadActions();
+        loadLogs();
+    </script>
+</body>
+</html>

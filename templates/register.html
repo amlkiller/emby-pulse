@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>加入媒体库</title>
+    <link rel="icon" type="image/png" href="/static/img/favicon.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;500;700&display=swap');
+        body { font-family: 'Noto Sans SC', sans-serif; }
+        
+        .mac-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .mac-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .mac-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(156, 163, 175, 0.3); border-radius: 10px; }
+        
+        /* 🔥 渐变动画背景 */
+        .animated-bg {
+            background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
+            background-size: 400% 400%;
+            animation: gradient 15s ease infinite;
+        }
+        @keyframes gradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        
+        /* 🔥 成功页面进入动画 */
+        .success-enter {
+            animation: successPop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        @keyframes successPop {
+            0% { transform: scale(0.95); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        
+        /* 🔥 卡片阴影 */
+        .card-shadow {
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15), 0 12px 24px -8px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8 flex items-center justify-center animated-bg">
+
+    <!-- 🔥 主卡片：响应式宽度 -->
+    <div id="main-card" class="bg-white/95 backdrop-blur-xl rounded-3xl card-shadow w-full max-w-md md:max-w-xl lg:max-w-2xl transition-all duration-500 overflow-hidden">
+        
+        <!-- 🔥 注册表单 -->
+        <div id="register-form">
+            <div class="p-6 md:p-10 lg:p-12">
+                <div class="text-center mb-8">
+                    <!-- 🔥 Logo 区域 -->
+                    <div class="w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/30">
+                        <i class="fa-solid fa-play text-3xl text-white"></i>
+                    </div>
+                    <h1 class="text-2xl md:text-3xl font-bold text-gray-800">欢迎加入媒体库</h1>
+                    <p class="text-gray-500 text-sm mt-2">注册您的专属 Emby 账号</p>
+                </div>
+
+                {% if valid %}
+                <div class="space-y-5">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">用户名</label>
+                        <input type="text" id="username" 
+                               class="w-full px-5 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-base"
+                               placeholder="设置一个好记的名字">
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">密码</label>
+                        <input type="password" id="password" 
+                               class="w-full px-5 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-base"
+                               placeholder="设置登录密码">
+                    </div>
+
+                    <!-- 🔥 有效期提示 -->
+                    <div class="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-4 flex items-center gap-3 border border-indigo-100">
+                        <div class="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center shrink-0">
+                            <i class="fa-solid fa-clock text-indigo-500"></i>
+                        </div>
+                        <div>
+                            <span class="text-sm text-gray-600">账号有效期</span>
+                            <span class="ml-2 text-lg font-bold text-indigo-600">{{ '永久' if days == -1 else days ~ ' 天' }}</span>
+                        </div>
+                    </div>
+
+                    <button onclick="register()" id="reg-btn" 
+                            class="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-indigo-500/30 text-base mt-6 active:scale-[0.98]">
+                        <i class="fa-solid fa-user-plus mr-2"></i> 立即注册
+                    </button>
+                </div>
+                {% else %}
+                <div class="text-center py-12">
+                    <div class="w-20 h-20 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
+                        <i class="fa-solid fa-link-slash text-3xl text-gray-400"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-gray-700">链接已失效</h3>
+                    <p class="text-gray-500 text-sm mt-2">该邀请链接不存在或已达到使用次数上限</p>
+                </div>
+                {% endif %}
+            </div>
+            
+            <!-- 🔥 底部品牌 -->
+            <div class="px-6 md:px-10 py-4 bg-gray-50/50 border-t border-gray-100 text-center">
+                <span class="text-xs text-gray-400 font-medium">Powered by <span class="text-indigo-500">EmbyPulse</span></span>
+            </div>
+        </div>
+
+        <!-- 🔥 注册成功页面：响应式布局 -->
+        <div id="success-view" class="hidden success-enter">
+            <!-- 🔥 顶部成功区域 -->
+            <div class="bg-gradient-to-br from-green-400 via-emerald-500 to-teal-500 p-6 md:p-8 lg:p-10 text-white">
+                <div class="flex items-center gap-4 mb-4">
+                    <div class="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center shrink-0 backdrop-blur-sm">
+                        <i class="fa-solid fa-check text-3xl text-white"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-2xl md:text-3xl font-bold">注册成功！</h2>
+                        <p class="text-white/80 text-sm">您的专属账号已创建完成</p>
+                    </div>
+                </div>
+                <p class="text-white/90 text-sm">请截图保存以下账号信息，用于登录 Emby 客户端</p>
+            </div>
+            
+            <!-- 🔥 账号信息区域 -->
+            <div class="p-6 md:p-8 lg:p-10">
+                <div class="bg-gray-50 rounded-2xl p-5 mb-6 border border-gray-200">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <!-- 🔥 用户名 -->
+                        <div class="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-sm font-bold text-gray-500 flex items-center gap-2">
+                                    <i class="fa-solid fa-user text-indigo-500"></i> 用户名
+                                </span>
+                                <button onclick="copyText('res-user')" 
+                                        class="px-2 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-500 text-xs font-bold transition-colors">
+                                    <i class="fa-regular fa-copy mr-1"></i> 复制
+                                </button>
+                            </div>
+                            <code class="text-lg md:text-xl font-bold text-gray-800 block truncate" id="res-user">...</code>
+                        </div>
+                        
+                        <!-- 🔥 密码 -->
+                        <div class="bg-white rounded-xl p-4 border border-gray-200 shadow-sm">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-sm font-bold text-gray-500 flex items-center gap-2">
+                                    <i class="fa-solid fa-key text-indigo-500"></i> 密码
+                                </span>
+                                <button onclick="copyText('res-pass')" 
+                                        class="px-2 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-500 text-xs font-bold transition-colors">
+                                    <i class="fa-regular fa-copy mr-1"></i> 复制
+                                </button>
+                            </div>
+                            <code class="text-lg md:text-xl font-mono font-bold text-gray-800 block truncate" id="res-pass">...</code>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 🔥 节点测速区域 -->
+                <div class="bg-gray-50 rounded-2xl p-5 mb-6 border border-gray-200">
+                    <div class="flex items-center gap-2 mb-3">
+                        <i class="fa-solid fa-satellite-dish text-indigo-500"></i>
+                        <span class="text-sm font-bold text-gray-700">可访问节点</span>
+                        <span class="text-xs text-gray-400">(自动测速)</span>
+                    </div>
+                    <div id="route-list-display" class="space-y-2 max-h-48 md:max-h-64 overflow-y-auto mac-scrollbar">
+                    </div>
+                </div>
+
+                <!-- 🔥 备注信息区域 -->
+                <div id="welcome-msg-box" class="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-5 mb-6 border border-blue-200 hidden">
+                    <div class="flex items-start gap-3">
+                        <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center shrink-0">
+                            <i class="fa-solid fa-circle-info text-blue-500"></i>
+                        </div>
+                        <div id="res-msg" class="text-sm text-blue-800 leading-relaxed max-h-40 md:max-h-60 overflow-y-auto mac-scrollbar flex-1"></div>
+                    </div>
+                </div>
+
+                <!-- 🔥 操作按钮 -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    <a href="{{ client_download_url }}" target="_blank" 
+                       class="flex items-center justify-center gap-3 bg-gray-800 hover:bg-gray-900 text-white font-bold py-4 rounded-xl transition-all shadow-lg text-base active:scale-[0.98]">
+                        <i class="fa-solid fa-download"></i>
+                        <span>下载客户端</span>
+                    </a>
+                    <a id="user-center-btn" href="#" target="_blank" 
+                       class="flex items-center justify-center gap-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-indigo-500/30 text-base active:scale-[0.98]">
+                        <i class="fa-solid fa-user"></i>
+                        <span>用户中心</span>
+                    </a>
+                </div>
+
+                <!-- 🔥 用户中心提示 -->
+                <div id="user-center-tip" class="bg-indigo-50 rounded-xl p-4 border border-indigo-200 hidden">
+                    <div class="flex items-start gap-3">
+                        <i class="fa-solid fa-lightbulb text-indigo-500 shrink-0 mt-0.5"></i>
+                        <div class="text-sm text-indigo-700 leading-relaxed">
+                            <strong class="font-bold">用户中心</strong>可查看播放记录、申请求片、管理订阅等功能，使用刚才注册的账号密码登录即可体验。
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 🔥 Toast 提示函数
+        function showToast(type, title, message) {
+            // 创建 toast 容器
+            let container = document.getElementById('toast-container');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'toast-container';
+                container.className = 'fixed top-4 right-4 z-50 space-y-2';
+                document.body.appendChild(container);
+            }
+            
+            // 根据类型设置颜色
+            const colors = {
+                success: 'bg-green-500',
+                error: 'bg-red-500',
+                warning: 'bg-yellow-500',
+                info: 'bg-blue-500'
+            };
+            const icons = {
+                success: 'fa-check-circle',
+                error: 'fa-times-circle',
+                warning: 'fa-exclamation-circle',
+                info: 'fa-info-circle'
+            };
+            
+            // 创建 toast 元素
+            const toast = document.createElement('div');
+            toast.className = `${colors[type] || 'bg-gray-500'} text-white px-4 py-3 rounded-xl shadow-lg flex items-center gap-3 animate-slide-in max-w-sm`;
+            toast.innerHTML = `
+                <i class="fa-solid ${icons[type] || 'fa-info-circle'} text-lg"></i>
+                <div>
+                    <div class="font-bold text-sm">${title}</div>
+                    <div class="text-xs opacity-90">${message}</div>
+                </div>
+            `;
+            
+            container.appendChild(toast);
+            
+            // 3秒后自动消失
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(100%)';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+        
+        // 添加动画样式
+        const style = document.createElement('style');
+        style.textContent = `.animate-slide-in { animation: slideIn 0.3s ease-out; } @keyframes slideIn { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }`;
+        document.head.appendChild(style);
+
+        // 简易 Markdown 解析器
+        function parseMarkdown(text) {
+            if (!text) return '';
+            
+            // 先转义 HTML 特殊字符
+            let html = text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+            
+            // 恢复允许的 HTML 标签
+            html = html
+                .replace(/&lt;b&gt;/gi, '<b>').replace(/&lt;\/b&gt;/gi, '</b>')
+                .replace(/&lt;strong&gt;/gi, '<strong>').replace(/&lt;\/strong&gt;/gi, '</strong>')
+                .replace(/&lt;i&gt;/gi, '<i>').replace(/&lt;\/i&gt;/gi, '</i>')
+                .replace(/&lt;em&gt;/gi, '<em>').replace(/&lt;\/em&gt;/gi, '</em>')
+                .replace(/&lt;u&gt;/gi, '<u>').replace(/&lt;\/u&gt;/gi, '</u>')
+                .replace(/&lt;s&gt;/gi, '<s>').replace(/&lt;\/s&gt;/gi, '</s>')
+                .replace(/&lt;br\s*\/?&gt;/gi, '<br>')
+                .replace(/&lt;font([^&]*)&gt;/gi, '<font$1>').replace(/&lt;\/font&gt;/gi, '</font>')
+                .replace(/&lt;a\s+([^&]*)&gt;/gi, '<a $1>').replace(/&lt;\/a&gt;/gi, '</a>')
+                .replace(/&lt;code&gt;/gi, '<code>').replace(/&lt;\/code&gt;/gi, '</code>');
+            
+            // Markdown 解析（按行处理）
+            const lines = html.split('\n');
+            const result = [];
+            let inList = false;
+            let listType = '';
+            
+            for (let i = 0; i < lines.length; i++) {
+                let line = lines[i];
+                
+                // 标题
+                if (/^###\s+(.+)/.test(line)) {
+                    line = line.replace(/^###\s+(.+)/, '<h3 style="font-size:1rem;font-weight:bold;margin:0.5rem 0">$1</h3>');
+                } else if (/^##\s+(.+)/.test(line)) {
+                    line = line.replace(/^##\s+(.+)/, '<h2 style="font-size:1.1rem;font-weight:bold;margin:0.5rem 0">$1</h2>');
+                } else if (/^#\s+(.+)/.test(line)) {
+                    line = line.replace(/^#\s+(.+)/, '<h1 style="font-size:1.2rem;font-weight:bold;margin:0.5rem 0">$1</h1>');
+                }
+                
+                // 无序列表
+                if (/^-\s+(.+)/.test(line)) {
+                    if (!inList || listType !== 'ul') {
+                        if (inList) result.push(`</${listType}>`);
+                        result.push('<ul style="list-style:disc;margin-left:1rem;margin:0.25rem 0">');
+                        inList = true;
+                        listType = 'ul';
+                    }
+                    line = line.replace(/^-\s+(.+)/, '<li>$1</li>');
+                }
+                // 有序列表
+                else if (/^\d+\.\s+(.+)/.test(line)) {
+                    if (!inList || listType !== 'ol') {
+                        if (inList) result.push(`</${listType}>`);
+                        result.push('<ol style="list-style:decimal;margin-left:1rem;margin:0.25rem 0">');
+                        inList = true;
+                        listType = 'ol';
+                    }
+                    line = line.replace(/^\d+\.\s+(.+)/, '<li>$1</li>');
+                }
+                else {
+                    if (inList) {
+                        result.push(`</${listType}>`);
+                        inList = false;
+                        listType = '';
+                    }
+                }
+                
+                // 行内格式
+                if (!/^<(h[1-6]|ul|ol|li)/.test(line)) {
+                    line = line.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+                    line = line.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+                    line = line.replace(/_([^_]+)_/g, '<em>$1</em>');
+                    line = line.replace(/~~([^~]+)~~/g, '<s>$1</s>');
+                    line = line.replace(/`([^`]+)`/g, '<code style="background:rgba(0,0,0,0.1);padding:0.1rem 0.3rem;border-radius:0.25rem;font-size:0.9em">$1</code>');
+                    line = line.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" style="color:#3b82f6;text-decoration:underline" target="_blank">$1</a>');
+                }
+                
+                result.push(line);
+            }
+            
+            if (inList) result.push(`</${listType}>`);
+            
+            html = result.join('\n');
+            html = html.replace(/\n/g, '<br>');
+            html = html.replace(/<br>\s*<(h[1-6]|ul|ol|li|\/ul|\/ol)/gi, '<$1');
+            html = html.replace(/(<\/h[1-6]|<\/ul|<\/ol|<\/li)>\s*<br>/gi, '$1>');
+            
+            return html;
+        }
+
+        async function register() {
+            const btn = document.getElementById('reg-btn');
+            const u = document.getElementById('username').value;
+            const p = document.getElementById('password').value;
+            
+            if (!u || !p) return showToast('warning', '提示', '请填写完整');
+            
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> 注册中...';
+            
+            try {
+                const res = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        code: "{{ code }}",
+                        username: u,
+                        password: p
+                    })
+                });
+                const json = await res.json();
+                
+                if (json.status === 'success') {
+                    document.getElementById('register-form').classList.add('hidden');
+                    document.getElementById('success-view').classList.remove('hidden');
+                    
+                    document.getElementById('res-user').textContent = u;
+                    document.getElementById('res-pass').textContent = p;
+                    
+                    if (json.welcome_message) {
+                        // Quill 编辑器保存的是 HTML，直接显示
+                        document.getElementById('res-msg').innerHTML = json.welcome_message;
+                        document.getElementById('welcome-msg-box').classList.remove('hidden');
+                    }
+
+                    let rawUrlStr = json.server_url || "";
+                    let pingRoutes = [];
+                    try {
+                        pingRoutes = JSON.parse(rawUrlStr);
+                        if(!Array.isArray(pingRoutes)) throw new Error();
+                    } catch(e) {
+                        pingRoutes = rawUrlStr ? [{name: "默认推荐节点", url: rawUrlStr, is_main: true}] : [];
+                    }
+                    renderDisplayRoutes(pingRoutes);
+
+                    if (json.user_portal_url) {
+                        document.getElementById('user-center-btn').href = json.user_portal_url;
+                        document.getElementById('user-center-tip').classList.remove('hidden');
+                    }
+
+                } else {
+                    showToast('error', '注册失败', json.message);
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fa-solid fa-user-plus mr-2"></i> 立即注册';
+                }
+            } catch (e) {
+                showToast('error', '网络错误', '请稀后重试');
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-user-plus mr-2"></i> 立即注册';
+            }
+        }
+
+        function copyText(id) {
+            const text = document.getElementById(id).textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                // 🔥 视觉反馈
+                const btn = event.target.closest('button');
+                if (btn) {
+                    btn.innerHTML = '<i class="fa-solid fa-check mr-1"></i> 已复制';
+                    btn.classList.add('bg-green-50', 'text-green-500');
+                    setTimeout(() => {
+                        btn.innerHTML = '<i class="fa-regular fa-copy mr-1"></i> 复制';
+                        btn.classList.remove('bg-green-50', 'text-green-500');
+                    }, 1500);
+                }
+            });
+        }
+
+        function copyToBoard(text) {
+            navigator.clipboard.writeText(text).then(() => showToast('success', '复制成功', '节点地址已复制'));
+        }
+
+        function renderDisplayRoutes(pingRoutes) {
+            const container = document.getElementById('route-list-display');
+            if(pingRoutes.length === 0) {
+                container.innerHTML = '<div class="text-center text-sm text-gray-400 py-6">管理员未配置访问节点</div>';
+                return;
+            }
+
+            let html = '';
+            pingRoutes.sort((a, b) => (b.is_main ? 1 : 0) - (a.is_main ? 1 : 0)).forEach((r, idx) => {
+                const badge = r.is_main ? '<span class="px-2 py-0.5 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-xs font-bold">推荐</span>' : '';
+                
+                html += `
+                    <div class="flex items-center justify-between bg-white p-4 rounded-xl border border-gray-200 hover:border-indigo-300 hover:shadow-md transition-all group">
+                        <div class="flex items-center gap-3 min-w-0 flex-1">
+                            <div id="ping-status-${idx}" class="w-3 h-3 rounded-full bg-gray-300 shrink-0"></div>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="text-sm font-bold text-gray-800 truncate">${r.name || '备用线路'}</span>
+                                    ${badge}
+                                </div>
+                                <div class="text-xs text-gray-400 font-mono truncate select-all">${r.url}</div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3 shrink-0">
+                            <span id="ping-ms-${idx}" class="text-xs font-mono font-bold text-gray-400 min-w-[50px] text-right">等待中</span>
+                            <button onclick="copyToBoard('${r.url}')" 
+                                    class="w-9 h-9 rounded-xl bg-gray-50 hover:bg-indigo-50 text-gray-400 hover:text-indigo-500 transition-colors flex justify-center items-center group-hover:opacity-100">
+                                <i class="fa-regular fa-copy"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+            setTimeout(() => startPingTest(pingRoutes), 300);
+        }
+
+        async function startPingTest(pingRoutes) {
+            for (let idx = 0; idx < pingRoutes.length; idx++) {
+                const r = pingRoutes[idx];
+                const statusDot = document.getElementById(`ping-status-${idx}`);
+                const msText = document.getElementById(`ping-ms-${idx}`);
+                statusDot.className = "w-3 h-3 rounded-full bg-blue-400 animate-pulse shrink-0";
+                msText.innerText = "测速中";
+
+                try {
+                    const res = await fetch('/api/ping', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({url: r.url})
+                    });
+                    const json = await res.json();
+                    if (json.status === 'success') {
+                        const latency = json.latency;
+                        msText.innerText = `${latency}ms`;
+                        if(latency < 80) {
+                            statusDot.className = "w-3 h-3 rounded-full bg-green-500 shrink-0";
+                            msText.className = "text-xs font-mono font-bold text-green-500 min-w-[50px] text-right";
+                        } else if(latency < 200) {
+                            statusDot.className = "w-3 h-3 rounded-full bg-yellow-500 shrink-0";
+                            msText.className = "text-xs font-mono font-bold text-yellow-500 min-w-[50px] text-right";
+                        } else {
+                            statusDot.className = "w-3 h-3 rounded-full bg-red-500 shrink-0";
+                            msText.className = "text-xs font-mono font-bold text-red-500 min-w-[50px] text-right";
+                        }
+                    } else {
+                        msText.innerText = "超时";
+                        statusDot.className = "w-3 h-3 rounded-full bg-red-500 shrink-0";
+                        msText.className = "text-xs font-mono font-bold text-red-500 min-w-[50px] text-right";
+                    }
+                } catch(e) {
+                    msText.innerText = "超时";
+                    statusDot.className = "w-3 h-3 rounded-full bg-red-500 shrink-0";
+                    msText.className = "text-xs font-mono font-bold text-red-500 min-w-[50px] text-right";
+                }
+            }
+        }
+    </script>
+</body>
+</html>

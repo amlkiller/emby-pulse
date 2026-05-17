@@ -1,0 +1,19 @@
+__pycache__/
+*.pyc
+.env
+.DS_Store
+# 忽略配置文件夹里的内容，但保留文件夹本身
+config/*
+!config/.gitkeep
+# 忽略本地测试数据
+*.db
+
+# 🔒 忽略所有 .md 文件（除了 README.md）
+*.md
+!README.md
+
+# 忽略 memory 目录
+memory/
+
+# 忽略 docs 目录
+docs/

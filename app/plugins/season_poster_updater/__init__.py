@@ -1,0 +1,1 @@
+from app.plugins.season_poster_updater.plugin import SeasonPosterUpdaterPlugin

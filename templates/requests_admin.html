@@ -1,0 +1,1780 @@
+{% extends "layout.html" %}
+
+{% set active_page = 'requests_admin' %}
+
+{% block title %}资源求片与反馈大厅 - EmbyPulse{% endblock %}
+
+{% block head %}
+<style>
+    /* === 🔥 Apple 级极简卡片质感 === */
+    .apple-card { 
+        background-color: rgba(255, 255, 255, 0.95); 
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-radius: 24px; 
+        padding: 24px; 
+        box-shadow: 0 4px 24px -8px rgba(0,0,0,0.04);
+        border: 1px solid rgba(0,0,0,0.02);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    html.dark .apple-card {
+        background-color: rgba(28, 28, 30, 0.85); 
+        box-shadow: 0 4px 24px -8px rgba(0, 0, 0, 0.4);
+        border: 1px solid rgba(255,255,255,0.04);
+    }
+
+    @media (min-width: 768px) {
+        .apple-card:hover { transform: translateY(-2px); box-shadow: 0 12px 32px -8px rgba(0,0,0,0.08); }
+        html.dark .apple-card:hover { box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.6); }
+    }
+
+    [x-cloak] { display: none !important; }
+    
+    .pulse-list-row { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+    .pulse-list-row:hover { transform: translateY(-2px); box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.08); }
+    html.dark .pulse-list-row:hover { box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.5); }
+    
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    
+    /* 固定头部样式优化 */
+    .sticky-header {
+        box-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.08);
+    }
+    html.dark .sticky-header {
+        box-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.4);
+    }
+
+    /* === 🔔 Confirm 确认框样式 === */
+    .confirm-overlay { position: fixed; inset: 0; z-index: 9998; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); animation: confirm-fade 0.2s ease; }
+    .confirm-modal {
+        position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 9999;
+        width: 90%; max-width: 400px; padding: 24px; border-radius: 24px;
+        background: rgba(255,255,255,0.98); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+        box-shadow: 0 24px 48px -12px rgba(0,0,0,0.2); border: 1px solid rgba(0,0,0,0.04);
+        animation: confirm-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    html.dark .confirm-modal { background: rgba(44,44,46,0.98); border-color: rgba(255,255,255,0.08); box-shadow: 0 24px 48px -12px rgba(0,0,0,0.6); }
+    @keyframes confirm-fade { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes confirm-in { from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+    .confirm-icon { width: 56px; height: 56px; border-radius: 16px; margin: 0 auto 16px; display: flex; align-items: center; justify-content: center; font-size: 24px; }
+    .confirm-icon.warning { background: linear-gradient(135deg, #fef3c7, #fde68a); color: #d97706; }
+    .confirm-icon.danger { background: linear-gradient(135deg, #fee2e2, #fecaca); color: #dc2626; }
+    html.dark .confirm-icon.warning { background: linear-gradient(135deg, rgba(217,119,6,0.2), rgba(217,119,6,0.1)); color: #fbbf24; }
+    html.dark .confirm-icon.danger { background: linear-gradient(135deg, rgba(220,38,38,0.2), rgba(220,38,38,0.1)); color: #f87171; }
+    .confirm-title { font-size: 18px; font-weight: 800; text-align: center; color: #111827; margin-bottom: 8px; }
+    html.dark .confirm-title { color: #f9fafb; }
+    .confirm-message { font-size: 14px; text-align: center; color: #6b7280; line-height: 1.5; white-space: pre-line; }
+    html.dark .confirm-message { color: #9ca3af; }
+    .confirm-buttons { display: flex; gap: 12px; margin-top: 24px; }
+    .confirm-btn { flex: 1; padding: 14px 20px; border-radius: 14px; font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.2s; }
+    .confirm-btn.cancel { background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; }
+    .confirm-btn.cancel:hover { background: #e5e7eb; }
+    html.dark .confirm-btn.cancel { background: #374151; color: #d1d5db; border-color: #4b5563; }
+    html.dark .confirm-btn.cancel:hover { background: #4b5563; }
+    .confirm-btn.danger { background: linear-gradient(135deg, #ef4444, #dc2626); color: white; border: none; box-shadow: 0 4px 12px -2px rgba(239,68,68,0.4); }
+    .confirm-btn.danger:hover { box-shadow: 0 6px 16px -2px rgba(239,68,68,0.5); transform: translateY(-1px); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div x-data="adminApp()" x-init="init()" class="w-full max-w-[1600px] mx-auto py-4 pb-32 px-4 sm:px-6 md:px-8 space-y-4 md:space-y-6" x-cloak>
+    
+    <!-- 标题栏 - 固定在内容区域顶部 -->
+    <div class="apple-card flex flex-col xl:flex-row xl:items-center justify-between gap-5 w-full mb-2 p-5 md:p-6 sticky top-[72px] z-30 bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl border-b border-gray-200/50 dark:border-white/5 sticky-header">
+        <div class="flex items-center gap-4 pl-1 shrink-0">
+            
+            <div x-show="viewMode === 'request'" class="w-12 h-12 rounded-[14px] bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center text-[22px] shadow-lg shadow-blue-500/30 shrink-0">
+                <i class="fa-solid fa-clapperboard"></i>
+            </div>
+            <div x-show="viewMode === 'feedback'" class="w-12 h-12 rounded-[14px] bg-gradient-to-br from-red-500 to-rose-600 text-white flex items-center justify-center text-[22px] shadow-lg shadow-red-500/30 shrink-0" x-cloak>
+                <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+
+            <div>
+                <h2 class="text-xl md:text-[22px] font-bold tracking-tight text-gray-900 dark:text-white" x-text="viewMode === 'request' ? '资源求片大厅' : '用户报错工单'"></h2>
+                <div class="text-[12px] text-gray-500 mt-1 font-medium flex items-center gap-1.5">
+                    <i class="fa-solid" :class="viewMode === 'request' ? 'fa-satellite-dish opacity-70' : 'fa-bug opacity-70'"></i> 
+                    <span x-text="viewMode === 'request' ? '多渠道精准接单 · 全场景闭环审批' : '追踪资源质量 · 及时修复用户反馈'"></span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="flex flex-col sm:flex-row items-center gap-3 w-full xl:w-auto">
+            <div class="flex bg-gray-100 dark:bg-[#2C2C2E] p-1 rounded-[14px] shadow-inner border border-transparent dark:border-white/5 w-full sm:w-auto relative">
+                <button @click="switchView('request')" class="flex-1 sm:flex-none px-6 py-2 rounded-[10px] text-[13px] font-bold transition-all z-10" :class="viewMode === 'request' ? 'bg-white dark:bg-[#1C1C1E] shadow-sm text-brand-500' : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'">
+                    <i class="fa-solid fa-clapperboard mr-1.5"></i> 求片
+                </button>
+                <button @click="switchView('feedback')" class="flex-1 sm:flex-none px-6 py-2 rounded-[10px] text-[13px] font-bold transition-all z-10" :class="viewMode === 'feedback' ? 'bg-white dark:bg-[#1C1C1E] shadow-sm text-red-500' : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'">
+                    <i class="fa-solid fa-triangle-exclamation mr-1.5"></i> 报错
+                </button>
+            </div>
+
+            <div class="flex items-center gap-2 w-full sm:w-auto">
+                <!-- 通知设置按钮 -->
+                <button onclick="openRequestNotifyModal()" class="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 rounded-[14px] text-[13px] font-bold transition-colors shadow-sm border border-amber-100 dark:border-amber-500/20 active:scale-95 whitespace-nowrap">
+                    <i class="fa-solid fa-bell"></i> 通知设置
+                </button>
+                <button @click="viewMode === 'request' ? loadData() : loadFeedback()" class="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-gray-700 dark:text-gray-200 rounded-[14px] text-[13px] font-bold transition-colors shadow-sm border border-transparent dark:border-white/5 active:scale-95">
+                    <i class="fa-solid fa-rotate-right" :class="isOperating ? 'animate-spin text-brand-500' : ''"></i> <span class="sm:hidden">刷新</span>
+                </button>
+                <a id="user-portal-link" href="/request" target="_blank" class="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-[14px] text-[13px] font-bold transition-all shadow-md shadow-emerald-500/20 active:scale-95 whitespace-nowrap">
+                    <i class="fa-solid fa-arrow-up-right-from-square"></i> 前往用户前台
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="viewMode === 'request'" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4" x-transition:enter-end="opacity-100 translate-y-0">
+        
+        <!-- 分类栏 - 固定在标题栏下方 -->
+        <div class="flex flex-col md:flex-row justify-between gap-3 items-center apple-card !p-3 !rounded-[20px] mb-5 sticky top-[160px] md:top-[172px] z-20 bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl border-b border-gray-200/50 dark:border-white/5 sticky-header">
+            <div class="flex gap-2 overflow-x-auto no-scrollbar w-full md:w-auto pl-1 pr-4">
+                <button @click="filterStatus = 'all'; currentPage = 1" :class="filterStatus === 'all' ? 'bg-gray-800 text-white dark:bg-gray-200 dark:text-gray-900 shadow-md' : 'bg-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#2C2C2E]'" class="px-4 py-2 rounded-[12px] text-[12px] font-bold transition-all whitespace-nowrap">全部</button>
+                <button @click="filterStatus = 'new'; currentPage = 1" :class="filterStatus === 'new' ? 'bg-blue-500 text-white shadow-md' : 'bg-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#2C2C2E]'" class="px-4 py-2 rounded-[12px] text-[12px] font-bold transition-all whitespace-nowrap">求片 <span x-text="requests.filter(r => r.status===0 && r.request_type==='new').length" class="ml-1 opacity-70 font-mono"></span></button>
+                <button @click="filterStatus = 'update'; currentPage = 1" :class="filterStatus === 'update' ? 'bg-orange-500 text-white shadow-md' : 'bg-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#2C2C2E]'" class="px-4 py-2 rounded-[12px] text-[12px] font-bold transition-all whitespace-nowrap">追新 <span x-text="requests.filter(r => r.status===0 && r.request_type==='update').length" class="ml-1 opacity-70 font-mono"></span></button>
+                <button @click="filterStatus = 0; currentPage = 1" :class="filterStatus === 0 ? 'bg-brand-500 text-white shadow-md' : 'bg-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#2C2C2E]'" class="px-4 py-2 rounded-[12px] text-[12px] font-bold transition-all whitespace-nowrap">待审批 <span x-text="requests.filter(r => r.status===0).length" class="ml-1 opacity-70 font-mono"></span></button>
+                <button @click="filterStatus = 7; currentPage = 1" :class="filterStatus === 7 ? 'bg-emerald-500 text-white shadow-md' : 'bg-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#2C2C2E]'" class="px-4 py-2 rounded-[12px] text-[12px] font-bold transition-all whitespace-nowrap">待入库 <span x-text="requests.filter(r => r.status===7).length" class="ml-1 opacity-70 font-mono"></span></button>
+                <button @click="filterStatus = 1; currentPage = 1" :class="filterStatus === 1 ? 'bg-yellow-500 text-white shadow-md' : 'bg-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#2C2C2E]'" class="px-4 py-2 rounded-[12px] text-[12px] font-bold transition-all whitespace-nowrap">自动下载中</button>
+                <button @click="filterStatus = 4; currentPage = 1" :class="filterStatus === 4 ? 'bg-purple-500 text-white shadow-md' : 'bg-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#2C2C2E]'" class="px-4 py-2 rounded-[12px] text-[12px] font-bold transition-all whitespace-nowrap">手动接单中</button>
+                <button @click="filterStatus = 2; currentPage = 1" :class="filterStatus === 2 ? 'bg-blue-500 text-white shadow-md' : 'bg-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#2C2C2E]'" class="px-4 py-2 rounded-[12px] text-[12px] font-bold transition-all whitespace-nowrap">已入库</button>
+                <button @click="filterStatus = 3; currentPage = 1" :class="filterStatus === 3 ? 'bg-red-500 text-white shadow-md' : 'bg-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#2C2C2E]'" class="px-4 py-2 rounded-[12px] text-[12px] font-bold transition-all whitespace-nowrap">已拒绝</button>
+            </div>
+
+            <div class="flex items-center gap-2 w-full md:w-auto">
+                <!-- 🔥 排序下拉框 -->
+                <div class="relative">
+                    <select x-model="sortBy" class="appearance-none pl-3 pr-8 py-2 bg-gray-50 dark:bg-[#2C2C2E] border border-gray-200 dark:border-white/5 rounded-[12px] text-[12px] font-bold text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-500/30 cursor-pointer transition-all">
+                        <template x-for="opt in sortOptions" :key="opt.value">
+                            <option :value="opt.value" x-text="opt.label"></option>
+                        </template>
+                    </select>
+                    <i class="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-[10px] pointer-events-none"></i>
+                </div>
+                
+                <div class="relative flex-1 md:w-64">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+                    <input type="text" x-model="searchQuery" placeholder="搜索用户、片名..." class="w-full pl-9 pr-8 py-2 bg-gray-50 dark:bg-[#2C2C2E] border border-gray-200 dark:border-white/5 rounded-[12px] text-[12px] font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500/50 transition-all">
+                    <button x-show="searchQuery" @click="searchQuery = ''" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition">
+                        <i class="fa-solid fa-xmark text-xs"></i>
+                    </button>
+                </div>
+                <div x-show="searchQuery" x-transition class="text-[11px] text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                    找到 <span x-text="filteredRequests.length" class="font-bold text-brand-500"></span> 条
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-4 md:gap-5">
+            <div class="col-span-full flex items-center px-3 pb-1" x-show="paginatedRequests.length > 0">
+                <label class="flex items-center gap-2 cursor-pointer group">
+                    <input type="checkbox" @click="toggleSelectAll()" :checked="selectedKeys.length === paginatedRequests.length && paginatedRequests.length > 0" class="w-4 h-4 text-brand-500 rounded cursor-pointer">
+                    <span class="text-[13px] text-gray-500 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200 font-bold transition">全选当前页</span>
+                </label>
+            </div>
+
+            <template x-for="item in paginatedRequests" :key="item.tmdb_id + '_' + item.season">
+                <div class="pulse-list-row bg-white dark:bg-[#1C1C1E] p-4 md:p-5 rounded-[24px] border border-gray-100 dark:border-white/5 shadow-[0_4px_20px_rgba(0,0,0,0.03)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)] flex gap-4 md:gap-5 relative"
+                     :class="selectedKeys.includes(item.tmdb_id + '_' + item.season) ? 'ring-2 ring-brand-500 bg-brand-50/30 dark:bg-brand-900/10' : ''">
+                    
+                    <div class="absolute top-5 left-5 z-10">
+                        <input type="checkbox" :value="item.tmdb_id + '_' + item.season" x-model="selectedKeys" class="w-4 h-4 text-brand-500 rounded cursor-pointer bg-white dark:bg-[#2C2C2E] border-gray-300 dark:border-gray-600">
+                    </div>
+
+                    <div class="shrink-0 ml-7">
+                        <!-- 🔥 封面处理：智能判断路径类型 -->
+                        <img :src="getPosterUrl(item.poster_path)" class="w-16 h-24 md:w-20 md:h-28 rounded-xl object-cover shadow-md bg-gray-100 dark:bg-[#2C2C2E] border border-gray-100 dark:border-white/5" onerror="this.src='/static/img/logo-app.png'">
+                    </div>
+
+                    <div class="flex-1 min-w-0 flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-start justify-between gap-2 mb-1.5">
+                                <div class="min-w-0">
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <h3 class="font-bold text-gray-900 dark:text-white truncate text-[14px] md:text-[15px]" x-text="item.title"></h3>
+                                        <!-- 追新标签 -->
+                                        <span x-show="item.request_type === 'update'" class="text-[9px] font-bold bg-orange-100 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400 px-1.5 py-0.5 rounded whitespace-nowrap border border-orange-200/50 dark:border-orange-500/30">追新</span>
+                                    </div>
+                                    <div class="flex items-center gap-2 text-[10px] mt-1">
+                                        <span class="px-2 py-0.5 bg-gray-100 dark:bg-[#2C2C2E] border border-gray-200/50 dark:border-white/5 text-gray-600 dark:text-gray-300 rounded-md font-black uppercase tracking-wider" x-text="item.media_type === 'movie' ? 'Movie' : 'TV'"></span>
+                                        <span class="text-gray-400 font-mono font-bold" x-text="item.year"></span>
+                                        <!-- 追新显示季集数 -->
+                                        <span x-show="item.request_type === 'update' && item.episodes" class="text-orange-500 dark:text-orange-400 font-bold" x-text="'S' + (item.season || 1) + 'E' + item.episodes.replace(',', '-')"></span>
+                                    </div>
+                                </div>
+                                <div class="shrink-0 pt-0.5">
+                                    <span x-show="item.status === 0" class="text-brand-500 text-[10px] font-bold bg-brand-50 dark:bg-brand-500/10 px-2 py-1 rounded-md border border-brand-100 dark:border-brand-500/20 shadow-sm whitespace-nowrap">待审批</span>
+                                    <span x-show="item.status === 7" class="text-emerald-600 dark:text-emerald-400 text-[10px] font-bold bg-emerald-50 dark:bg-emerald-500/10 px-2 py-1 rounded-md border border-emerald-200/50 dark:border-emerald-500/20 shadow-sm flex items-center gap-1.5 whitespace-nowrap"><i class="fa-solid fa-box-open text-emerald-500"></i>待入库</span>
+                                    <span x-show="item.status === 1" class="text-yellow-600 dark:text-yellow-500 text-[10px] font-bold bg-yellow-50 dark:bg-yellow-500/10 px-2 py-1 rounded-md border border-yellow-200/50 dark:border-yellow-500/20 shadow-sm flex items-center gap-1.5 whitespace-nowrap"><span class="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse"></span>自动下载中</span>
+                                    <span x-show="item.status === 4" class="text-purple-600 dark:text-purple-400 text-[10px] font-bold bg-purple-50 dark:bg-purple-500/10 px-2 py-1 rounded-md border border-purple-200/50 dark:border-purple-500/20 shadow-sm flex items-center gap-1.5 whitespace-nowrap"><span class="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse"></span>手动接单中</span>
+                                    <span x-show="item.status === 2" class="text-blue-600 dark:text-blue-400 text-[10px] font-bold bg-blue-50 dark:bg-blue-500/10 px-2 py-1 rounded-md border border-blue-200/50 dark:border-blue-500/20 shadow-sm whitespace-nowrap"><i class="fa-solid fa-check mr-1"></i>已入库</span>
+                                    <span x-show="item.status === 3" class="text-red-500 text-[10px] font-bold bg-red-50 dark:bg-red-500/10 px-2 py-1 rounded-md border border-red-100 dark:border-red-500/20 shadow-sm whitespace-nowrap">已拒绝</span>
+                                </div>
+                            </div>
+                            
+                            <div class="mt-2.5 md:mt-3 space-y-1.5">
+                                <div class="flex items-center gap-1.5 text-[11px] md:text-xs text-gray-500 dark:text-gray-400">
+                                    <i class="fa-solid fa-users text-gray-400 w-4 text-center"></i>
+                                    <span class="truncate font-medium">支持者: <span class="font-bold text-gray-700 dark:text-gray-300" x-text="item.requested_by"></span></span>
+                                </div>
+                                <div x-show="item.status === 3 && item.reject_reason" class="flex items-start gap-1.5 text-[11px] text-red-500 mt-2 bg-red-50 dark:bg-red-500/10 p-2 rounded-lg border border-red-100 dark:border-red-900/30 shadow-inner leading-relaxed">
+                                    <i class="fa-solid fa-ban mt-0.5"></i>
+                                    <span>原因: <span class="font-bold" x-text="item.reject_reason"></span></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-3 md:mt-4 pt-3 border-t border-gray-100 dark:border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div class="text-[10px] text-gray-400 font-mono hidden sm:block" x-text="formatLocalTime(item.created_at)"></div>
+                            
+                            <!-- 🔥 按钮区域：flex-wrap确保换行，max-width限制宽度 -->
+                            <div class="flex flex-wrap items-center gap-1 w-full sm:w-auto justify-start sm:justify-end max-w-full">
+                                <!-- 追新工单：搜索单集 -->
+                                <template x-if="item.status === 0 && item.request_type === 'update'">
+                                    <button @click="openEpisodeSearch(item)" class="px-2 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-[10px] font-bold transition shadow-sm active:scale-95 flex items-center shrink-0">
+                                        <i class="fa-solid fa-magnifying-glass mr-1 text-[10px]"></i>搜索单集
+                                    </button>
+                                </template>
+                                <!-- 求片工单：推给MP -->
+                                <template x-if="item.status === 0 && item.request_type !== 'update'">
+                                    <button @click="doAction(item.tmdb_id, item.season, 'approve')" class="px-2 py-1.5 bg-brand-500 hover:bg-brand-600 text-white rounded-lg text-[10px] font-bold transition shadow-sm active:scale-95 flex items-center shrink-0">
+                                        <i class="fa-solid fa-robot mr-1 text-[10px]"></i>推给MP
+                                    </button>
+                                </template>
+                                <!-- 手动接单（通用） -->
+                                <template x-if="item.status === 0">
+                                    <button @click="doAction(item.tmdb_id, item.season, 'manual')" class="px-2 py-1.5 bg-purple-500 hover:bg-purple-600 text-white rounded-lg text-[10px] font-bold transition shadow-sm active:scale-95 flex items-center shrink-0">
+                                        <i class="fa-solid fa-hand mr-1 text-[10px]"></i>手动接单
+                                    </button>
+                                </template>
+                                <!-- 影巢搜索（待审批 + 下载中/手动接单中） -->
+                                <template x-if="item.status === 0 || item.status === 1 || item.status === 4">
+                                    <button @click="openHDHiveSearch(item)" class="px-2 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-[10px] font-bold transition shadow-sm active:scale-95 flex items-center shrink-0">
+                                        <i class="fa-solid fa-cloud mr-1 text-[10px]"></i>影巢
+                                    </button>
+                                </template>
+                                <!-- 待入库：确认入库 -->
+                                <template x-if="item.status === 7">
+                                    <button @click="doAction(item.tmdb_id, item.season, 'finish')" class="px-2 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-[10px] font-bold transition shadow-sm active:scale-95 flex items-center shrink-0">
+                                        <i class="fa-solid fa-check mr-1 text-[10px]"></i>确认入库
+                                    </button>
+                                </template>
+                                <!-- 下载中/手动接单中：强制入库 -->
+                                <template x-if="item.status === 1 || item.status === 4">
+                                    <button @click="doAction(item.tmdb_id, item.season, 'finish')" class="px-2 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-[10px] font-bold transition shadow-sm active:scale-95 flex items-center shrink-0">
+                                        <i class="fa-solid fa-check mr-1 text-[10px]"></i>强制入库
+                                    </button>
+                                </template>
+                                <!-- 拒绝按钮 -->
+                                <template x-if="item.status === 0 || item.status === 1 || item.status === 4 || item.status === 7">
+                                    <button @click="openRejectModal([{tmdb_id: item.tmdb_id, season: item.season}])" class="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition shrink-0" title="拒绝">
+                                        <i class="fa-solid fa-circle-xmark text-xs"></i>
+                                    </button>
+                                </template>
+                                <button @click="confirmDelete(item.tmdb_id, item.season)" class="p-2 text-gray-300 hover:text-gray-600 dark:text-gray-600 dark:hover:text-red-400 rounded-[10px] transition shrink-0" title="删除">
+                                    <i class="fa-regular fa-trash-can text-sm md:text-base"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+        <div x-show="filteredRequests.length === 0" class="text-center py-32 apple-card !rounded-[24px]" x-cloak>
+            <div class="text-5xl mb-4 opacity-20"><i class="fa-solid fa-ghost"></i></div>
+            <p class="text-gray-400 dark:text-gray-500 font-bold tracking-widest text-[13px] uppercase">当前分类下空空如也</p>
+        </div>
+        
+        <!-- 🔥 分页控件 - 与历史记录页面一致 -->
+        <div x-show="filteredRequests.length > pageSize" class="apple-card !rounded-[20px] !p-4 mt-6" x-cloak>
+            <div class="flex flex-col sm:flex-row items-center justify-between gap-3">
+                <!-- 左侧：每页条数选择 + 总数 -->
+                <div class="flex items-center gap-3 w-full sm:w-auto">
+                    <!-- 🔥 Alpine.js 下拉选择器 -->
+                    <div class="relative" x-data="{ open: false }">
+                        <button @click="open = !open" class="flex items-center justify-between gap-2 px-3 py-2 bg-white dark:bg-[#2C2C2E] border border-gray-200 dark:border-white/10 rounded-lg text-[12px] font-bold text-gray-700 dark:text-gray-300 hover:border-brand-500 hover:ring-2 hover:ring-brand-500/20 transition-all min-w-[80px]">
+                            <span>每页 <span x-text="pageSize"></span></span>
+                            <i class="fa-solid fa-chevron-down text-[10px] text-gray-400 transition-transform" :class="open ? 'rotate-180' : ''"></i>
+                        </button>
+                        <!-- 下拉菜单 -->
+                        <div x-show="open" x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100" x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95" @click.away="open = false" class="absolute bottom-full left-0 mb-2 bg-white dark:bg-[#1f2937] border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 z-50 min-w-[80px]">
+                            <template x-for="size in [20, 40, 60, 80, 100]" :key="size">
+                                <button @click="pageSize = size; currentPage = 1; open = false" :class="pageSize === size ? 'bg-brand-500 text-white' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'" class="w-full px-3 py-2 text-[12px] font-bold text-left transition-colors">
+                                    <span x-text="size"></span> 条/页
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+                    <div class="text-[12px] text-gray-500 dark:text-gray-400 font-medium">
+                        共 <span x-text="filteredRequests.length" class="font-bold text-brand-500"></span> 条，第 <span x-text="currentPage"></span>/<span x-text="totalPages"></span> 页
+                    </div>
+                </div>
+                
+                <!-- 右侧：分页按钮 -->
+                <div class="flex items-center gap-1 w-full sm:w-auto justify-between sm:justify-end">
+                    <button @click="currentPage = 1" :disabled="currentPage === 1" class="w-8 h-8 rounded-lg bg-white dark:bg-[#2C2C2E] border border-gray-200 dark:border-white/10 flex items-center justify-center text-[12px] text-gray-500 hover:bg-gray-100 dark:hover:bg-[#3A3A3C] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0">
+                        <i class="fa-solid fa-angles-left"></i>
+                    </button>
+                    <button @click="currentPage = Math.max(1, currentPage - 1)" :disabled="currentPage === 1" class="w-8 h-8 rounded-lg bg-white dark:bg-[#2C2C2E] border border-gray-200 dark:border-white/10 flex items-center justify-center text-[12px] text-gray-500 hover:bg-gray-100 dark:hover:bg-[#3A3A3C] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0">
+                        <i class="fa-solid fa-angle-left"></i>
+                    </button>
+                    
+                    <!-- 页码按钮 -->
+                    <div class="flex items-center gap-1 overflow-x-auto no-scrollbar">
+                        <template x-for="p in getPageNumbers()" :key="p">
+                            <button @click="currentPage = p" :class="p === currentPage ? 'bg-brand-500 text-white' : 'bg-white dark:bg-[#2C2C2E] border border-gray-200 dark:border-white/10 text-gray-500 hover:bg-gray-100 dark:hover:bg-[#3A3A3C]'" class="w-8 h-8 rounded-lg flex items-center justify-center text-[12px] font-bold transition-colors shrink-0" x-text="p"></button>
+                        </template>
+                    </div>
+                    
+                    <button @click="currentPage = Math.min(totalPages, currentPage + 1)" :disabled="currentPage === totalPages" class="w-8 h-8 rounded-lg bg-white dark:bg-[#2C2C2E] border border-gray-200 dark:border-white/10 flex items-center justify-center text-[12px] text-gray-500 hover:bg-gray-100 dark:hover:bg-[#3A3A3C] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0">
+                        <i class="fa-solid fa-angle-right"></i>
+                    </button>
+                    <button @click="currentPage = totalPages" :disabled="currentPage === totalPages" class="w-8 h-8 rounded-lg bg-white dark:bg-[#2C2C2E] border border-gray-200 dark:border-white/10 flex items-center justify-center text-[12px] text-gray-500 hover:bg-gray-100 dark:hover:bg-[#3A3A3C] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0">
+                        <i class="fa-solid fa-angles-right"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="viewMode === 'feedback'" x-transition x-cloak>
+        
+        <!-- 分类栏 - 固定在标题栏下方 -->
+        <div class="flex flex-col md:flex-row justify-between gap-3 items-center apple-card !p-3 !rounded-[20px] mb-5 sticky top-[160px] md:top-[172px] z-20 bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl border-b border-gray-200/50 dark:border-white/5 sticky-header">
+            <div class="flex gap-2 overflow-x-auto no-scrollbar w-full md:w-auto pl-1 pr-4">
+                <button @click="feedFilter = 'all'" :class="feedFilter === 'all' ? 'bg-gray-800 text-white dark:bg-gray-200 dark:text-gray-900 shadow-md' : 'bg-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#2C2C2E]'" class="px-4 py-2 rounded-[12px] text-[12px] font-bold transition-all whitespace-nowrap">全部</button>
+                <button @click="feedFilter = 0" :class="feedFilter === 0 ? 'bg-red-500 text-white shadow-md' : 'bg-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#2C2C2E]'" class="px-4 py-2 rounded-[12px] text-[12px] font-bold transition-all whitespace-nowrap">待核实 <span x-text="feedbacks.filter(f => f.status===0).length" class="ml-1 opacity-70 font-mono"></span></button>
+                <button @click="feedFilter = 1" :class="feedFilter === 1 ? 'bg-blue-500 text-white shadow-md' : 'bg-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#2C2C2E]'" class="px-4 py-2 rounded-[12px] text-[12px] font-bold transition-all whitespace-nowrap">修复中</button>
+                <button @click="feedFilter = 2" :class="feedFilter === 2 ? 'bg-emerald-500 text-white shadow-md' : 'bg-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#2C2C2E]'" class="px-4 py-2 rounded-[12px] text-[12px] font-bold transition-all whitespace-nowrap">已解决</button>
+                <button @click="feedFilter = 3" :class="feedFilter === 3 ? 'bg-gray-500 text-white shadow-md' : 'bg-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#2C2C2E]'" class="px-4 py-2 rounded-[12px] text-[12px] font-bold transition-all whitespace-nowrap">已忽略</button>
+            </div>
+
+            <div class="flex items-center gap-2 w-full md:w-auto">
+                <div class="relative flex-1 md:w-64">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+                    <input type="text" x-model="feedSearchQuery" placeholder="搜索用户、片名、问题..." class="w-full pl-9 pr-8 py-2 bg-gray-50 dark:bg-[#2C2C2E] border border-gray-200 dark:border-white/5 rounded-[12px] text-[12px] font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500/50 transition-all">
+                    <button x-show="feedSearchQuery" @click="feedSearchQuery = ''" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition">
+                        <i class="fa-solid fa-xmark text-xs"></i>
+                    </button>
+                </div>
+                <div x-show="feedSearchQuery" x-transition class="text-[11px] text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                    找到 <span x-text="filteredFeedbacks.length" class="font-bold text-red-500"></span> 条
+                </div>
+            </div>
+            
+            <div x-show="selectedFeedbacks.length > 0" x-transition class="flex items-center gap-2 pr-1 w-full md:w-auto overflow-x-auto no-scrollbar pb-1 md:pb-0 shrink-0">
+                <span class="text-[12px] font-black text-red-500 whitespace-nowrap px-2">已选 <span x-text="selectedFeedbacks.length"></span></span>
+                <button @click="batchFeedAction('fix')" class="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-500/10 dark:hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 rounded-xl text-[12px] font-bold transition shadow-sm active:scale-95 whitespace-nowrap border border-blue-200/50 dark:border-blue-500/20"><i class="fa-solid fa-wrench mr-1"></i>批量修复</button>
+                <button @click="batchFeedAction('done')" class="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-xl text-[12px] font-bold transition shadow-sm active:scale-95 whitespace-nowrap border border-emerald-200/50 dark:border-emerald-500/20"><i class="fa-solid fa-check mr-1"></i>批量解决</button>
+                <button @click="batchFeedAction('reject')" class="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-gray-600 dark:text-gray-300 rounded-xl text-[12px] font-bold transition shadow-sm active:scale-95 whitespace-nowrap border border-transparent dark:border-white/5"><i class="fa-solid fa-ban mr-1"></i>批量忽略</button>
+                <button @click="batchFeedAction('delete')" class="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-500 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] dark:text-gray-400 rounded-xl text-[12px] transition active:scale-95 border border-transparent dark:border-white/5"><i class="fa-regular fa-trash-can"></i></button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-4 md:gap-5">
+            <div class="col-span-full flex items-center px-3 pb-1" x-show="filteredFeedbacks.length > 0">
+                <label class="flex items-center gap-2 cursor-pointer group">
+                    <input type="checkbox" @click="toggleSelectAllFeeds()" :checked="selectedFeedbacks.length === filteredFeedbacks.length && filteredFeedbacks.length > 0" class="w-4 h-4 text-red-500 rounded cursor-pointer bg-white dark:bg-[#2C2C2E] border-gray-300 dark:border-gray-600">
+                    <span class="text-[13px] text-gray-500 dark:text-gray-400 group-hover:text-gray-800 dark:group-hover:text-gray-200 font-bold transition">全选当前列表</span>
+                </label>
+            </div>
+
+            <template x-for="item in filteredFeedbacks" :key="item.id">
+                <div class="pulse-list-row bg-white dark:bg-[#1C1C1E] p-5 md:p-6 rounded-[24px] border border-gray-100 dark:border-white/5 shadow-[0_4px_20px_rgba(0,0,0,0.03)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)] flex flex-col justify-between relative transition-all"
+                     :class="selectedFeedbacks.includes(item.id) ? 'ring-2 ring-red-500 bg-red-50/30 dark:bg-red-900/10' : ''">
+                    
+                    <div class="absolute top-6 left-5 z-10">
+                        <input type="checkbox" :value="item.id" x-model="selectedFeedbacks" class="w-4 h-4 text-red-500 rounded cursor-pointer bg-white dark:bg-[#2C2C2E] border-gray-300 dark:border-gray-600 shadow-sm transition">
+                    </div>
+
+                    <div class="pl-8">
+                        <div class="flex items-start justify-between gap-3 mb-4">
+                            <h3 class="font-bold text-gray-900 dark:text-white text-[15px] md:text-base leading-tight line-clamp-2" x-text="item.item_name"></h3>
+                            <div class="shrink-0 pt-0.5">
+                                <span x-show="item.status === 0" class="text-red-500 text-[10px] font-bold bg-red-50 dark:bg-red-500/10 px-2.5 py-1 rounded-md border border-red-100 dark:border-red-500/20 whitespace-nowrap shadow-sm"><i class="fa-solid fa-magnifying-glass mr-1"></i>待核实</span>
+                                <span x-show="item.status === 1" class="text-brand-500 text-[10px] font-bold bg-brand-50 dark:bg-brand-500/10 px-2.5 py-1 rounded-md border border-brand-100 dark:border-brand-500/20 whitespace-nowrap shadow-sm"><i class="fa-solid fa-wrench fa-spin mr-1"></i>修复中</span>
+                                <span x-show="item.status === 2" class="text-emerald-600 dark:text-emerald-400 text-[10px] font-bold bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-1 rounded-md border border-emerald-200/50 dark:border-emerald-500/20 whitespace-nowrap shadow-sm"><i class="fa-solid fa-check mr-1"></i>已解决</span>
+                                <span x-show="item.status === 3" class="text-gray-500 text-[10px] font-bold bg-gray-100 dark:bg-[#3A3A3C] px-2.5 py-1 rounded-md border border-gray-200 dark:border-white/5 whitespace-nowrap shadow-sm"><i class="fa-solid fa-xmark mr-1"></i>已忽略</span>
+                            </div>
+                        </div>
+
+                        <div class="space-y-2.5 mb-5">
+                            <p class="text-[11px] md:text-xs text-gray-600 dark:text-gray-400 font-medium"><i class="fa-solid fa-user text-gray-400 w-5"></i> 反馈用户：<span class="font-bold text-gray-800 dark:text-gray-200" x-text="item.username"></span></p>
+                            <p class="text-[11px] md:text-xs text-rose-500 dark:text-rose-400 font-bold bg-rose-50 dark:bg-rose-500/10 w-fit px-2.5 py-1 rounded-lg border border-rose-100/50 dark:border-rose-900/30 shadow-inner"><i class="fa-solid fa-tag w-5"></i> 问题：<span x-text="item.issue_type"></span></p>
+                            <div x-show="item.description" class="text-[11px] md:text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-black/20 p-3 rounded-xl border border-gray-100 dark:border-white/5 shadow-inner leading-relaxed">
+                                "<span x-text="item.description"></span>"
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between pt-3 md:pt-4 border-t border-gray-100 dark:border-white/5 pl-8 gap-3">
+                        <span class="text-[10px] text-gray-400 font-mono hidden sm:block" x-text="formatLocalTime(item.created_at)"></span>
+                        <div class="flex flex-wrap items-center gap-1.5 md:gap-2 w-full sm:w-auto justify-end">
+                            <button x-show="item.status === 0 || item.status === 3" @click="feedAction(item.id, 'fix')" class="flex-1 sm:flex-none justify-center px-3 py-2 bg-brand-50 hover:bg-brand-100 text-brand-600 dark:bg-brand-500/10 dark:text-brand-400 rounded-[10px] text-[11px] md:text-xs font-bold transition border border-transparent dark:border-brand-500/20 active:scale-95 whitespace-nowrap">修复中</button>
+                            <button x-show="item.status === 0 || item.status === 1" @click="feedAction(item.id, 'done')" class="flex-1 sm:flex-none justify-center px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-[10px] text-[11px] md:text-xs font-bold transition shadow-md shadow-emerald-500/20 active:scale-95 whitespace-nowrap"><i class="fa-solid fa-check mr-1.5"></i>已解决</button>
+                            <button x-show="item.status === 0 || item.status === 1" @click="feedAction(item.id, 'reject')" class="flex-1 sm:flex-none justify-center px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] dark:text-gray-300 rounded-[10px] text-[11px] md:text-xs font-bold transition border border-transparent dark:border-white/5 active:scale-95 whitespace-nowrap">忽略</button>
+                            <button @click="confirmFeedDelete(item.id)" class="p-2 text-gray-400 hover:text-red-500 dark:hover:text-red-400 rounded-[10px] transition shrink-0 bg-gray-50 dark:bg-[#2C2C2E] border border-transparent dark:border-white/5" title="删除记录"><i class="fa-solid fa-trash text-xs md:text-sm"></i></button>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </div>
+        
+        <div x-show="filteredFeedbacks.length === 0" class="text-center py-32 apple-card !rounded-[24px]" x-cloak>
+            <div class="text-5xl mb-4 opacity-20"><i class="fa-solid fa-check-double text-emerald-500"></i></div>
+            <p class="text-gray-400 dark:text-gray-500 font-bold tracking-widest text-[13px] uppercase">没有需要处理的报错</p>
+        </div>
+    </div>
+
+    <!-- 🔥 底部悬浮批量操作栏（求片） - 参考用户管理页面样式 -->
+    <div x-show="viewMode === 'request' && selectedKeys.length > 0" 
+         x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-8" x-transition:enter-end="opacity-100 translate-y-0"
+         x-transition:leave="transition ease-in duration-200" x-transition:leave-start="opacity-100 translate-y-0" x-transition:leave-end="opacity-0 translate-y-8"
+         class="fixed bottom-[88px] left-4 right-4 md:bottom-8 md:left-1/2 md:right-auto md:-translate-x-1/2 z-[90] bg-white/90 dark:bg-[#2C2C2E]/90 backdrop-blur-2xl border border-gray-200/60 dark:border-white/10 shadow-[0_16px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_16px_40px_rgba(0,0,0,0.6)] rounded-2xl px-3 py-3 md:px-5 flex items-center justify-between md:justify-start gap-2 md:gap-4 overflow-x-auto mac-scrollbar" x-cloak>
+        <div class="flex items-center shrink-0 pl-1">
+            <div class="bg-brand-100 dark:bg-brand-900/50 text-brand-600 dark:text-brand-400 font-black h-7 min-w-[1.75rem] px-2 rounded-lg flex items-center justify-center text-sm shadow-inner" x-text="selectedKeys.length"></div>
+            <span class="text-sm font-bold text-gray-600 dark:text-gray-300 ml-2 hidden sm:inline whitespace-nowrap">项已选</span>
+        </div>
+        <div class="w-px h-5 bg-gray-200 dark:bg-gray-700 hidden md:block shrink-0"></div>
+        <div class="flex items-center gap-1.5 md:gap-2 shrink-0">
+            <button @click="batchAction('approve')" class="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-xs md:text-[13px] font-bold transition shadow-md active:scale-95 whitespace-nowrap">
+                <i class="fa-solid fa-robot"></i><span class="hidden sm:inline">推MP</span><span class="sm:hidden">推</span>
+            </button>
+            <button @click="batchAction('manual')" class="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-xl text-xs md:text-[13px] font-bold transition shadow-md active:scale-95 whitespace-nowrap">
+                <i class="fa-solid fa-hand"></i><span class="hidden sm:inline">接单</span><span class="sm:hidden">接</span>
+            </button>
+            <button @click="openBatchRejectModal()" class="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-600 dark:text-amber-400 rounded-xl text-xs md:text-[13px] font-bold transition border border-transparent hover:border-amber-200 dark:hover:border-amber-800/50 active:scale-95 whitespace-nowrap">
+                <i class="fa-solid fa-ban"></i><span class="hidden sm:inline">拒绝</span><span class="sm:hidden">拒</span>
+            </button>
+            <button @click="confirmBatchDelete()" class="flex items-center justify-center w-8 h-8 md:w-9 md:h-9 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 text-red-500 rounded-xl transition ml-0.5 shrink-0 active:scale-95 border border-transparent hover:border-red-200 dark:hover:border-red-800/50" title="批量删除">
+                <i class="fa-solid fa-trash"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- 🔥 底部悬浮批量操作栏（报错） - 参考用户管理页面样式 -->
+    <div x-show="viewMode === 'feedback' && selectedFeedbacks.length > 0" 
+         x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-8" x-transition:enter-end="opacity-100 translate-y-0"
+         x-transition:leave="transition ease-in duration-200" x-transition:leave-start="opacity-100 translate-y-0" x-transition:leave-end="opacity-0 translate-y-8"
+         class="fixed bottom-[88px] left-4 right-4 md:bottom-8 md:left-1/2 md:right-auto md:-translate-x-1/2 z-[90] bg-white/90 dark:bg-[#2C2C2E]/90 backdrop-blur-2xl border border-gray-200/60 dark:border-white/10 shadow-[0_16px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_16px_40px_rgba(0,0,0,0.6)] rounded-2xl px-3 py-3 md:px-5 flex items-center justify-between md:justify-start gap-2 md:gap-4 overflow-x-auto mac-scrollbar" x-cloak>
+        <div class="flex items-center shrink-0 pl-1">
+            <div class="bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400 font-black h-7 min-w-[1.75rem] px-2 rounded-lg flex items-center justify-center text-sm shadow-inner" x-text="selectedFeedbacks.length"></div>
+            <span class="text-sm font-bold text-gray-600 dark:text-gray-300 ml-2 hidden sm:inline whitespace-nowrap">项已选</span>
+        </div>
+        <div class="w-px h-5 bg-gray-200 dark:bg-gray-700 hidden md:block shrink-0"></div>
+        <div class="flex items-center gap-1.5 md:gap-2 shrink-0">
+            <button @click="batchFeedAction('fix')" class="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-xs md:text-[13px] font-bold transition shadow-md active:scale-95 whitespace-nowrap">
+                <i class="fa-solid fa-wrench"></i><span class="hidden sm:inline">修复</span><span class="sm:hidden">修</span>
+            </button>
+            <button @click="batchFeedAction('done')" class="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs md:text-[13px] font-bold transition shadow-md active:scale-95 whitespace-nowrap">
+                <i class="fa-solid fa-check"></i><span class="hidden sm:inline">解决</span><span class="sm:hidden">解</span>
+            </button>
+            <button @click="batchFeedAction('reject')" class="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 rounded-xl text-xs md:text-[13px] font-bold transition border border-transparent hover:border-gray-300 dark:hover:border-gray-500 active:scale-95 whitespace-nowrap">
+                <i class="fa-solid fa-ban"></i><span class="hidden sm:inline">忽略</span><span class="sm:hidden">忽</span>
+            </button>
+            <button @click="batchFeedAction('delete')" class="flex items-center justify-center w-8 h-8 md:w-9 md:h-9 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 text-red-500 rounded-xl transition ml-0.5 shrink-0 active:scale-95 border border-transparent hover:border-red-200 dark:hover:border-red-800/50" title="批量删除">
+                <i class="fa-solid fa-trash"></i>
+            </button>
+        </div>
+    </div>
+
+    <div x-show="rejectModal.open" class="fixed inset-0 z-[100] flex items-center justify-center p-4" x-cloak>
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" @click="rejectModal.open = false" x-transition.opacity></div>
+        <div class="relative bg-white dark:bg-[#1C1C1E] border border-transparent dark:border-white/5 rounded-[24px] w-full max-w-md p-6 md:p-8 shadow-[0_20px_60px_rgba(0,0,0,0.3)]"
+             x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 scale-95 translate-y-4" x-transition:enter-end="opacity-100 scale-100 translate-y-0">
+            <div class="flex items-center gap-3 mb-6 text-red-500">
+                <div class="w-10 h-10 rounded-full bg-red-50 dark:bg-red-500/10 flex items-center justify-center shadow-inner border border-red-100 dark:border-red-500/20">
+                    <i class="fa-solid fa-triangle-exclamation text-lg"></i>
+                </div>
+                <h3 class="text-[17px] font-black text-gray-900 dark:text-white" x-text="rejectModal.items.length > 1 ? '批量拒绝 ' + rejectModal.items.length + ' 项求片' : '确认拒绝该求片？'"></h3>
+            </div>
+            
+            <div class="mb-6">
+                <p class="text-[11px] text-gray-500 dark:text-gray-400 mb-3 font-bold uppercase tracking-widest pl-1">请选择拒绝原因：</p>
+                <div class="flex flex-wrap gap-2.5 mb-4">
+                    <template x-for="reason in predefinedReasons" :key="reason">
+                        <button @click="rejectModal.reasonType = reason" 
+                                class="px-3.5 py-2 rounded-xl text-[12px] font-bold transition-all shadow-sm active:scale-95"
+                                :class="rejectModal.reasonType === reason ? 'bg-red-50 border border-red-200 text-red-600 dark:bg-red-500/20 dark:border-red-500/30 dark:text-red-400' : 'bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100 dark:bg-[#2C2C2E] dark:border-white/5 dark:text-gray-300 dark:hover:bg-[#3A3A3C]'">
+                            <span x-text="reason"></span>
+                        </button>
+                    </template>
+                </div>
+                <div x-show="rejectModal.reasonType === '其他原因...'" x-collapse>
+                    <textarea x-model="rejectModal.customReason" rows="3" placeholder="请输入具体原因（将发送给用户）..." class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200/80 dark:border-white/10 rounded-xl p-4 text-[13px] font-medium focus:outline-none focus:ring-2 focus:ring-red-500/50 text-gray-800 dark:text-white transition-all resize-none shadow-inner"></textarea>
+                </div>
+            </div>
+
+            <div class="flex gap-3 justify-end pt-2 border-t border-gray-100 dark:border-white/5 mt-4">
+                <button @click="rejectModal.open = false" class="px-6 py-3 rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:text-gray-200 dark:hover:bg-[#3A3A3C] font-bold text-[13px] transition-colors">取消</button>
+                <button @click="submitReject()" class="px-6 py-3 rounded-xl bg-red-500 text-white hover:bg-red-600 font-bold text-[13px] transition shadow-md shadow-red-500/30 flex items-center justify-center gap-2 active:scale-95 min-w-[100px]">
+                    <span x-show="isOperating" class="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full"></span>
+                    <span x-show="!isOperating">确认拒绝</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="toast.show" x-transition x-cloak class="fixed top-20 left-1/2 -translate-x-1/2 z-[110] px-6 py-3 rounded-full shadow-2xl border backdrop-blur-2xl flex items-center gap-2 font-bold text-[13px]"
+         :class="toast.type === 'success' ? 'bg-white/95 dark:bg-[#1C1C1E]/95 border-emerald-200 text-emerald-600 dark:border-emerald-500/30 dark:text-emerald-400' : 'bg-white/95 dark:bg-[#1C1C1E]/95 border-red-200 text-red-600 dark:border-red-500/30 dark:text-red-400'">
+        <i :class="toast.type === 'success' ? 'fa-solid fa-circle-check' : 'fa-solid fa-circle-xmark'"></i>
+        <span x-text="toast.message"></span>
+    </div>
+
+    <!-- 🔔 Confirm 确认框 -->
+    <template x-if="confirmData.open">
+        <div>
+            <div class="confirm-overlay" @click="confirmData.onCancel"></div>
+            <div class="confirm-modal">
+                <div class="confirm-icon" :class="confirmData.type">
+                    <template x-if="confirmData.type === 'warning'"><i class="fa-solid fa-triangle-exclamation"></i></template>
+                    <template x-if="confirmData.type === 'danger'"><i class="fa-solid fa-circle-exclamation"></i></template>
+                </div>
+                <div class="confirm-title" x-text="confirmData.title"></div>
+                <div class="confirm-message" x-text="confirmData.message"></div>
+                <div class="confirm-buttons">
+                    <button class="confirm-btn cancel" @click="confirmData.onCancel" x-text="confirmData.cancelText"></button>
+                    <button class="confirm-btn danger" @click="confirmData.onConfirm" x-text="confirmData.confirmText"></button>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- 影巢资源搜索弹窗 -->
+    <div x-show="hdhiveModal.open" class="fixed inset-0 z-[100] flex items-end md:items-center justify-center p-0 md:p-4" x-cloak>
+        <div x-show="hdhiveModal.open" x-transition.opacity @click="closeHDHiveModal()" class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+        <div x-show="hdhiveModal.open" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-full md:translate-y-10 scale-95" x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+             class="relative w-full md:w-[700px] max-h-[90vh] bg-white dark:bg-[#1C1C1E] md:rounded-[24px] rounded-t-[32px] overflow-hidden shadow-2xl flex flex-col border border-transparent dark:border-white/5">
+            <div class="px-5 py-5 sm:px-6 sm:py-5 border-b border-gray-100 dark:border-white/5 flex justify-between items-center bg-gray-50/50 dark:bg-black/10 shrink-0">
+                <div>
+                    <h3 class="text-[17px] font-black text-gray-900 dark:text-white flex items-center gap-2 tracking-tight">
+                        <i class="fa-solid fa-cloud text-emerald-500"></i>
+                        <span>影巢115资源列表</span>
+                    </h3>
+                    <p class="text-[11px] font-medium text-gray-500 dark:text-gray-400 mt-1">
+                        <span>为 <span class="font-bold text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-[#2C2C2E] px-1.5 py-0.5 rounded shadow-inner" x-text="hdhiveModal.targetTitle"></span> 搜索115网盘资源</span>
+                    </p>
+                </div>
+                <button @click="closeHDHiveModal()" class="w-8 h-8 rounded-full bg-gray-100 dark:bg-[#2C2C2E] hover:text-rose-500 text-gray-500 transition-colors flex items-center justify-center shadow-sm">
+                    <i class="fa-solid fa-xmark text-sm"></i>
+                </button>
+            </div>
+            <div class="p-5 sm:p-6 overflow-y-auto flex-1 mac-scrollbar bg-white dark:bg-transparent">
+                <div x-show="hdhiveModal.isLoading" class="space-y-3"><div class="h-20 w-full bg-gray-50 dark:bg-[#2C2C2E]/50 rounded-[16px] animate-pulse border border-gray-100 dark:border-white/5"></div></div>
+                <div x-show="!hdhiveModal.isLoading && hdhiveModal.results.length > 0" class="space-y-3">
+                    <template x-for="(res, index) in hdhiveModal.results" :key="index">
+                        <label class="flex items-start gap-3.5 p-4 rounded-[16px] border cursor-pointer transition-all hover:bg-gray-50 dark:hover:bg-[#2C2C2E]/40" :class="hdhiveModal.selectedItems.includes(index) ? 'border-emerald-500 bg-emerald-50/30 dark:bg-emerald-900/10 shadow-md ring-1 ring-emerald-500/20' : 'border-gray-200/80 dark:border-white/5 shadow-sm'">
+                            <input type="checkbox" :value="index" :checked="hdhiveModal.selectedItems.includes(index)" @change="toggleHDHiveSelection(index)" class="w-5 h-5 mt-0.5 text-emerald-600 focus:ring-emerald-500 border-gray-300 dark:border-gray-600 dark:bg-[#1C1C1E] cursor-pointer rounded">
+                            <div class="flex-1 min-w-0">
+                                <div class="font-bold text-[13px] sm:text-[14px] text-gray-900 dark:text-white truncate mb-1" x-text="res.ui_title"></div>
+
+                                <!-- 资源标签 -->
+                                <div class="flex flex-wrap items-center gap-1.5 mb-2">
+                                    <template x-if="res.ui_labels && res.ui_labels.includes('免费')">
+                                        <span class="text-[10px] px-2 py-0.5 rounded-md font-bold border bg-emerald-50 text-emerald-600 border-emerald-200/50 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20 shadow-sm">
+                                            <i class="fa-solid fa-gift mr-0.5"></i>免费
+                                        </span>
+                                    </template>
+                                    <template x-if="res.ui_labels && res.ui_labels.find(l => l.includes('积分'))">
+                                        <span class="text-[10px] px-2 py-0.5 rounded-md font-bold border bg-rose-50 text-rose-600 border-rose-200/50 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20 shadow-sm" x-text="res.ui_labels.find(l => l.includes('积分'))"></span>
+                                    </template>
+                                    <template x-if="res.ui_labels && res.ui_labels.includes('官方')">
+                                        <span class="text-[10px] px-2 py-0.5 rounded-md font-bold border bg-blue-50 text-blue-600 border-blue-200/50 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20 shadow-sm">
+                                            <i class="fa-solid fa-check-circle mr-0.5"></i>官方
+                                        </span>
+                                    </template>
+                                    <template x-for="label in res.ui_labels.filter(l => l !== '免费' && l !== '官方' && !l.includes('积分'))" :key="label">
+                                        <span class="text-[10px] px-2 py-0.5 rounded-md font-bold border bg-purple-50 text-purple-600 border-purple-200/50 dark:bg-purple-500/10 dark:text-purple-400 dark:border-purple-500/20 shadow-sm" x-text="label"></span>
+                                    </template>
+                                </div>
+
+                                <!-- 资源详情 -->
+                                <div class="flex flex-wrap items-center gap-2 mt-1.5">
+                                    <span class="text-[10px] font-mono text-gray-500 dark:text-gray-400 font-bold bg-gray-50 dark:bg-[#2C2C2E] px-1.5 py-0.5 rounded border border-gray-200/50 dark:border-white/5 shadow-sm" x-text="res.ui_size"></span>
+                                    <span class="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1 ml-1"><i class="fa-solid fa-cloud"></i> 115网盘</span>
+                                    <template x-for="tag in res.extracted_tags" :key="tag"><span class="text-[10px] text-indigo-500 dark:text-indigo-400 font-bold ml-1 bg-indigo-50 dark:bg-indigo-500/10 px-1.5 rounded" x-text="tag"></span></template>
+                                    <!-- 影巢资源：分享人 -->
+                                    <template x-if="res.hdhive_info && res.hdhive_info.uploader">
+                                        <span class="text-[10px] text-amber-600 dark:text-amber-400 font-bold flex items-center gap-1 ml-1 bg-amber-50 dark:bg-amber-500/10 px-1.5 rounded">
+                                            <i class="fa-solid fa-user"></i> <span x-text="res.hdhive_info.uploader"></span>
+                                        </span>
+                                    </template>
+                                </div>
+
+                                <!-- 影巢详情信息 -->
+                                <template x-if="res.hdhive_info && res.hdhive_info.remark">
+                                    <div class="text-[11px] text-gray-500 dark:text-gray-400 mb-2 line-clamp-2 bg-gray-50 dark:bg-[#2C2C2E] px-2 py-1.5 rounded border border-gray-100 dark:border-white/5 mt-2" x-text="res.hdhive_info.remark"></div>
+                                </template>
+                            </div>
+                        </label>
+                    </template>
+                </div>
+                <div x-show="!hdhiveModal.isLoading && hdhiveModal.results.length === 0" class="text-center py-16 apple-card !shadow-none !border-dashed">
+                    <i class="fa-solid fa-cloud text-5xl text-gray-200 dark:text-gray-700 mb-4 block"></i>
+                    <p class="text-[13px] font-bold text-gray-400 tracking-widest uppercase">未捕获到115网盘资源星尘</p>
+                </div>
+            </div>
+            <div class="px-5 py-4 sm:px-6 sm:py-5 border-t border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-black/10 flex gap-3 pb-[env(safe-area-inset-bottom)] shrink-0">
+                <button @click="closeHDHiveModal()" class="px-5 py-3 rounded-xl text-[13px] font-bold text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 dark:bg-[#2C2C2E] dark:border-white/5 dark:text-gray-300 dark:hover:bg-[#3A3A3C] transition-colors shadow-sm flex items-center justify-center gap-2 active:scale-95"><i class="fa-solid fa-xmark"></i> 取消</button>
+                <button @click="unlockAndTransferHDHive()" :disabled="hdhiveModal.selectedItems.length === 0 || hdhiveModal.isSubmitting" class="flex-1 py-3 rounded-xl text-[13px] font-bold text-white transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]" :class="hdhiveModal.selectedItems.length > 0 ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/30' : 'bg-gray-400 dark:bg-gray-600 shadow-none border border-transparent'">
+                    <span x-show="hdhiveModal.isSubmitting" class="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full"></span>
+                    <span x-show="!hdhiveModal.isSubmitting">
+                        <i class="fa-solid fa-lock-open mr-1"></i>
+                        <span x-text="hdhiveModal.selectedItems.length > 0 ? '一键解锁并转存' : '请选择资源'"></span>
+                    </span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 文件夹选择弹窗 -->
+    <div x-show="folderModal.open" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="transition ease-in duration-150" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" class="fixed inset-0 z-[110] flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="folderModal.open = false"></div>
+        <div class="relative bg-white dark:bg-[#1C1C1E] rounded-2xl shadow-2xl w-full max-w-sm p-6 z-10">
+            <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2"><i class="fa-solid fa-folder text-emerald-500"></i> 选择115转存文件夹</h3>
+            <div class="space-y-2 max-h-[60vh] overflow-y-auto">
+                <template x-for="folder in folderModal.folders" :key="folder.cid">
+                    <button @click="selectFolderAndTransfer(folder.cid)" class="w-full py-3 px-4 rounded-xl bg-gray-100 dark:bg-[#2C2C2E] hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-gray-800 dark:text-gray-200 font-bold flex items-center gap-3 transition-colors">
+                        <i class="fa-solid fa-folder text-emerald-500"></i>
+                        <span x-text="folder.name"></span>
+                    </button>
+                </template>
+            </div>
+            <button @click="folderModal.open = false" class="mt-4 w-full py-3 rounded-xl text-gray-500 dark:text-gray-400 font-medium hover:bg-gray-100 dark:hover:bg-white/5 transition-colors">取消</button>
+        </div>
+    </div>
+    
+    <!-- 🔥 追新：搜索单集弹窗 -->
+    <div x-show="episodeModal.open" class="fixed inset-0 z-[100] flex items-end md:items-center justify-center p-0 md:p-4" x-cloak>
+        <div x-show="episodeModal.open" x-transition.opacity @click="closeEpisodeModal()" class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+        <div x-show="episodeModal.open" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-full md:translate-y-10 scale-95" x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+             class="relative w-full md:w-[600px] max-h-[90vh] bg-white dark:bg-[#1C1C1E] md:rounded-[24px] rounded-t-[32px] overflow-hidden shadow-2xl flex flex-col border border-transparent dark:border-white/5">
+            <div class="px-5 py-5 sm:px-6 sm:py-5 border-b border-gray-100 dark:border-white/5 flex justify-between items-center bg-gray-50/50 dark:bg-black/10 shrink-0">
+                <div>
+                    <h3 class="text-[17px] font-black text-gray-900 dark:text-white flex items-center gap-2 tracking-tight">
+                        <i class="fa-solid fa-magnifying-glass text-orange-500"></i>
+                        <span>搜索单集资源</span>
+                    </h3>
+                    <p class="text-[11px] font-medium text-gray-500 dark:text-gray-400 mt-1" x-show="episodeModal.targetItem">
+                        <span x-text="episodeModal.targetItem?.title || ''"></span>
+                        <span x-show="episodeModal.targetItem?.episodes" class="text-orange-500" x-text="' S' + (episodeModal.targetItem?.season || 1) + 'E' + (episodeModal.targetItem?.episodes || '').replace(',', '-')"></span>
+                    </p>
+                </div>
+                <button @click="closeEpisodeModal()" class="w-8 h-8 rounded-full bg-gray-100 dark:bg-[#2C2C2E] hover:text-rose-500 text-gray-500 transition-colors flex items-center justify-center shadow-sm">
+                    <i class="fa-solid fa-xmark text-sm"></i>
+                </button>
+            </div>
+            <div class="p-5 sm:p-6 overflow-y-auto flex-1 mac-scrollbar bg-white dark:bg-transparent">
+                <div x-show="episodeModal.isLoading" class="space-y-3">
+                    <div class="h-16 w-full bg-gray-50 dark:bg-[#2C2C2E]/50 rounded-[16px] animate-pulse border border-gray-100 dark:border-white/5"></div>
+                    <div class="h-16 w-full bg-gray-50 dark:bg-[#2C2C2E]/50 rounded-[16px] animate-pulse border border-gray-100 dark:border-white/5"></div>
+                    <div class="h-16 w-full bg-gray-50 dark:bg-[#2C2C2E]/50 rounded-[16px] animate-pulse border border-gray-100 dark:border-white/5"></div>
+                </div>
+                <div x-show="!episodeModal.isLoading && episodeModal.results.length > 0" class="space-y-3">
+                    <template x-for="(res, index) in episodeModal.results" :key="index">
+                        <label class="flex items-start gap-3.5 p-4 rounded-[16px] border cursor-pointer transition-all hover:bg-gray-50 dark:hover:bg-[#2C2C2E]/40" :class="episodeModal.selectedItems.includes(index) ? 'border-orange-500 bg-orange-50/30 dark:bg-orange-900/10 shadow-md ring-1 ring-orange-500/20' : 'border-gray-200/80 dark:border-white/5 shadow-sm'">
+                            <input type="checkbox" :value="index" :checked="episodeModal.selectedItems.includes(index)" @change="toggleEpisodeSelection(index)" class="w-5 h-5 mt-0.5 text-orange-600 focus:ring-orange-500 border-gray-300 dark:border-gray-600 dark:bg-[#1C1C1E] cursor-pointer rounded">
+                            <div class="flex-1 min-w-0">
+                                <div class="font-bold text-[13px] sm:text-[14px] text-gray-900 dark:text-white truncate mb-1" x-text="res.title"></div>
+                                <!-- 站点和标签 -->
+                                <div class="flex flex-wrap items-center gap-1.5 mb-2">
+                                    <span class="text-[10px] px-1.5 py-0.5 rounded font-bold bg-orange-100 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400" x-text="res.site || 'MP'"></span>
+                                    <template x-if="res.resolution">
+                                        <span class="text-[10px] font-mono text-blue-600 dark:text-blue-400 font-bold bg-blue-50 dark:bg-blue-500/10 px-1.5 py-0.5 rounded" x-text="res.resolution"></span>
+                                    </template>
+                                    <template x-if="res.chinese_audio">
+                                        <span class="text-[10px] px-1.5 py-0.5 rounded font-bold bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">中字</span>
+                                    </template>
+                                    <template x-if="res.resource">
+                                        <span class="text-[10px] px-1.5 py-0.5 rounded font-bold bg-purple-100 text-purple-600 dark:bg-purple-500/20 dark:text-purple-400" x-text="res.resource"></span>
+                                    </template>
+                                    <template x-for="label in (res.labels || []).slice(0, 3)" :key="label">
+                                        <span class="text-[10px] px-1.5 py-0.5 rounded font-bold bg-gray-100 text-gray-600 dark:bg-gray-500/20 dark:text-gray-400" x-text="label"></span>
+                                    </template>
+                                </div>
+                                <div class="flex flex-wrap items-center gap-2 mt-1.5">
+                                    <span class="text-[10px] font-mono text-gray-500 dark:text-gray-400 font-bold bg-gray-50 dark:bg-[#2C2C2E] px-1.5 py-0.5 rounded border border-gray-200/50 dark:border-white/5 shadow-sm" x-text="res.size"></span>
+                                    <span class="text-[10px] text-orange-600 dark:text-orange-400 font-bold" x-text="'做种 ' + res.seeders"></span>
+                                    <template x-if="res.episodes && res.episodes.length > 0">
+                                        <span class="text-[10px] text-blue-600 dark:text-blue-400 font-bold bg-blue-50 dark:bg-blue-500/10 px-1.5 rounded">
+                                            E<span x-text="res.episodes.join('-')"></span>
+                                        </span>
+                                    </template>
+                                </div>
+                                <!-- 备注 -->
+                                <template x-if="res.desc">
+                                    <div class="text-[11px] text-gray-500 dark:text-gray-400 mt-2 line-clamp-2 bg-gray-50 dark:bg-[#2C2C2E] px-2 py-1.5 rounded border border-gray-100 dark:border-white/5" x-text="res.desc"></div>
+                                </template>
+                            </div>
+                        </label>
+                    </template>
+                </div>
+                <div x-show="!episodeModal.isLoading && episodeModal.results.length === 0" class="text-center py-16 apple-card !shadow-none !border-dashed">
+                    <i class="fa-solid fa-video text-5xl text-gray-200 dark:text-gray-700 mb-4 block"></i>
+                    <p class="text-[13px] font-bold text-gray-400 tracking-widest uppercase">未找到单集资源</p>
+                </div>
+            </div>
+            <div class="px-5 py-4 sm:px-6 sm:py-5 border-t border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-black/10 flex gap-3 pb-[env(safe-area-inset-bottom)] shrink-0">
+                <button @click="closeEpisodeModal()" class="px-5 py-3 rounded-xl text-[13px] font-bold text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 dark:bg-[#2C2C2E] dark:border-white/5 dark:text-gray-300 dark:hover:bg-[#3A3A3C] transition-colors shadow-sm flex items-center justify-center gap-2 active:scale-95"><i class="fa-solid fa-xmark"></i> 取消</button>
+                <button @click="downloadSelectedEpisodes()" :disabled="episodeModal.selectedItems.length === 0 || episodeModal.isLoading" class="flex-1 py-3 rounded-xl text-[13px] font-bold text-white transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]" :class="episodeModal.selectedItems.length > 0 ? 'bg-orange-600 hover:bg-orange-700 shadow-orange-500/30' : 'bg-gray-400 dark:bg-gray-600 shadow-none border border-transparent'">
+                    <span x-show="episodeModal.isLoading" class="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full"></span>
+                    <span x-show="!episodeModal.isLoading">
+                        <i class="fa-solid fa-download mr-1"></i>
+                        <span x-text="episodeModal.selectedItems.length > 0 ? '下载选中资源' : '请选择资源'"></span>
+                    </span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 工单大厅通知设置浮窗 -->
+    <div id="request-notify-modal" class="fixed inset-0 z-[100] hidden items-center justify-center h-screen w-screen bg-black/50 backdrop-blur-sm px-4" x-cloak>
+        <div class="bg-white dark:bg-[#1C1C1E] rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col border border-gray-100 dark:border-white/5">
+            <div class="px-5 py-4 border-b border-gray-100 dark:border-white/5 flex justify-between items-center bg-gray-50/50 dark:bg-black/20 rounded-t-2xl shrink-0">
+                <h3 class="text-[16px] font-black text-gray-800 dark:text-gray-100 flex items-center gap-2">
+                    <i class="fa-solid fa-bell text-amber-500"></i>
+                    工单大厅通知设置
+                </h3>
+                <button onclick="closeRequestNotifyModal()" class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-200 dark:bg-gray-800 text-gray-500 hover:text-gray-700 dark:hover:text-white transition-colors"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            
+            <div class="flex-1 overflow-y-auto mac-scrollbar p-5 space-y-4">
+                <!-- 新求片通知 -->
+                <div class="p-4 bg-blue-50 dark:bg-blue-500/10 rounded-xl border border-blue-100 dark:border-blue-500/20">
+                    <div class="flex items-center gap-2 mb-3">
+                        <i class="fa-solid fa-clapperboard text-blue-500"></i>
+                        <span class="font-bold text-gray-800 dark:text-gray-200 text-[14px]">新求片通知</span>
+                        <span class="text-[11px] text-gray-500 dark:text-gray-400">收到新的求片请求时通知管理员</span>
+                    </div>
+                    <div class="flex items-center gap-3 mb-3">
+                        <input type="checkbox" id="notify-request-new-enabled" class="w-4 h-4 rounded text-blue-500 focus:ring-blue-500">
+                        <span class="text-[12px] font-medium text-gray-700 dark:text-gray-300">启用通知</span>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <label class="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white dark:bg-gray-800 text-[12px] cursor-pointer border border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-500 transition-colors">
+                            <input type="checkbox" class="notify-channel w-4 h-4 rounded text-blue-500" data-type="request_new" data-channel="tg_bot">
+                            <i class="fa-brands fa-telegram text-blue-500"></i> TG机器人
+                        </label>
+                        <label class="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white dark:bg-gray-800 text-[12px] cursor-pointer border border-gray-200 dark:border-gray-700 hover:border-green-300 dark:hover:border-green-500 transition-colors">
+                            <input type="checkbox" class="notify-channel w-4 h-4 rounded text-blue-500" data-type="request_new" data-channel="wecom">
+                            <i class="fa-brands fa-weixin text-green-500"></i> 企业微信
+                        </label>
+                        <label class="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white dark:bg-gray-800 text-[12px] cursor-pointer border border-gray-200 dark:border-gray-700 hover:border-amber-300 dark:hover:border-amber-500 transition-colors">
+                            <input type="checkbox" class="notify-channel w-4 h-4 rounded text-blue-500" data-type="request_new" data-channel="web">
+                            <i class="fa-solid fa-bell text-amber-500"></i> Web通知
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 新追新通知 -->
+                <div class="p-4 bg-orange-50 dark:bg-orange-500/10 rounded-xl border border-orange-100 dark:border-orange-500/20">
+                    <div class="flex items-center gap-2 mb-3">
+                        <i class="fa-solid fa-tv text-orange-500"></i>
+                        <span class="font-bold text-gray-800 dark:text-gray-200 text-[14px]">新追新通知</span>
+                        <span class="text-[11px] text-gray-500 dark:text-gray-400">收到新的追新请求时通知管理员</span>
+                    </div>
+                    <div class="flex items-center gap-3 mb-3">
+                        <input type="checkbox" id="notify-request-update-enabled" class="w-4 h-4 rounded text-orange-500 focus:ring-orange-500">
+                        <span class="text-[12px] font-medium text-gray-700 dark:text-gray-300">启用通知</span>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <label class="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white dark:bg-gray-800 text-[12px] cursor-pointer border border-gray-200 dark:border-gray-700 hover:border-orange-300 dark:hover:border-orange-500 transition-colors">
+                            <input type="checkbox" class="notify-channel w-4 h-4 rounded text-orange-500" data-type="request_update" data-channel="tg_bot">
+                            <i class="fa-brands fa-telegram text-blue-500"></i> TG机器人
+                        </label>
+                        <label class="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white dark:bg-gray-800 text-[12px] cursor-pointer border border-gray-200 dark:border-gray-700 hover:border-green-300 dark:hover:border-green-500 transition-colors">
+                            <input type="checkbox" class="notify-channel w-4 h-4 rounded text-orange-500" data-type="request_update" data-channel="wecom">
+                            <i class="fa-brands fa-weixin text-green-500"></i> 企业微信
+                        </label>
+                        <label class="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white dark:bg-gray-800 text-[12px] cursor-pointer border border-gray-200 dark:border-gray-700 hover:border-amber-300 dark:hover:border-amber-500 transition-colors">
+                            <input type="checkbox" class="notify-channel w-4 h-4 rounded text-orange-500" data-type="request_update" data-channel="web">
+                            <i class="fa-solid fa-bell text-amber-500"></i> Web通知
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 工单状态变更通知 -->
+                <div class="p-4 bg-emerald-50 dark:bg-emerald-500/10 rounded-xl border border-emerald-100 dark:border-emerald-500/20">
+                    <div class="flex items-center gap-2 mb-3">
+                        <i class="fa-solid fa-check-circle text-emerald-500"></i>
+                        <span class="font-bold text-gray-800 dark:text-gray-200 text-[14px]">状态变更通知</span>
+                        <span class="text-[11px] text-gray-500 dark:text-gray-400">工单审批通过、入库、拒绝时通知用户（仅TG）</span>
+                    </div>
+                    <div class="flex items-center gap-3 mb-3">
+                        <input type="checkbox" id="notify-request-status-enabled" class="w-4 h-4 rounded text-emerald-500 focus:ring-emerald-500">
+                        <span class="text-[12px] font-medium text-gray-700 dark:text-gray-300">启用通知</span>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <label class="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white dark:bg-gray-800 text-[12px] cursor-pointer border border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-500 transition-colors">
+                            <input type="checkbox" class="notify-channel w-4 h-4 rounded text-emerald-500" data-type="request_status" data-channel="tg_bot">
+                            <i class="fa-brands fa-telegram text-blue-500"></i> TG机器人
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 用户报错通知 -->
+                <div class="p-4 bg-red-50 dark:bg-red-500/10 rounded-xl border border-red-100 dark:border-red-500/20">
+                    <div class="flex items-center gap-2 mb-3">
+                        <i class="fa-solid fa-triangle-exclamation text-red-500"></i>
+                        <span class="font-bold text-gray-800 dark:text-gray-200 text-[14px]">用户报错通知</span>
+                        <span class="text-[11px] text-gray-500 dark:text-gray-400">收到新的用户报错反馈时通知管理员</span>
+                    </div>
+                    <div class="flex items-center gap-3 mb-3">
+                        <input type="checkbox" id="notify-feedback-new-enabled" class="w-4 h-4 rounded text-red-500 focus:ring-red-500">
+                        <span class="text-[12px] font-medium text-gray-700 dark:text-gray-300">启用通知</span>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <label class="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white dark:bg-gray-800 text-[12px] cursor-pointer border border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-500 transition-colors">
+                            <input type="checkbox" class="notify-channel w-4 h-4 rounded text-red-500" data-type="feedback_new" data-channel="tg_bot">
+                            <i class="fa-brands fa-telegram text-blue-500"></i> TG机器人
+                        </label>
+                        <label class="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white dark:bg-gray-800 text-[12px] cursor-pointer border border-gray-200 dark:border-gray-700 hover:border-green-300 dark:hover:border-green-500 transition-colors">
+                            <input type="checkbox" class="notify-channel w-4 h-4 rounded text-red-500" data-type="feedback_new" data-channel="wecom">
+                            <i class="fa-brands fa-weixin text-green-500"></i> 企业微信
+                        </label>
+                        <label class="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white dark:bg-gray-800 text-[12px] cursor-pointer border border-gray-200 dark:border-gray-700 hover:border-amber-300 dark:hover:border-amber-500 transition-colors">
+                            <input type="checkbox" class="notify-channel w-4 h-4 rounded text-red-500" data-type="feedback_new" data-channel="web">
+                            <i class="fa-solid fa-bell text-amber-500"></i> Web通知
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="px-5 py-4 border-t border-gray-100 dark:border-white/5 shrink-0">
+                <button onclick="saveRequestNotifyModal()" class="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-[14px] shadow-md active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-save"></i>
+                    保存设置
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+<script>
+// ========== 工单大厅通知设置相关函数 ==========
+
+async function openRequestNotifyModal() {
+    const modal = document.getElementById('request-notify-modal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    
+    // 加载通知规则配置
+    try {
+        const res = await fetch('/api/notify/rules');
+        const data = await res.json();
+        if (data.status === 'success') {
+            const rules = data.data || {};
+            
+            // 设置新求片通知 (enabled 可能是整数 1 或布尔 true)
+            const requestNew = rules.request_new || {};
+            document.getElementById('notify-request-new-enabled').checked = requestNew.enabled == 1 || requestNew.enabled === true;
+            document.querySelectorAll('.notify-channel[data-type="request_new"]').forEach(cb => {
+                const channel = cb.dataset.channel;
+                cb.checked = (requestNew.channels || []).includes(channel);
+            });
+            
+            // 设置新追新通知
+            const requestUpdate = rules.request_update || {};
+            document.getElementById('notify-request-update-enabled').checked = requestUpdate.enabled == 1 || requestUpdate.enabled === true;
+            document.querySelectorAll('.notify-channel[data-type="request_update"]').forEach(cb => {
+                const channel = cb.dataset.channel;
+                cb.checked = (requestUpdate.channels || []).includes(channel);
+            });
+            
+            // 设置状态变更通知
+            const requestStatus = rules.request_status || {};
+            document.getElementById('notify-request-status-enabled').checked = requestStatus.enabled == 1 || requestStatus.enabled === true;
+            document.querySelectorAll('.notify-channel[data-type="request_status"]').forEach(cb => {
+                const channel = cb.dataset.channel;
+                cb.checked = (requestStatus.channels || []).includes(channel);
+            });
+            
+            // 设置用户报错通知
+            const feedbackNew = rules.feedback_new || {};
+            document.getElementById('notify-feedback-new-enabled').checked = feedbackNew.enabled == 1 || feedbackNew.enabled === true;
+            document.querySelectorAll('.notify-channel[data-type="feedback_new"]').forEach(cb => {
+                const channel = cb.dataset.channel;
+                cb.checked = (feedbackNew.channels || []).includes(channel);
+            });
+        }
+    } catch (e) {
+        console.error('加载通知配置失败:', e);
+    }
+}
+
+function closeRequestNotifyModal() {
+    const modal = document.getElementById('request-notify-modal');
+    modal.classList.remove('flex');
+    modal.classList.add('hidden');
+}
+
+async function saveRequestNotifyModal() {
+    const btn = event.target;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner animate-spin"></i> 保存中...';
+    
+    try {
+        // 收集通知规则
+        const rules = {};
+        
+        // 新求片通知
+        rules.request_new = {
+            enabled: document.getElementById('notify-request-new-enabled').checked,
+            channels: Array.from(document.querySelectorAll('.notify-channel[data-type="request_new"]:checked')).map(cb => cb.dataset.channel)
+        };
+        
+        // 新追新通知
+        rules.request_update = {
+            enabled: document.getElementById('notify-request-update-enabled').checked,
+            channels: Array.from(document.querySelectorAll('.notify-channel[data-type="request_update"]:checked')).map(cb => cb.dataset.channel)
+        };
+        
+        // 状态变更通知
+        rules.request_status = {
+            enabled: document.getElementById('notify-request-status-enabled').checked,
+            channels: Array.from(document.querySelectorAll('.notify-channel[data-type="request_status"]:checked')).map(cb => cb.dataset.channel)
+        };
+        
+        // 用户报错通知
+        rules.feedback_new = {
+            enabled: document.getElementById('notify-feedback-new-enabled').checked,
+            channels: Array.from(document.querySelectorAll('.notify-channel[data-type="feedback_new"]:checked')).map(cb => cb.dataset.channel)
+        };
+        
+        const res = await fetch('/api/notify/rules', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rules: rules })
+        });
+        
+        const data = await res.json();
+        if (data.status === 'success') {
+            closeRequestNotifyModal();
+            showNotifyToast('保存成功', 'success');
+        } else {
+            showNotifyToast('保存失败', 'error');
+        }
+    } catch (e) {
+        showNotifyToast('网络请求失败', 'error');
+    }
+    
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-save"></i> 保存设置';
+}
+
+// 🔥 独立 toast 提示函数 - 重命名避免与 Alpine 方法冲突
+function showNotifyToast(message, type = 'success') {
+    // 移除已有的 toast
+    const existingToast = document.getElementById('custom-toast');
+    if (existingToast) existingToast.remove();
+
+    const toast = document.createElement('div');
+    toast.id = 'custom-toast';
+    const bgColor = type === 'success' ? 'bg-emerald-500' : 'bg-red-500';
+    const icon = type === 'success' ? 'fa-check' : 'fa-xmark';
+    toast.className = `fixed top-4 left-1/2 -translate-x-1/2 z-[200] ${bgColor} text-white px-4 py-2 rounded-xl text-[13px] font-bold shadow-lg flex items-center gap-2`;
+    toast.innerHTML = `<i class="fa-solid ${icon}"></i> ${message}`;
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.3s';
+        setTimeout(() => toast.remove(), 300);
+    }, 2500);
+}
+
+// ========== 以下为 Alpine.js 组件代码 ==========
+    // 🔥 智能封面 URL 处理函数
+    function getPosterUrl(posterPath) {
+        if (!posterPath) return '/static/img/logo-app.png';
+        
+        // 🔥 本地 API 路径：以 /api/ 开头（包括带 ? 参数的）
+        if (posterPath.startsWith('/api/')) {
+            return posterPath;  // 直接使用本地 API
+        }
+        
+        // 完整 URL：直接使用
+        if (posterPath.startsWith('http://') || posterPath.startsWith('https://')) {
+            return posterPath;
+        }
+        
+        // 🔥 TMDB 相对路径：以 / 开头，不含 /api/，不含 ?，通常以图片扩展名结尾
+        // TMDB 路径格式如: /abc123.jpg 或 /def456.png
+        if (posterPath.startsWith('/') && 
+            !posterPath.startsWith('/api/') && 
+            !posterPath.includes('?') &&
+            (posterPath.endsWith('.jpg') || posterPath.endsWith('.png') || posterPath.endsWith('.webp') || posterPath.length < 30)) {
+            return 'https://image.tmdb.org/t/p/w300' + posterPath;
+        }
+        
+        // 其他情况：返回默认图
+        return '/static/img/logo-app.png';
+    }
+
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('adminApp', () => ({
+            viewMode: 'request',
+            requests: [],
+            feedbacks: [],
+            filterStatus: 'all',
+            feedFilter: 'all',
+            searchQuery: '',
+            feedSearchQuery: '',
+            isOperating: false,
+            toast: { show: false, message: '', type: 'success' },
+            selectedKeys: [], 
+            selectedFeedbacks: [],
+            
+            // 🔥 分页相关变量
+            pageSize: 21,
+            currentPage: 1,
+            
+            // 🔥 排序选项
+            sortBy: 'status_asc',
+            sortOptions: [
+                { value: 'time_desc', label: '最新优先' },
+                { value: 'time_asc', label: '最早优先' },
+                { value: 'status_asc', label: '未处理优先' },
+                { value: 'hot_desc', label: '热度最高' },
+            ],
+            
+            rejectModal: { open: false, items: [], reasonType: '未找到可用资源', customReason: '' },
+            predefinedReasons: ['影片未上映', '剧集未开播', '未找到可用资源', '质量太差等待洗版', '其他原因...'],
+
+            // 影巢相关状态
+            hdhiveModal: { open: false, isLoading: false, isSubmitting: false, targetTitle: '', targetTmdbId: null, targetSeason: 0, targetMediaType: 'tv', results: [], selectedItems: [], pendingSlug: null },
+            folderModal: { open: false, folders: [], pendingSlug: null },
+
+            // 🔔 Confirm 确认框状态
+            confirmData: { open: false, type: 'warning', title: '', message: '', onConfirm: null, confirmText: '确定', cancelText: '取消' },
+
+            init() {
+                const urlParams = new URLSearchParams(window.location.search);
+                if (urlParams.get('tab') === 'feedback') {
+                    this.viewMode = 'feedback';
+                }
+                this.loadData();
+                this.loadFeedback();
+                setInterval(() => {
+                    if(this.viewMode === 'request') this.loadData();
+                    else this.loadFeedback();
+                }, 30000);
+                
+                // 监听全局 toast 事件
+                window.addEventListener('show-toast', (e) => {
+                    const { message, type } = e.detail;
+                    this.showToast(message, type);
+                });
+                
+                // 🔥 监听搜索条件变化，自动重置分页
+                this.$watch('searchQuery', () => this.currentPage = 1);
+                this.$watch('filterStatus', () => this.currentPage = 1);
+                
+                // 🔥 设置用户前台链接
+                this.setupUserPortalLink();
+            },
+            
+            // 🔥 设置用户前台链接
+            async setupUserPortalLink() {
+                const link = document.getElementById('user-portal-link');
+                if (!link) return;
+                
+                try {
+                    const res = await fetch('/api/settings');
+                    const result = await res.json();
+                    const data = result.data || result;  // 兼容两种返回格式
+                    
+                    // 优先级1: 用户社区公网域名
+                    if (data.user_portal_url) {
+                        link.href = data.user_portal_url;
+                        return;
+                    }
+                    
+                    // 优先级2: 判断当前访问地址
+                    const hostname = window.location.hostname;
+                    const isPrivateIP = /^(localhost|127\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|::1|\[::1\])/i.test(hostname);
+                    
+                    if (isPrivateIP) {
+                        // 内网IP: 跳转到 10308 端口
+                        link.href = `${window.location.protocol}//${hostname}:10308`;
+                    } else {
+                        // 公网地址: 跳转到当前地址的 /request
+                        link.href = `${window.location.protocol}//${hostname}:${window.location.port || (window.location.protocol === 'https:' ? '443' : '80')}/request`;
+                    }
+                } catch (e) {
+                    // 失败时使用默认逻辑
+                    const hostname = window.location.hostname;
+                    const isPrivateIP = /^(localhost|127\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|::1|\[::1\])/i.test(hostname);
+                    if (isPrivateIP) {
+                        link.href = `${window.location.protocol}//${hostname}:10308`;
+                    } else {
+                        link.href = `${window.location.protocol}//${hostname}:${window.location.port || (window.location.protocol === 'https:' ? '443' : '80')}/request`;
+                    }
+                }
+            },
+
+            switchView(mode) {
+                this.viewMode = mode;
+                this.currentPage = 1; // 🔥 切换视图时重置分页
+                window.history.replaceState({}, '', '/requests_admin');
+                if(mode === 'request') this.loadData();
+                else this.loadFeedback();
+            },
+
+            get filteredRequests() {
+                let result = this.requests;
+                // 追新/求片筛选
+                if (this.filterStatus === 'new') {
+                    result = result.filter(r => r.request_type !== 'update');
+                } else if (this.filterStatus === 'update') {
+                    result = result.filter(r => r.request_type === 'update');
+                } else if (this.filterStatus !== 'all') {
+                    result = result.filter(r => r.status === this.filterStatus);
+                }
+                if (this.searchQuery && this.searchQuery.trim()) {
+                    const query = this.searchQuery.toLowerCase().trim();
+                    result = result.filter(r => {
+                        const titleMatch = r.title && r.title.toLowerCase().includes(query);
+                        const userMatch = r.requested_by && r.requested_by.toLowerCase().includes(query);
+                        const yearMatch = r.year && r.year.toString().includes(query);
+                        return titleMatch || userMatch || yearMatch;
+                    });
+                }
+                
+                // 🔥 排序逻辑
+                result = [...result].sort((a, b) => {
+                    switch (this.sortBy) {
+                        case 'time_desc': // 最新优先
+                            return new Date(b.created_at) - new Date(a.created_at);
+                        case 'time_asc': // 最早优先
+                            return new Date(a.created_at) - new Date(b.created_at);
+                        case 'status_asc': { // 未处理优先(status=0排最前)
+                            const statusOrder = { 0: 0, 7: 1, 1: 2, 4: 3, 2: 4, 3: 5 };
+                            const statusDiff = (statusOrder[a.status] ?? 99) - (statusOrder[b.status] ?? 99);
+                            if (statusDiff !== 0) return statusDiff;
+                            return new Date(b.created_at) - new Date(a.created_at); // 同状态按时间
+                        }
+                        case 'hot_desc': { // 热度最高
+                            const hotDiff = (b.vote_count || 0) - (a.vote_count || 0);
+                            if (hotDiff !== 0) return hotDiff;
+                            return new Date(b.created_at) - new Date(a.created_at);
+                        }
+                        default:
+                            return 0;
+                    }
+                });
+                
+                return result;
+            },
+
+            // 🔥 分页计算属性
+            get totalPages() {
+                return Math.ceil(this.filteredRequests.length / this.pageSize) || 1;
+            },
+
+            get paginatedRequests() {
+                const start = (this.currentPage - 1) * this.pageSize;
+                const end = start + this.pageSize;
+                return this.filteredRequests.slice(start, end);
+            },
+
+            // 🔥 分页方法
+            prevPage() {
+                if (this.currentPage > 1) this.currentPage--;
+            },
+
+            nextPage() {
+                if (this.currentPage < this.totalPages) this.currentPage++;
+            },
+
+            goToPage(p) {
+                this.currentPage = p;
+            },
+
+            // 🔥 获取页码数组（最多显示5个）
+            getPageNumbers() {
+                const maxVisible = 5;
+                let start = Math.max(1, this.currentPage - Math.floor(maxVisible / 2));
+                let end = Math.min(this.totalPages, start + maxVisible - 1);
+                
+                // 调整起始位置
+                if (end - start < maxVisible - 1) {
+                    start = Math.max(1, end - maxVisible + 1);
+                }
+                
+                const pages = [];
+                for (let i = start; i <= end; i++) {
+                    pages.push(i);
+                }
+                return pages;
+            },
+
+            get filteredFeedbacks() {
+                let result = this.feedbacks;
+                if (this.feedFilter !== 'all') {
+                    result = result.filter(f => f.status === this.feedFilter);
+                }
+                if (this.feedSearchQuery && this.feedSearchQuery.trim()) {
+                    const query = this.feedSearchQuery.toLowerCase().trim();
+                    result = result.filter(f => {
+                        const itemMatch = f.item_name && f.item_name.toLowerCase().includes(query);
+                        const userMatch = f.username && f.username.toLowerCase().includes(query);
+                        const issueMatch = f.issue_type && f.issue_type.toLowerCase().includes(query);
+                        const descMatch = f.description && f.description.toLowerCase().includes(query);
+                        return itemMatch || userMatch || issueMatch || descMatch;
+                    });
+                }
+                return result;
+            },
+
+            // 🔥 分页计算属性
+            get totalPages() {
+                return Math.ceil(this.filteredRequests.length / this.pageSize) || 1;
+            },
+            
+            get paginatedRequests() {
+                const start = (this.currentPage - 1) * this.pageSize;
+                const end = start + this.pageSize;
+                return this.filteredRequests.slice(start, end);
+            },
+            
+            // 🔥 分页方法
+            prevPage() {
+                if (this.currentPage > 1) {
+                    this.currentPage--;
+                    this.selectedKeys = []; // 切换页面时清空选择
+                }
+            },
+            
+            nextPage() {
+                if (this.currentPage < this.totalPages) {
+                    this.currentPage++;
+                    this.selectedKeys = [];
+                }
+            },
+            
+            goToPage(p) {
+                this.currentPage = p;
+                this.selectedKeys = [];
+            },
+
+            showToast(msg, type = 'success') {
+                this.toast = { show: true, message: msg, type };
+                setTimeout(() => this.toast.show = false, 3000);
+            },
+
+            // 🔔 Confirm 确认框方法
+            showConfirm(options) {
+                return new Promise((resolve) => {
+                    this.confirmData = {
+                        open: true,
+                        type: options.type || 'warning',
+                        title: options.title || '确认操作',
+                        message: options.message || '',
+                        confirmText: options.confirmText || '确定',
+                        cancelText: options.cancelText || '取消',
+                        onConfirm: () => {
+                            this.confirmData.open = false;
+                            resolve(true);
+                        },
+                        onCancel: () => {
+                            this.confirmData.open = false;
+                            resolve(false);
+                        }
+                    };
+                });
+            },
+
+            formatLocalTime(dateString) {
+                if (!dateString) return '';
+                const date = new Date(dateString.replace(' ', 'T') + 'Z');
+                const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                const day = date.getDate().toString().padStart(2, '0');
+                const hours = date.getHours().toString().padStart(2, '0');
+                const minutes = date.getMinutes().toString().padStart(2, '0');
+                return `${month}-${day} ${hours}:${minutes}`;
+            },
+
+            async loadData() {
+                try {
+                    const res = await fetch('/api/manage/requests');
+                    const data = await res.json();
+                    if (data.status === 'success') {
+                        this.requests = data.data;
+                        // 🔥 数据更新后，如果当前页超出范围，重置到第一页
+                        if (this.currentPage > this.totalPages) this.currentPage = 1;
+                        const currentKeys = this.requests.map(r => r.tmdb_id + '_' + r.season);
+                        this.selectedKeys = this.selectedKeys.filter(k => currentKeys.includes(k));
+                    }
+                } catch (e) { console.error(e); }
+            },
+
+            async loadFeedback() {
+                try {
+                    const res = await fetch('/api/manage/feedback');
+                    const data = await res.json();
+                    if (data.status === 'success') {
+                        this.feedbacks = data.data;
+                        const currentFeeds = this.feedbacks.map(f => f.id);
+                        this.selectedFeedbacks = this.selectedFeedbacks.filter(id => currentFeeds.includes(id));
+                    }
+                } catch (e) {}
+            },
+
+            async feedAction(id, action) {
+                this.isOperating = true;
+                try {
+                    const res = await fetch('/api/manage/feedback/action', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id: id, action: action })
+                    });
+                    const data = await res.json();
+                    this.showToast(data.message, data.status === 'success' ? 'success' : 'error');
+                    this.loadFeedback();
+                } catch(e) { this.showToast('操作失败', 'error'); }
+                finally { this.isOperating = false; }
+            },
+
+            async batchFeedAction(action) {
+                if (action === 'delete') {
+                    const confirmed = await this.showConfirm({ type: 'danger', title: '批量删除', message: '确认批量删除选中的报错记录吗？', confirmText: '确定删除' });
+                    if (!confirmed) return;
+                }
+                this.isOperating = true;
+                try {
+                    const res = await fetch('/api/manage/feedback/batch', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ items: this.selectedFeedbacks, action: action })
+                    });
+                    const data = await res.json();
+                    this.showToast(data.message, data.status === 'success' ? 'success' : 'error');
+                    if(data.status === 'success') this.selectedFeedbacks = [];
+                    this.loadFeedback();
+                } catch(e) { this.showToast('批量操作失败', 'error'); }
+                finally { this.isOperating = false; }
+            },
+
+            toggleSelectAll() {
+                // 🔥 只全选当前页的数据
+                const currentPageKeys = this.paginatedRequests.map(i => i.tmdb_id + '_' + i.season);
+                const allCurrentSelected = currentPageKeys.every(k => this.selectedKeys.includes(k)) && currentPageKeys.length > 0;
+                if (allCurrentSelected) {
+                    // 取消当前页的选择
+                    this.selectedKeys = this.selectedKeys.filter(k => !currentPageKeys.includes(k));
+                } else {
+                    // 添加当前页的选择（保留其他页已选的）
+                    const newKeys = currentPageKeys.filter(k => !this.selectedKeys.includes(k));
+                    this.selectedKeys = [...this.selectedKeys, ...newKeys];
+                }
+            },
+
+            toggleSelectAllFeeds() {
+                if (this.selectedFeedbacks.length === this.filteredFeedbacks.length) { this.selectedFeedbacks = []; } 
+                else { this.selectedFeedbacks = this.filteredFeedbacks.map(f => f.id); }
+            },
+
+            _getKeysAsObjects() {
+                return this.selectedKeys.map(k => {
+                    const parts = k.split('_');
+                    return { tmdb_id: parseInt(parts[0]), season: parseInt(parts[1]) };
+                });
+            },
+
+            async batchAction(action) {
+                if (action === 'delete') {
+                    const confirmed = await this.showConfirm({ type: 'danger', title: '物理删除确认', message: '确认物理删除选中的求片项目吗？\n不可恢复！', confirmText: '确定删除' });
+                    if (!confirmed) return;
+                }
+                
+                this.isOperating = true;
+                try {
+                    const res = await fetch('/api/manage/requests/batch', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ items: this._getKeysAsObjects(), action: action })
+                    });
+                    const data = await res.json();
+                    this.showToast(data.message, data.status === 'success' ? 'success' : 'error');
+                    if(data.status === 'success') this.selectedKeys = [];
+                    this.loadData();
+                } catch (e) {
+                    this.showToast('批量操作失败', 'error');
+                } finally { this.isOperating = false; }
+            },
+
+            async doAction(id, season, action) {
+                this.isOperating = true;
+                try {
+                    const res = await fetch('/api/manage/requests/batch', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ items: [{tmdb_id: id, season: season}], action: action })
+                    });
+                    const data = await res.json();
+                    this.showToast(data.message, data.status === 'success' ? 'success' : 'error');
+                    this.loadData();
+                } catch (e) {
+                    this.showToast('网络请求失败', 'error');
+                } finally { this.isOperating = false; }
+            },
+
+            // 🔔 确认删除相关方法
+            async confirmDelete(tmdb_id, season) {
+                const confirmed = await this.showConfirm({ type: 'danger', title: '物理删除确认', message: '物理删除将无法恢复，确定吗？', confirmText: '确定删除' });
+                if (confirmed) this.doAction(tmdb_id, season, 'delete');
+            },
+            async confirmFeedDelete(id) {
+                const confirmed = await this.showConfirm({ type: 'warning', title: '删除工单', message: '确定删除此工单记录吗？', confirmText: '确定删除' });
+                if (confirmed) this.feedAction(id, 'delete');
+            },
+            async confirmBatchDelete() {
+                const confirmed = await this.showConfirm({ type: 'danger', title: '批量删除确认', message: '确认批量删除选中的求片项目吗？', confirmText: '确定删除' });
+                if (confirmed) this.batchAction('delete');
+            },
+
+            openRejectModal(items) {
+                this.rejectModal.items = items;
+                this.rejectModal.reasonType = '未找到可用资源';
+                this.rejectModal.customReason = '';
+                this.rejectModal.open = true;
+            },
+
+            openBatchRejectModal() {
+                this.openRejectModal(this._getKeysAsObjects());
+            },
+
+            async submitReject() {
+                let finalReason = this.rejectModal.reasonType === '其他原因...' ? this.rejectModal.customReason.trim() : this.rejectModal.reasonType;
+                if (!finalReason) return this.showToast('请输入具体拒绝原因', 'error');
+
+                this.isOperating = true;
+                try {
+                    const res = await fetch('/api/manage/requests/batch', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ items: this.rejectModal.items, action: 'reject', reject_reason: finalReason })
+                    });
+                    const data = await res.json();
+                    this.showToast(data.message, data.status === 'success' ? 'success' : 'error');
+                    this.rejectModal.open = false;
+                    this.selectedKeys = [];
+                    this.loadData();
+                } finally { this.isOperating = false; }
+            },
+
+            // 影巢搜索相关方法
+            async openHDHiveSearch(item) {
+                this.hdhiveModal = {
+                    open: true,
+                    isLoading: true,
+                    isSubmitting: false,
+                    targetTitle: item.title,
+                    targetTmdbId: item.tmdb_id,
+                    targetSeason: item.season || 0,
+                    targetMediaType: item.media_type || 'tv',
+                    results: [],
+                    selectedItems: [],
+                    pendingSlug: null
+                };
+
+                try {
+                    const res = await fetch('/api/gaps/search_hdhive', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            series_name: item.title,
+                            tmdb_id: item.tmdb_id,
+                            season: item.season || 1,
+                            episodes: [1],
+                            type: item.media_type || 'tv'
+                        })
+                    });
+                    const data = await res.json();
+
+                    if (data.status !== 'success') {
+                        this.showToast(data.message || '搜索失败', 'error');
+                        this.hdhiveModal.open = false;
+                        return;
+                    }
+
+                    const resources = data.data || [];
+                    if (resources.length === 0) {
+                        this.showToast('未找到115网盘资源', 'error');
+                        this.hdhiveModal.open = false;
+                        return;
+                    }
+
+                    // 转换为前端展示格式
+                    this.hdhiveModal.results = resources.map((r, index) => ({
+                        index: index,
+                        ui_title: r.title || '未知资源',
+                        ui_size: r.share_size || '未知大小',
+                        ui_site: '影巢115',
+                        ui_seeders: r.unlock_points || 0,
+                        match_score: r.is_unlocked ? 100 : (r.unlock_points === 0 || r.unlock_points === null ? 90 : 80),
+                        hdhive_info: {
+                            resolution: r.video_resolution || [],
+                            source: r.source || [],
+                            subtitle_lang: r.subtitle_language || [],
+                            subtitle_type: r.subtitle_type || [],
+                            remark: r.remark || '',
+                            is_official: r.is_official,
+                            validate_status: r.validate_status,
+                            unlocked_count: r.unlocked_users_count || 0,
+                            // 新增：分享人信息
+                            uploader: r.user ? (r.user.username || r.user.name || r.user.nickname || '') : '',
+                            // 新增：解锁状态
+                            is_unlocked: r.is_unlocked,
+                            unlock_points: r.unlock_points
+                        },
+                        ui_labels: [
+                            r.is_official ? '官方' : '',
+                            r.validate_status === 'valid' ? '有效' : '',
+                            r.is_unlocked ? '✅已解锁' : (r.unlock_points === 0 || r.unlock_points === null ? '🆓免费' : `🔴${r.unlock_points}积分`),
+                            ...(r.video_resolution || []),
+                            ...(r.source || [])
+                        ].filter(Boolean),
+                        slug: r.slug,
+                        is_pack: false,
+                        extracted_tags: ['115'],
+                        is_hdhive: true,
+                        _raw: r
+                    }));
+
+                    // 默认选中第一个
+                    if (this.hdhiveModal.results.length > 0) {
+                        this.hdhiveModal.selectedItems = [0];
+                    }
+
+                } catch (e) {
+                    this.showToast('搜索请求失败', 'error');
+                    this.hdhiveModal.open = false;
+                }
+                this.hdhiveModal.isLoading = false;
+            },
+
+            closeHDHiveModal() {
+                this.hdhiveModal.open = false;
+            },
+
+            toggleHDHiveSelection(index) {
+                const idx = this.hdhiveModal.selectedItems.indexOf(index);
+                if (idx > -1) {
+                    this.hdhiveModal.selectedItems.splice(idx, 1);
+                } else {
+                    this.hdhiveModal.selectedItems.push(index);
+                }
+            },
+
+            async unlockAndTransferHDHive() {
+                if (this.hdhiveModal.selectedItems.length === 0) return;
+
+                const selectedResults = this.hdhiveModal.selectedItems.map(i => this.hdhiveModal.results[i]);
+                const selectedResource = selectedResults[0];
+
+                if (!selectedResource || !selectedResource.slug) {
+                    this.showToast('资源信息不完整', 'error');
+                    return;
+                }
+
+                this.hdhiveModal.isSubmitting = true;
+
+                try {
+                    const unlockRes = await fetch('/api/gaps/download_hdhive', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            slug: selectedResource.slug
+                        })
+                    });
+                    const unlockData = await unlockRes.json();
+
+                    if (unlockData.status === 'need_folder') {
+                        // 需要选择文件夹
+                        this.hdhiveModal.isSubmitting = false;
+                        this.showFolderSelect(unlockData.folders, selectedResource.slug);
+                        return;
+                    }
+
+                    if (unlockData.status === 'success') {
+                        this.showToast('✅ 影巢资源已解锁并转存！等待自动入库...', 'success');
+                        // 更新状态为待入库(7)，等待Emby webhook自动检测入库
+                        await this.doAction(this.hdhiveModal.targetTmdbId, this.hdhiveModal.targetSeason, 'hdhive_done');
+                        this.closeHDHiveModal();
+                        this.loadData();
+                    } else {
+                        this.showToast(unlockData.message || '解锁失败', 'error');
+                    }
+                } catch (e) {
+                    this.showToast('操作失败: ' + e.message, 'error');
+                }
+
+                this.hdhiveModal.isSubmitting = false;
+            },
+
+            showFolderSelect(folders, slug) {
+                this.folderModal = {
+                    open: true,
+                    folders: folders || [],
+                    pendingSlug: slug
+                };
+            },
+
+            async selectFolderAndTransfer(folderCid) {
+                if (!this.folderModal.pendingSlug) return;
+
+                this.folderModal.open = false;
+                this.hdhiveModal.isSubmitting = true;
+
+                try {
+                    const unlockRes = await fetch('/api/gaps/download_hdhive', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            slug: this.folderModal.pendingSlug,
+                            folder_cid: folderCid
+                        })
+                    });
+                    const unlockData = await unlockRes.json();
+
+                    if (unlockData.status === 'success') {
+                        this.showToast('✅ 影巢资源已解锁并转存！等待自动入库...', 'success');
+                        // 更新状态为待入库(7)，等待Emby webhook自动检测入库
+                        await this.doAction(this.hdhiveModal.targetTmdbId, this.hdhiveModal.targetSeason, 'hdhive_done');
+                        this.closeHDHiveModal();
+                        this.loadData();
+                    } else {
+                        this.showToast(unlockData.message || '转存失败', 'error');
+                    }
+                } catch (e) {
+                    this.showToast('操作失败: ' + e.message, 'error');
+                }
+
+                this.hdhiveModal.isSubmitting = false;
+                this.folderModal.pendingSlug = null;
+            },
+            
+            // 🔥 追新：搜索单集功能
+            episodeModal: { open: false, isLoading: false, targetItem: null, results: [], selectedItems: [] },
+            
+            async openEpisodeSearch(item) {
+                // 解析集数
+                const episodes = item.episodes ? item.episodes.split(',').map(e => parseInt(e)).filter(e => !isNaN(e)) : [];
+                if (episodes.length === 0) {
+                    this.showToast('无效的集数信息', 'error');
+                    return;
+                }
+                
+                this.episodeModal = {
+                    open: true,
+                    isLoading: true,
+                    targetItem: item,
+                    results: [],
+                    selectedItems: []
+                };
+                
+                try {
+                    const res = await fetch('/api/manage/requests/search_episodes', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            tmdb_id: item.tmdb_id,
+                            season: item.season,
+                            episodes: episodes
+                        })
+                    });
+                    const data = await res.json();
+                    
+                    if (data.status === 'success' && data.results && data.results.length > 0) {
+                        this.episodeModal.results = data.results.map((r, index) => ({
+                            index: index,
+                            title: r.ui_title || r.title || r.name || '未知资源',
+                            size: r.ui_size ? (typeof r.ui_size === 'number' ? (r.ui_size / 1024 / 1024 / 1024).toFixed(2) + ' GB' : r.ui_size) : '未知大小',
+                            seeders: r.ui_seeders || r.seeders || 0,
+                            episodes: r.ui_extracted_episodes || r.ui_matched_episodes || [],
+                            site: r.ui_site || r.site || 'MP',
+                            resolution: r.ui_resolution || '',
+                            labels: r.ui_labels || [],
+                            desc: r.ui_desc || '',
+                            resource: r.ui_resource || '',
+                            chinese_audio: r.ui_chinese_audio || false,
+                            enclosure: r.enclosure || (r.org_payload ? r.org_payload.enclosure : ''),
+                            description: r.ui_desc || r.description || '',
+                            match_score: r.match_score || 0,
+                            is_pack: r.is_pack || false,
+                            org_payload: r.org_payload || r
+                        }));
+                        
+                        if (this.episodeModal.results.length > 0) {
+                            this.episodeModal.selectedItems = [0];
+                        }
+                    } else {
+                        this.showToast(data.message || '未找到单集资源', 'error');
+                        this.episodeModal.open = false;
+                    }
+                } catch (e) {
+                    this.showToast('搜索失败: ' + e.message, 'error');
+                    this.episodeModal.open = false;
+                }
+                
+                this.episodeModal.isLoading = false;
+            },
+            
+            closeEpisodeModal() {
+                this.episodeModal.open = false;
+            },
+            
+            toggleEpisodeSelection(index) {
+                const idx = this.episodeModal.selectedItems.indexOf(index);
+                if (idx > -1) {
+                    this.episodeModal.selectedItems.splice(idx, 1);
+                } else {
+                    this.episodeModal.selectedItems.push(index);
+                }
+            },
+            
+            async downloadSelectedEpisodes() {
+                if (this.episodeModal.selectedItems.length === 0) return;
+                
+                const selectedItem = this.episodeModal.results[this.episodeModal.selectedItems[0]];
+                const item = this.episodeModal.targetItem;
+                
+                this.episodeModal.isLoading = true;
+                
+                try {
+                    const res = await fetch('/api/manage/requests/download_episodes', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            series_id: item.series_id || '',
+                            series_name: item.title ? item.title.split(' 第')[0] : '',
+                            tmdb_id: item.tmdb_id,
+                            season: item.season,
+                            episodes: item.episodes ? item.episodes.split(',').map(e => parseInt(e)) : [],
+                            torrent_info: selectedItem.org_payload || selectedItem
+                        })
+                    });
+                    const data = await res.json();
+                    
+                    if (data.status === 'success') {
+                        this.showToast('✅ 已推送下载，等待入库...', 'success');
+                        this.closeEpisodeModal();
+                        this.loadData();
+                    } else {
+                        this.showToast(data.message || '下载失败', 'error');
+                    }
+                } catch (e) {
+                    this.showToast('下载失败: ' + e.message, 'error');
+                }
+                
+                this.episodeModal.isLoading = false;
+            }
+        }));
+    });
+</script>
+{% endblock %}

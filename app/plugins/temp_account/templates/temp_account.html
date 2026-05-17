@@ -1,0 +1,657 @@
+{% extends "layout.html" %}
+{% block title %}临时账号管理 - EmbyPulse{% endblock %}
+
+{% block extra_head %}
+<style>
+.temp-card {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+.dark .temp-card {
+    background: rgba(30, 30, 30, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.password-box {
+    font-family: 'Courier New', monospace;
+    background: rgba(0, 0, 0, 0.05);
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+.dark .password-box {
+    background: rgba(255, 255, 255, 0.1);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div x-data="tempAccountApp()" x-init="init()" class="p-6">
+    <!-- 页面标题 -->
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">临时账号管理</h1>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">创建临时观影账号，密码定时自动更新</p>
+        </div>
+        <button @click="showCreateModal = true" 
+                class="px-4 py-2 bg-gradient-to-r from-violet-500 to-purple-500 text-white rounded-lg hover:opacity-90 transition flex items-center gap-2">
+            <i class="fa-solid fa-plus"></i>
+            <span>新建账号</span>
+        </button>
+    </div>
+
+    <!-- 统计卡片 -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div class="temp-card rounded-xl p-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
+                    <i class="fa-solid fa-users text-violet-500"></i>
+                </div>
+                <div>
+                    <div class="text-2xl font-bold text-gray-900 dark:text-white" x-text="accounts.length"></div>
+                    <div class="text-xs text-gray-500 dark:text-gray-400">总账号数</div>
+                </div>
+            </div>
+        </div>
+        <div class="temp-card rounded-xl p-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                    <i class="fa-solid fa-check text-green-500"></i>
+                </div>
+                <div>
+                    <div class="text-2xl font-bold text-gray-900 dark:text-white" x-text="accounts.filter(a => a.enabled).length"></div>
+                    <div class="text-xs text-gray-500 dark:text-gray-400">已启用</div>
+                </div>
+            </div>
+        </div>
+        <div class="temp-card rounded-xl p-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                    <i class="fa-solid fa-clock text-amber-500"></i>
+                </div>
+                <div>
+                    <div class="text-2xl font-bold text-gray-900 dark:text-white" x-text="accounts.filter(a => a.auto_update_enabled).length"></div>
+                    <div class="text-xs text-gray-500 dark:text-gray-400">自动更新</div>
+                </div>
+            </div>
+        </div>
+        <div class="temp-card rounded-xl p-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center">
+                    <i class="fa-solid fa-ban text-rose-500"></i>
+                </div>
+                <div>
+                    <div class="text-2xl font-bold text-gray-900 dark:text-white" x-text="accounts.filter(a => !a.enabled).length"></div>
+                    <div class="text-xs text-gray-500 dark:text-gray-400">已禁用</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 账号列表 -->
+    <div class="temp-card rounded-xl overflow-hidden">
+        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <div class="flex items-center justify-between">
+                <h2 class="font-semibold text-gray-900 dark:text-white">账号列表</h2>
+                <button @click="loadAccounts()" class="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                    <i class="fa-solid fa-refresh mr-1"></i>刷新
+                </button>
+            </div>
+        </div>
+        
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 dark:bg-gray-800/50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">用户名</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">当前密码</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">备注</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">更新间隔</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">下次更新</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">通知</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">状态</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">操作</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    <template x-for="account in accounts" :key="account.id">
+                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/30">
+                            <td class="px-4 py-3">
+                                <div class="font-medium text-gray-900 dark:text-white" x-text="account.username"></div>
+                                <div class="text-xs text-gray-500 dark:text-gray-400" x-text="formatDate(account.created_at)"></div>
+                            </td>
+                            <td class="px-4 py-3">
+                                <div class="flex items-center gap-2">
+                                    <span class="password-box text-sm" x-text="account.current_password"></span>
+                                    <button @click="copyPassword(account.current_password)" 
+                                            class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                                        <i class="fa-solid fa-copy"></i>
+                                    </button>
+                                </div>
+                            </td>
+                            <td class="px-4 py-3">
+                                <span class="text-sm text-gray-600 dark:text-gray-300" x-text="account.remark || '临时账号'"></span>
+                            </td>
+                            <td class="px-4 py-3">
+                                <span class="text-sm text-gray-600 dark:text-gray-300" 
+                                      x-text="formatInterval(account.update_interval_hours, account.update_interval_minutes)"></span>
+                            </td>
+                            <td class="px-4 py-3">
+                                <span class="text-sm text-gray-600 dark:text-gray-300" 
+                                      x-text="formatDate(account.next_password_update)"></span>
+                            </td>
+                            <td class="px-4 py-3">
+                                <div class="flex items-center gap-1">
+                                    <span x-show="account.notify_tg" class="text-blue-500"><i class="fa-brands fa-telegram"></i></span>
+                                    <span x-show="account.notify_wecom" class="text-green-500"><i class="fa-solid fa-comments"></i></span>
+                                    <span x-show="!account.notify_tg && !account.notify_wecom" class="text-gray-400">-</span>
+                                </div>
+                            </td>
+                            <td class="px-4 py-3">
+                                <span x-show="account.enabled" 
+                                      class="px-2 py-1 text-xs rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                                    启用
+                                </span>
+                                <span x-show="!account.enabled" 
+                                      class="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400">
+                                    禁用
+                                </span>
+                            </td>
+                            <td class="px-4 py-3">
+                                <div class="flex items-center gap-2">
+                                    <button @click="refreshPassword(account.id)" 
+                                            class="text-violet-500 hover:text-violet-700" title="刷新密码">
+                                        <i class="fa-solid fa-key"></i>
+                                    </button>
+                                    <button @click="showHistory(account)" 
+                                            class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200" title="历史记录">
+                                        <i class="fa-solid fa-clock-rotate-left"></i>
+                                    </button>
+                                    <button @click="toggleAccount(account)" 
+                                            class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200" 
+                                            :title="account.enabled ? '禁用' : '启用'">
+                                        <i :class="account.enabled ? 'fa-solid fa-toggle-on text-green-500' : 'fa-solid fa-toggle-off'"></i>
+                                    </button>
+                                    <button @click="deleteAccount(account.id, account.username)" 
+                                            class="text-rose-500 hover:text-rose-700" title="删除">
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+            
+            <!-- 空状态 -->
+            <div x-show="accounts.length === 0" class="p-12 text-center">
+                <i class="fa-solid fa-user-clock text-4xl text-gray-300 dark:text-gray-600 mb-4"></i>
+                <p class="text-gray-500 dark:text-gray-400">暂无临时账号</p>
+                <button @click="showCreateModal = true" 
+                        class="mt-4 text-violet-500 hover:text-violet-700">
+                    创建第一个账号
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 新建账号弹窗 -->
+    <div x-show="showCreateModal" x-cloak
+         class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+        <div @click.away="showCreateModal = false" 
+             class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white">新建临时账号</h3>
+                    <button @click="showCreateModal = false" class="text-gray-400 hover:text-gray-600">
+                        <i class="fa-solid fa-times"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="p-6 space-y-4">
+                <!-- 用户名 -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        用户名 <span class="text-rose-500">*</span>
+                    </label>
+                    <textarea x-model="createForm.usernames" 
+                              placeholder="每行一个用户名，支持批量创建"
+                              rows="3"
+                              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 focus:border-transparent"></textarea>
+                </div>
+                
+                <!-- 备注 -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">备注前缀</label>
+                    <input x-model="createForm.remark_prefix" type="text" placeholder="临时账号"
+                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 focus:border-transparent">
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">批量创建时自动编号，如：临时账号1、临时账号2...</p>
+                </div>
+                
+                <!-- 权限模板 -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">权限模板用户</label>
+                    <select x-model="createForm.template_user_id"
+                            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 focus:border-transparent">
+                        <option value="">不使用模板</option>
+                        <template x-for="user in templateUsers" :key="user.id">
+                            <option :value="user.id" x-text="user.name"></option>
+                        </template>
+                    </select>
+                </div>
+                
+                <!-- 线路权限 -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">线路权限</label>
+                    <div class="flex gap-2 mb-2">
+                        <select x-model="createForm.route_mode"
+                                class="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                            <option value="block">黑名单模式</option>
+                            <option value="allow">白名单模式</option>
+                        </select>
+                    </div>
+                    <select x-model="createForm.selectedRoutes" multiple
+                            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                            style="min-height: 80px;">
+                        <template x-for="route in routes" :key="route.id">
+                            <option :value="route.id" x-text="route.name"></option>
+                        </template>
+                    </select>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">按住 Ctrl/Cmd 多选</p>
+                </div>
+                
+                <!-- 更新间隔 -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">密码更新间隔</label>
+                    <div class="flex gap-2">
+                        <div class="flex-1">
+                            <input x-model.number="createForm.update_interval_hours" type="number" min="0" placeholder="24"
+                                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 focus:border-transparent">
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">小时</p>
+                        </div>
+                        <div class="flex-1">
+                            <input x-model.number="createForm.update_interval_minutes" type="number" min="0" max="59" placeholder="0"
+                                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-violet-500 focus:border-transparent">
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">分钟</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 通知方式 -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">密码更新通知</label>
+                    <div class="flex gap-4">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input x-model="createForm.notify_tg" type="checkbox" 
+                                   class="w-4 h-4 text-violet-500 rounded border-gray-300 focus:ring-violet-500">
+                            <span class="text-sm text-gray-700 dark:text-gray-300">
+                                <i class="fa-brands fa-telegram text-blue-500 mr-1"></i>Telegram
+                            </span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input x-model="createForm.notify_wecom" type="checkbox"
+                                   class="w-4 h-4 text-violet-500 rounded border-gray-300 focus:ring-violet-500">
+                            <span class="text-sm text-gray-700 dark:text-gray-300">
+                                <i class="fa-solid fa-comments text-green-500 mr-1"></i>企业微信
+                            </span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
+                <button @click="showCreateModal = false" 
+                        class="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+                    取消
+                </button>
+                <button @click="createAccounts()" 
+                        :disabled="creating"
+                        class="px-4 py-2 bg-gradient-to-r from-violet-500 to-purple-500 text-white rounded-lg hover:opacity-90 disabled:opacity-50">
+                    <span x-show="!creating">创建</span>
+                    <span x-show="creating" class="flex items-center gap-2">
+                        <i class="fa-solid fa-spinner fa-spin"></i>创建中...
+                    </span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 密码历史弹窗 -->
+    <div x-show="showHistoryModal" x-cloak
+         class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+        <div @click.away="showHistoryModal = false" 
+             class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md">
+            <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+                        密码历史 - <span x-text="historyAccount?.username"></span>
+                    </h3>
+                    <button @click="showHistoryModal = false" class="text-gray-400 hover:text-gray-600">
+                        <i class="fa-solid fa-times"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="p-6 max-h-80 overflow-y-auto">
+                <template x-for="item in passwordHistory" :key="item.id">
+                    <div class="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-700 last:border-0">
+                        <div>
+                            <div class="password-box text-sm" x-text="item.new_password"></div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400 mt-1" x-text="formatDate(item.updated_at)"></div>
+                        </div>
+                        <button @click="copyPassword(item.new_password)" 
+                                class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                            <i class="fa-solid fa-copy"></i>
+                        </button>
+                    </div>
+                </template>
+                
+                <div x-show="passwordHistory.length === 0" class="text-center py-4 text-gray-500 dark:text-gray-400">
+                    暂无历史记录
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 创建结果弹窗 -->
+    <div x-show="showResultModal" x-cloak
+         class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-lg">
+            <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white">创建结果</h3>
+                    <button @click="showResultModal = false" class="text-gray-400 hover:text-gray-600">
+                        <i class="fa-solid fa-times"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="p-6">
+                <div class="mb-4">
+                    <span class="text-green-500 font-medium" x-text="createResult.success_count"></span>
+                    <span class="text-gray-600 dark:text-gray-400"> / </span>
+                    <span class="text-gray-600 dark:text-gray-400" x-text="createResult.total"></span>
+                    <span class="text-gray-600 dark:text-gray-400"> 个账号创建成功</span>
+                </div>
+                
+                <!-- 成功列表 -->
+                <div x-show="createResult.created?.length > 0" class="mb-4">
+                    <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">成功：</h4>
+                    <div class="space-y-2 max-h-40 overflow-y-auto">
+                        <template x-for="item in createResult.created" :key="item.username">
+                            <div class="flex items-center justify-between p-2 bg-green-50 dark:bg-green-900/20 rounded">
+                                <div>
+                                    <span class="font-medium text-gray-900 dark:text-white" x-text="item.username"></span>
+                                    <span class="text-xs text-gray-500 dark:text-gray-400 ml-2" x-text="item.remark"></span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="password-box text-sm" x-text="item.password"></span>
+                                    <button @click="copyPassword(item.password)" class="text-gray-400 hover:text-gray-600">
+                                        <i class="fa-solid fa-copy"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+                
+                <!-- 失败列表 -->
+                <div x-show="createResult.failed?.length > 0">
+                    <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">失败：</h4>
+                    <div class="space-y-2 max-h-40 overflow-y-auto">
+                        <template x-for="item in createResult.failed" :key="item.username">
+                            <div class="flex items-center justify-between p-2 bg-red-50 dark:bg-red-900/20 rounded">
+                                <span class="font-medium text-gray-900 dark:text-white" x-text="item.username"></span>
+                                <span class="text-sm text-red-500" x-text="item.error"></span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end">
+                <button @click="showResultModal = false" 
+                        class="px-4 py-2 bg-gradient-to-r from-violet-500 to-purple-500 text-white rounded-lg hover:opacity-90">
+                    确定
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function tempAccountApp() {
+    return {
+        accounts: [],
+        templateUsers: [],
+        routes: [],
+        showCreateModal: false,
+        showHistoryModal: false,
+        showResultModal: false,
+        creating: false,
+        historyAccount: null,
+        passwordHistory: [],
+        createResult: { created: [], failed: [], total: 0, success_count: 0 },
+        createForm: {
+            usernames: '',
+            remark_prefix: '临时账号',
+            template_user_id: '',
+            route_mode: 'block',
+            selectedRoutes: [],
+            update_interval_hours: 24,
+            update_interval_minutes: 0,
+            notify_tg: true,
+            notify_wecom: false
+        },
+        
+        async init() {
+            await Promise.all([
+                this.loadAccounts(),
+                this.loadTemplateUsers(),
+                this.loadRoutes()
+            ]);
+        },
+        
+        async loadAccounts() {
+            try {
+                const res = await fetch('/api/plugins/temp_account/accounts');
+                const data = await res.json();
+                if (data.status === 'success') {
+                    this.accounts = data.data;
+                }
+            } catch (e) {
+                console.error('加载账号列表失败:', e);
+            }
+        },
+        
+        async loadTemplateUsers() {
+            try {
+                const res = await fetch('/api/plugins/temp_account/template_users');
+                const data = await res.json();
+                if (data.status === 'success') {
+                    this.templateUsers = data.data;
+                }
+            } catch (e) {
+                console.error('加载模板用户失败:', e);
+            }
+        },
+        
+        async loadRoutes() {
+            try {
+                const res = await fetch('/api/plugins/temp_account/routes');
+                const data = await res.json();
+                if (data.status === 'success') {
+                    this.routes = data.data;
+                }
+            } catch (e) {
+                console.error('加载线路列表失败:', e);
+            }
+        },
+        
+        async createAccounts() {
+            if (!this.createForm.usernames.trim()) {
+                alert('请输入用户名');
+                return;
+            }
+            
+            this.creating = true;
+            
+            try {
+                const usernames = this.createForm.usernames.split('\n').filter(u => u.trim());
+                
+                const res = await fetch('/api/plugins/temp_account/accounts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        usernames: usernames,
+                        remark_prefix: this.createForm.remark_prefix || '临时账号',
+                        template_user_id: this.createForm.template_user_id,
+                        route_mode: this.createForm.route_mode,
+                        routes: this.createForm.selectedRoutes.join(','),
+                        update_interval_hours: this.createForm.update_interval_hours || 24,
+                        update_interval_minutes: this.createForm.update_interval_minutes || 0,
+                        notify_tg: this.createForm.notify_tg ? 1 : 0,
+                        notify_wecom: this.createForm.notify_wecom ? 1 : 0
+                    })
+                });
+                
+                const data = await res.json();
+                
+                if (data.status === 'success') {
+                    this.createResult = data.data;
+                    this.showCreateModal = false;
+                    this.showResultModal = true;
+                    this.loadAccounts();
+                    
+                    // 重置表单
+                    this.createForm = {
+                        usernames: '',
+                        remark_prefix: '临时账号',
+                        template_user_id: '',
+                        route_mode: 'block',
+                        selectedRoutes: [],
+                        update_interval_hours: 24,
+                        update_interval_minutes: 0,
+                        notify_tg: true,
+                        notify_wecom: false
+                    };
+                } else {
+                    alert(data.message || '创建失败');
+                }
+            } catch (e) {
+                console.error('创建账号失败:', e);
+                alert('创建失败: ' + e.message);
+            } finally {
+                this.creating = false;
+            }
+        },
+        
+        async refreshPassword(accountId) {
+            if (!confirm('确定要刷新密码吗？')) return;
+            
+            try {
+                const res = await fetch(`/api/plugins/temp_account/accounts/${accountId}/refresh_password`, {
+                    method: 'POST'
+                });
+                const data = await res.json();
+                
+                if (data.status === 'success') {
+                    alert(`密码已更新: ${data.data.password}`);
+                    this.loadAccounts();
+                } else {
+                    alert(data.message || '刷新失败');
+                }
+            } catch (e) {
+                console.error('刷新密码失败:', e);
+                alert('刷新失败');
+            }
+        },
+        
+        async toggleAccount(account) {
+            try {
+                const res = await fetch(`/api/plugins/temp_account/accounts/${account.id}/toggle`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled: account.enabled ? 0 : 1 })
+                });
+                const data = await res.json();
+                
+                if (data.status === 'success') {
+                    this.loadAccounts();
+                } else {
+                    alert(data.message || '操作失败');
+                }
+            } catch (e) {
+                console.error('切换状态失败:', e);
+            }
+        },
+        
+        async deleteAccount(accountId, username) {
+            if (!confirm(`确定要删除账号 "${username}" 吗？\n这将同时删除 Emby 中的用户。`)) return;
+            
+            try {
+                const res = await fetch(`/api/plugins/temp_account/accounts/${accountId}`, {
+                    method: 'DELETE'
+                });
+                const data = await res.json();
+                
+                if (data.status === 'success') {
+                    this.loadAccounts();
+                } else {
+                    alert(data.message || '删除失败');
+                }
+            } catch (e) {
+                console.error('删除账号失败:', e);
+                alert('删除失败');
+            }
+        },
+        
+        async showHistory(account) {
+            this.historyAccount = account;
+            this.showHistoryModal = true;
+            
+            try {
+                const res = await fetch(`/api/plugins/temp_account/accounts/${account.id}/history`);
+                const data = await res.json();
+                if (data.status === 'success') {
+                    this.passwordHistory = data.data;
+                }
+            } catch (e) {
+                console.error('获取历史失败:', e);
+            }
+        },
+        
+        copyPassword(password) {
+            navigator.clipboard.writeText(password).then(() => {
+                // 可选：显示复制成功提示
+            });
+        },
+        
+        formatDate(dateStr) {
+            if (!dateStr) return '-';
+            try {
+                const date = new Date(dateStr);
+                return date.toLocaleString('zh-CN', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            } catch (e) {
+                return dateStr;
+            }
+        },
+        
+        formatInterval(hours, minutes) {
+            const h = hours || 0;
+            const m = minutes || 0;
+            if (h === 0 && m === 0) return '未设置';
+            if (m === 0) return `${h}小时`;
+            if (h === 0) return `${m}分钟`;
+            return `${h}小时${m}分钟`;
+        }
+    };
+}
+</script>
+{% endblock %}

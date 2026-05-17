@@ -1,0 +1,458 @@
+{% extends "layout.html" %}
+{% block title %}全景画质盘点 - EmbyPulse{% endblock %}
+
+{% block head %}
+<style>
+    .bento-card { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; }
+    .bento-card:hover { transform: translateY(-4px); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1); }
+    .bento-card:active { transform: scale(0.97); }
+    .bento-active { border-color: #6366f1 !important; box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2) !important; background-color: rgba(99, 102, 241, 0.05) !important; }
+    .dark .bento-active { border-color: #818cf8 !important; background-color: rgba(99, 102, 241, 0.1) !important; }
+    .energy-bar { height: 4px; border-radius: 2px; transition: width 1s ease-out; }
+    
+    .modal-enter { animation: modalEnter 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    @keyframes modalEnter {
+        0% { opacity: 0; transform: scale(0.95) translateY(10px); }
+        100% { opacity: 1; transform: scale(1) translateY(0); }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto w-full px-4 md:px-8 py-6 pb-24 relative">
+
+    <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4 bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+        <div class="flex items-center gap-3">
+            <div class="w-12 h-12 bg-indigo-50 dark:bg-indigo-900/30 rounded-xl flex items-center justify-center border border-indigo-100 dark:border-indigo-800">
+                <i class="fa-solid fa-microchip text-indigo-500 text-xl"></i>
+            </div>
+            <div>
+                <div class="flex items-center gap-2">
+                    <h1 class="text-xl font-black text-gray-900 dark:text-white">全景画质盘点</h1>
+                    <span class="text-[10px] font-bold bg-indigo-100 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800 shadow-sm" id="total-count-badge">总计: 0 部</span>
+                </div>
+                <p class="text-xs text-gray-500 mt-0.5" id="scan-time">点击卡片切换视图，探索媒体库质量</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <button onclick="openIgnoreModal()" class="px-4 py-2 text-sm font-bold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl transition shadow-sm flex items-center gap-2 border border-transparent hover:border-gray-300 dark:hover:border-gray-500">
+                <i class="fa-solid fa-trash-can-arrow-up"></i> <span class="hidden sm:inline">回收站</span>
+            </button>
+            <button onclick="loadQualityData(true)" id="refresh-btn" class="px-5 py-2 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-md transition active:scale-95 flex items-center gap-2">
+                <i class="fa-solid fa-rotate" id="refresh-icon"></i> 深度重扫
+            </button>
+        </div>
+    </div>
+
+    <div id="loading" class="text-center py-32 text-gray-400">
+        <i class="fa-solid fa-circle-notch fa-spin text-4xl mb-4 text-indigo-500"></i>
+        <p class="text-sm font-bold">正在极速加载并生成质量快照...</p>
+    </div>
+
+    <div id="dashboard" class="hidden animate-fade-in grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
+        
+        <div class="bg-white dark:bg-gray-800 rounded-3xl p-5 md:p-6 shadow-sm border border-gray-100 dark:border-gray-700">
+            <h3 class="text-sm font-black text-gray-800 dark:text-gray-100 mb-4 flex items-center gap-2 uppercase tracking-wide">
+                <i class="fa-solid fa-expand text-blue-500"></i> 分辨率矩阵
+            </h3>
+            
+            <div class="grid grid-cols-2 gap-3 md:gap-4">
+                <div class="bento-card bento-active border border-gray-200 dark:border-gray-700 rounded-2xl p-4 relative overflow-hidden" onclick="switchView('4k', this)">
+                    <div class="absolute -right-4 -top-4 opacity-[0.03] dark:opacity-10 pointer-events-none"><i class="fa-solid fa-tv text-8xl"></i></div>
+                    <div class="text-gray-500 dark:text-gray-400 text-xs font-bold mb-1">Ultra HD</div>
+                    <div class="text-2xl font-black text-gray-900 dark:text-white flex items-end gap-1" id="stat-4k">0 <span class="text-xs text-gray-400 font-normal pb-1.5">部</span></div>
+                    <div class="w-full bg-gray-100 dark:bg-gray-700 mt-3 rounded-full overflow-hidden"><div class="energy-bar bg-blue-500 w-0" id="bar-4k"></div></div>
+                </div>
+                
+                <div class="bento-card border border-gray-200 dark:border-gray-700 rounded-2xl p-4 relative overflow-hidden" onclick="switchView('1080p', this)">
+                    <div class="text-gray-500 dark:text-gray-400 text-xs font-bold mb-1">1080P Full HD</div>
+                    <div class="text-2xl font-black text-gray-900 dark:text-white flex items-end gap-1" id="stat-1080p">0 <span class="text-xs text-gray-400 font-normal pb-1.5">部</span></div>
+                    <div class="w-full bg-gray-100 dark:bg-gray-700 mt-3 rounded-full overflow-hidden"><div class="energy-bar bg-cyan-500 w-0" id="bar-1080p"></div></div>
+                </div>
+                
+                <div class="bento-card border border-gray-200 dark:border-gray-700 rounded-2xl p-4 relative overflow-hidden" onclick="switchView('720p', this)">
+                    <div class="text-gray-500 dark:text-gray-400 text-xs font-bold mb-1">720P HD</div>
+                    <div class="text-2xl font-black text-gray-900 dark:text-white flex items-end gap-1" id="stat-720p">0 <span class="text-xs text-gray-400 font-normal pb-1.5">部</span></div>
+                    <div class="w-full bg-gray-100 dark:bg-gray-700 mt-3 rounded-full overflow-hidden"><div class="energy-bar bg-teal-500 w-0" id="bar-720p"></div></div>
+                </div>
+                
+                <div class="bento-card border border-rose-200 dark:border-rose-900/50 bg-rose-50/30 dark:bg-rose-900/10 rounded-2xl p-4 relative overflow-hidden" onclick="switchView('sd', this)">
+                    <div class="text-rose-500 dark:text-rose-400 text-xs font-bold mb-1 flex items-center gap-1"><i class="fa-solid fa-triangle-exclamation"></i> 远古画质(需洗版)</div>
+                    <div class="text-2xl font-black text-rose-600 dark:text-rose-400 flex items-end gap-1" id="stat-sd">0 <span class="text-xs text-rose-400/60 font-normal pb-1.5">部</span></div>
+                    <div class="w-full bg-rose-100 dark:bg-rose-900 mt-3 rounded-full overflow-hidden"><div class="energy-bar bg-rose-500 w-0" id="bar-sd"></div></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white dark:bg-gray-800 rounded-3xl p-5 md:p-6 shadow-sm border border-gray-100 dark:border-gray-700">
+            <h3 class="text-sm font-black text-gray-800 dark:text-gray-100 mb-4 flex items-center gap-2 uppercase tracking-wide">
+                <i class="fa-solid fa-eye text-purple-500"></i> 光影与动态范围
+            </h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 h-[calc(100%-2rem)] pb-1.5">
+                <div class="bento-card border border-purple-200 dark:border-purple-800 bg-gradient-to-br from-purple-50/50 to-fuchsia-50/50 dark:from-purple-900/20 dark:to-fuchsia-900/20 rounded-2xl p-5 relative overflow-hidden flex flex-col justify-between" onclick="switchView('dolby_vision', this)">
+                    <div class="absolute -right-2 top-2 opacity-10 pointer-events-none"><i class="fa-solid fa-certificate text-6xl text-purple-500"></i></div>
+                    <div class="text-purple-600 dark:text-purple-400 text-sm font-black tracking-widest mb-1">DOLBY VISION</div>
+                    <div>
+                        <div class="text-3xl font-black text-gray-900 dark:text-white mt-2" id="stat-dv">0</div>
+                        <p class="text-[10px] text-gray-500 mt-1 font-mono">顶级HDR体验</p>
+                    </div>
+                </div>
+                
+                <div class="flex flex-col gap-3 md:gap-4">
+                    <div class="bento-card flex-1 border border-gray-200 dark:border-gray-700 rounded-2xl p-4 flex justify-between items-center" onclick="switchView('hdr10', this)">
+                        <div>
+                            <div class="text-gray-500 dark:text-gray-400 text-xs font-bold mb-0.5">普通 HDR / HDR10</div>
+                            <div class="text-xl font-black text-gray-900 dark:text-white" id="stat-hdr">0</div>
+                        </div>
+                        <div class="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-400"><i class="fa-solid fa-sun"></i></div>
+                    </div>
+                    
+                    <div class="bento-card flex-1 border border-gray-200 dark:border-gray-700 rounded-2xl p-4 flex justify-between items-center" onclick="switchView('sdr', this)">
+                        <div>
+                            <div class="text-gray-500 dark:text-gray-400 text-xs font-bold mb-0.5">SDR 标准范围</div>
+                            <div class="text-xl font-black text-gray-900 dark:text-white" id="stat-sdr">0</div>
+                        </div>
+                        <div class="w-10 h-10 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-400"><i class="fa-solid fa-tv"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <div id="list-container" class="hidden animate-fade-in bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden">
+        <div class="px-4 md:px-6 py-4 border-b border-gray-100 dark:border-gray-700/50 bg-gray-50/80 dark:bg-gray-800/80 flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <label id="batch-ignore-checkbox" class="hidden flex items-center gap-1.5 text-xs font-bold text-gray-600 cursor-pointer pl-1">
+                    <input type="checkbox" onchange="toggleAllListView(this)" class="w-4 h-4 text-rose-500 rounded border-gray-300 focus:ring-rose-500"> 全选
+                </label>
+                <h3 class="font-bold text-indigo-600 dark:text-indigo-400 text-sm flex items-center gap-2 border-l-2 border-indigo-500 pl-3 ml-1" id="list-title">
+                    当前视图: 4K Ultra HD
+                </h3>
+            </div>
+            
+            <div class="flex items-center gap-2">
+                <button id="batch-ignore-btn" onclick="batchIgnore()" class="hidden px-3 py-1.5 bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 hover:bg-rose-200 rounded-lg text-xs font-bold transition shadow-sm">
+                    批量忽略
+                </button>
+                <span class="text-xs font-mono font-bold text-gray-500 bg-white dark:bg-gray-900 px-3 py-1 rounded-md shadow-sm border border-gray-200 dark:border-gray-700" id="list-count">0 部</span>
+            </div>
+        </div>
+        <div id="movie-list" class="divide-y divide-gray-100 dark:divide-gray-700/50 max-h-[600px] overflow-y-auto custom-scrollbar p-2"></div>
+    </div>
+</div>
+
+<div id="ignore-modal" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[85vh] modal-enter">
+        <div class="p-5 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-800/50 rounded-t-2xl shrink-0">
+            <h3 class="font-black text-gray-900 dark:text-white flex items-center gap-2">
+                <i class="fa-solid fa-trash-can-arrow-up text-indigo-500"></i> 回收站 (已忽略的影片)
+            </h3>
+            <button onclick="closeIgnoreModal()" class="text-gray-400 hover:text-red-500 transition w-8 h-8 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center justify-center"><i class="fa-solid fa-xmark text-lg"></i></button>
+        </div>
+        
+        <div class="p-3 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center shrink-0 bg-white dark:bg-gray-800">
+            <label class="flex items-center gap-2 text-sm font-bold text-gray-600 dark:text-gray-300 cursor-pointer pl-2">
+                <input type="checkbox" id="select-all-ignores" onchange="toggleAllIgnores(this)" class="w-4 h-4 text-indigo-600 rounded cursor-pointer focus:ring-indigo-500"> 全选
+            </label>
+            <button onclick="batchRestore()" id="btn-restore" disabled class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed active:scale-95">
+                批量恢复所选
+            </button>
+        </div>
+        
+        <div class="flex-1 overflow-y-auto custom-scrollbar p-2" id="ignore-list-content"></div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let globalMoviesData = {};
+    let currentView = '4k';
+    let selectedIgnores = new Set();
+    let selectedListView = new Set(); // 列表界面的多选集合保存了对象 {id, name}
+    
+    const viewNames = {
+        '4k': 'Ultra HD (4K)', '1080p': 'Full HD (1080P)', '720p': 'HD (720P)', 'sd': '标清/远古画质 (需洗版)',
+        'dolby_vision': 'Dolby Vision (杜比视界)', 'hdr10': 'HDR10', 'sdr': 'SDR 标准范围'
+    };
+
+    document.addEventListener('DOMContentLoaded', () => { loadQualityData(false); });
+
+    async function loadQualityData(force) {
+        const loading = document.getElementById('loading');
+        const dash = document.getElementById('dashboard');
+        const listC = document.getElementById('list-container');
+        const btn = document.getElementById('refresh-btn');
+        const icon = document.getElementById('refresh-icon');
+        
+        if(force) {
+            loading.classList.remove('hidden'); dash.classList.add('hidden'); listC.classList.add('hidden');
+            btn.disabled = true; icon.classList.add('fa-spin');
+        }
+
+        try {
+            const res = await fetch(`/api/insight/quality${force ? '?force_refresh=true' : ''}`);
+            const json = await res.json();
+            
+            if (json.status === 'success') {
+                const d = json.data;
+                globalMoviesData = d.movies;
+                
+                document.getElementById('total-count-badge').innerText = `已排查: ${d.total_count} 部真实数据`;
+                if(d.scan_time_str) document.getElementById('scan-time').innerText = `系统已准备完毕，最后快照: ${d.scan_time_str}`;
+                
+                updateStatCounts();
+
+                loading.classList.add('hidden'); dash.classList.remove('hidden'); listC.classList.remove('hidden');
+                
+                // 重新渲染列表，不强制清空选中项
+                renderListView(currentView);
+            }
+        } catch(e) {} finally {
+            if(force) { btn.disabled = false; icon.classList.remove('fa-spin'); }
+        }
+    }
+
+    function updateStatCounts() {
+        const d = globalMoviesData;
+        document.getElementById('stat-4k').innerHTML = `${d['4k'].length} <span class="text-xs text-gray-400 font-normal pb-1.5">部</span>`;
+        document.getElementById('stat-1080p').innerHTML = `${d['1080p'].length} <span class="text-xs text-gray-400 font-normal pb-1.5">部</span>`;
+        document.getElementById('stat-720p').innerHTML = `${d['720p'].length} <span class="text-xs text-gray-400 font-normal pb-1.5">部</span>`;
+        document.getElementById('stat-sd').innerHTML = `${d['sd'].length} <span class="text-xs text-rose-400/60 font-normal pb-1.5">部</span>`;
+        
+        document.getElementById('stat-dv').innerText = d['dolby_vision'].length;
+        document.getElementById('stat-hdr').innerText = d['hdr10'].length;
+        document.getElementById('stat-sdr').innerText = d['sdr'].length;
+
+        const totalRes = Math.max(d['4k'].length + d['1080p'].length + d['720p'].length + d['sd'].length, 1);
+        setTimeout(() => {
+            document.getElementById('bar-4k').style.width = `${(d['4k'].length/totalRes)*100}%`;
+            document.getElementById('bar-1080p').style.width = `${(d['1080p'].length/totalRes)*100}%`;
+            document.getElementById('bar-720p').style.width = `${(d['720p'].length/totalRes)*100}%`;
+            document.getElementById('bar-sd').style.width = `${(d['sd'].length/totalRes)*100}%`;
+        }, 50);
+    }
+
+    function removeLocalItem(id) {
+        for (let key in globalMoviesData) {
+            globalMoviesData[key] = globalMoviesData[key].filter(m => m.Id !== id);
+        }
+        updateStatCounts();
+        renderListView(currentView); 
+    }
+
+    function switchView(viewKey, cardElement) {
+        document.querySelectorAll('.bento-card').forEach(el => el.classList.remove('bento-active'));
+        cardElement.classList.add('bento-active');
+        if (currentView !== viewKey) {
+            selectedListView.clear(); // 只有真正切换分类时，才清空选中池
+        }
+        renderListView(viewKey);
+    }
+
+    function renderListView(viewKey) {
+        currentView = viewKey;
+        // 关键修复：不要在这里清空 selectedListView
+        
+        document.getElementById('list-title').innerHTML = viewNames[viewKey];
+        
+        const batchCheckbox = document.getElementById('batch-ignore-checkbox');
+        const batchBtn = document.getElementById('batch-ignore-btn');
+        if (viewKey === 'sd') {
+            batchCheckbox.classList.remove('hidden');
+            batchBtn.classList.remove('hidden');
+            // 如果所有本页可见的项都被选中了，就勾选全选框
+            batchCheckbox.querySelector('input').checked = false; 
+        } else {
+            batchCheckbox.classList.add('hidden');
+            batchBtn.classList.add('hidden');
+        }
+        updateBatchIgnoreBtn();
+
+        // 🔥 核心过滤：剔除没有分辨率数据的幽灵影片
+        let rawMovies = globalMoviesData[viewKey] || [];
+        if (['4k', '1080p', '720p', 'sd'].includes(viewKey)) {
+            rawMovies = rawMovies.filter(m => m.Resolution && m.Resolution !== '0x0' && m.Resolution !== 'x');
+        }
+        const movies = rawMovies;
+        
+        document.getElementById('list-count').innerText = `${movies.length} 部`;
+        const container = document.getElementById('movie-list');
+        
+        if (movies.length === 0) {
+            container.innerHTML = '<div class="py-16 text-center text-gray-400 font-medium tracking-widest"><i class="fa-solid fa-ghost mb-3 text-3xl opacity-30 block"></i>当前分类已清理完毕</div>';
+            return;
+        }
+
+        let html = '';
+        movies.forEach(m => {
+            const imgUrl = `/api/proxy/smart_image?item_id=${m.Id}&name=${encodeURIComponent(m.Name)}&type=Primary`;
+            
+            // 列表复选框 (保留选中状态)
+            let isChecked = false;
+            for(let item of selectedListView) {
+                if(item.id === m.Id) { isChecked = true; break; }
+            }
+            const checkHtml = viewKey === 'sd' 
+                ? `<input type="checkbox" value="${m.Id}" data-name="${m.Name.replace(/"/g, '&quot;')}" class="list-checkbox w-4 h-4 text-rose-500 rounded focus:ring-rose-500 cursor-pointer mr-3" onchange="toggleSelectList(this)" ${isChecked ? 'checked' : ''}>`
+                : ``;
+
+            html += `
+            <label class="flex items-center p-2.5 md:p-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition rounded-xl group cursor-pointer border border-transparent hover:border-gray-200 dark:hover:border-gray-600">
+                ${checkHtml}
+                <img src="${imgUrl}" class="w-10 h-14 rounded shadow-sm object-cover bg-gray-200 dark:bg-gray-800 mr-4 shrink-0" loading="lazy">
+                <div class="flex-1 min-w-0 pr-4">
+                    <h4 class="text-sm font-bold text-gray-800 dark:text-gray-200 truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition">${m.Name}</h4>
+                    <div class="flex items-center gap-3 text-[10px] md:text-xs text-gray-500 dark:text-gray-400 font-mono mt-1">
+                        <span class="bg-white dark:bg-gray-800 px-1.5 py-0.5 rounded text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 shadow-sm font-bold">${m.Resolution}</span>
+                        <span class="truncate opacity-60"><i class="fa-solid fa-folder-open mr-1"></i>${m.Path}</span>
+                    </div>
+                </div>
+            </label>`;
+        });
+        container.innerHTML = html;
+    }
+
+    function toggleSelectList(checkbox) {
+        if(checkbox.checked) {
+            selectedListView.add({id: checkbox.value, name: checkbox.dataset.name});
+        } else {
+            for(let item of selectedListView) {
+                if(item.id === checkbox.value) { selectedListView.delete(item); break; }
+            }
+        }
+        updateBatchIgnoreBtn();
+    }
+
+    function toggleAllListView(checkbox) {
+        document.querySelectorAll('.list-checkbox').forEach(box => {
+            box.checked = checkbox.checked;
+            toggleSelectList(box);
+        });
+    }
+
+    function updateBatchIgnoreBtn() {
+        const btn = document.getElementById('batch-ignore-btn');
+        if(selectedListView.size > 0) {
+            btn.innerText = `执行批量隔离 (${selectedListView.size})`;
+            btn.classList.add('bg-rose-500', 'text-white', 'shadow-md');
+            btn.classList.remove('bg-rose-100', 'text-rose-600');
+        } else {
+            btn.innerText = `批量忽略`;
+            btn.classList.remove('bg-rose-500', 'text-white', 'shadow-md');
+            btn.classList.add('bg-rose-100', 'text-rose-600');
+        }
+    }
+
+    // 🔥 真正的原子级极速批量发送
+    async function batchIgnore() {
+        if(selectedListView.size === 0) return;
+        const btn = document.getElementById('batch-ignore-btn');
+        btn.innerText = '写入中...';
+        btn.disabled = true;
+        
+        try {
+            // 将 Set 转为后端需要的数组格式
+            const payload = Array.from(selectedListView).map(i => ({item_id: i.id, item_name: i.name}));
+            
+            // 一次性发给后端
+            await fetch('/api/insight/ignore_batch', {
+                method: 'POST', 
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ items: payload })
+            });
+            
+            // 前端瞬间抹除本地数据
+            selectedListView.forEach(item => removeLocalItem(item.id));
+            
+            selectedListView.clear();
+            document.getElementById('batch-ignore-checkbox').querySelector('input').checked = false;
+            updateBatchIgnoreBtn();
+        } catch(e) {
+            showToast('error', '网络异常', '请稍后重试');
+        } finally { btn.disabled = false; }
+    }
+
+    function openIgnoreModal() {
+        const modal = document.getElementById('ignore-modal');
+        modal.classList.remove('hidden'); modal.classList.add('flex');
+        loadIgnoreList();
+    }
+
+    function closeIgnoreModal() {
+        const modal = document.getElementById('ignore-modal');
+        modal.classList.add('hidden'); modal.classList.remove('flex');
+        selectedIgnores.clear();
+    }
+
+    async function loadIgnoreList() {
+        const c = document.getElementById('ignore-list-content');
+        c.innerHTML = '<div class="py-10 text-center"><i class="fa-solid fa-spinner fa-spin text-indigo-500 text-2xl"></i></div>';
+        try {
+            const res = await fetch('/api/insight/ignores');
+            const json = await res.json();
+            if(json.data && json.data.length > 0) {
+                let html = '';
+                json.data.forEach(item => {
+                    const isChecked = selectedIgnores.has(item.item_id) ? 'checked' : '';
+                    const dStr = new Date(item.ignored_at).toLocaleDateString();
+                    html += `
+                    <label class="flex items-center p-3 hover:bg-gray-50 dark:hover:bg-gray-800/80 rounded-xl transition cursor-pointer border border-transparent hover:border-gray-200 dark:hover:border-gray-700">
+                        <input type="checkbox" value="${item.item_id}" class="ignore-checkbox w-4 h-4 text-indigo-600 rounded mr-3 focus:ring-indigo-500" onchange="toggleSelectIgnore('${item.item_id}', this.checked)" ${isChecked}>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-sm font-bold text-gray-800 dark:text-gray-200 truncate">${item.item_name}</div>
+                            <div class="text-[10px] font-mono text-gray-400 mt-0.5">归档时间: ${dStr}</div>
+                        </div>
+                    </label>`;
+                });
+                c.innerHTML = html;
+            } else {
+                c.innerHTML = '<div class="text-center py-20 text-gray-400 text-sm tracking-widest"><i class="fa-solid fa-box-open text-4xl opacity-20 mb-3 block"></i>回收站是空的</div>';
+            }
+            updateRestoreBtn();
+        } catch(e){}
+    }
+
+    function toggleSelectIgnore(id, checked) {
+        if(checked) selectedIgnores.add(id); else selectedIgnores.delete(id);
+        updateRestoreBtn();
+    }
+
+    function toggleAllIgnores(checkbox) {
+        document.querySelectorAll('.ignore-checkbox').forEach(box => {
+            box.checked = checkbox.checked;
+            if(checkbox.checked) selectedIgnores.add(box.value); else selectedIgnores.delete(box.value);
+        });
+        updateRestoreBtn();
+    }
+
+    function updateRestoreBtn() {
+        const btn = document.getElementById('btn-restore');
+        if(selectedIgnores.size > 0) {
+            btn.disabled = false; btn.innerText = `闪电恢复 (${selectedIgnores.size})`;
+        } else {
+            btn.disabled = true; btn.innerText = `批量恢复所选`;
+        }
+    }
+
+    async function batchRestore() {
+        if(selectedIgnores.size === 0) return;
+        const btn = document.getElementById('btn-restore');
+        btn.disabled = true; btn.innerText = '正在调取缓存...';
+        try {
+            await fetch('/api/insight/unignore_batch', {
+                method: 'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({item_ids: Array.from(selectedIgnores)})
+            });
+            selectedIgnores.clear();
+            document.getElementById('select-all-ignores').checked = false;
+            
+            await loadQualityData(false);  
+            closeIgnoreModal();
+        } catch(e){}
+    }
+</script>
+{% endblock %}

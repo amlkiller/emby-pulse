@@ -1,0 +1,966 @@
+{% extends "layout.html" %}
+
+{% block title %}去重管理 - EmbyPulse{% endblock %}
+
+{% block head %}
+<style>
+    /* === 🔔 Toast 通知样式 - 顶部居中胶囊气泡 === */
+    .dedupe-toast-container { position: fixed; top: 40px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; align-items: center; gap: 12px; pointer-events: none; }
+    .dedupe-toast-item { 
+        display: flex; align-items: center; gap: 10px; padding: 12px 20px; border-radius: 9999px; 
+        background: rgba(255,255,255,0.98); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+        box-shadow: 0 8px 32px -8px rgba(0,0,0,0.2); border: 1px solid rgba(0,0,0,0.04);
+        pointer-events: auto;
+        animation: dedupe-toast-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+        font-size: 13px; font-weight: 700; color: #1f2937;
+    }
+    html.dark .dedupe-toast-item { background: rgba(44,44,46,0.98); border-color: rgba(255,255,255,0.08); box-shadow: 0 8px 32px -8px rgba(0,0,0,0.6); color: #f3f4f6; }
+    .dedupe-toast-icon { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; flex-shrink: 0; }
+    .dedupe-toast-icon.success { background: linear-gradient(135deg, #10b981, #059669); color: white; }
+    .dedupe-toast-icon.error { background: linear-gradient(135deg, #ef4444, #dc2626); color: white; }
+    .dedupe-toast-icon.warning { background: linear-gradient(135deg, #f59e0b, #d97706); color: white; }
+    .dedupe-toast-item.success { border-color: rgba(16, 185, 129, 0.3); }
+    .dedupe-toast-item.error { border-color: rgba(239, 68, 68, 0.3); }
+    .dedupe-toast-item.warning { border-color: rgba(245, 158, 11, 0.3); }
+    html.dark .dedupe-toast-item.success { border-color: rgba(16, 185, 129, 0.4); }
+    html.dark .dedupe-toast-item.error { border-color: rgba(239, 68, 68, 0.4); }
+    html.dark .dedupe-toast-item.warning { border-color: rgba(245, 158, 11, 0.4); }
+    @keyframes dedupe-toast-in { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes dedupe-toast-out { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-20px); } }
+
+    /* === 🔔 Confirm 确认框样式 === */
+    .dedupe-confirm-overlay { position: fixed; inset: 0; z-index: 9998; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); animation: dedupe-confirm-fade 0.2s ease; }
+    .dedupe-confirm-modal {
+        position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 9999;
+        width: 90%; max-width: 400px; padding: 24px; border-radius: 24px;
+        background: rgba(255,255,255,0.98); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+        box-shadow: 0 24px 48px -12px rgba(0,0,0,0.2); border: 1px solid rgba(0,0,0,0.04);
+        animation: dedupe-confirm-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    html.dark .dedupe-confirm-modal { background: rgba(44,44,46,0.98); border-color: rgba(255,255,255,0.08); box-shadow: 0 24px 48px -12px rgba(0,0,0,0.6); }
+    @keyframes dedupe-confirm-fade { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes dedupe-confirm-in { from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+    .dedupe-confirm-icon { width: 56px; height: 56px; border-radius: 16px; margin: 0 auto 16px; display: flex; align-items: center; justify-content: center; font-size: 24px; }
+    .dedupe-confirm-icon.warning { background: linear-gradient(135deg, #fef3c7, #fde68a); color: #d97706; }
+    .dedupe-confirm-icon.danger { background: linear-gradient(135deg, #fee2e2, #fecaca); color: #dc2626; }
+    html.dark .dedupe-confirm-icon.warning { background: linear-gradient(135deg, rgba(217,119,6,0.2), rgba(217,119,6,0.1)); color: #fbbf24; }
+    html.dark .dedupe-confirm-icon.danger { background: linear-gradient(135deg, rgba(220,38,38,0.2), rgba(220,38,38,0.1)); color: #f87171; }
+    .dedupe-confirm-title { font-size: 18px; font-weight: 800; text-align: center; color: #111827; margin-bottom: 8px; }
+    html.dark .dedupe-confirm-title { color: #f9fafb; }
+    .dedupe-confirm-message { font-size: 14px; text-align: center; color: #6b7280; line-height: 1.5; white-space: pre-line; }
+    html.dark .dedupe-confirm-message { color: #9ca3af; }
+    .dedupe-confirm-buttons { display: flex; gap: 12px; margin-top: 24px; }
+    .dedupe-confirm-btn { flex: 1; padding: 14px 20px; border-radius: 14px; font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.2s; }
+    .dedupe-confirm-btn.cancel { background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; }
+    .dedupe-confirm-btn.cancel:hover { background: #e5e7eb; }
+    html.dark .dedupe-confirm-btn.cancel { background: #374151; color: #d1d5db; border-color: #4b5563; }
+    html.dark .dedupe-confirm-btn.cancel:hover { background: #4b5563; }
+    .dedupe-confirm-btn.danger { background: linear-gradient(135deg, #ef4444, #dc2626); color: white; border: none; box-shadow: 0 4px 12px -2px rgba(239,68,68,0.4); }
+    .dedupe-confirm-btn.danger:hover { box-shadow: 0 6px 16px -2px rgba(239,68,68,0.5); transform: translateY(-1px); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="p-4 md:p-8 w-full max-w-[100%] mx-auto flex flex-col gap-6 relative min-h-screen">
+    
+    <div class="bg-white dark:bg-apple-cardDark rounded-[24px] p-6 md:p-8 shadow-sm border border-gray-100 dark:border-white/5 flex flex-col gap-6 relative overflow-hidden">
+        <div class="absolute -right-10 -top-10 text-brand-500/5 dark:text-white/5 pointer-events-none">
+            <i class="fa-solid fa-layer-group text-[150px] rotate-12"></i>
+        </div>
+        
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
+            <div>
+                <h1 class="text-2xl md:text-3xl font-black tracking-tight text-gray-900 dark:text-white flex items-center gap-3">
+                    <i class="fa-solid fa-clone text-brand-500"></i> 去重管理
+                </h1>
+                <p class="text-[13px] md:text-[14px] text-gray-500 dark:text-gray-400 mt-2 font-medium">释放无效的存储空间，永远为您保留最极致的视听体验。</p>
+            </div>
+            
+            <div class="flex flex-wrap items-center gap-3">
+                <button onclick="openWhitelistModal()" class="h-11 px-4 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-gray-700 dark:text-gray-300 font-bold text-[13px] transition-colors flex items-center gap-2">
+                    <i class="fa-solid fa-shield-halved"></i> 白名单
+                </button>
+                <button onclick="openConfigModal()" class="h-11 px-4 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-gray-700 dark:text-gray-300 font-bold text-[13px] transition-colors flex items-center gap-2">
+                    <i class="fa-solid fa-sliders"></i> 扫描配置
+                </button>
+                <button onclick="startScan()" id="btn-scan" class="h-11 bg-brand-500 hover:bg-brand-600 text-white px-6 rounded-xl text-[14px] font-bold shadow-lg shadow-brand-500/30 transition-all active:scale-95 flex items-center gap-2">
+                    <i class="fa-solid fa-radar"></i> 智能全库扫描
+                </button>
+            </div>
+        </div>
+
+        <div id="type-tabs" class="hidden border-t border-gray-100 dark:border-white/5 pt-5 flex-col sm:flex-row justify-between items-start sm:items-center gap-4 relative z-10">
+            <div class="flex items-center gap-2">
+                <div class="w-1.5 h-4 bg-brand-500 rounded-full"></div>
+                <span class="text-[13px] font-bold text-gray-700 dark:text-gray-300">分类检索面板</span>
+            </div>
+            <div class="bg-gray-100/80 dark:bg-black/30 p-1 rounded-xl flex w-full sm:w-auto shadow-inner border border-gray-200/50 dark:border-white/5">
+                <button id="tab-btn-movies" onclick="switchTab('movies')" class="flex-1 sm:flex-none px-6 py-2 rounded-lg text-[13px] font-bold transition-all bg-white dark:bg-apple-hoverDark shadow-sm text-gray-900 dark:text-white">
+                    🎬 电影 (<span id="tab-count-movies">0</span>)
+                </button>
+                <button id="tab-btn-tv" onclick="switchTab('tv')" class="flex-1 sm:flex-none px-6 py-2 rounded-lg text-[13px] font-bold transition-all text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                    📺 剧集 (<span id="tab-count-tv">0</span>)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="scan-progress-container" class="hidden bg-white dark:bg-apple-cardDark rounded-[20px] p-5 shadow-sm border border-brand-100 dark:border-brand-500/20 relative overflow-hidden">
+        <div class="absolute top-0 left-0 w-full h-1 bg-gray-100 dark:bg-white/5">
+            <div id="scan-progress-bar" class="h-full bg-brand-500 transition-all duration-300" style="width: 0%"></div>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="w-10 h-10 rounded-full bg-brand-50 dark:bg-brand-500/10 flex justify-center items-center shrink-0">
+                <i class="fa-solid fa-compact-disc text-brand-500 animate-spin-slow"></i>
+            </div>
+            <div class="flex-1">
+                <h3 class="font-bold text-[14px] text-gray-900 dark:text-white mb-0.5">扫描正在进行中...</h3>
+                <p id="scan-status-text" class="text-[12px] text-gray-500 font-mono">正在分析文件结构...</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="result-summary" class="hidden flex items-center gap-3 px-5 py-3.5 bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-400 rounded-[16px] text-[13px] font-bold border border-brand-100 dark:border-brand-500/20">
+        <i class="fa-solid fa-circle-check text-lg"></i>
+        <span id="summary-text">扫描完成。</span>
+    </div>
+
+    <div id="dedupe-empty-state" class="text-center py-24 text-gray-400">
+        <i class="fa-solid fa-layer-group text-6xl mb-5 opacity-20"></i>
+        <p class="text-[15px] font-medium text-gray-500">准备就绪，等待您的扫描指令</p>
+    </div>
+
+    <div id="dedupe-results-movies" class="hidden">
+        <div id="movie-cards-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5 items-start pb-28"></div>
+    </div>
+
+    <div id="dedupe-results-tv" class="hidden">
+        <div id="tv-cards-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5 items-start pb-28"></div>
+    </div>
+
+    <div id="action-pill" class="fixed bottom-[90px] md:bottom-8 left-1/2 -translate-x-1/2 z-[90] w-[92%] md:w-auto min-w-[320px] max-w-3xl bg-white/95 dark:bg-[#2C2C2E]/95 apple-blur border border-gray-200 dark:border-white/10 rounded-[20px] shadow-[0_20px_40px_rgba(0,0,0,0.3)] p-2.5 md:px-4 md:py-3 flex items-center justify-between transition-all duration-400 transform translate-y-32 opacity-0 pointer-events-none">
+        <div class="flex items-center gap-3 flex-1 min-w-0">
+            <button onclick="clearSelection()" class="w-10 h-10 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-black/30 dark:hover:bg-black/50 text-gray-500 flex items-center justify-center transition-colors shrink-0 tooltip" title="取消所有选择">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            <div class="flex flex-col min-w-0">
+                <span class="text-[11px] font-bold text-gray-500 uppercase">即将抹除 <span id="pill-count" class="text-red-500 text-[13px]">0</span> 项</span>
+                <span class="text-[14px] font-mono font-black text-brand-500 leading-tight truncate" id="pill-size">0.0 GB</span>
+            </div>
+        </div>
+        <div class="flex items-center gap-2 shrink-0 border-l border-gray-200 dark:border-white/10 pl-3">
+            <button onclick="batchIgnore()" class="h-10 px-3 md:px-4 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-black/30 dark:hover:bg-black/50 text-gray-600 dark:text-gray-300 font-bold text-[12px] md:text-[13px] transition-colors tooltip" title="加入白名单">
+                忽略
+            </button>
+            <button onclick="checkAuthAndExecute()" class="h-10 px-4 md:px-6 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold text-[13px] md:text-[14px] shadow-lg shadow-red-500/30 transition-all active:scale-95 flex items-center gap-1.5">
+                <i class="fa-solid fa-trash-can"></i> <span class="hidden sm:inline">删除</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- 🔔 Toast 通知容器 -->
+    <div id="dedupe-toast-container" class="dedupe-toast-container"></div>
+
+    <!-- 🔔 Confirm 确认框容器 -->
+    <div id="dedupe-confirm-container"></div>
+</div>
+
+<div id="config-modal" class="fixed inset-0 z-[100] hidden flex items-center justify-center bg-black/50 backdrop-blur-sm opacity-0 transition-opacity duration-300 px-4">
+    <div class="bg-apple-bgLight dark:bg-apple-cardDark w-full max-w-2xl rounded-[28px] shadow-2xl p-6 md:p-8 transform scale-95 transition-transform duration-300 border border-white/50 dark:border-white/5 max-h-[90vh] overflow-y-auto mac-scrollbar">
+        <div class="mb-6 flex justify-between items-center">
+            <h3 class="text-xl font-black text-gray-900 dark:text-white"><i class="fa-solid fa-sliders text-brand-500 mr-2"></i>打分引擎策略配置</h3>
+            <button onclick="closeConfigModal()" class="w-8 h-8 bg-gray-100 dark:bg-white/5 rounded-full text-gray-500 hover:text-gray-800 dark:hover:text-white transition-colors"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <!-- 媒体库屏蔽设置 -->
+        <div class="mb-6 border-b border-gray-200 dark:border-white/10 pb-6">
+            <div class="flex items-center gap-2 mb-3">
+                <i class="fa-solid fa-ban text-rose-500"></i>
+                <span class="font-bold text-[14px] text-gray-800 dark:text-gray-200">屏蔽媒体库</span>
+            </div>
+            <p class="text-[11px] text-gray-500 mb-3">选择不参与去重扫描的媒体库</p>
+            <div id="library-list-container" class="space-y-2 max-h-[150px] overflow-y-auto mac-scrollbar bg-gray-50 dark:bg-black/20 rounded-xl p-3 border border-gray-100 dark:border-white/5">
+                <div class="text-[12px] text-gray-400 text-center py-2">加载中...</div>
+            </div>
+        </div>
+        
+        <!-- 勾选模式设置 -->
+        <div class="mb-6 border-b border-gray-200 dark:border-white/10 pb-6">
+            <div class="flex items-center gap-2 mb-3">
+                <i class="fa-solid fa-check-double text-indigo-500"></i>
+                <span class="font-bold text-[14px] text-gray-800 dark:text-gray-200">勾选模式</span>
+            </div>
+            <div class="flex flex-col gap-3">
+                <label class="flex items-start gap-3 p-3 bg-gray-50 dark:bg-black/20 rounded-xl cursor-pointer hover:bg-gray-100 dark:hover:bg-white/5 transition-colors border-2 border-transparent has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-50 dark:has-[:checked]:bg-indigo-500/10">
+                    <input type="radio" name="select_mode" value="manual" class="mt-0.5 accent-indigo-500" checked>
+                    <div class="flex flex-col">
+                        <span class="font-bold text-[13px] text-gray-800 dark:text-gray-200">🎯 手动挑选</span>
+                        <span class="text-[11px] text-gray-500 mt-0.5">扫描结果默认不勾选，由您自行决定保留哪些</span>
+                    </div>
+                </label>
+                <label class="flex items-start gap-3 p-3 bg-gray-50 dark:bg-black/20 rounded-xl cursor-pointer hover:bg-gray-100 dark:hover:bg-white/5 transition-colors border-2 border-transparent has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-50 dark:has-[:checked]:bg-indigo-500/10">
+                    <input type="radio" name="select_mode" value="auto" class="mt-0.5 accent-indigo-500">
+                    <div class="flex flex-col">
+                        <span class="font-bold text-[13px] text-gray-800 dark:text-gray-200">🤖 自动勾选</span>
+                        <span class="text-[11px] text-gray-500 mt-0.5">根据打分策略自动勾选劣势版本，快速清理</span>
+                    </div>
+                </label>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+            <label class="strategy-card cursor-pointer relative border-2 rounded-2xl p-4 transition-all hover:bg-gray-50 dark:hover:bg-white/5" data-val="quality">
+                <input type="radio" name="st_radio" value="quality" class="hidden">
+                <div class="text-2xl mb-2">🏆</div>
+                <div class="font-bold text-[14px] text-gray-900 dark:text-white">画质与音效至上</div>
+                <div class="text-[11px] text-gray-500 mt-1">优先保留 4K、高码率与杜比全景声，适合发烧友。</div>
+            </label>
+            <label class="strategy-card cursor-pointer relative border-2 rounded-2xl p-4 transition-all hover:bg-gray-50 dark:hover:bg-white/5" data-val="subs">
+                <input type="radio" name="st_radio" value="subs" class="hidden">
+                <div class="text-2xl mb-2">🇨🇳</div>
+                <div class="font-bold text-[14px] text-gray-900 dark:text-white">中文字幕优先</div>
+                <div class="text-[11px] text-gray-500 mt-1">画质再好不如有熟肉。优先保留携带 ASS 特效中字的资源。</div>
+            </label>
+            <label class="strategy-card cursor-pointer relative border-2 rounded-2xl p-4 transition-all hover:bg-gray-50 dark:hover:bg-white/5" data-val="size">
+                <input type="radio" name="st_radio" value="size" class="hidden">
+                <div class="text-2xl mb-2">💾</div>
+                <div class="font-bold text-[14px] text-gray-900 dark:text-white">空间体积最小化</div>
+                <div class="text-[11px] text-gray-500 mt-1">严厉惩罚大体积文件，偏好 HEVC/AV1 小体积高压版。</div>
+            </label>
+        </div>
+
+        <div class="border-t border-gray-200 dark:border-white/10 pt-6">
+            <div class="flex items-center justify-between mb-4 cursor-pointer select-none" onclick="toggleCustomPanel()">
+                <div class="font-bold text-[14px] text-gray-800 dark:text-gray-200"><i class="fa-solid fa-code-branch text-indigo-500 mr-2"></i>极客自定义权重</div>
+                <input type="checkbox" id="custom-toggle" class="ep-checkbox">
+            </div>
+            <div id="custom-panel" class="hidden space-y-5 bg-gray-50 dark:bg-black/20 p-5 rounded-2xl border border-gray-100 dark:border-white/5 mt-2">
+                <div>
+                    <label class="flex justify-between text-[12px] font-bold text-gray-700 dark:text-gray-300 mb-2"><span>📺 画质指标 (分辨率/码率)</span><span id="val-res" class="text-brand-500 font-mono">40</span></label>
+                    <input type="range" id="slider-res" min="0" max="100" value="40" class="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-brand-500" oninput="document.getElementById('val-res').innerText=this.value">
+                </div>
+                <div>
+                    <label class="flex justify-between text-[12px] font-bold text-gray-700 dark:text-gray-300 mb-2"><span>🗜️ 编码与体积 (HEVC/AV1)</span><span id="val-codec" class="text-brand-500 font-mono">5</span></label>
+                    <input type="range" id="slider-codec" min="0" max="100" value="5" class="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-brand-500" oninput="document.getElementById('val-codec').innerText=this.value">
+                </div>
+                <div>
+                    <label class="flex justify-between text-[12px] font-bold text-gray-700 dark:text-gray-300 mb-2"><span>✨ 特效指标 (HDR/DoVi)</span><span id="val-hdr" class="text-brand-500 font-mono">15</span></label>
+                    <input type="range" id="slider-hdr" min="0" max="100" value="15" class="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-brand-500" oninput="document.getElementById('val-hdr').innerText=this.value">
+                </div>
+                <div>
+                    <label class="flex justify-between text-[12px] font-bold text-gray-700 dark:text-gray-300 mb-2"><span>🇨🇳 字幕指标 (中文字幕/ASS)</span><span id="val-sub" class="text-brand-500 font-mono">25</span></label>
+                    <input type="range" id="slider-sub" min="0" max="100" value="25" class="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-brand-500" oninput="document.getElementById('val-sub').innerText=this.value">
+                </div>
+            </div>
+        </div>
+        <div class="mt-8 flex gap-3">
+            <button onclick="saveConfigAndClose()" class="flex-1 py-3 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-bold text-[14px] transition-colors">确认保存</button>
+        </div>
+    </div>
+</div>
+
+<div id="whitelist-modal" class="fixed inset-0 z-[100] hidden flex items-center justify-center bg-black/50 backdrop-blur-sm opacity-0 transition-opacity duration-300 px-4">
+    <div class="bg-white dark:bg-apple-cardDark w-full max-w-2xl rounded-[28px] shadow-2xl p-6 transform scale-95 transition-transform duration-300 border border-white/50 dark:border-white/5 flex flex-col max-h-[80vh]">
+        <div class="mb-4 flex justify-between items-center shrink-0">
+            <h3 class="text-lg font-black text-gray-900 dark:text-white"><i class="fa-solid fa-shield-halved text-indigo-500 mr-2"></i>永久豁免白名单</h3>
+            <button onclick="closeWhitelistModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white transition-colors"><i class="fa-solid fa-xmark text-lg"></i></button>
+        </div>
+        <p class="text-xs text-gray-500 mb-3 shrink-0">被加入白名单的影视剧，系统扫描时将永远直接跳过，保护您的特殊收藏。</p>
+        <div class="flex items-center gap-2 mb-3 shrink-0">
+            <label class="flex items-center gap-2 px-3 py-1.5 bg-gray-100 dark:bg-white/5 rounded-lg cursor-pointer hover:bg-gray-200 dark:hover:bg-white/10 transition-colors">
+                <input type="checkbox" id="wl-select-all" class="ep-checkbox brand-cb" onchange="toggleSelectAllWl(this)">
+                <span class="text-[12px] font-bold text-gray-600 dark:text-gray-300">全选</span>
+            </label>
+            <span class="text-[11px] text-gray-400" id="wl-total-count">共 0 项</span>
+        </div>
+        <div id="whitelist-container" class="flex-1 overflow-y-auto mac-scrollbar bg-gray-50 dark:bg-black/10 rounded-xl border border-gray-100 dark:border-white/5 p-2 space-y-1">
+            <div class="text-center py-10 text-gray-400 text-xs">加载中...</div>
+        </div>
+        <div class="mt-4 pt-4 border-t border-gray-100 dark:border-white/5 flex justify-between items-center shrink-0">
+            <span class="text-xs text-gray-500" id="wl-count-text">已选择 0 项</span>
+            <div class="flex gap-2">
+                <button onclick="removeWhitelistItems()" class="px-5 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl font-bold text-[13px] shadow-sm transition-colors active:scale-95 disabled:opacity-50" id="btn-rm-wl" disabled>
+                    <i class="fa-solid fa-trash-can mr-1"></i> 移出白名单
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="auth-modal" class="fixed inset-0 z-[110] hidden flex items-center justify-center bg-black/60 backdrop-blur-md opacity-0 transition-opacity duration-300 px-4">
+    <div class="bg-white dark:bg-apple-cardDark w-full max-w-sm rounded-[24px] shadow-2xl p-6 transform scale-95 transition-transform duration-300 border border-red-500/20">
+        <div class="text-center mb-5">
+            <div class="w-14 h-14 bg-red-50 text-red-500 dark:bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-3"><i class="fa-solid fa-shield-halved text-2xl"></i></div>
+            <h3 class="text-lg font-black text-gray-900 dark:text-white">高危操作验证</h3>
+            <p class="text-[12px] text-gray-500 mt-1.5 px-2 leading-relaxed">为了防止误删珍贵媒体，由于您是首次操作，必须输入 <b class="text-brand-500">Emby管理员密码</b> 进行确权。</p>
+        </div>
+        <div class="space-y-3">
+            <input type="text" id="auth-user" class="w-full bg-gray-50 dark:bg-[#2C2C2E] border border-gray-200 dark:border-white/5 rounded-xl px-4 py-3 text-[14px] focus:ring-2 focus:ring-brand-500 outline-none dark:text-white placeholder-gray-400" placeholder="Emby 管理员账号">
+            <input type="password" id="auth-pwd" class="w-full bg-gray-50 dark:bg-[#2C2C2E] border border-gray-200 dark:border-white/5 rounded-xl px-4 py-3 text-[14px] focus:ring-2 focus:ring-brand-500 outline-none dark:text-white placeholder-gray-400" placeholder="Emby 管理员密码">
+        </div>
+        <div class="mt-6 flex gap-3">
+            <button onclick="closeAuthModal()" class="flex-1 py-3 bg-gray-100 dark:bg-[#2C2C2E] text-gray-600 dark:text-gray-300 rounded-xl font-bold text-[13px] transition-colors">取消</button>
+            <button onclick="executeFinalDelete()" class="flex-1 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-bold text-[13px] shadow-md shadow-red-500/20 transition-colors active:scale-95">确权并物理删除</button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<style>
+    .animate-spin-slow { animation: spin 3s linear infinite; }
+    .ep-checkbox {
+        appearance: none; background-color: transparent; margin: 0; color: currentColor;
+        width: 1.3em; height: 1.3em; border: 2px solid #9CA3AF; border-radius: 0.35em;
+        display: grid; place-content: center; transition: all 0.2s ease-in-out; cursor: pointer; flex-shrink: 0;
+    }
+    .ep-checkbox::before {
+        content: ""; width: 0.65em; height: 0.65em; transform: scale(0); transition: 120ms transform ease-in-out;
+        box-shadow: inset 1em 1em white; transform-origin: center; clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+    }
+    .ep-checkbox:checked { background-color: #EF4444; border-color: #EF4444; }
+    .ep-checkbox.brand-cb:checked { background-color: #007AFF; border-color: #007AFF; }
+    .ep-checkbox:checked::before { transform: scale(1); }
+    .ep-checkbox:disabled { opacity: 0.5; cursor: not-allowed; }
+    
+    .strategy-card.active { border-color: #007AFF; background-color: rgba(0,122,255,0.05); }
+    .strategy-card { border-color: transparent; }
+</style>
+
+<script>
+    let pollInterval = null;
+    let selectedItems = new Map(); 
+    let allGroups = {};
+    let currentStrategy = 'quality';
+    let hasVerifiedPassword = false;
+    let currentTab = 'movies';
+    let selectMode = 'manual'; // 'manual' 或 'auto'，默认手动挑选
+    
+    // 全局暂存剧集的勾选状态数据
+    window.folderData = {};
+
+    function getDirName(path) {
+        if (!path) return "未知目录";
+        const parts = path.split(/[/\\]/);
+        parts.pop(); 
+        return parts.join('/') || "/";
+    }
+
+    function formatBreadcrumb(path) {
+        if (!path) return "未知路径";
+        let parts = path.split(/[/\\]/).filter(Boolean);
+        parts.pop(); 
+        if (parts.length === 0) return "根目录";
+        if (parts.length <= 3) return '📁 ' + parts.join(' ❯ ');
+        return '📁 ... ❯ ' + parts.slice(-3).join(' ❯ ');
+    }
+
+    // 🔥 JS 更新：同步修改标签切换时的样式（包含适配手机的 flex-1）
+    function switchTab(tab) {
+        currentTab = tab;
+        const btnM = document.getElementById('tab-btn-movies');
+        const btnT = document.getElementById('tab-btn-tv');
+        
+        const activeClass = 'flex-1 sm:flex-none px-6 py-2 rounded-lg text-[13px] font-bold transition-all bg-white dark:bg-apple-hoverDark shadow-sm text-gray-900 dark:text-white';
+        const inactiveClass = 'flex-1 sm:flex-none px-6 py-2 rounded-lg text-[13px] font-bold transition-all text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200';
+
+        if (tab === 'movies') {
+            btnM.className = activeClass;
+            btnT.className = inactiveClass;
+            document.getElementById('dedupe-results-movies').classList.remove('hidden');
+            document.getElementById('dedupe-results-tv').classList.add('hidden');
+        } else {
+            btnT.className = activeClass;
+            btnM.className = inactiveClass;
+            document.getElementById('dedupe-results-movies').classList.add('hidden');
+            document.getElementById('dedupe-results-tv').classList.remove('hidden');
+        }
+    }
+
+    function updateStrategyUI() {
+        document.querySelectorAll('.strategy-card').forEach(el => {
+            el.classList.remove('active', 'border-brand-500', 'bg-brand-50', 'dark:bg-brand-500/10');
+            el.classList.add('border-gray-200', 'dark:border-white/10');
+            if(el.dataset.val === currentStrategy && !document.getElementById('custom-toggle').checked) {
+                el.classList.add('active', 'border-brand-500', 'bg-brand-50', 'dark:bg-brand-500/10');
+                el.classList.remove('border-gray-200', 'dark:border-white/10');
+            }
+        });
+    }
+    
+    document.querySelectorAll('.strategy-card').forEach(el => {
+        el.addEventListener('click', () => {
+            document.getElementById('custom-toggle').checked = false;
+            document.getElementById('custom-panel').classList.add('hidden');
+            currentStrategy = el.dataset.val; updateStrategyUI();
+        });
+    });
+    
+    function toggleCustomPanel() {
+        const cb = document.getElementById('custom-toggle'); cb.checked = !cb.checked;
+        const panel = document.getElementById('custom-panel');
+        if(cb.checked) { panel.classList.remove('hidden'); currentStrategy = 'custom'; updateStrategyUI(); }
+        else { panel.classList.add('hidden'); currentStrategy = 'quality'; updateStrategyUI(); }
+    }
+    
+    function openConfigModal() {
+        const m = document.getElementById('config-modal'); m.classList.remove('hidden'); void m.offsetWidth; m.classList.remove('opacity-0'); m.querySelector('div').classList.remove('scale-95'); updateStrategyUI();
+    }
+    
+    function closeConfigModal() {
+        const m = document.getElementById('config-modal'); m.classList.add('opacity-0'); m.querySelector('div').classList.add('scale-95'); setTimeout(() => m.classList.add('hidden'), 300);
+    }
+
+    function formatBytes(bytes) {
+        if (!bytes || bytes === 0) return '0 B'; const k = 1024; const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k)); return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+    
+    function updateActionPill() {
+        const pill = document.getElementById('action-pill');
+        if (selectedItems.size > 0) {
+            pill.classList.remove('translate-y-32', 'opacity-0', 'pointer-events-none'); pill.classList.add('translate-y-0', 'opacity-100', 'pointer-events-auto');
+            document.getElementById('pill-count').innerText = selectedItems.size;
+            let totalBytes = 0; selectedItems.forEach(size => totalBytes += size);
+            document.getElementById('pill-size').innerText = formatBytes(totalBytes);
+        } else {
+            pill.classList.add('translate-y-32', 'opacity-0', 'pointer-events-none'); pill.classList.remove('translate-y-0', 'opacity-100', 'pointer-events-auto');
+        }
+    }
+    
+    function clearSelection() {
+        selectedItems.clear(); 
+        document.querySelectorAll('.ep-checkbox').forEach(cb => cb.checked = false);
+        document.querySelectorAll('[id^="row-"]').forEach(r => r.classList.remove('bg-red-50/50', 'dark:bg-red-500/10')); 
+        updateActionPill();
+    }
+
+    // 电影单体勾选
+    function toggleSelection(itemId, sizeBytes, event) {
+        if(event && event.target.tagName.toLowerCase() === 'a') return;
+        const checkbox = document.getElementById(`chk-${itemId}`); if(checkbox && checkbox.disabled) return;
+        if(event && event.target !== checkbox && checkbox) checkbox.checked = !checkbox.checked;
+        if (checkbox && checkbox.checked) { selectedItems.set(itemId, sizeBytes); document.getElementById(`row-${itemId}`).classList.add('bg-red-50/50', 'dark:bg-red-500/10'); } 
+        else if (checkbox) { selectedItems.delete(itemId); document.getElementById(`row-${itemId}`).classList.remove('bg-red-50/50', 'dark:bg-red-500/10'); }
+        updateActionPill();
+    }
+
+    // 文件夹联动全选
+    function toggleFolderCb(cbElement, folderId, event) {
+        if(event) event.stopPropagation();
+        const data = window.folderData[folderId];
+        if(!data) return;
+        
+        const isChecked = cbElement.checked;
+        data.ids.forEach((id, idx) => {
+            if (data.exempts[idx] === 1) return;
+            const childCb = document.getElementById(`chk-${id}`);
+            if (childCb) childCb.checked = isChecked;
+            if(isChecked) { selectedItems.set(id, data.sizes[idx]); } 
+            else { selectedItems.delete(id); }
+        });
+        updateActionPill();
+    }
+
+    // 单集子项勾选联动
+    function toggleChildCb(cbElement, itemId, sizeBytes, folderId, event) {
+        if(event) event.stopPropagation();
+        if(cbElement.checked) { selectedItems.set(itemId, sizeBytes); } 
+        else { selectedItems.delete(itemId); }
+        
+        const data = window.folderData[folderId];
+        if(data) {
+            const someChecked = data.ids.some(id => selectedItems.has(id));
+            const parentCb = document.getElementById(`chk_${folderId}`);
+            if(parentCb) parentCb.checked = someChecked; 
+        }
+        updateActionPill();
+    }
+
+    function toggleAccordion(groupKey) {
+        const body = document.getElementById(`body-${groupKey}`); 
+        const icon = document.getElementById(`icon-${groupKey}`);
+        if (body && icon) {
+            if (body.classList.contains('hidden')) { body.classList.remove('hidden'); icon.classList.add('rotate-180'); } 
+            else { body.classList.add('hidden'); icon.classList.remove('rotate-180'); }
+        }
+    }
+
+    // 存储选中的屏蔽媒体库（从 localStorage 加载）
+    let excludedLibraries = JSON.parse(localStorage.getItem('dedupe_excluded_libraries') || '[]');
+    
+    // 🔥 加载勾选模式（默认手动挑选）
+    selectMode = localStorage.getItem('dedupe_select_mode') || 'manual';
+
+    async function startScan() {
+        const payload = { strategy: currentStrategy, excluded_libraries: excludedLibraries };
+        if (currentStrategy === 'custom') {
+            payload.custom_weights = { res: parseInt(document.getElementById('slider-res').value), codec: parseInt(document.getElementById('slider-codec').value), hdr: parseInt(document.getElementById('slider-hdr').value), chi: parseInt(document.getElementById('slider-sub').value) - 10, ass: parseInt(document.getElementById('slider-sub').value) };
+        }
+        try {
+            const res = await fetch('/api/dedupe/scan', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) });
+            const data = await res.json();
+            if (data.success) {
+                document.getElementById('scan-progress-container').classList.remove('hidden');
+                document.getElementById('btn-scan').disabled = true; document.getElementById('btn-scan').classList.add('opacity-50');
+                pollInterval = setInterval(checkStatus, 1000);
+            } else { dedupeToast('error', data.msg); }
+        } catch(e) { console.error(e); }
+    }
+
+    // 加载媒体库列表
+    async function loadLibraries() {
+        try {
+            const res = await fetch('/api/dedupe/libraries');
+            const data = await res.json();
+            const container = document.getElementById('library-list-container');
+            if (data.success && data.data.length > 0) {
+                container.innerHTML = data.data.map(lib => `
+                    <label class="flex items-center gap-3 p-2 rounded-lg hover:bg-white dark:hover:bg-white/5 transition-colors cursor-pointer">
+                        <input type="checkbox" value="${lib.id}" class="library-checkbox w-4 h-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500"
+                            ${excludedLibraries.includes(lib.id) ? 'checked' : ''}>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-[13px] font-medium text-gray-800 dark:text-gray-200 truncate">${lib.name}</div>
+                            <div class="text-[10px] text-gray-400">${lib.item_count} 个项目</div>
+                        </div>
+                    </label>
+                `).join('');
+            } else {
+                container.innerHTML = '<div class="text-[12px] text-gray-400 text-center py-2">暂无媒体库</div>';
+            }
+        } catch(e) {
+            console.error(e);
+            document.getElementById('library-list-container').innerHTML = '<div class="text-[12px] text-red-400 text-center py-2">加载失败</div>';
+        }
+    }
+
+    // 保存配置并关闭弹窗
+    function saveConfigAndClose() {
+        // 收集选中的媒体库
+        const checkboxes = document.querySelectorAll('.library-checkbox:checked');
+        excludedLibraries = Array.from(checkboxes).map(cb => cb.value);
+        // 持久化存储到 localStorage
+        localStorage.setItem('dedupe_excluded_libraries', JSON.stringify(excludedLibraries));
+        
+        // 🔥 保存勾选模式
+        selectMode = document.querySelector('input[name="select_mode"]:checked').value;
+        localStorage.setItem('dedupe_select_mode', selectMode);
+        
+        closeConfigModal();
+    }
+
+    // 修改打开配置弹窗函数
+    const originalOpenConfigModal = openConfigModal;
+    openConfigModal = function() {
+        const m = document.getElementById('config-modal'); m.classList.remove('hidden'); void m.offsetWidth; m.classList.remove('opacity-0'); m.querySelector('div').classList.remove('scale-95'); updateStrategyUI();
+        loadLibraries(); // 加载媒体库列表
+        
+        // 🔥 加载勾选模式
+        selectMode = localStorage.getItem('dedupe_select_mode') || 'manual';
+        const modeRadio = document.querySelector(`input[name="select_mode"][value="${selectMode}"]`);
+        if (modeRadio) modeRadio.checked = true;
+    }
+
+    async function checkStatus() {
+        try {
+            const res = await fetch('/api/dedupe/status'); const data = await res.json();
+            if (data.success) {
+                const state = data.data;
+                document.getElementById('scan-progress-bar').style.width = `${state.progress}%`;
+                document.getElementById('scan-status-text').innerText = state.message;
+                if (!state.is_scanning) {
+                    clearInterval(pollInterval);
+                    document.getElementById('scan-progress-container').classList.add('hidden');
+                    document.getElementById('btn-scan').disabled = false; document.getElementById('btn-scan').classList.remove('opacity-50');
+                    if(state.message.includes('✅')) {
+                        document.getElementById('summary-text').innerText = state.message;
+                        document.getElementById('result-summary').classList.remove('hidden');
+                    }
+                    loadResults(); 
+                }
+            }
+        } catch(e) { console.error(e); }
+    }
+
+    async function loadResults() {
+        try {
+            const res = await fetch('/api/dedupe/results'); const data = await res.json();
+            if (data.success) { allGroups = data.data; renderResults(allGroups, data.emby_url, data.server_id); }
+        } catch(e) { console.error(e); }
+    }
+
+    function renderResults(groups, embyUrl, serverId) {
+        const containerEmpty = document.getElementById('dedupe-empty-state'); 
+        const cMovies = document.getElementById('dedupe-results-movies'); 
+        const cTv = document.getElementById('dedupe-results-tv');
+        const cMovieCards = document.getElementById('movie-cards-container');
+        const cTvCards = document.getElementById('tv-cards-container');
+        const typeTabs = document.getElementById('type-tabs');
+        
+        selectedItems.clear(); window.folderData = {};
+        let keys = Object.keys(groups);
+        
+        if (keys.length === 0) {
+            containerEmpty.style.display = 'block'; cMovies.classList.add('hidden'); cTv.classList.add('hidden'); typeTabs.classList.add('hidden');
+            updateActionPill(); return;
+        }
+        
+        // 🔥 将原先的独立模块，改为内置元素的弹性展开展示
+        containerEmpty.style.display = 'none'; 
+        typeTabs.classList.remove('hidden'); 
+        typeTabs.classList.add('flex');
+        
+        const finalEmbyUrl = embyUrl || globalEmbyBaseUrl || window.location.origin;
+        const serverParam = serverId ? `&serverId=${serverId}` : '';
+        
+        const movieGroups = {}; const tvDisplayGroups = {};
+        
+        keys.forEach(gKey => {
+            const items = groups[gKey]; const first = items[0];
+            if (first.media_type === 'Movie') {
+                movieGroups[`movie_${gKey}`] = { type: 'Movie', title: first.title, targetImageId: first.item_id, itemCount: items.length, items: items };
+            } else {
+                const showName = first.title || "未知剧集";
+                const showKey = `tv_show_${first.tmdb_id || showName}`; 
+                if (!tvDisplayGroups[showKey]) {
+                    tvDisplayGroups[showKey] = { title: showName, targetImageId: first.item_id, allItems: [] };
+                }
+                tvDisplayGroups[showKey].allItems.push(...items);
+            }
+        });
+
+        const mKeys = Object.keys(movieGroups);
+        document.getElementById('tab-count-movies').innerText = mKeys.length;
+        if (mKeys.length > 0) {
+            let mHtml = '';
+            mKeys.forEach((gKey, index) => {
+                const dg = movieGroups[gKey]; const uniqueId = `mv_grp_${index}`;
+                mHtml += `<div class="bg-white dark:bg-apple-cardDark rounded-[16px] shadow-sm border border-gray-200 dark:border-white/5 overflow-hidden transition-colors hover:border-brand-500/30 group flex flex-col h-fit">`;
+                mHtml += `<div class="pl-3 pr-4 py-2 flex items-center justify-between cursor-pointer bg-gray-50/50 dark:bg-black/20 select-none hover:bg-gray-100/50 dark:hover:bg-white/5 transition-colors" onclick="toggleAccordion('${uniqueId}')">`;
+                mHtml += `<div class="flex items-center gap-3 flex-1 min-w-0"><img src="/api/proxy/smart_image?item_id=${dg.targetImageId}&type=Primary" class="w-8 h-12 object-cover rounded shadow-sm border border-gray-200 dark:border-white/10" onerror="this.style.display='none'"><div class="flex flex-col min-w-0"><h3 class="font-bold text-[14px] text-gray-900 dark:text-white truncate">🎬 ${dg.title}</h3><span class="text-[10px] text-brand-500 dark:text-brand-400 font-bold">包含 ${dg.itemCount} 个重复版本</span></div></div><i class="fa-solid fa-chevron-down text-[12px] text-gray-400 transition-transform duration-300 ml-2" id="icon-${uniqueId}"></i></div>`;
+                mHtml += `<div id="body-${uniqueId}" class="flex flex-col border-t border-gray-100 dark:border-white/5">`;
+
+                dg.items.forEach(item => {
+                    const sizeStr = formatBytes(item.size_bytes);
+                    const vCodec = item.video_codec || "未知"; const aCodec = item.audio_codec || "未知";
+                    let badgesHtml = '';
+                    if (item.resolution === '4K') badgesHtml += `<span class="bg-purple-100 text-purple-600 dark:bg-purple-500/20 dark:text-purple-400 px-1.5 py-0.5 rounded-[4px] text-[9px] font-bold whitespace-nowrap border border-purple-200 dark:border-purple-500/30">4K</span>`;
+                    else if (item.resolution === '1080P') badgesHtml += `<span class="bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400 px-1.5 py-0.5 rounded-[4px] text-[9px] font-bold whitespace-nowrap border border-blue-200 dark:border-blue-500/30">1080P</span>`;
+                    else badgesHtml += `<span class="bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-gray-300 px-1.5 py-0.5 rounded-[4px] text-[9px] font-bold whitespace-nowrap border border-gray-200 dark:border-white/10">${item.resolution}</span>`;
+                    
+                    if (item.has_dovi === 1) badgesHtml += `<span class="bg-yellow-100 text-yellow-600 dark:bg-yellow-500/20 dark:text-yellow-400 px-1.5 py-0.5 rounded-[4px] text-[9px] font-bold whitespace-nowrap border border-yellow-200 dark:border-yellow-500/30"><i class="fa-solid fa-wand-magic-sparkles mr-0.5"></i>DoVi</span>`;
+                    if (item.has_ass_sub === 1) badgesHtml += `<span class="bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-400 px-1.5 py-0.5 rounded-[4px] text-[9px] font-bold whitespace-nowrap border border-green-200 dark:border-green-500/30">中字 ASS</span>`;
+
+                    let isChecked = false; let disabledAttr = ''; let rowBg = ''; let actionBtnHtml = '';
+                    if (item.is_exempt === 1) { disabledAttr = 'disabled'; actionBtnHtml = `<span class="text-[10px] font-bold text-indigo-500">豁免</span>`; } 
+                    else if (item.is_recommended_del === 1) { isChecked = true; rowBg = 'bg-red-50/50 dark:bg-red-500/10'; selectedItems.set(item.item_id, item.size_bytes); actionBtnHtml = `<span class="text-[10px] font-bold text-red-500"><i class="fa-solid fa-trash-can"></i> 清理</span>`; } 
+                    else if (item.score === dg.items[0].score) { actionBtnHtml = `<span class="text-[10px] font-bold text-brand-500"><i class="fa-solid fa-trophy"></i> 最佳</span>`; }
+
+                    const playUrl = `${finalEmbyUrl}/web/index.html#!/item?id=${item.item_id}${serverParam}`;
+                    const breadcrumb = formatBreadcrumb(item.file_path);
+                    
+                    mHtml += `<div id="row-${item.item_id}" class="flex items-start py-2.5 px-3 md:px-4 border-b border-gray-100 dark:border-white/5 cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5 transition-colors gap-2.5 ${rowBg}" onclick="toggleSelection('${item.item_id}', ${item.size_bytes}, event)">`;
+                    mHtml += `<div class="pt-0.5 md:pt-1 shrink-0"><input type="checkbox" id="chk-${item.item_id}" class="ep-checkbox" ${isChecked ? 'checked' : ''} ${disabledAttr} onclick="toggleSelection('${item.item_id}', ${item.size_bytes}, event)"></div>`;
+                    mHtml += `<div class="flex flex-col min-w-0 flex-1"><a href="${playUrl}" target="_blank" class="text-[13px] font-bold text-gray-800 dark:text-gray-200 truncate hover:text-brand-500 transition-colors block leading-tight mb-0.5" title="${item.file_name}" onclick="event.stopPropagation()">${item.file_name}</a><div class="text-[10px] text-gray-400 font-mono truncate mb-1" title="${item.file_path}">${breadcrumb}</div><div class="flex flex-wrap items-center gap-1.5"><span class="text-[10px] font-mono text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-white/5 px-1 rounded">${sizeStr}</span><span class="text-[9px] text-gray-400">${vCodec} | ${aCodec}</span>${badgesHtml}</div></div>`;
+                    mHtml += `<div class="flex flex-col justify-center items-end shrink-0 pl-2">${actionBtnHtml}</div></div>`;
+                });
+                mHtml += `</div></div>`;
+            });
+            cMovieCards.innerHTML = mHtml;
+        }
+
+        const tKeys = Object.keys(tvDisplayGroups);
+        document.getElementById('tab-count-tv').innerText = tKeys.length;
+        if (tKeys.length > 0) {
+            let tHtml = '';
+            tKeys.forEach((showKey, index) => {
+                const show = tvDisplayGroups[showKey]; const uniqueId = `tv_grp_${index}`;
+                const groupPlayUrl = `${finalEmbyUrl}/web/index.html#!/item?id=${show.targetImageId}${serverParam}`;
+                
+                const folders = {};
+                show.allItems.forEach(item => {
+                    const dir = getDirName(item.file_path);
+                    if(!folders[dir]) folders[dir] = { path: dir, items: [], size: 0, resSet: new Set(), codecSet: new Set(), score: 0 };
+                    folders[dir].items.push(item);
+                    folders[dir].size += item.size_bytes;
+                    folders[dir].score = Math.max(folders[dir].score, item.score);
+                    if(item.resolution) folders[dir].resSet.add(item.resolution);
+                    if(item.video_codec) folders[dir].codecSet.add(item.video_codec);
+                });
+
+                const sortedFolders = Object.values(folders).sort((a,b) => b.score - a.score);
+
+                tHtml += `<div class="bg-white dark:bg-apple-cardDark rounded-[16px] shadow-sm border border-gray-200 dark:border-white/5 overflow-hidden transition-colors hover:border-brand-500/30 group flex flex-col h-fit">`;
+                tHtml += `<div class="pl-3 pr-4 py-2 flex items-center justify-between cursor-pointer bg-gray-50/50 dark:bg-black/20 select-none hover:bg-gray-100/50 dark:hover:bg-white/5 transition-colors" onclick="toggleAccordion('${uniqueId}')">`;
+                tHtml += `<div class="flex items-center gap-3 flex-1 min-w-0"><img src="/api/proxy/smart_image?item_id=${show.targetImageId}&type=Primary" class="w-8 h-12 object-cover rounded shadow-sm border border-gray-200 dark:border-white/10" onerror="this.style.display='none'"><div class="flex flex-col min-w-0"><a href="${groupPlayUrl}" target="_blank" onclick="event.stopPropagation()" class="font-bold text-[14px] text-gray-900 dark:text-white truncate hover:text-brand-500 transition-colors" title="在 Emby 中打开该剧集">📺 ${show.title}</a><span class="text-[10px] text-brand-500 dark:text-brand-400 font-bold mt-0.5">发现 ${sortedFolders.length} 个版本文件夹</span></div></div><i class="fa-solid fa-chevron-down text-[12px] text-gray-400 transition-transform duration-300 ml-2" id="icon-${uniqueId}"></i></div>`;
+                tHtml += `<div id="body-${uniqueId}" class="flex flex-col border-t border-gray-100 dark:border-white/5">`;
+
+                sortedFolders.forEach((f, fIdx) => {
+                    const folderId = `folder_${uniqueId}_${fIdx}`;
+                    const breadcrumb = formatBreadcrumb(f.path);
+                    const sizeStr = formatBytes(f.size);
+                    const resStr = Array.from(f.resSet).filter(x => x && x !== '未知').join('/') || '未知';
+                    const codecStr = Array.from(f.codecSet).filter(x => x && x !== '未知').join('/') || '未知';
+                    
+                    window.folderData[folderId] = {
+                        ids: f.items.map(i => i.item_id),
+                        sizes: f.items.map(i => i.size_bytes),
+                        exempts: f.items.map(i => i.is_exempt)
+                    };
+
+                    let checkedCount = 0;
+                    let hasRecommendedDel = false;
+                    f.items.forEach(i => {
+                        if (i.is_recommended_del === 1) hasRecommendedDel = true;
+                        // 🔥 只有自动勾选模式才自动勾选劣势版本
+                        if (selectMode === 'auto' && i.is_recommended_del === 1 && i.is_exempt !== 1) {
+                            selectedItems.set(i.item_id, i.size_bytes);
+                            checkedCount++;
+                        }
+                    });
+                    const isChecked = checkedCount > 0;
+
+                    const folderPlayUrl = f.items.length > 0 ? `${finalEmbyUrl}/web/index.html#!/item?id=${f.items[0].item_id}${serverParam}` : '#';
+
+                    tHtml += `<div class="border-b border-gray-100 dark:border-white/5 last:border-b-0">`;
+                    tHtml += `<div class="p-3.5 flex items-start gap-3 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors cursor-pointer" onclick="toggleAccordion('${folderId}_content')">`;
+                    tHtml += `<div class="pt-0.5 shrink-0">`;
+                    tHtml += `<input type="checkbox" id="chk_${folderId}" class="ep-checkbox" ${isChecked?'checked':''} onclick="toggleFolderCb(this, '${folderId}', event)">`;
+                    tHtml += `</div>`;
+                    tHtml += `<div class="flex flex-col min-w-0 flex-1">`;
+                    tHtml += `<div class="text-[12px] font-bold text-gray-800 dark:text-gray-200 mb-1 flex items-center justify-between gap-2">`;
+                    tHtml += `<a href="${folderPlayUrl}" target="_blank" onclick="event.stopPropagation()" class="truncate hover:text-brand-500 transition-colors block" title="${f.path}">${breadcrumb}</a>`;
+                    tHtml += `<div class="p-1.5 rounded flex items-center shrink-0 hover:bg-gray-200 dark:hover:bg-white/10"><i class="fa-solid fa-chevron-down text-[12px] text-gray-400 transition-transform duration-300" id="icon-${folderId}_content"></i></div>`;
+                    tHtml += `</div>`;
+                    tHtml += `<div class="flex flex-wrap items-center gap-2 mb-1.5"><span class="bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded text-[10px] font-bold text-gray-600 dark:text-gray-300">包含 ${f.items.length} 集</span><span class="text-[10px] font-mono text-gray-500">${sizeStr} | ${resStr} | ${codecStr}</span></div>`;
+                    
+                    if (hasRecommendedDel) {
+                        tHtml += `<div class="text-[10px] text-red-500 font-bold bg-red-50 dark:bg-red-500/10 px-2 py-0.5 rounded inline-block w-fit">⚠️ 此版本已被判为劣势，勾选以清理</div>`;
+                    } else {
+                        tHtml += `<div class="text-[10px] text-brand-500 font-bold bg-brand-50 dark:bg-brand-500/10 px-2 py-0.5 rounded inline-block w-fit"><i class="fa-solid fa-trophy"></i> 高分版本目录，建议保留</div>`;
+                    }
+                    tHtml += `</div></div>`; 
+                    
+                    tHtml += `<div id="body-${folderId}_content" class="hidden bg-gray-50/50 dark:bg-black/20 pl-8 pr-3 py-2 space-y-2 border-t border-gray-100 dark:border-white/5 shadow-inner" onclick="event.stopPropagation()">`;
+                    
+                    let sortedItems = f.items.slice().sort((a,b) => (a.season_num - b.season_num) || (a.episode_num - b.episode_num));
+                    sortedItems.forEach(item => {
+                        const itemSizeStr = formatBytes(item.size_bytes);
+                        const epPlayUrl = `${finalEmbyUrl}/web/index.html#!/item?id=${item.item_id}${serverParam}`;
+                        const isItemChecked = selectedItems.has(item.item_id);
+                        const itemDisabled = item.is_exempt === 1 ? 'disabled' : '';
+                        
+                        let badgesHtml = '';
+                        if (item.resolution === '4K') badgesHtml += `<span class="text-purple-500 border border-purple-200 dark:border-purple-500/30 px-1 py-0.5 rounded text-[8px] font-bold">4K</span>`;
+                        else if (item.resolution === '1080P') badgesHtml += `<span class="text-blue-500 border border-blue-200 dark:border-blue-500/30 px-1 py-0.5 rounded text-[8px] font-bold">1080P</span>`;
+
+                        let tagHtml = item.is_recommended_del ? `<span class="text-[9px] text-red-500 ml-1">清理项</span>` : `<span class="text-[9px] text-brand-500 ml-1">保留项</span>`;
+
+                        tHtml += `<div class="flex items-start gap-2 py-1" id="row-${item.item_id}">`;
+                        tHtml += `<div class="pt-0.5 shrink-0"><input type="checkbox" id="chk-${item.item_id}" class="ep-checkbox w-[1em] h-[1em]" ${isItemChecked?'checked':''} ${itemDisabled} onclick="toggleChildCb(this, '${item.item_id}', ${item.size_bytes}, '${folderId}', event)"></div>`;
+                        tHtml += `<div class="flex flex-col min-w-0 flex-1"><a href="${epPlayUrl}" target="_blank" class="text-[12px] font-bold text-gray-700 dark:text-gray-300 truncate hover:text-brand-500 block leading-tight" title="${item.file_name}" onclick="event.stopPropagation()"><span class="text-brand-500 mr-1 font-mono">S${String(item.season_num).padStart(2,'0')}E${String(item.episode_num).padStart(2,'0')}</span>${item.file_name}</a><div class="flex flex-wrap items-center gap-1 mt-1"><span class="text-[9px] font-mono text-gray-400">${itemSizeStr}</span>${badgesHtml}${tagHtml}</div></div>`;
+                        tHtml += `</div>`;
+                    });
+                    
+                    tHtml += `</div></div>`; 
+                });
+                tHtml += `</div></div>`; 
+            });
+            cTvCards.innerHTML = tHtml;
+        }
+
+        switchTab(mKeys.length > 0 ? 'movies' : 'tv');
+        updateActionPill();
+    }
+
+    let whitelistSelected = new Set();
+    let whitelistData = [];
+    function openWhitelistModal() {
+        const m = document.getElementById('whitelist-modal'); m.classList.remove('hidden'); void m.offsetWidth; m.classList.remove('opacity-0'); m.querySelector('div').classList.remove('scale-95'); fetchWhitelist();
+    }
+    function closeWhitelistModal() {
+        const m = document.getElementById('whitelist-modal'); m.classList.add('opacity-0'); m.querySelector('div').classList.add('scale-95'); setTimeout(() => m.classList.add('hidden'), 300);
+    }
+    async function fetchWhitelist() {
+        whitelistSelected.clear(); whitelistData = []; updateWlBtn();
+        document.getElementById('wl-select-all').checked = false;
+        try {
+            const res = await fetch('/api/dedupe/whitelist'); const data = await res.json();
+            const c = document.getElementById('whitelist-container');
+            if(!data.success || data.data.length === 0) { c.innerHTML = '<div class="text-center py-10 text-gray-400 text-xs">白名单空空如也</div>'; document.getElementById('wl-total-count').innerText = '共 0 项'; return; }
+            whitelistData = data.data;
+            document.getElementById('wl-total-count').innerText = `共 ${whitelistData.length} 项`;
+            let html = '';
+            data.data.forEach(item => {
+                html += `
+                <label class="flex items-center gap-3 p-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 cursor-pointer transition-colors border border-transparent">
+                    <input type="checkbox" class="ep-checkbox brand-cb wl-cb" value="${item.group_key}" onchange="toggleWl('${item.group_key}', this)">
+                    <div class="flex flex-col min-w-0"><span class="text-[13px] font-bold text-gray-800 dark:text-gray-200 truncate">${item.title || item.group_key}</span><span class="text-[10px] text-gray-400 font-mono mt-0.5">添加于: ${item.created_at.substring(0,16)}</span></div>
+                </label>`;
+            });
+            c.innerHTML = html;
+        } catch(e) { console.error(e); }
+    }
+    function toggleSelectAllWl(checkbox) {
+        const isChecked = checkbox.checked;
+        const allCbs = document.querySelectorAll('.wl-cb');
+        allCbs.forEach(cb => {
+            cb.checked = isChecked;
+            if (isChecked) {
+                whitelistSelected.add(cb.value);
+            } else {
+                whitelistSelected.delete(cb.value);
+            }
+        });
+        updateWlBtn();
+    }
+    function toggleWl(key, el) { if(el.checked) whitelistSelected.add(key); else whitelistSelected.delete(key); updateWlBtn(); updateWlSelectAll(); }
+    function updateWlBtn() { document.getElementById('wl-count-text').innerText = `已选择 ${whitelistSelected.size} 项`; document.getElementById('btn-rm-wl').disabled = whitelistSelected.size === 0; }
+    function updateWlSelectAll() {
+        const allCbs = document.querySelectorAll('.wl-cb');
+        const selectAllCb = document.getElementById('wl-select-all');
+        if (allCbs.length === 0) {
+            selectAllCb.checked = false;
+            return;
+        }
+        const allChecked = Array.from(allCbs).every(cb => cb.checked);
+        selectAllCb.checked = allChecked;
+    }
+    async function removeWhitelistItems() {
+        if(whitelistSelected.size === 0) return;
+        const confirmed = await dedupeConfirm({
+            type: 'warning',
+            title: '移出白名单',
+            message: `确定要将 ${whitelistSelected.size} 项移出白名单吗？`,
+            confirmText: '确定移出'
+        });
+        if (!confirmed) return;
+        try {
+            const res = await fetch('/api/dedupe/whitelist/remove', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({group_keys: Array.from(whitelistSelected)}) });
+            const data = await res.json();
+            if(data.success) {
+                fetchWhitelist();
+            } else {
+                dedupeToast('error', data.msg || '移出失败');
+            }
+        } catch(e) {}
+    }
+
+    async function batchIgnore() {
+        if(selectedItems.size === 0) return;
+        try {
+            const itemsToIgnore = [];
+            selectedItems.forEach((_, itemId) => {
+                for (let gKey in allGroups) {
+                    if (allGroups[gKey].find(i => i.item_id === itemId)) {
+                        const first = allGroups[gKey][0];
+                        const title = first.media_type === 'Movie' ? first.title : `${first.title} S${first.season_num}E${first.episode_num}`;
+                        if(!itemsToIgnore.find(x => x.group_key === gKey)) itemsToIgnore.push({group_key: gKey, title: title});
+                    }
+                }
+            });
+            const res = await fetch('/api/dedupe/ignore', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({items: itemsToIgnore}) });
+            const data = await res.json(); dedupeToast(data.success ? 'success' : 'error', data.msg); if(data.success) { loadResults(); clearSelection(); }
+        } catch(e) { console.error(e); }
+    }
+
+    async function checkAuthAndExecute() {
+        if(selectedItems.size === 0) return;
+        if (!hasVerifiedPassword) {
+            const m = document.getElementById('auth-modal'); m.classList.remove('hidden'); void m.offsetWidth; m.classList.remove('opacity-0'); m.querySelector('div').classList.remove('scale-95');
+            try { const u = JSON.parse(localStorage.getItem('user')); if(u && (u.username || u.Name)) document.getElementById('auth-user').value = u.username || u.Name; } catch(e){}
+        } else {
+            const confirmed = await dedupeConfirm({
+                type: 'danger',
+                title: '物理删除确认',
+                message: `⚠️ 确定物理删除这 ${selectedItems.size} 个视频文件？\n将释放 ${document.getElementById('pill-size').innerText}。\n此操作不可逆！`,
+                confirmText: '确定删除'
+            });
+            if (confirmed) executeDeleteAPI('', '');
+        }
+    }
+    function closeAuthModal() {
+        const m = document.getElementById('auth-modal'); m.classList.add('opacity-0'); m.querySelector('div').classList.add('scale-95'); setTimeout(() => { m.classList.add('hidden'); document.getElementById('auth-pwd').value = ''; }, 300);
+    }
+    async function executeFinalDelete() {
+        const u = document.getElementById('auth-user').value.trim(); const p = document.getElementById('auth-pwd').value.trim();
+        if(!u || !p) { dedupeToast('error', '必须输入账号和密码！'); return; } closeAuthModal(); executeDeleteAPI(u, p);
+    }
+    async function executeDeleteAPI(u, p) {
+        const pill = document.getElementById('action-pill');
+        pill.style.opacity = '0.5'; pill.style.pointerEvents = 'none';
+        try {
+            const res = await fetch('/api/dedupe/delete', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({item_ids: Array.from(selectedItems.keys()), username: u, password: p}) });
+            const data = await res.json();
+            if (data.success) { 
+                dedupeToast('success', data.msg); 
+                hasVerifiedPassword = true; 
+                selectedItems.clear(); // 清空选中项
+                pill.style.opacity = ''; pill.style.pointerEvents = ''; // 重置样式
+                loadResults(); 
+            } else { 
+                dedupeToast('error', data.msg); 
+                pill.style.opacity = '1'; pill.style.pointerEvents = 'auto'; 
+            }
+        } catch(e) { 
+            console.error(e); 
+            dedupeToast('error', '网络请求失败'); 
+            pill.style.opacity = '1'; pill.style.pointerEvents = 'auto';
+        }
+    }
+
+    // 🔔 Toast 通知函数
+    function dedupeToast(type, title, duration = 4000) {
+        const container = document.getElementById('dedupe-toast-container');
+        const toast = document.createElement('div');
+        toast.className = `dedupe-toast-item ${type}`;
+        const iconName = type === 'success' ? 'fa-check' : type === 'error' ? 'fa-xmark' : 'fa-exclamation';
+        toast.innerHTML = `
+            <div class="dedupe-toast-icon ${type}"><i class="fa-solid ${iconName}"></i></div>
+            <span>${title}</span>
+        `;
+        container.appendChild(toast);
+        setTimeout(() => {
+            toast.style.animation = 'dedupe-toast-out 0.25s ease-in forwards';
+            setTimeout(() => toast.remove(), 250);
+        }, duration);
+    }
+
+    // 🔔 Confirm 确认框函数
+    let dedupeConfirmResolve = null;
+    function dedupeConfirm(options) {
+        return new Promise((resolve) => {
+            dedupeConfirmResolve = resolve;
+            const container = document.getElementById('dedupe-confirm-container');
+            const iconClass = options.type === 'danger' ? 'danger' : 'warning';
+            const iconName = options.type === 'danger' ? 'fa-circle-exclamation' : 'fa-triangle-exclamation';
+            const btnClass = options.type === 'danger' ? 'danger' : 'danger';
+            container.innerHTML = `
+                <div class="dedupe-confirm-overlay" onclick="dedupeConfirmCancel()"></div>
+                <div class="dedupe-confirm-modal">
+                    <div class="dedupe-confirm-icon ${iconClass}"><i class="fa-solid ${iconName}"></i></div>
+                    <div class="dedupe-confirm-title">${options.title || '确认操作'}</div>
+                    <div class="dedupe-confirm-message">${options.message || ''}</div>
+                    <div class="dedupe-confirm-buttons">
+                        <button class="dedupe-confirm-btn cancel" onclick="dedupeConfirmCancel()">${options.cancelText || '取消'}</button>
+                        <button class="dedupe-confirm-btn ${btnClass}" onclick="dedupeConfirmOk()">${options.confirmText || '确定'}</button>
+                    </div>
+                </div>
+            `;
+        });
+    }
+    function dedupeConfirmOk() {
+        const container = document.getElementById('dedupe-confirm-container');
+        container.innerHTML = '';
+        if (dedupeConfirmResolve) { dedupeConfirmResolve(true); dedupeConfirmResolve = null; }
+    }
+    function dedupeConfirmCancel() {
+        const container = document.getElementById('dedupe-confirm-container');
+        container.innerHTML = '';
+        if (dedupeConfirmResolve) { dedupeConfirmResolve(false); dedupeConfirmResolve = null; }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => { loadResults(); });
+</script>
+{% endblock %}

@@ -1,0 +1,1679 @@
+{% extends "layout.html" %}
+{% block title %}积分引擎 - EmbyPulse{% endblock %}
+
+{% block head %}
+<style>
+    .apple-card { background-color: rgba(255, 255, 255, 0.75); backdrop-filter: blur(24px) saturate(150%); border-radius: 24px; padding: 24px; box-shadow: 0 4px 24px -8px rgba(0,0,0,0.05); border: 1px solid rgba(255,255,255,0.6); transition: all 0.3s; }
+    html.dark .apple-card { background-color: rgba(28, 28, 30, 0.65); box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5); border: 1px solid rgba(255,255,255,0.05); }
+    .ep-switch { position: relative; display: inline-flex; align-items: center; cursor: pointer; }
+    .ep-switch input { display: none; }
+    .ep-switch .track { width: 44px; height: 24px; background-color: #E5E5EA; border-radius: 9999px; transition: .3s; }
+    html.dark .ep-switch .track { background-color: #38383A; }
+    .ep-switch .thumb { position: absolute; left: 2px; width: 20px; height: 20px; background-color: white; border-radius: 50%; transition: .3s; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+    .ep-switch input:checked + .track { background-color: #34C759; }
+    .ep-switch input:checked + .track + .thumb { transform: translateX(20px); }
+    .ep-checkbox-custom { appearance: none; width: 20px; height: 20px; border: 2px solid #D1D5DB; border-radius: 6px; outline: none; cursor: pointer; position: relative; }
+    html.dark .ep-checkbox-custom { border-color: #4B5563; }
+    .ep-checkbox-custom:checked { background-color: #007AFF; border-color: #007AFF; }
+    .ep-checkbox-custom:checked::after { content: ''; position: absolute; left: 6px; top: 2px; width: 5px; height: 10px; border: solid white; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+    
+    /* 自定义下拉菜单 */
+    .custom-select { position: relative; z-index: 100; }
+    .custom-select.open { z-index: 9999; }
+    .custom-select-trigger {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 10px 14px;
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-size: 13px;
+        font-weight: 500;
+        color: #374151;
+        width: 100%;
+    }
+    .dark .custom-select-trigger {
+        background: #2C2C2E;
+        border-color: rgba(255,255,255,0.1);
+        color: #d1d5db;
+    }
+    .custom-select-trigger:hover {
+        border-color: #6366f1;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+    .dark .custom-select-trigger:hover {
+        border-color: #818cf8;
+        box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.15);
+    }
+    .custom-select-trigger-icon { font-size: 10px; color: #9ca3af; transition: transform 0.2s; }
+    .custom-select.open .custom-select-trigger-icon { transform: rotate(180deg); }
+    
+    .custom-select-menu {
+        position: absolute;
+        top: auto;
+        bottom: 100%;
+        left: 0;
+        right: 0;
+        margin-bottom: 6px;
+        max-height: 200px;
+        overflow-y: auto;
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        box-shadow: 0 12px 32px -8px rgba(0,0,0,0.15);
+        z-index: 9999;
+        padding: 6px;
+        display: none;
+        animation: dropdownFadeIn 0.15s ease-out;
+    }
+    .dark .custom-select-menu {
+        background: #1f2937;
+        border-color: #374151;
+        box-shadow: 0 12px 32px -8px rgba(0,0,0,0.5);
+    }
+    .custom-select-menu.open { display: block; }
+    
+    .custom-select-option {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 500;
+        color: #374151;
+        transition: all 0.15s;
+    }
+    .dark .custom-select-option { color: #d1d5db; }
+    .custom-select-option:hover { background: #f3f4f6; }
+    .dark .custom-select-option:hover { background: #374151; }
+    .custom-select-option.active {
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        color: white;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="w-full max-w-[1200px] mx-auto py-4 pb-32 px-4 sm:px-6 md:px-8 space-y-6">
+
+    <div class="apple-card flex flex-col md:flex-row md:items-center justify-between gap-6 w-full p-5 md:p-6">
+        <div class="flex items-center gap-4 pl-1">
+            <div class="w-12 h-12 rounded-[14px] bg-gradient-to-br from-amber-400 to-orange-500 text-white flex items-center justify-center text-xl shadow-lg shadow-orange-500/30 shrink-0"><i class="fa-solid fa-coins"></i></div>
+            <div>
+                <h2 class="text-xl md:text-[22px] font-bold tracking-tight text-gray-900 dark:text-white">积分引擎与经济学</h2>
+                <div class="text-[12px] text-gray-500 mt-1 font-medium flex items-center gap-1.5"><i class="fa-solid fa-scale-balanced opacity-70"></i> <span>全局参数调控与用户资产总览</span></div>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <button onclick="saveConfig()" class="px-6 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white rounded-[14px] font-bold text-[13px] shadow-md shadow-blue-500/20 transition-all active:scale-95"><i class="fa-solid fa-floppy-disk mr-1"></i> 保存配置</button>
+            <button onclick="openModal('fun-modal')" class="px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-[14px] font-bold text-[13px] shadow-md shadow-purple-500/20 transition-all active:scale-95"><i class="fa-solid fa-gamepad mr-1"></i> 娱乐功能</button>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- 签到盲盒 -->
+        <div class="apple-card flex flex-col">
+            <div class="flex items-center justify-between mb-5 border-b border-gray-100 dark:border-white/5 pb-4">
+                <div class="flex items-center gap-3"><div class="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-500/10 text-blue-500 flex justify-center items-center"><i class="fa-solid fa-calendar-check"></i></div><span class="font-bold text-[15px]">每日签到盲盒</span></div>
+            </div>
+            <div class="flex gap-4">
+                <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">保底积分</label><input type="number" id="checkin_min" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none"></div>
+                <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">暴击上限</label><input type="number" id="checkin_max" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none"></div>
+            </div>
+        </div>
+
+        <!-- 商城货架 -->
+        <div class="apple-card flex items-center justify-between cursor-pointer hover:bg-emerald-50 dark:hover:bg-emerald-900/20 group transition-colors relative overflow-hidden" onclick="openStoreModal()">
+            <div id="store-pro-mask" class="absolute inset-0 z-10 bg-white/40 dark:bg-black/40 backdrop-blur-[2px] hidden flex items-center justify-center transition-all">
+                <div class="bg-white dark:bg-[#2C2C2E] px-3 py-1.5 rounded-lg shadow-md border border-amber-200 dark:border-amber-500/20 text-amber-600 dark:text-amber-400 text-xs font-bold flex items-center gap-1.5 transform hover:scale-105 transition-transform"><i class="fa-solid fa-crown"></i> Pro 专属</div>
+            </div>
+            <div class="flex items-center gap-4 relative z-0">
+                <div class="w-12 h-12 bg-emerald-100 dark:bg-emerald-500/10 text-emerald-500 rounded-[14px] flex justify-center items-center shadow-inner group-hover:scale-110 transition-transform"><i class="fa-solid fa-store text-lg"></i></div>
+                <div><h3 class="font-black text-[15px] text-gray-900 dark:text-white">商城货架管理 <span class="pro-glow-tag text-[7px] font-black text-white px-1.5 py-0.5 rounded ml-1 uppercase leading-tight align-middle">Pro</span></h3><p class="text-[11px] font-bold text-gray-500 mt-0.5">新增修改商品 <i class="fa-solid fa-arrow-right ml-1"></i></p></div>
+            </div>
+        </div>
+        
+        <!-- 求片门槛 -->
+        <div class="apple-card flex flex-col relative overflow-hidden group">
+            <div id="req-pro-mask" class="absolute inset-0 z-10 bg-white/40 dark:bg-black/40 backdrop-blur-[2px] cursor-pointer hidden flex items-center justify-center transition-all" onclick="window.dispatchEvent(new Event('show-pro-modal'))">
+                <div class="bg-white dark:bg-[#2C2C2E] px-3 py-1.5 rounded-lg shadow-md border border-amber-200 dark:border-amber-500/20 text-amber-600 dark:text-amber-400 text-xs font-bold flex items-center gap-1.5 transform hover:scale-105 transition-transform"><i class="fa-solid fa-crown"></i> Pro 专属</div>
+            </div>
+            <div class="flex items-center justify-between mb-5 border-b border-gray-100 dark:border-white/5 pb-4">
+                <div class="flex items-center gap-3"><div class="w-8 h-8 rounded-lg bg-pink-50 dark:bg-pink-500/10 text-pink-500 flex justify-center items-center"><i class="fa-solid fa-film"></i></div><span class="font-bold text-[15px]">求片防刷门槛</span><span class="pro-glow-tag text-[7px] font-black text-white px-1.5 py-0.5 rounded ml-1.5 uppercase leading-tight">Pro</span></div>
+                <label class="ep-switch"><input type="checkbox" id="enable_req_cost"><span class="track"></span><span class="thumb"></span></label>
+            </div>
+            <!-- 🔥 收费模式选择 -->
+            <div class="mb-4">
+                <label class="block text-[11px] font-bold text-gray-500 mb-1.5">收费模式</label>
+                <select id="req_cost_mode" onchange="toggleReqCostFields()" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-brand-500">
+                    <option value="per_request">按次收费 - 每次请求扣分</option>
+                    <option value="per_season">按季收费 - 每季扣一次（多季倍扣）</option>
+                </select>
+            </div>
+            <!-- 🔥 积分配置 -->
+            <div>
+                <label class="block text-[11px] font-bold text-gray-500 mb-1.5">单位积分 <span id="req_cost_label" class="text-pink-500">(每次消耗)</span></label>
+                <input type="number" id="req_cost" onchange="toggleReqCostFields()" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none">
+            </div>
+            <!-- 🔥 模式说明 -->
+            <div id="req_cost_hint" class="mt-3 bg-pink-50 dark:bg-pink-500/10 border border-pink-200 dark:border-pink-500/20 rounded-xl p-3">
+                <div class="text-[11px] font-bold text-pink-600 dark:text-pink-400">
+                    <i class="fa-solid fa-lightbulb mr-1"></i>
+                    <span id="req_hint_text">示例：设置 50 积分，用户每次求片扣 50 积分（电影或单季剧集）</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="apple-card flex flex-col relative overflow-hidden group">
+            <div id="update-pro-mask" class="absolute inset-0 z-10 bg-white/40 dark:bg-black/40 backdrop-blur-[2px] cursor-pointer hidden flex items-center justify-center transition-all" onclick="window.dispatchEvent(new Event('show-pro-modal'))">
+                <div class="bg-white dark:bg-[#2C2C2E] px-3 py-1.5 rounded-lg shadow-md border border-amber-200 dark:border-amber-500/20 text-amber-600 dark:text-amber-400 text-xs font-bold flex items-center gap-1.5 transform hover:scale-105 transition-transform"><i class="fa-solid fa-crown"></i> Pro 专属</div>
+            </div>
+            <div class="flex items-center justify-between mb-5 border-b border-gray-100 dark:border-white/5 pb-4">
+                <div class="flex items-center gap-3"><div class="w-8 h-8 rounded-lg bg-orange-50 dark:bg-orange-500/10 text-orange-500 flex justify-center items-center"><i class="fa-solid fa-sync"></i></div><span class="font-bold text-[15px]">追新防刷门槛</span><span class="pro-glow-tag text-[7px] font-black text-white px-1.5 py-0.5 rounded ml-1.5 uppercase leading-tight">Pro</span></div>
+                <label class="ep-switch"><input type="checkbox" id="enable_update_cost"><span class="track"></span><span class="thumb"></span></label>
+            </div>
+            <!-- 🔥 收费模式选择 -->
+            <div class="mb-4">
+                <label class="block text-[11px] font-bold text-gray-500 mb-1.5">收费模式</label>
+                <select id="update_cost_mode" onchange="toggleUpdateCostFields()" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-brand-500">
+                    <option value="per_series">按剧收费 - 一剧一费（不管多少集/季）</option>
+                    <option value="per_season">按季收费 - 每季扣一次（不管多少集）</option>
+                    <option value="per_episode">按集收费 - 每集扣一次</option>
+                </select>
+            </div>
+            <!-- 🔥 积分配置 -->
+            <div>
+                <label class="block text-[11px] font-bold text-gray-500 mb-1.5">单位积分 <span id="update_cost_label" class="text-orange-500">(每剧消耗)</span></label>
+                <input type="number" id="update_cost" onchange="toggleUpdateCostFields()" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none">
+            </div>
+            <!-- 🔥 模式说明 -->
+            <div id="update_cost_hint" class="mt-3 bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/20 rounded-xl p-3">
+                <div class="text-[11px] font-bold text-orange-600 dark:text-orange-400">
+                    <i class="fa-solid fa-lightbulb mr-1"></i>
+                    <span id="update_hint_text">示例：设置 50 积分，用户追新一部剧（无论选多少集）只扣 50 积分</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="apple-card">
+        <div class="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
+            <h3 class="text-[16px] font-bold flex items-center gap-2"><i class="fa-solid fa-users text-blue-500"></i> 全站用户资产大盘</h3>
+            <div class="flex items-center gap-3 flex-wrap justify-end w-full sm:w-auto">
+                <input type="text" id="search-input" placeholder="搜索用户..." class="w-full sm:w-48 bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl py-2 px-3 text-[13px] outline-none focus:border-brand-500" onkeyup="filterTable()">
+                <button onclick="openBatchModal()" class="px-4 py-2 bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-500 font-bold rounded-xl text-[13px] shrink-0 hover:bg-amber-100 transition-colors"><i class="fa-solid fa-crown mr-1"></i> 批量调控</button>
+                <button onclick="openLogsModal('', '全站')" class="px-4 py-2 bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300 font-bold rounded-xl text-[13px] shrink-0 hover:bg-slate-200 transition-colors"><i class="fa-solid fa-file-invoice-dollar mr-1"></i> 全局流水明细</button>
+            </div>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead><tr class="border-b border-gray-200 dark:border-white/10 text-[12px] text-gray-500"><th class="py-3 px-4 w-10 text-center"><input type="checkbox" class="ep-checkbox-custom" onclick="toggleAll(this)"></th><th class="py-3 px-4 uppercase">用户信息</th><th class="py-3 px-4 uppercase">资产 (积分)</th><th class="py-3 px-4 uppercase hidden sm:table-cell">最近活跃</th><th class="py-3 px-4 text-right uppercase">操作</th></tr></thead>
+                <tbody id="user-tbody" class="text-[14px]"></tbody>
+            </table>
+        </div>
+        <!-- 分页控件 -->
+        <div id="pagination-container" class="flex flex-col sm:flex-row items-start sm:items-center justify-between mt-4 pt-4 border-t border-gray-100 dark:border-white/5 gap-3">
+            <div class="flex items-center gap-2 flex-wrap">
+                <div class="text-[12px] text-gray-500 dark:text-gray-400 font-medium whitespace-nowrap">
+                    共 <span id="total-count">0</span> 个，第 <span id="current-page">1</span>/<span id="total-pages">1</span> 页
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <span class="text-[12px] text-gray-500 dark:text-gray-400 hidden sm:inline">每页</span>
+                    <div class="custom-select" id="page-size-select-dropdown" style="min-width: 60px;">
+                        <div class="custom-select-trigger" onclick="toggleCustomSelect('page-size-select')" style="padding: 4px 8px; font-size: 12px;">
+                            <span id="page-size-select-display">20</span>
+                            <i class="fa-solid fa-chevron-down custom-select-trigger-icon"></i>
+                        </div>
+                        <div class="custom-select-menu" id="page-size-select-menu">
+                            <div class="custom-select-option active" data-value="20" onclick="selectCustomOption('page-size-select', '20', '20'); changePageSize('20')"><span>20</span></div>
+                            <div class="custom-select-option" data-value="40" onclick="selectCustomOption('page-size-select', '40', '40'); changePageSize('40')"><span>40</span></div>
+                            <div class="custom-select-option" data-value="60" onclick="selectCustomOption('page-size-select', '60', '60'); changePageSize('60')"><span>60</span></div>
+                            <div class="custom-select-option" data-value="80" onclick="selectCustomOption('page-size-select', '80', '80'); changePageSize('80')"><span>80</span></div>
+                            <div class="custom-select-option" data-value="100" onclick="selectCustomOption('page-size-select', '100', '100'); changePageSize('100')"><span>100</span></div>
+                            <div class="custom-select-option" data-value="all" onclick="selectCustomOption('page-size-select', 'all', '全部'); changePageSize('all')"><span>全部</span></div>
+                        </div>
+                    </div>
+                    <input type="hidden" id="page-size-select" value="20">
+                </div>
+            </div>
+            <div class="flex items-center gap-1 w-full sm:w-auto justify-between sm:justify-end">
+                <button onclick="goToPage(1)" id="btn-first" class="w-8 h-8 rounded-lg bg-white dark:bg-[#2C2C2E] border border-gray-200 dark:border-white/10 flex items-center justify-center text-[12px] text-gray-500 hover:bg-gray-100 dark:hover:bg-[#3A3A3C] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"><i class="fa-solid fa-angles-left"></i></button>
+                <button onclick="goToPage(currentPage - 1)" id="btn-prev" class="w-8 h-8 rounded-lg bg-white dark:bg-[#2C2C2E] border border-gray-200 dark:border-white/10 flex items-center justify-center text-[12px] text-gray-500 hover:bg-gray-100 dark:hover:bg-[#3A3A3C] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"><i class="fa-solid fa-angle-left"></i></button>
+                <div id="page-numbers" class="flex items-center gap-1 overflow-x-auto"></div>
+                <button onclick="goToPage(currentPage + 1)" id="btn-next" class="w-8 h-8 rounded-lg bg-white dark:bg-[#2C2C2E] border border-gray-200 dark:border-white/10 flex items-center justify-center text-[12px] text-gray-500 hover:bg-gray-100 dark:hover:bg-[#3A3A3C] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"><i class="fa-solid fa-angle-right"></i></button>
+                <button onclick="goToPage(totalPages)" id="btn-last" class="w-8 h-8 rounded-lg bg-white dark:bg-[#2C2C2E] border border-gray-200 dark:border-white/10 flex items-center justify-center text-[12px] text-gray-500 hover:bg-gray-100 dark:hover:bg-[#3A3A3C] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"><i class="fa-solid fa-angles-right"></i></button>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- 娱乐功能弹窗 -->
+<div id="fun-modal" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/40 backdrop-blur-sm opacity-0 transition-opacity duration-300 p-4">
+    <div class="bg-white dark:bg-[#1C1C1E] w-full max-w-2xl rounded-[28px] shadow-2xl transform scale-95 transition-transform flex flex-col max-h-[85vh] overflow-hidden">
+        <div class="p-6 border-b border-gray-100 dark:border-white/5 flex justify-between items-center shrink-0 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-500/10 dark:to-pink-500/10">
+            <h3 class="text-lg font-black flex items-center gap-2 text-slate-800 dark:text-white"><i class="fa-solid fa-gamepad text-purple-500"></i> 娱乐功能配置</h3>
+            <button onclick="closeModal('fun-modal')" class="w-8 h-8 rounded-full bg-gray-100 dark:bg-white/10 flex justify-center items-center text-gray-500 hover:text-rose-500 transition-colors"><i class="fa-solid fa-xmark text-sm"></i></button>
+        </div>
+        
+        <!-- 🔥 分类筛选 -->
+        <div class="px-6 py-3 border-b border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-[#0a0a0a] shrink-0">
+            <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-[11px] font-bold text-gray-500">筛选：</span>
+                <button onclick="filterFunGames('all')" class="fun-filter-btn active px-3 py-1.5 rounded-full text-[11px] font-bold transition-all bg-purple-500 text-white" data-filter="all">全部</button>
+                <button onclick="filterFunGames('community')" class="fun-filter-btn px-3 py-1.5 rounded-full text-[11px] font-bold transition-all bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-400 hover:bg-purple-100 dark:hover:bg-purple-500/20" data-filter="community">🌐 用户社区</button>
+                <button onclick="filterFunGames('bot')" class="fun-filter-btn px-3 py-1.5 rounded-full text-[11px] font-bold transition-all bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-400 hover:bg-purple-100 dark:hover:bg-purple-500/20" data-filter="bot">🤖 TG机器人</button>
+                <button onclick="filterFunGames('both')" class="fun-filter-btn px-3 py-1.5 rounded-full text-[11px] font-bold transition-all bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-400 hover:bg-purple-100 dark:hover:bg-purple-500/20" data-filter="both">📍 两端通用</button>
+            </div>
+        </div>
+        
+        <div class="flex-1 overflow-y-auto p-6 space-y-6 bg-gray-50/50 dark:bg-[#0a0a0a]">
+            <!-- 连续签到奖励 -->
+            <div class="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-2xl p-5 fun-game-card" data-platform="both">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-purple-50 dark:bg-purple-500/10 text-purple-500 flex justify-center items-center"><i class="fa-solid fa-fire"></i></div>
+                        <span class="font-bold text-[14px]">连续签到奖励</span>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-gray-400">📍 两端通用</span>
+                    </div>
+                    <label class="ep-switch"><input type="checkbox" id="enable_streak_bonus"><span class="track"></span><span class="thumb"></span></label>
+                </div>
+                <div class="flex gap-4 mb-3">
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">连续7天奖励</label><input type="number" id="streak_7_days" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none"></div>
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">连续30天奖励</label><input type="number" id="streak_30_days" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none"></div>
+                </div>
+                <label class="flex items-center gap-2 text-xs text-gray-500"><input type="checkbox" id="streak_reset_on_miss" class="ep-checkbox-custom"><span>断签清零（否则只累加天数）</span></label>
+            </div>
+            
+            <!-- 积分转赠 -->
+            <div class="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-2xl p-5 fun-game-card" data-platform="bot">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-cyan-50 dark:bg-cyan-500/10 text-cyan-500 flex justify-center items-center"><i class="fa-solid fa-paper-plane"></i></div>
+                        <span class="font-bold text-[14px]">积分转赠</span>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 dark:bg-blue-500/10 text-blue-500">🤖 TG机器人</span>
+                    </div>
+                    <label class="ep-switch"><input type="checkbox" id="enable_transfer"><span class="track"></span><span class="thumb"></span></label>
+                </div>
+                <div class="flex gap-4">
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">手续费率 (%)</label><input type="number" id="transfer_fee_rate" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none"></div>
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">单次最小</label><input type="number" id="transfer_min" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none"></div>
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">单次最大</label><input type="number" id="transfer_max" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none"></div>
+                </div>
+                <div class="mt-3 p-2 bg-gray-50 dark:bg-black/10 rounded-lg">
+                    <p class="text-[10px] text-gray-500">📝 命令：<code class="bg-white dark:bg-black/20 px-1 rounded">/transfer @用户 100</code> 或 <code class="bg-white dark:bg-black/20 px-1 rounded">/转赠 @用户 100</code> 或 <code class="bg-white dark:bg-black/20 px-1 rounded">/zz @用户 100</code></p>
+                </div>
+            </div>
+            
+            <!-- 积分红包 -->
+            <div class="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-2xl p-5 fun-game-card" data-platform="bot">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-500/10 text-rose-500 flex justify-center items-center"><i class="fa-solid fa-gift"></i></div>
+                        <span class="font-bold text-[14px]">积分红包</span>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 dark:bg-blue-500/10 text-blue-500">🤖 TG机器人</span>
+                    </div>
+                    <label class="ep-switch"><input type="checkbox" id="enable_red_packet"><span class="track"></span><span class="thumb"></span></label>
+                </div>
+                <div class="flex gap-4">
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">过期时间(小时)</label><input type="number" id="red_packet_expire_hours" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none"></div>
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">仅管理员可发</label><input type="checkbox" id="red_packet_admin_only" class="ep-checkbox-custom mt-2"></div>
+                </div>
+                <div class="mt-3 p-2 bg-gray-50 dark:bg-black/10 rounded-lg">
+                    <p class="text-[10px] text-gray-500">📝 发红包：<code class="bg-white dark:bg-black/20 px-1 rounded">/hb 1000 10</code> 或 <code class="bg-white dark:bg-black/20 px-1 rounded">/红包 1000 10</code></p>
+                    <p class="text-[10px] text-gray-500 mt-1">抢红包：<code class="bg-white dark:bg-black/20 px-1 rounded">/grab 123</code> 或 <code class="bg-white dark:bg-black/20 px-1 rounded">/抢 123</code></p>
+                </div>
+            </div>
+            
+            <!-- PK骰子游戏 -->
+            <div class="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-2xl p-5 fun-game-card" data-platform="bot">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-500/10 text-amber-500 flex justify-center items-center"><i class="fa-solid fa-dice"></i></div>
+                        <span class="font-bold text-[14px]">PK骰子游戏</span>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 dark:bg-blue-500/10 text-blue-500">🤖 TG机器人</span>
+                    </div>
+                    <label class="ep-switch"><input type="checkbox" id="enable_pk"><span class="track"></span><span class="thumb"></span></label>
+                </div>
+                <div class="flex gap-4">
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">最小积分</label><input type="number" id="pk_min" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none"></div>
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">最大积分</label><input type="number" id="pk_max" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none"></div>
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">每日次数</label><input type="number" id="pk_max_per_day" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="10"></div>
+                </div>
+                <p class="text-[11px] text-gray-400 mt-3">💡 用户掷骰子和机器人比大小，赢了翻倍积分，输了扣分，平局不扣</p>
+                <div class="mt-3 p-2 bg-gray-50 dark:bg-black/10 rounded-lg">
+                    <p class="text-[10px] text-gray-500">📝 命令：<code class="bg-white dark:bg-black/20 px-1 rounded">/pk 100</code> 或 <code class="bg-white dark:bg-black/20 px-1 rounded">/骰子 100</code> 或 <code class="bg-white dark:bg-black/20 px-1 rounded">/tz 100</code></p>
+                </div>
+            </div>
+            
+            <!-- 每日彩票 -->
+            <div class="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-2xl p-5 fun-game-card" data-platform="bot">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-violet-50 dark:bg-violet-500/10 text-violet-500 flex justify-center items-center"><i class="fa-solid fa-ticket"></i></div>
+                        <span class="font-bold text-[14px]">每日彩票</span>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 dark:bg-blue-500/10 text-blue-500">🤖 TG机器人</span>
+                    </div>
+                    <label class="ep-switch"><input type="checkbox" id="enable_lottery"><span class="track"></span><span class="thumb"></span></label>
+                </div>
+                <div class="flex gap-4">
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">彩票价格</label><input type="number" id="lottery_cost" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none"></div>
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">每人每天限购</label><input type="number" id="lottery_max_per_day" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none"></div>
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">开奖时间(点)</label><input type="number" id="lottery_draw_hour" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="20"></div>
+                </div>
+                <!-- 奖池分配比例 -->
+                <div class="mt-3">
+                    <label class="block text-[11px] font-bold text-gray-500 mb-1.5">奖池分配比例 (%)</label>
+                    <div class="flex gap-2">
+                        <div class="flex-1"><input type="number" id="lottery_pool_ratio_1" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm outline-none text-center"><p class="text-[10px] text-gray-400 text-center mt-1">一等奖</p></div>
+                        <div class="flex-1"><input type="number" id="lottery_pool_ratio_2" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm outline-none text-center"><p class="text-[10px] text-gray-400 text-center mt-1">二等奖</p></div>
+                        <div class="flex-1"><input type="number" id="lottery_pool_ratio_3" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm outline-none text-center"><p class="text-[10px] text-gray-400 text-center mt-1">三等奖</p></div>
+                        <div class="flex-1"><input type="number" id="lottery_pool_ratio_4" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm outline-none text-center"><p class="text-[10px] text-gray-400 text-center mt-1">安慰奖</p></div>
+                        <div class="flex-1"><input type="number" id="lottery_pool_ratio_5" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm outline-none text-center"><p class="text-[10px] text-gray-400 text-center mt-1">幸运奖</p></div>
+                    </div>
+                    <div class="flex gap-2 mt-2">
+                        <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">幸运奖人数</label><input type="number" id="lottery_lucky_count" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm outline-none" placeholder="0" min="0"></div>
+                        <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">幸运奖比例 (%)</label><input type="number" id="lottery_lucky_ratio" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm outline-none" placeholder="5" min="0"></div>
+                    </div>
+                </div>
+                <!-- 当前奖池信息 -->
+                <div class="mt-3 p-3 bg-violet-50 dark:bg-violet-500/10 rounded-xl border border-violet-100 dark:border-violet-500/20">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-[11px] font-bold text-violet-700 dark:text-violet-400">当前奖池</p>
+                            <p class="text-lg font-black text-violet-600 dark:text-violet-300" id="lottery-pool-display">加载中...</p>
+                            <p class="text-[10px] text-violet-500 mt-1"><i class="fa-regular fa-clock mr-1"></i><span id="lottery-next-draw">-</span></p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-[10px] text-violet-500">购票: <span id="lottery-today-tickets">-</span> 张</p>
+                            <div class="flex gap-2 mt-1">
+                                <input type="number" id="lottery-init-pool" class="w-20 bg-white dark:bg-black/20 border border-violet-200 dark:border-violet-500/30 rounded-lg px-2 py-1 text-xs outline-none" placeholder="数值">
+                                <button onclick="addInitPool(1)" class="px-2 py-1 bg-violet-500 hover:bg-violet-600 text-white text-[10px] font-bold rounded-lg transition-colors">+加</button>
+                                <button onclick="addInitPool(-1)" class="px-2 py-1 bg-red-500 hover:bg-red-600 text-white text-[10px] font-bold rounded-lg transition-colors">-减</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <p class="text-[11px] text-gray-400 mt-3">💡 4位数字彩票，按奖池比例分配奖金</p>
+                <div class="mt-3 p-2 bg-gray-50 dark:bg-black/10 rounded-lg">
+                    <p class="text-[10px] text-gray-500">📝 命令：<code class="bg-white dark:bg-black/20 px-1 rounded">/lottery 1234</code> 或 <code class="bg-white dark:bg-black/20 px-1 rounded">/彩票 1234</code> 或 <code class="bg-white dark:bg-black/20 px-1 rounded">/cp 1234</code></p>
+                    <p class="text-[10px] text-gray-500 mt-1">查看：<code class="bg-white dark:bg-black/20 px-1 rounded">/彩票 我的</code> | <code class="bg-white dark:bg-black/20 px-1 rounded">/彩票 结果</code> | <code class="bg-white dark:bg-black/20 px-1 rounded">/彩票 奖池</code></p>
+                </div>
+                <div class="mt-3 flex justify-end gap-2">
+                    <button onclick="fixLotteryPool()" class="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-bold rounded-lg transition-colors">
+                        <i class="fa-solid fa-wrench mr-1"></i> 修复奖池
+                    </button>
+                    <button onclick="resetLotteryDraw()" class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-[11px] font-bold rounded-lg transition-colors">
+                        <i class="fa-solid fa-rotate-left mr-1"></i> 清除今日开奖
+                    </button>
+                    <button onclick="doLotteryDraw()" class="px-4 py-2 bg-violet-500 hover:bg-violet-600 text-white text-[11px] font-bold rounded-lg transition-colors">
+                        <i class="fa-solid fa-dice mr-1"></i> 手动开奖
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 🔥 刮刮乐配置 -->
+            <div class="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-2xl p-5 fun-game-card" data-platform="bot">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-pink-50 dark:bg-pink-500/10 text-pink-500 flex justify-center items-center"><i class="fa-solid fa-eraser"></i></div>
+                        <span class="font-bold text-[14px]">刮刮乐</span>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 dark:bg-blue-500/10 text-blue-500">🤖 TG机器人</span>
+                    </div>
+                    <label class="ep-switch"><input type="checkbox" id="enable_scratch"><span class="track"></span><span class="thumb"></span></label>
+                </div>
+                <div class="flex gap-4">
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">售价</label><input type="number" id="scratch_cost" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none"></div>
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">每人每天限刮</label><input type="number" id="scratch_max_per_day" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none"></div>
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">格子数量(1-9)</label><input type="number" id="scratch_slots" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" min="1" max="9"></div>
+                </div>
+                <div class="flex gap-4 mt-3">
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">大奖概率(%)</label><input type="number" id="scratch_big_prize_rate" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" step="0.1"></div>
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">中奖概率(%)</label><input type="number" id="scratch_medium_prize_rate" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" step="0.1"></div>
+                    <div class="flex-1">
+                        <label class="ep-switch mt-5"><input type="checkbox" id="scratch_admin_only"><span class="track"></span><span class="thumb"></span><span class="ml-2 text-[11px] font-bold text-gray-500">仅管理员发起</span></label>
+                    </div>
+                </div>
+                <p class="text-[11px] text-gray-400 mt-3">💡 刮刮乐命令：<code class="bg-white dark:bg-black/20 px-1 rounded">/scratch</code> 或 <code class="bg-white dark:bg-black/20 px-1 rounded">/刮刮乐</code></p>
+                <div class="mt-3 flex justify-end">
+                    <button onclick="clearScratchCard()" class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-[11px] font-bold rounded-lg transition-colors">
+                        <i class="fa-solid fa-trash mr-1"></i> 清除当前刮刮卡
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 🔥 打劫功能 -->
+            <div class="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-2xl p-5 fun-game-card" data-platform="bot">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-red-50 dark:bg-red-500/10 text-red-500 flex justify-center items-center"><i class="fa-solid fa-mask"></i></div>
+                        <span class="font-bold text-[14px]">打劫功能</span>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 dark:bg-blue-500/10 text-blue-500">🤖 TG机器人</span>
+                    </div>
+                    <label class="ep-switch"><input type="checkbox" id="enable_rob"><span class="track"></span><span class="thumb"></span></label>
+                </div>
+                <div class="flex gap-4">
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">成功率(%)</label><input type="number" id="rob_success_rate" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="50"></div>
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">打劫积分下限</label><input type="number" id="rob_min" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="1"></div>
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">打劫积分上限</label><input type="number" id="rob_max" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="10"></div>
+                </div>
+                <div class="flex gap-4 mt-3">
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">反杀积分下限</label><input type="number" id="rob_counter_min" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="1"></div>
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">反杀积分上限</label><input type="number" id="rob_counter_max" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="5"></div>
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">保护阈值</label><input type="number" id="rob_protect_threshold" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="50"></div>
+                </div>
+                <div class="flex gap-4 mt-3">
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">每日打劫次数</label><input type="number" id="rob_max_per_day" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="5"></div>
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">每日被打劫次数</label><input type="number" id="rob_max_be_robbed" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="3"></div>
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">冷却时间(小时)</label><input type="number" id="rob_cooldown_hours" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="2"></div>
+                </div>
+                <p class="text-[11px] text-gray-400 mt-3">💡 打劫成功获得随机积分，失败则被反杀损失积分给对方</p>
+                <div class="mt-3 p-2 bg-gray-50 dark:bg-black/10 rounded-lg">
+                    <p class="text-[10px] text-gray-500">📝 命令：<code class="bg-white dark:bg-black/20 px-1 rounded">/rob @用户</code> 或 <code class="bg-white dark:bg-black/20 px-1 rounded">/打劫 @用户</code> 或 <code class="bg-white dark:bg-black/20 px-1 rounded">/dj @用户</code></p>
+                </div>
+            </div>
+            
+            <!-- 🔥 用户PK -->
+            <div class="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-2xl p-5 fun-game-card" data-platform="bot">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 text-indigo-500 flex justify-center items-center"><i class="fa-solid fa-hand-fist"></i></div>
+                        <span class="font-bold text-[14px]">用户PK</span>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 dark:bg-blue-500/10 text-blue-500">🤖 TG机器人</span>
+                    </div>
+                    <label class="ep-switch"><input type="checkbox" id="enable_user_pk"><span class="track"></span><span class="thumb"></span></label>
+                </div>
+                <div class="flex gap-4">
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">最小下注</label><input type="number" id="user_pk_min_points" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="10"></div>
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">最大下注</label><input type="number" id="user_pk_max_points" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="500"></div>
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">每日次数</label><input type="number" id="user_pk_max_per_day" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="5"></div>
+                </div>
+                <div class="flex gap-4 mt-3">
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">邀请超时(分钟)</label><input type="number" id="user_pk_timeout" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="5"></div>
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">手续费(%)</label><input type="number" id="user_pk_tax" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="5"></div>
+                </div>
+                <p class="text-[11px] text-gray-400 mt-3">💡 用户间PK，双方下注积分，掷骰子比大小，赢家获得积分</p>
+                <div class="mt-3 p-2 bg-gray-50 dark:bg-black/10 rounded-lg">
+                    <p class="text-[10px] text-gray-500">📝 命令：<code class="bg-white dark:bg-black/20 px-1 rounded">/upk @用户 积分</code></p>
+                </div>
+                <div class="mt-3 flex justify-end">
+                    <button onclick="clearPKInvitations()" class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-[11px] font-bold rounded-lg transition-colors">
+                        <i class="fa-solid fa-trash mr-1"></i> 清除所有PK邀请
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 🎰 幸运老虎机 -->
+            <div class="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-2xl p-5 fun-game-card" data-platform="community">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-yellow-50 dark:bg-yellow-500/10 text-yellow-500 flex justify-center items-center"><i class="fa-solid fa-coins"></i></div>
+                        <span class="font-bold text-[14px]">幸运老虎机</span>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-50 dark:bg-green-500/10 text-green-500">🌐 用户社区</span>
+                    </div>
+                    <label class="ep-switch"><input type="checkbox" id="enable_slot"><span class="track"></span><span class="thumb"></span></label>
+                </div>
+                <div class="flex gap-4">
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">每次消耗积分</label><input type="number" id="slot_cost" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="10"></div>
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">每日免费次数</label><input type="number" id="slot_daily_free" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="3"></div>
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">每日最大次数</label><input type="number" id="slot_max_per_day" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="20"></div>
+                </div>
+                <div class="flex gap-4 mt-3">
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">三同奖励倍率</label><input type="number" id="slot_triple_multiplier" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="10"></div>
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">两同奖励倍率</label><input type="number" id="slot_double_multiplier" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="2"></div>
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">特殊图案倍率</label><input type="number" id="slot_special_multiplier" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="50"></div>
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">中奖概率 (0-1)</label><input type="number" step="0.1" min="0" max="1" id="slot_win_rate_modifier" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="1.0"></div>
+                </div>
+                <!-- 图案配置 -->
+                <div class="mt-3">
+                    <label class="block text-[11px] font-bold text-gray-500 mb-2">图案权重配置</label>
+                    <div class="grid grid-cols-4 gap-2" id="slot-symbols-config">
+                        <!-- 🍒 樱桃 -->
+                        <div class="bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl p-2 text-center">
+                            <div class="text-2xl mb-1">🍒</div>
+                            <input type="number" id="slot_symbol_cherry" class="w-full bg-white dark:bg-black/30 border border-gray-200 dark:border-white/5 rounded-lg px-2 py-1 text-xs text-center outline-none" placeholder="20">
+                            <label class="flex items-center justify-center gap-1 mt-1 text-[10px] text-gray-500"><input type="checkbox" id="slot_special_cherry" class="ep-checkbox-custom"><span>特殊</span></label>
+                        </div>
+                        <!-- 🍋 柠檬 -->
+                        <div class="bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl p-2 text-center">
+                            <div class="text-2xl mb-1">🍋</div>
+                            <input type="number" id="slot_symbol_lemon" class="w-full bg-white dark:bg-black/30 border border-gray-200 dark:border-white/5 rounded-lg px-2 py-1 text-xs text-center outline-none" placeholder="20">
+                            <label class="flex items-center justify-center gap-1 mt-1 text-[10px] text-gray-500"><input type="checkbox" id="slot_special_lemon" class="ep-checkbox-custom"><span>特殊</span></label>
+                        </div>
+                        <!-- 🍊 橙子 -->
+                        <div class="bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl p-2 text-center">
+                            <div class="text-2xl mb-1">🍊</div>
+                            <input type="number" id="slot_symbol_orange" class="w-full bg-white dark:bg-black/30 border border-gray-200 dark:border-white/5 rounded-lg px-2 py-1 text-xs text-center outline-none" placeholder="15">
+                            <label class="flex items-center justify-center gap-1 mt-1 text-[10px] text-gray-500"><input type="checkbox" id="slot_special_orange" class="ep-checkbox-custom"><span>特殊</span></label>
+                        </div>
+                        <!-- 🍇 葡萄 -->
+                        <div class="bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl p-2 text-center">
+                            <div class="text-2xl mb-1">🍇</div>
+                            <input type="number" id="slot_symbol_grape" class="w-full bg-white dark:bg-black/30 border border-gray-200 dark:border-white/5 rounded-lg px-2 py-1 text-xs text-center outline-none" placeholder="15">
+                            <label class="flex items-center justify-center gap-1 mt-1 text-[10px] text-gray-500"><input type="checkbox" id="slot_special_grape" class="ep-checkbox-custom"><span>特殊</span></label>
+                        </div>
+                        <!-- 💎 钻石 -->
+                        <div class="bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl p-2 text-center">
+                            <div class="text-2xl mb-1">💎</div>
+                            <input type="number" id="slot_symbol_diamond" class="w-full bg-white dark:bg-black/30 border border-gray-200 dark:border-white/5 rounded-lg px-2 py-1 text-xs text-center outline-none" placeholder="10">
+                            <label class="flex items-center justify-center gap-1 mt-1 text-[10px] text-gray-500"><input type="checkbox" id="slot_special_diamond" class="ep-checkbox-custom"><span>特殊</span></label>
+                        </div>
+                        <!-- 7️⃣ 七 -->
+                        <div class="bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl p-2 text-center">
+                            <div class="text-2xl mb-1">7️⃣</div>
+                            <input type="number" id="slot_symbol_seven" class="w-full bg-white dark:bg-black/30 border border-gray-200 dark:border-white/5 rounded-lg px-2 py-1 text-xs text-center outline-none" placeholder="10">
+                            <label class="flex items-center justify-center gap-1 mt-1 text-[10px] text-gray-500"><input type="checkbox" id="slot_special_seven" class="ep-checkbox-custom" checked><span>特殊</span></label>
+                        </div>
+                        <!-- ⭐ 星星 -->
+                        <div class="bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl p-2 text-center">
+                            <div class="text-2xl mb-1">⭐</div>
+                            <input type="number" id="slot_symbol_star" class="w-full bg-white dark:bg-black/30 border border-gray-200 dark:border-white/5 rounded-lg px-2 py-1 text-xs text-center outline-none" placeholder="5">
+                            <label class="flex items-center justify-center gap-1 mt-1 text-[10px] text-gray-500"><input type="checkbox" id="slot_special_star" class="ep-checkbox-custom" checked><span>特殊</span></label>
+                        </div>
+                        <!-- 🎰 老虎机 -->
+                        <div class="bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl p-2 text-center">
+                            <div class="text-2xl mb-1">🎰</div>
+                            <input type="number" id="slot_symbol_slot" class="w-full bg-white dark:bg-black/30 border border-gray-200 dark:border-white/5 rounded-lg px-2 py-1 text-xs text-center outline-none" placeholder="5">
+                            <label class="flex items-center justify-center gap-1 mt-1 text-[10px] text-gray-500"><input type="checkbox" id="slot_special_slot" class="ep-checkbox-custom" checked><span>特殊</span></label>
+                        </div>
+                    </div>
+                </div>
+                <p class="text-[11px] text-gray-400 mt-3">💡 权重越高出现概率越大，特殊图案奖励倍率更高</p>
+            </div>
+            
+            <!-- 🎫 刮刮乐（用户社区版） -->
+            <div class="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-2xl p-5 fun-game-card" data-platform="community">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 text-emerald-500 flex justify-center items-center"><i class="fa-solid fa-eraser"></i></div>
+                        <span class="font-bold text-[14px]">刮刮乐</span>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-50 dark:bg-green-500/10 text-green-500">🌐 用户社区</span>
+                    </div>
+                    <label class="ep-switch"><input type="checkbox" id="enable_web_scratch"><span class="track"></span><span class="thumb"></span></label>
+                </div>
+                <div class="flex gap-4">
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">每张价格</label><input type="number" id="web_scratch_cost" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="10"></div>
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">每日最大次数</label><input type="number" id="web_scratch_max_per_day" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="20"></div>
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">中奖数字数</label><input type="number" id="web_scratch_win_numbers" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="3"></div>
+                </div>
+                <div class="flex gap-4 mt-3">
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">刮开格子数</label><input type="number" id="web_scratch_grid_count" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="12"></div>
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">最小奖励</label><input type="number" id="web_scratch_min_reward" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="5"></div>
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">最大奖励</label><input type="number" id="web_scratch_max_reward" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="100"></div>
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">匹配概率(%)</label><input type="number" id="web_scratch_match_rate" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="20" step="0.1"></div>
+                </div>
+                <p class="text-[11px] text-gray-400 mt-3">💡 刮开格子匹配中奖数字获得对应积分，刮完可继续购买下一张</p>
+            </div>
+            
+            <!-- 🎡 幸运转盘 -->
+            <div class="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-2xl p-5 fun-game-card" data-platform="community">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-500/10 text-rose-500 flex justify-center items-center"><i class="fa-solid fa-circle-notch"></i></div>
+                        <span class="font-bold text-[14px]">幸运转盘</span>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-50 dark:bg-green-500/10 text-green-500">🌐 用户社区</span>
+                    </div>
+                    <label class="ep-switch"><input type="checkbox" id="enable_wheel"><span class="track"></span><span class="thumb"></span></label>
+                </div>
+                <div class="flex gap-4">
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">每次消耗积分</label><input type="number" id="wheel_cost" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="10"></div>
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">每日免费次数</label><input type="number" id="wheel_daily_free" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="3"></div>
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">每日最大次数</label><input type="number" id="wheel_max_per_day" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="20"></div>
+                </div>
+                <div class="mt-3">
+                    <label class="block text-[11px] font-bold text-gray-500 mb-1.5">扇区配置（每行一个，格式：奖励积分|概率权重|颜色）</label>
+                    <div class="grid grid-cols-4 gap-2 mt-2">
+                        <div class="bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl p-2 text-center">
+                            <div class="w-6 h-6 mx-auto rounded-full bg-red-500 mb-1"></div>
+                            <input type="number" id="wheel_reward_1" class="w-full bg-white dark:bg-black/30 border border-gray-200 dark:border-white/5 rounded-lg px-2 py-1 text-xs text-center outline-none" placeholder="50">
+                            <input type="number" id="wheel_weight_1" class="w-full bg-white dark:bg-black/30 border border-gray-200 dark:border-white/5 rounded-lg px-2 py-1 text-xs text-center outline-none mt-1" placeholder="5">
+                        </div>
+                        <div class="bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl p-2 text-center">
+                            <div class="w-6 h-6 mx-auto rounded-full bg-orange-500 mb-1"></div>
+                            <input type="number" id="wheel_reward_2" class="w-full bg-white dark:bg-black/30 border border-gray-200 dark:border-white/5 rounded-lg px-2 py-1 text-xs text-center outline-none" placeholder="30">
+                            <input type="number" id="wheel_weight_2" class="w-full bg-white dark:bg-black/30 border border-gray-200 dark:border-white/5 rounded-lg px-2 py-1 text-xs text-center outline-none mt-1" placeholder="10">
+                        </div>
+                        <div class="bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl p-2 text-center">
+                            <div class="w-6 h-6 mx-auto rounded-full bg-yellow-500 mb-1"></div>
+                            <input type="number" id="wheel_reward_3" class="w-full bg-white dark:bg-black/30 border border-gray-200 dark:border-white/5 rounded-lg px-2 py-1 text-xs text-center outline-none" placeholder="20">
+                            <input type="number" id="wheel_weight_3" class="w-full bg-white dark:bg-black/30 border border-gray-200 dark:border-white/5 rounded-lg px-2 py-1 text-xs text-center outline-none mt-1" placeholder="15">
+                        </div>
+                        <div class="bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl p-2 text-center">
+                            <div class="w-6 h-6 mx-auto rounded-full bg-green-500 mb-1"></div>
+                            <input type="number" id="wheel_reward_4" class="w-full bg-white dark:bg-black/30 border border-gray-200 dark:border-white/5 rounded-lg px-2 py-1 text-xs text-center outline-none" placeholder="10">
+                            <input type="number" id="wheel_weight_4" class="w-full bg-white dark:bg-black/30 border border-gray-200 dark:border-white/5 rounded-lg px-2 py-1 text-xs text-center outline-none mt-1" placeholder="20">
+                        </div>
+                        <div class="bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl p-2 text-center">
+                            <div class="w-6 h-6 mx-auto rounded-full bg-blue-500 mb-1"></div>
+                            <input type="number" id="wheel_reward_5" class="w-full bg-white dark:bg-black/30 border border-gray-200 dark:border-white/5 rounded-lg px-2 py-1 text-xs text-center outline-none" placeholder="5">
+                            <input type="number" id="wheel_weight_5" class="w-full bg-white dark:bg-black/30 border border-gray-200 dark:border-white/5 rounded-lg px-2 py-1 text-xs text-center outline-none mt-1" placeholder="25">
+                        </div>
+                        <div class="bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl p-2 text-center">
+                            <div class="w-6 h-6 mx-auto rounded-full bg-purple-500 mb-1"></div>
+                            <input type="number" id="wheel_reward_6" class="w-full bg-white dark:bg-black/30 border border-gray-200 dark:border-white/5 rounded-lg px-2 py-1 text-xs text-center outline-none" placeholder="0">
+                            <input type="number" id="wheel_weight_6" class="w-full bg-white dark:bg-black/30 border border-gray-200 dark:border-white/5 rounded-lg px-2 py-1 text-xs text-center outline-none mt-1" placeholder="25">
+                        </div>
+                    </div>
+                    <p class="text-[10px] text-gray-400 mt-2">上方为奖励积分，下方为概率权重（权重越高概率越大）</p>
+                </div>
+                <p class="text-[11px] text-gray-400 mt-3">💡 转动转盘，指针停留位置决定奖励</p>
+            </div>
+            
+            <!-- 🎲 猜数字 -->
+            <div class="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-2xl p-5 fun-game-card" data-platform="community">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 text-indigo-500 flex justify-center items-center"><i class="fa-solid fa-question"></i></div>
+                        <span class="font-bold text-[14px]">猜数字</span>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-50 dark:bg-green-500/10 text-green-500">🌐 用户社区</span>
+                    </div>
+                    <label class="ep-switch"><input type="checkbox" id="enable_guess"><span class="track"></span><span class="thumb"></span></label>
+                </div>
+                <div class="flex gap-4">
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">每次消耗积分</label><input type="number" id="guess_cost" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="5"></div>
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">数字范围</label><input type="text" id="guess_range" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="1-100"></div>
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">每日最大次数</label><input type="number" id="guess_max_per_day" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="20"></div>
+                </div>
+                <div class="flex gap-4 mt-3">
+                    <div class="flex-1"><label class="block text-[11px] font-bold text-gray-500 mb-1.5">最大尝试次数</label><input type="number" id="guess_max_tries" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm outline-none" placeholder="7"></div>
+                </div>
+                <div class="mt-3">
+                    <label class="block text-[11px] font-bold text-gray-500 mb-1.5">奖励配置（猜中奖励 = 基础奖励 × 剩余次数倍率）</label>
+                    <div class="grid grid-cols-4 gap-2">
+                        <div class="flex-1"><label class="block text-[10px] text-gray-400 mb-1">基础奖励</label><input type="number" id="guess_base_reward" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm outline-none" placeholder="50"></div>
+                        <div class="flex-1"><label class="block text-[10px] text-gray-400 mb-1">第1次猜中倍率</label><input type="number" id="guess_multiplier_1" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm outline-none" placeholder="5"></div>
+                        <div class="flex-1"><label class="block text-[10px] text-gray-400 mb-1">第2次猜中倍率</label><input type="number" id="guess_multiplier_2" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm outline-none" placeholder="3"></div>
+                        <div class="flex-1"><label class="block text-[10px] text-gray-400 mb-1">第3次猜中倍率</label><input type="number" id="guess_multiplier_3" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm outline-none" placeholder="2"></div>
+                    </div>
+                </div>
+                <p class="text-[11px] text-gray-400 mt-3">💡 猜中数字获得奖励，次数越少奖励越高，失败扣除参与费</p>
+            </div>
+        </div>
+        <div class="p-4 border-t border-gray-100 dark:border-white/5 bg-white dark:bg-[#1C1C1E] shrink-0">
+            <button onclick="saveConfig(); closeModal('fun-modal')" class="w-full py-3.5 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-[14px] font-bold text-[13px] shadow-md shadow-purple-500/20 transition-all active:scale-[0.98]">保存娱乐功能配置</button>
+        </div>
+    </div>
+</div>
+
+<div id="store-modal" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/40 backdrop-blur-sm opacity-0 transition-opacity duration-300 p-4">
+    <div class="bg-white dark:bg-[#1C1C1E] w-full max-w-2xl rounded-[28px] shadow-2xl transform scale-95 transition-transform flex flex-col max-h-[85vh] overflow-hidden">
+        <div class="p-6 border-b border-gray-100 dark:border-white/5 flex justify-between items-center shrink-0 bg-slate-50/50 dark:bg-[#1C1C1E]">
+            <h3 class="text-lg font-black flex items-center gap-2 text-slate-800 dark:text-white"><i class="fa-solid fa-store text-emerald-500"></i> 商品货架配置</h3>
+            <div class="flex items-center gap-2">
+                <button onclick="addStoreItem()" class="px-3 py-1.5 bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400 font-bold rounded-lg text-xs hover:bg-emerald-100 transition-colors"><i class="fa-solid fa-plus"></i> 新增</button>
+                <button onclick="closeModal('store-modal')" class="w-8 h-8 rounded-full bg-gray-100 dark:bg-white/10 flex justify-center items-center text-gray-500 hover:text-rose-500 transition-colors"><i class="fa-solid fa-xmark text-sm"></i></button>
+            </div>
+        </div>
+        <div id="store-items-container" class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-gray-50/50 dark:bg-[#0a0a0a]">
+            </div>
+        <div class="p-4 border-t border-gray-100 dark:border-white/5 bg-white dark:bg-[#1C1C1E] shrink-0">
+            <button onclick="saveConfig(); closeModal('store-modal')" class="w-full py-3.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-[14px] font-bold text-[13px] shadow-md shadow-emerald-500/20 transition-all active:scale-[0.98]">确认保存货架配置</button>
+        </div>
+    </div>
+</div>
+
+<div id="batch-modal" class="fixed inset-0 z-[120] hidden items-center justify-center bg-black/60 backdrop-blur-md opacity-0 transition-opacity duration-300 p-4">
+    <div class="bg-white dark:bg-[#1C1C1E] w-full max-w-md rounded-[28px] shadow-2xl p-6 transform scale-95 transition-transform overflow-hidden">
+        <div class="flex justify-between items-center mb-6"><h3 class="text-lg font-black flex items-center gap-2 text-slate-800 dark:text-white"><i class="fa-solid fa-sack-dollar text-brand-500"></i> 发放 / 扣除资产</h3><button onclick="closeModal('batch-modal')" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark text-lg"></i></button></div>
+        <div class="space-y-4">
+            <div><label class="block text-[11px] font-bold text-gray-500 mb-1.5">数额 (+增 -减)</label><input type="number" id="batch_amount" value="100" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 text-center font-black text-lg outline-none focus:border-brand-500"></div>
+            <div><label class="block text-[11px] font-bold text-gray-500 mb-1.5">变更理由 (将记入用户流水账单)</label><input type="text" id="batch_reason" placeholder="例如：节日福利" class="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm font-bold outline-none focus:border-brand-500"></div>
+        </div>
+        <div class="flex gap-3 mt-8"><button onclick="closeModal('batch-modal')" class="flex-1 py-3.5 bg-gray-100 dark:bg-[#2C2C2E] text-gray-600 dark:text-gray-300 rounded-[14px] font-bold text-[13px] active:scale-[0.98] transition-transform">取消</button><button onclick="submitBatch()" class="flex-1 py-3.5 bg-brand-500 hover:bg-brand-600 text-white rounded-[14px] font-bold text-[13px] active:scale-[0.98] transition-transform shadow-md shadow-brand-500/20">确认执行</button></div>
+    </div>
+</div>
+
+<div id="logs-modal" class="fixed inset-0 z-[120] hidden items-center justify-center bg-black/60 backdrop-blur-md opacity-0 transition-opacity duration-300 p-4">
+    <div class="bg-white dark:bg-[#1C1C1E] w-full max-w-2xl rounded-[28px] shadow-2xl transform scale-95 transition-transform flex flex-col h-[85vh] overflow-hidden">
+        <div class="p-6 border-b border-gray-100 dark:border-white/5 flex justify-between items-center shrink-0 bg-slate-50/50 dark:bg-[#1C1C1E]">
+            <h3 class="text-lg font-black flex items-center gap-2 text-slate-800 dark:text-white"><i class="fa-solid fa-list-ul text-blue-500"></i> <span id="logs-modal-title">资产明细</span></h3>
+            <button onclick="closeModal('logs-modal')" class="w-8 h-8 rounded-full bg-gray-100 dark:bg-white/10 flex justify-center items-center text-gray-500 hover:text-gray-800 dark:hover:text-white transition-colors"><i class="fa-solid fa-xmark text-sm"></i></button>
+        </div>
+        <!-- 筛选栏 -->
+        <div class="p-4 border-b border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-[#0a0a0a] shrink-0">
+            <div class="flex flex-wrap gap-2 items-center">
+                <select id="logs-filter-type" onchange="loadLogsData()" class="bg-white dark:bg-black/40 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 text-[12px] font-bold outline-none">
+                    <option value="all">全部类型</option>
+                    <option value="签到">签到</option>
+                    <option value="转赠">转赠</option>
+                    <option value="商城">商城兑换</option>
+                    <option value="红包">红包</option>
+                    <option value="打劫">打劫</option>
+                    <option value="老虎机">老虎机</option>
+                    <option value="刮刮乐">刮刮乐</option>
+                    <option value="彩票">彩票</option>
+                    <option value="幸运转盘">幸运转盘</option>
+                </select>
+                <span id="logs-total-info" class="text-[11px] text-gray-400 ml-auto"></span>
+            </div>
+        </div>
+        <div class="flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-50/50 dark:bg-[#0a0a0a]">
+            <table class="w-full text-left text-[13px] border-collapse">
+                <thead><tr class="text-gray-500 text-[11px] uppercase tracking-wider"><th class="pb-3 px-2">发生时间</th><th class="pb-3 px-2">操作方/交易事由</th><th class="pb-3 px-2 text-right">变动额</th><th class="pb-3 px-2 text-right">结算余额</th></tr></thead>
+                <tbody id="logs-tbody" class="text-gray-700 dark:text-gray-300"></tbody>
+            </table>
+        </div>
+        <!-- 分页栏 -->
+        <div class="p-4 border-t border-gray-100 dark:border-white/5 bg-white dark:bg-[#1C1C1E] shrink-0">
+            <div class="flex items-center justify-between">
+                <button onclick="prevLogsPage()" id="logs-prev-btn" class="px-3 py-1.5 bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-300 rounded-lg text-[12px] font-bold hover:bg-gray-200 dark:hover:bg-white/20 transition-colors disabled:opacity-50"><i class="fa-solid fa-chevron-left mr-1"></i>上一页</button>
+                <span id="logs-page-info" class="text-[12px] text-gray-500 font-bold"></span>
+                <button onclick="nextLogsPage()" id="logs-next-btn" class="px-3 py-1.5 bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-300 rounded-lg text-[12px] font-bold hover:bg-gray-200 dark:hover:bg-white/20 transition-colors disabled:opacity-50">下一页<i class="fa-solid fa-chevron-right ml-1"></i></button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% include 'modal_pro.html' %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let isPro = false; // 🔥 全局变量判断权限
+
+    function openModal(id) {
+        const modal = document.getElementById(id);
+        modal.classList.remove('hidden'); modal.classList.add('flex');
+        setTimeout(() => { modal.classList.remove('opacity-0'); modal.querySelector('div').classList.remove('scale-95'); }, 10);
+    }
+    function closeModal(id) {
+        const modal = document.getElementById(id);
+        modal.classList.add('opacity-0'); modal.querySelector('div').classList.add('scale-95');
+        setTimeout(() => { modal.classList.add('hidden'); modal.classList.remove('flex'); }, 300);
+    }
+
+    // 🔥 拦截普通用户点击商城
+    function openStoreModal() {
+        if (!isPro) {
+            window.dispatchEvent(new Event('show-pro-modal'));
+            return;
+        }
+        openModal('store-modal');
+    }
+
+    let allUsers = [];
+    let storeItems = [];
+    let currentPage = 1;
+    let totalPages = 1;
+    let pageSize = 20;
+    let totalCount = 0;
+
+    function renderStoreItems() {
+        const container = document.getElementById('store-items-container');
+        if (storeItems.length === 0) { container.innerHTML = '<div class="text-center py-10 text-gray-400 text-xs font-bold bg-white dark:bg-white/5 rounded-2xl border border-dashed border-gray-300 dark:border-white/10">货架空空如也，点击右上角添加商品</div>'; return; }
+        let html = '';
+        storeItems.forEach((item, index) => {
+            const isRandom = item.type === 'random_renew';
+            const typeLabel = item.type === 'renew' ? '系统自动发货 (账号延期)' : (isRandom ? '🎲 随机定价延期 (趣味模式)' : '仅扣费人工对接 (邀请码/奖品)');
+            html += `
+            <div class="bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-2xl p-5 relative shadow-sm transition-all hover:border-emerald-300 group ${isRandom ? 'ring-2 ring-purple-200 dark:ring-purple-500/30' : ''}">
+                <button onclick="removeStoreItem(${index})" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-rose-50 text-rose-500 hover:bg-rose-500 hover:text-white dark:bg-rose-500/10 dark:hover:bg-rose-500 dark:hover:text-white transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100 sm:opacity-100"><i class="fa-solid fa-trash text-xs"></i></button>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 pr-10">
+                    <div><label class="block text-[10px] font-black text-gray-400 mb-1.5 uppercase tracking-widest">商品名称</label><input type="text" value="${item.name}" onchange="storeItems[${index}].name=this.value" class="w-full bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:border-brand-500"></div>
+                    <div><label class="block text-[10px] font-black text-gray-400 mb-1.5 uppercase tracking-widest">发货机制类型</label><select onchange="storeItems[${index}].type=this.value; storeItems[${index}].icon=(this.value==='renew'?'fa-battery-half':(this.value==='random_renew'?'fa-dice':'fa-ticket')); storeItems[${index}].color=(this.value==='renew'?'text-emerald-500':(this.value==='random_renew'?'text-purple-500':'text-amber-500')); renderStoreItems()" class="w-full bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-[13px] font-bold outline-none focus:border-brand-500"><option value="renew" ${item.type==='renew'?'selected':''}>系统自动发货 (账号延期)</option><option value="random_renew" ${isRandom?'selected':''}>🎲 随机定价延期 (趣味模式)</option><option value="manual" ${item.type==='manual'?'selected':''}>仅扣费人工对接 (邀请码/奖品)</option></select></div>
+                </div>
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div><label class="block text-[10px] font-black text-gray-400 mb-1.5 uppercase tracking-widest">定价 (扣除积分)</label><input type="number" value="${item.cost}" onchange="storeItems[${index}].cost=parseInt(this.value)" class="w-full bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl px-3 py-2 text-sm font-mono font-black text-amber-600 outline-none focus:ring-2 focus:ring-amber-500/50"></div>
+                    <div><label class="block text-[10px] font-black text-gray-400 mb-1.5 uppercase tracking-widest">限购次数 <span class="text-gray-300 font-normal">(0=不限)</span></label><input type="number" value="${item.max_buys||0}" onchange="storeItems[${index}].max_buys=parseInt(this.value)" class="w-full bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-xl px-3 py-2 text-sm font-mono font-black text-rose-600 outline-none focus:ring-2 focus:ring-rose-500/50" placeholder="0"></div>
+                    ${item.type === 'renew' ? `<div><label class="block text-[10px] font-black text-gray-400 mb-1.5 uppercase tracking-widest">增加账号寿命 (天)</label><input type="number" value="${item.val||30}" onchange="storeItems[${index}].val=parseInt(this.value)" class="w-full bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-xl px-3 py-2 text-sm font-mono font-black text-emerald-600 outline-none focus:ring-2 focus:ring-emerald-500/50"></div>` : ''}
+                    ${isRandom ? `<div><label class="block text-[10px] font-black text-gray-400 mb-1.5 uppercase tracking-widest">基础天数 (保底)</label><input type="number" value="${item.base_days||30}" onchange="storeItems[${index}].base_days=parseInt(this.value); renderStoreItems()" class="w-full bg-purple-50 dark:bg-purple-500/10 border border-purple-200 dark:border-purple-500/20 rounded-xl px-3 py-2 text-sm font-mono font-black text-purple-600 outline-none focus:ring-2 focus:ring-purple-500/50"></div>` : ''}
+                </div>
+                ${isRandom ? `
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div><label class="block text-[10px] font-black text-gray-400 mb-1.5 uppercase tracking-widest">随机最小浮动 <span class="text-purple-500">(可负数)</span></label><input type="number" value="${item.random_min||-10}" onchange="storeItems[${index}].random_min=parseInt(this.value); renderStoreItems()" class="w-full bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-xl px-3 py-2 text-sm font-mono font-black text-rose-600 outline-none focus:ring-2 focus:ring-rose-500/50" placeholder="-10"></div>
+                    <div><label class="block text-[10px] font-black text-gray-400 mb-1.5 uppercase tracking-widest">随机最大浮动</label><input type="number" value="${item.random_max||60}" onchange="storeItems[${index}].random_max=parseInt(this.value); renderStoreItems()" class="w-full bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-xl px-3 py-2 text-sm font-mono font-black text-emerald-600 outline-none focus:ring-2 focus:ring-emerald-500/50" placeholder="60"></div>
+                </div>
+                <div class="bg-purple-50 dark:bg-purple-500/10 border border-purple-200 dark:border-purple-500/20 rounded-xl p-3 mb-4">
+                    <div class="text-[10px] font-black text-purple-600 dark:text-purple-400 mb-1"><i class="fa-solid fa-info-circle mr-1"></i> 随机规则预览</div>
+                    <div class="text-[11px] text-purple-700 dark:text-purple-300">花费 <span class="font-black">${item.cost||300}</span> 积分，实际获得 <span class="font-black text-rose-600">${(item.base_days||30) + (item.random_min||-10)}</span> ~ <span class="font-black text-emerald-600">${(item.base_days||30) + (item.random_max||60)}</span> 天</div>
+                </div>
+                <div class="bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/5 rounded-xl p-3 mb-4">
+                    <div class="text-[10px] font-black text-gray-500 mb-2"><i class="fa-solid fa-sliders mr-1"></i> 概率调节 <span class="text-gray-400 font-normal">(可选)</span></div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-[9px] text-gray-400 mb-1">模式</label>
+                            <select onchange="storeItems[${index}].luck_mode=this.value; renderStoreItems()" class="w-full bg-white dark:bg-black/40 border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1.5 text-[11px] outline-none">
+                                <option value="normal" ${item.luck_mode!=='lucky' && item.luck_mode!=='unlucky'?'selected':''}>⚖️ 均匀随机</option>
+                                <option value="lucky" ${item.luck_mode==='lucky'?'selected':''}>🍀 幸运模式</option>
+                                <option value="unlucky" ${item.luck_mode==='unlucky'?'selected':''}>💀 挑战模式</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-[9px] text-gray-400 mb-1">强度 <span class="text-gray-300">(0-100)</span></label>
+                            <input type="number" value="${item.luck_value||50}" min="0" max="100" onchange="storeItems[${index}].luck_value=parseInt(this.value)" class="w-full bg-white dark:bg-black/40 border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1.5 text-[11px] outline-none" placeholder="50">
+                        </div>
+                    </div>
+                    <div class="text-[9px] text-gray-400 mt-2">💡 <b>均匀</b>：完全随机 | <b>幸运</b>：强度越高越容易得高天数 | <b>挑战</b>：强度越高越容易得低天数</div>
+                </div>
+                ` : ''}
+                <div><label class="block text-[10px] font-black text-gray-400 mb-1.5 uppercase tracking-widest">前端副标题描述</label><input type="text" value="${item.desc||''}" placeholder="向用户展示的话..." onchange="storeItems[${index}].desc=this.value" class="w-full bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:border-brand-500 text-gray-500"></div>
+            </div>`;
+        });
+        container.innerHTML = html;
+    }
+    function addStoreItem() { storeItems.push({id: 'item_' + Date.now(), type: 'renew', name: '新建商品', cost: 500, val: 30, desc: '在这里写描述...', icon: 'fa-battery-half', color: 'text-emerald-500', max_buys: 0}); renderStoreItems(); }
+    function removeStoreItem(idx) { storeItems.splice(idx, 1); renderStoreItems(); }
+
+    // 🔥 更新求片收费模式提示
+    function toggleReqCostFields() {
+        const mode = document.getElementById('req_cost_mode').value;
+        const label = document.getElementById('req_cost_label');
+        const hint = document.getElementById('req_hint_text');
+        const cost = document.getElementById('req_cost').value || 0;
+        
+        if (mode === 'per_request') {
+            label.textContent = '(每次消耗)';
+            hint.textContent = cost > 0 
+                ? `当前设置：每次求片扣 ${cost} 积分（电影或剧集）`
+                : '当前设置：求片不消耗积分';
+        } else if (mode === 'per_season') {
+            label.textContent = '(每季消耗)';
+            hint.textContent = cost > 0
+                ? `当前设置：每季扣 ${cost} 积分，求片一部 2 季剧集共扣 ${cost * 2} 积分`
+                : '当前设置：求片不消耗积分';
+        }
+    }
+
+    // 🔥 更新追新收费模式提示
+    function toggleUpdateCostFields() {
+        const mode = document.getElementById('update_cost_mode').value;
+        const label = document.getElementById('update_cost_label');
+        const hint = document.getElementById('update_hint_text');
+        const cost = document.getElementById('update_cost').value || 0;
+        
+        if (mode === 'per_series') {
+            label.textContent = '(每剧消耗)';
+            hint.textContent = cost > 0
+                ? `当前设置：追新一部剧（无论选多少集/季）只扣 ${cost} 积分`
+                : '当前设置：追新不消耗积分';
+        } else if (mode === 'per_season') {
+            label.textContent = '(每季消耗)';
+            hint.textContent = cost > 0
+                ? `当前设置：每季扣 ${cost} 积分，追新 2 季共扣 ${cost * 2} 积分，不限集数`
+                : '当前设置：追新不消耗积分';
+        } else if (mode === 'per_episode') {
+            label.textContent = '(每集消耗)';
+            hint.textContent = cost > 0
+                ? `当前设置：每集扣 ${cost} 积分，追新 5 集共扣 ${cost * 5} 积分`
+                : '当前设置：追新不消耗积分';
+        }
+    }
+
+    async function loadConfig() {
+        const res = await fetch('/api/points/config'); const json = await res.json();
+        if(json.status === 'success') {
+            const d = json.data;
+            isPro = d.is_pro === true; // 🔥 获取并存储当前用户的特权状态
+            
+            // 🔥 根据是否 Pro，自动显示/隐藏卡片上的遮罩层
+            if (!isPro) {
+                document.getElementById('req-pro-mask').classList.remove('hidden');
+                document.getElementById('store-pro-mask').classList.remove('hidden');
+            } else {
+                document.getElementById('req-pro-mask').classList.add('hidden');
+                document.getElementById('store-pro-mask').classList.add('hidden');
+            }
+
+            document.getElementById('checkin_min').value = d.checkin_min || 10;
+            document.getElementById('checkin_max').value = d.checkin_max || 30;
+            
+            // 🔥 连续签到奖励
+            document.getElementById('enable_streak_bonus').checked = d.enable_streak_bonus === "1";
+            document.getElementById('streak_7_days').value = d.streak_7_days || 100;
+            document.getElementById('streak_30_days').value = d.streak_30_days || 500;
+            document.getElementById('streak_reset_on_miss').checked = d.streak_reset_on_miss === "1";
+            
+            // 🔥 积分转赠
+            document.getElementById('enable_transfer').checked = d.enable_transfer === "1";
+            document.getElementById('transfer_fee_rate').value = d.transfer_fee_rate || 10;
+            document.getElementById('transfer_min').value = d.transfer_min || 10;
+            document.getElementById('transfer_max').value = d.transfer_max || 1000;
+            
+            // 🔥 积分红包
+            document.getElementById('enable_red_packet').checked = d.enable_red_packet === "1";
+            document.getElementById('red_packet_expire_hours').value = d.red_packet_expire_hours || 24;
+            document.getElementById('red_packet_admin_only').checked = d.red_packet_admin_only === "1";
+            
+            // 🔥 PK骰子游戏
+            document.getElementById('enable_pk').checked = d.enable_pk === "1";
+            document.getElementById('pk_min').value = d.pk_min || 10;
+            document.getElementById('pk_max').value = d.pk_max || 500;
+            document.getElementById('pk_max_per_day').value = d.pk_max_per_day || 10;
+            
+            // 🔥 每日彩票
+            document.getElementById('enable_lottery').checked = d.enable_lottery === "1";
+            document.getElementById('lottery_cost').value = d.lottery_cost || 100;
+            document.getElementById('lottery_max_per_day').value = d.lottery_max_per_day || 10;
+            document.getElementById('lottery_draw_hour').value = d.lottery_draw_hour || 20;
+            document.getElementById('lottery_pool_ratio_1').value = d.lottery_pool_ratio_1 || 50;
+            document.getElementById('lottery_pool_ratio_2').value = d.lottery_pool_ratio_2 || 20;
+            document.getElementById('lottery_pool_ratio_3').value = d.lottery_pool_ratio_3 || 10;
+            document.getElementById('lottery_pool_ratio_4').value = d.lottery_pool_ratio_4 || 5;
+            document.getElementById('lottery_pool_ratio_5').value = d.lottery_pool_ratio_5 || 5;
+            document.getElementById('lottery_lucky_count').value = d.lottery_lucky_count || 0;
+            document.getElementById('lottery_lucky_ratio').value = d.lottery_lucky_ratio || 5;
+            
+            // 🔥 刮刮乐
+            document.getElementById('enable_scratch').checked = d.enable_scratch === "1";
+            document.getElementById('scratch_cost').value = d.scratch_cost || 100;
+            document.getElementById('scratch_max_per_day').value = d.scratch_max_per_day || 10;
+            document.getElementById('scratch_slots').value = d.scratch_slots || 9;
+            document.getElementById('scratch_big_prize_rate').value = d.scratch_big_prize_rate || 1;
+            document.getElementById('scratch_medium_prize_rate').value = d.scratch_medium_prize_rate || 10;
+            document.getElementById('scratch_admin_only').checked = d.scratch_admin_only !== "0";
+            
+            // 🔥 打劫功能
+            document.getElementById('enable_rob').checked = d.enable_rob === "1";
+            document.getElementById('rob_success_rate').value = d.rob_success_rate || 50;
+            document.getElementById('rob_min').value = d.rob_min || 1;
+            document.getElementById('rob_max').value = d.rob_max || 10;
+            document.getElementById('rob_counter_min').value = d.rob_counter_min || 1;
+            document.getElementById('rob_counter_max').value = d.rob_counter_max || 5;
+            document.getElementById('rob_protect_threshold').value = d.rob_protect_threshold || 50;
+            document.getElementById('rob_max_per_day').value = d.rob_max_per_day || 5;
+            document.getElementById('rob_max_be_robbed').value = d.rob_max_be_robbed || 3;
+            document.getElementById('rob_cooldown_hours').value = d.rob_cooldown_hours || 2;
+            
+            // 🔥 用户PK功能
+            document.getElementById('enable_user_pk').checked = d.enable_user_pk === "1";
+            document.getElementById('user_pk_min_points').value = d.user_pk_min_points || 10;
+            document.getElementById('user_pk_max_points').value = d.user_pk_max_points || 500;
+            document.getElementById('user_pk_max_per_day').value = d.user_pk_max_per_day || 5;
+            document.getElementById('user_pk_timeout').value = d.user_pk_timeout || 5;
+            document.getElementById('user_pk_tax').value = d.user_pk_tax || 5;
+            
+            // 🎰 老虎机配置
+            document.getElementById('enable_slot').checked = d.enable_slot === "1";
+            document.getElementById('slot_cost').value = d.slot_cost || 10;
+            document.getElementById('slot_daily_free').value = d.slot_daily_free || 3;
+            document.getElementById('slot_max_per_day').value = d.slot_max_per_day || 20;
+            document.getElementById('slot_triple_multiplier').value = d.slot_triple_multiplier || 10;
+            document.getElementById('slot_double_multiplier').value = d.slot_double_multiplier || 2;
+            document.getElementById('slot_special_multiplier').value = d.slot_special_multiplier || 50;
+            document.getElementById('slot_win_rate_modifier').value = d.slot_win_rate_modifier || 1.0;
+            
+            // 解析图案权重和特殊标记
+            const defaultSymbols = [
+                {emoji: '🍒', weight: 20, special: false},
+                {emoji: '🍋', weight: 20, special: false},
+                {emoji: '🍊', weight: 15, special: false},
+                {emoji: '🍇', weight: 15, special: false},
+                {emoji: '💎', weight: 10, special: false},
+                {emoji: '7️⃣', weight: 10, special: true},
+                {emoji: '⭐', weight: 5, special: true},
+                {emoji: '🎰', weight: 5, special: true}
+            ];
+            
+            // 从配置解析
+            let symbols = defaultSymbols;
+            if (d.slot_symbols) {
+                try {
+                    symbols = d.slot_symbols.split('\n').filter(s => s.trim()).map(line => {
+                        const [emoji, weight, special] = line.split('|');
+                        return {emoji: emoji.trim(), weight: parseInt(weight) || 10, special: special === 'true'};
+                    });
+                } catch(e) {}
+            }
+            
+            // 映射到表单
+            const symbolMap = {
+                '🍒': {weight: 'slot_symbol_cherry', special: 'slot_special_cherry'},
+                '🍋': {weight: 'slot_symbol_lemon', special: 'slot_special_lemon'},
+                '🍊': {weight: 'slot_symbol_orange', special: 'slot_special_orange'},
+                '🍇': {weight: 'slot_symbol_grape', special: 'slot_special_grape'},
+                '💎': {weight: 'slot_symbol_diamond', special: 'slot_special_diamond'},
+                '7️⃣': {weight: 'slot_symbol_seven', special: 'slot_special_seven'},
+                '⭐': {weight: 'slot_symbol_star', special: 'slot_special_star'},
+                '🎰': {weight: 'slot_symbol_slot', special: 'slot_special_slot'}
+            };
+            
+            symbols.forEach(s => {
+                const map = symbolMap[s.emoji];
+                if (map) {
+                    const weightEl = document.getElementById(map.weight);
+                    const specialEl = document.getElementById(map.special);
+                    if (weightEl) weightEl.value = s.weight;
+                    if (specialEl) specialEl.checked = s.special;
+                }
+            });
+            
+            // 🎫 刮刮乐（用户社区版）
+            document.getElementById('enable_web_scratch').checked = d.enable_web_scratch === "1";
+            document.getElementById('web_scratch_cost').value = d.web_scratch_cost || 10;
+            document.getElementById('web_scratch_max_per_day').value = d.web_scratch_max_per_day || 20;
+            document.getElementById('web_scratch_win_numbers').value = d.web_scratch_win_numbers || 3;
+            document.getElementById('web_scratch_grid_count').value = d.web_scratch_grid_count || 12;
+            document.getElementById('web_scratch_min_reward').value = d.web_scratch_min_reward || 5;
+            document.getElementById('web_scratch_max_reward').value = d.web_scratch_max_reward || 100;
+            document.getElementById('web_scratch_match_rate').value = d.web_scratch_match_rate || 20;
+            
+            // 🎡 幸运转盘
+            document.getElementById('enable_wheel').checked = d.enable_wheel === "1";
+            document.getElementById('wheel_cost').value = d.wheel_cost || 10;
+            document.getElementById('wheel_daily_free').value = d.wheel_daily_free || 3;
+            document.getElementById('wheel_max_per_day').value = d.wheel_max_per_day || 20;
+            
+            // 扇区配置
+            for (let i = 1; i <= 6; i++) {
+                document.getElementById(`wheel_reward_${i}`).value = d[`wheel_reward_${i}`] || [50, 30, 20, 10, 5, 0][i-1];
+                document.getElementById(`wheel_weight_${i}`).value = d[`wheel_weight_${i}`] || [5, 10, 15, 20, 25, 25][i-1];
+            }
+            
+            // 🎲 猜数字
+            document.getElementById('enable_guess').checked = d.enable_guess === "1";
+            document.getElementById('guess_cost').value = d.guess_cost || 5;
+            document.getElementById('guess_range').value = d.guess_range || '1-100';
+            document.getElementById('guess_max_per_day').value = d.guess_max_per_day || 20;
+            document.getElementById('guess_max_tries').value = d.guess_max_tries || 7;
+            document.getElementById('guess_base_reward').value = d.guess_base_reward || 50;
+            document.getElementById('guess_multiplier_1').value = d.guess_multiplier_1 || 5;
+            document.getElementById('guess_multiplier_2').value = d.guess_multiplier_2 || 3;
+            document.getElementById('guess_multiplier_3').value = d.guess_multiplier_3 || 2;
+            
+            // 加载奖池信息
+            loadLotteryPool();
+            
+            document.getElementById('req_cost').value = d.req_cost !== undefined ? d.req_cost : 50;
+            document.getElementById('req_cost_mode').value = d.req_cost_mode || 'per_request';
+            document.getElementById('enable_req_cost').checked = d.enable_req_cost === "1";
+            toggleReqCostFields();  // 更新求片提示文本
+            // 🔥 追新积分配置
+            document.getElementById('update_cost').value = d.update_cost !== undefined ? d.update_cost : 20;
+            document.getElementById('update_cost_mode').value = d.update_cost_mode || 'per_series';
+            document.getElementById('enable_update_cost').checked = d.enable_update_cost === "1";
+            toggleUpdateCostFields();  // 更新提示文本
+            try { storeItems = JSON.parse(d.store_items || '[]'); } catch(e) { storeItems = []; }
+            renderStoreItems();
+        }
+    }
+
+    async function saveConfig() {
+        const payload = {
+            checkin_min: document.getElementById('checkin_min').value,
+            checkin_max: document.getElementById('checkin_max').value,
+            // 🔥 连续签到奖励
+            enable_streak_bonus: document.getElementById('enable_streak_bonus').checked ? "1" : "0",
+            streak_7_days: document.getElementById('streak_7_days').value,
+            streak_30_days: document.getElementById('streak_30_days').value,
+            streak_reset_on_miss: document.getElementById('streak_reset_on_miss').checked ? "1" : "0",
+            // 🔥 积分转赠
+            enable_transfer: document.getElementById('enable_transfer').checked ? "1" : "0",
+            transfer_fee_rate: document.getElementById('transfer_fee_rate').value,
+            transfer_min: document.getElementById('transfer_min').value,
+            transfer_max: document.getElementById('transfer_max').value,
+            // 🔥 积分红包
+            enable_red_packet: document.getElementById('enable_red_packet').checked ? "1" : "0",
+            red_packet_expire_hours: document.getElementById('red_packet_expire_hours').value,
+            red_packet_admin_only: document.getElementById('red_packet_admin_only').checked ? "1" : "0",
+            // 🔥 PK骰子游戏
+            enable_pk: document.getElementById('enable_pk').checked ? "1" : "0",
+            pk_min: document.getElementById('pk_min').value,
+            pk_max: document.getElementById('pk_max').value,
+            pk_max_per_day: document.getElementById('pk_max_per_day').value,
+            // 🔥 每日彩票
+            enable_lottery: document.getElementById('enable_lottery').checked ? "1" : "0",
+            lottery_cost: document.getElementById('lottery_cost').value,
+            lottery_max_per_day: document.getElementById('lottery_max_per_day').value,
+            lottery_draw_hour: document.getElementById('lottery_draw_hour').value,
+            lottery_pool_ratio_1: document.getElementById('lottery_pool_ratio_1').value,
+            lottery_pool_ratio_2: document.getElementById('lottery_pool_ratio_2').value,
+            lottery_pool_ratio_3: document.getElementById('lottery_pool_ratio_3').value,
+            lottery_pool_ratio_4: document.getElementById('lottery_pool_ratio_4').value,
+            lottery_pool_ratio_5: document.getElementById('lottery_pool_ratio_5').value,
+            lottery_lucky_count: document.getElementById('lottery_lucky_count').value,
+            lottery_lucky_ratio: document.getElementById('lottery_lucky_ratio').value,
+            // 🔥 刮刮乐
+            enable_scratch: document.getElementById('enable_scratch').checked ? "1" : "0",
+            scratch_cost: document.getElementById('scratch_cost').value,
+            scratch_max_per_day: document.getElementById('scratch_max_per_day').value,
+            scratch_slots: document.getElementById('scratch_slots').value,
+            scratch_big_prize_rate: document.getElementById('scratch_big_prize_rate').value,
+            scratch_medium_prize_rate: document.getElementById('scratch_medium_prize_rate').value,
+            scratch_admin_only: document.getElementById('scratch_admin_only').checked ? "1" : "0",
+            // 🔥 打劫功能
+            enable_rob: document.getElementById('enable_rob').checked ? "1" : "0",
+            rob_success_rate: document.getElementById('rob_success_rate').value,
+            rob_min: document.getElementById('rob_min').value,
+            rob_max: document.getElementById('rob_max').value,
+            rob_counter_min: document.getElementById('rob_counter_min').value,
+            rob_counter_max: document.getElementById('rob_counter_max').value,
+            rob_protect_threshold: document.getElementById('rob_protect_threshold').value,
+            rob_max_per_day: document.getElementById('rob_max_per_day').value,
+            rob_max_be_robbed: document.getElementById('rob_max_be_robbed').value,
+            rob_cooldown_hours: document.getElementById('rob_cooldown_hours').value,
+            // 🔥 用户PK功能
+            enable_user_pk: document.getElementById('enable_user_pk').checked ? "1" : "0",
+            user_pk_min_points: document.getElementById('user_pk_min_points').value,
+            user_pk_max_points: document.getElementById('user_pk_max_points').value,
+            user_pk_max_per_day: document.getElementById('user_pk_max_per_day').value,
+            user_pk_timeout: document.getElementById('user_pk_timeout').value,
+            user_pk_tax: document.getElementById('user_pk_tax').value,
+            // 🎰 老虎机配置
+            enable_slot: document.getElementById('enable_slot').checked ? "1" : "0",
+            slot_cost: document.getElementById('slot_cost').value,
+            slot_daily_free: document.getElementById('slot_daily_free').value,
+            slot_max_per_day: document.getElementById('slot_max_per_day').value,
+            slot_triple_multiplier: document.getElementById('slot_triple_multiplier').value,
+            slot_double_multiplier: document.getElementById('slot_double_multiplier').value,
+            slot_special_multiplier: document.getElementById('slot_special_multiplier').value,
+            slot_win_rate_modifier: document.getElementById('slot_win_rate_modifier').value,
+            // 从表单构建图案配置
+            slot_symbols: [
+                `🍒|${document.getElementById('slot_symbol_cherry').value}|${document.getElementById('slot_special_cherry').checked}`,
+                `🍋|${document.getElementById('slot_symbol_lemon').value}|${document.getElementById('slot_special_lemon').checked}`,
+                `🍊|${document.getElementById('slot_symbol_orange').value}|${document.getElementById('slot_special_orange').checked}`,
+                `🍇|${document.getElementById('slot_symbol_grape').value}|${document.getElementById('slot_special_grape').checked}`,
+                `💎|${document.getElementById('slot_symbol_diamond').value}|${document.getElementById('slot_special_diamond').checked}`,
+                `7️⃣|${document.getElementById('slot_symbol_seven').value}|${document.getElementById('slot_special_seven').checked}`,
+                `⭐|${document.getElementById('slot_symbol_star').value}|${document.getElementById('slot_special_star').checked}`,
+                `🎰|${document.getElementById('slot_symbol_slot').value}|${document.getElementById('slot_special_slot').checked}`
+            ].join('\n'),
+            // 🎫 刮刮乐（用户社区版）
+            enable_web_scratch: document.getElementById('enable_web_scratch').checked ? "1" : "0",
+            web_scratch_cost: document.getElementById('web_scratch_cost').value,
+            web_scratch_max_per_day: document.getElementById('web_scratch_max_per_day').value,
+            web_scratch_win_numbers: document.getElementById('web_scratch_win_numbers').value,
+            web_scratch_grid_count: document.getElementById('web_scratch_grid_count').value,
+            web_scratch_min_reward: document.getElementById('web_scratch_min_reward').value,
+            web_scratch_max_reward: document.getElementById('web_scratch_max_reward').value,
+            web_scratch_match_rate: document.getElementById('web_scratch_match_rate').value,
+            // 🎡 幸运转盘
+            enable_wheel: document.getElementById('enable_wheel').checked ? "1" : "0",
+            wheel_cost: document.getElementById('wheel_cost').value,
+            wheel_daily_free: document.getElementById('wheel_daily_free').value,
+            wheel_max_per_day: document.getElementById('wheel_max_per_day').value,
+            wheel_reward_1: document.getElementById('wheel_reward_1').value,
+            wheel_weight_1: document.getElementById('wheel_weight_1').value,
+            wheel_reward_2: document.getElementById('wheel_reward_2').value,
+            wheel_weight_2: document.getElementById('wheel_weight_2').value,
+            wheel_reward_3: document.getElementById('wheel_reward_3').value,
+            wheel_weight_3: document.getElementById('wheel_weight_3').value,
+            wheel_reward_4: document.getElementById('wheel_reward_4').value,
+            wheel_weight_4: document.getElementById('wheel_weight_4').value,
+            wheel_reward_5: document.getElementById('wheel_reward_5').value,
+            wheel_weight_5: document.getElementById('wheel_weight_5').value,
+            wheel_reward_6: document.getElementById('wheel_reward_6').value,
+            wheel_weight_6: document.getElementById('wheel_weight_6').value,
+            // 🎲 猜数字
+            enable_guess: document.getElementById('enable_guess').checked ? "1" : "0",
+            guess_cost: document.getElementById('guess_cost').value,
+            guess_range: document.getElementById('guess_range').value,
+            guess_max_per_day: document.getElementById('guess_max_per_day').value,
+            guess_max_tries: document.getElementById('guess_max_tries').value,
+            guess_base_reward: document.getElementById('guess_base_reward').value,
+            guess_multiplier_1: document.getElementById('guess_multiplier_1').value,
+            guess_multiplier_2: document.getElementById('guess_multiplier_2').value,
+            guess_multiplier_3: document.getElementById('guess_multiplier_3').value,
+            req_cost: document.getElementById('req_cost').value,
+            req_cost_mode: document.getElementById('req_cost_mode').value,
+            enable_req_cost: document.getElementById('enable_req_cost').checked ? "1" : "0",
+            // 🔥 追新积分配置
+            update_cost: document.getElementById('update_cost').value,
+            update_cost_mode: document.getElementById('update_cost_mode').value,
+            enable_update_cost: document.getElementById('enable_update_cost').checked ? "1" : "0",
+            store_items: storeItems
+        };
+        const res = await fetch('/api/points/config', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({configs: payload})});
+        
+        // 移除了这里的 402 拦截，让免费用户的签到配置能够正常保存提示
+        const json = await res.json(); showToast(json.status === 'success' ? 'success' : 'error', '操作结果', json.message); loadConfig();
+    }
+
+    async function loadUsers() {
+        const res = await fetch(`/api/points/users?page=${currentPage}&page_size=${pageSize}`); const json = await res.json();
+        if(json.status === 'success') { 
+            allUsers = json.data; 
+            totalCount = json.total || 0;
+            totalPages = json.total_pages || 1;
+            renderTable(allUsers); 
+            updatePagination();
+        }
+    }
+
+    function updatePagination() {
+        document.getElementById('total-count').textContent = totalCount;
+        document.getElementById('current-page').textContent = currentPage;
+        document.getElementById('total-pages').textContent = totalPages;
+        
+        // 更新按钮状态
+        document.getElementById('btn-first').disabled = currentPage <= 1;
+        document.getElementById('btn-prev').disabled = currentPage <= 1;
+        document.getElementById('btn-next').disabled = currentPage >= totalPages;
+        document.getElementById('btn-last').disabled = currentPage >= totalPages;
+        
+        // 更新页码显示
+        renderPageNumbers();
+    }
+
+    function renderPageNumbers() {
+        const container = document.getElementById('page-numbers');
+        if (!container) return;
+        
+        let html = '';
+        const maxVisible = 5;
+        let start = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+        let end = Math.min(totalPages, start + maxVisible - 1);
+        
+        if (end - start + 1 < maxVisible) {
+            start = Math.max(1, end - maxVisible + 1);
+        }
+        
+        for (let i = start; i <= end; i++) {
+            const isActive = i === currentPage;
+            html += `<button onclick="goToPage(${i})" class="w-8 h-8 rounded-lg ${isActive ? 'bg-brand-500 text-white' : 'bg-white dark:bg-[#2C2C2E] border border-gray-200 dark:border-white/10 text-gray-500 hover:bg-gray-100 dark:hover:bg-[#3A3A3C]'} flex items-center justify-center text-[12px] font-bold transition-colors">${i}</button>`;
+        }
+        
+        container.innerHTML = html;
+    }
+
+    function goToPage(page) {
+        if (page < 1 || page > totalPages) return;
+        currentPage = page;
+        loadUsers();
+    }
+
+    function changePageSize(size) {
+        if (size === 'all') {
+            pageSize = 9999;
+        } else {
+            pageSize = parseInt(size);
+        }
+        currentPage = 1;
+        loadUsers();
+    }
+
+    // 自定义下拉选择框
+    function toggleCustomSelect(id) {
+        const menu = document.getElementById(id + '-menu');
+        const allMenus = document.querySelectorAll('.custom-select-menu');
+        allMenus.forEach(m => { if (m !== menu) m.classList.remove('open'); });
+        menu.classList.toggle('open');
+    }
+
+    function selectCustomOption(hiddenId, value, display) {
+        document.getElementById(hiddenId).value = value;
+        document.getElementById(hiddenId + '-display').textContent = display;
+        document.getElementById(hiddenId + '-menu').classList.remove('open');
+        
+        // 更新选中状态
+        const options = document.querySelectorAll(`#${hiddenId}-menu .custom-select-option`);
+        options.forEach(opt => {
+            opt.classList.toggle('active', opt.dataset.value === value);
+        });
+    }
+
+    // 点击外部关闭下拉菜单
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.custom-select')) {
+            document.querySelectorAll('.custom-select-menu').forEach(m => m.classList.remove('open'));
+        }
+    });
+
+    function renderTable(users) {
+        const tbody = document.getElementById('user-tbody');
+        let html = '';
+        users.forEach(u => {
+            html += `<tr class="border-b border-gray-100 dark:border-white/5 hover:bg-gray-50/50 dark:hover:bg-white/5 transition-colors">
+                <td class="py-3 px-4 text-center"><input type="checkbox" class="ep-checkbox-custom user-cb" value="${u.id}"></td>
+                <td class="py-3 px-4 font-bold text-gray-800 dark:text-gray-200">${u.name}</td>
+                <td class="py-3 px-4"><span class="px-2.5 py-1 bg-amber-50 text-amber-600 dark:bg-amber-500/10 rounded-lg font-mono font-bold text-[13px] border border-amber-200/50 dark:border-amber-500/20"><i class="fa-solid fa-coins"></i> ${u.points}</span></td>
+                <td class="py-3 px-4 text-xs text-gray-500 font-mono hidden sm:table-cell">${u.last_active.substring(0, 16).replace('T',' ')}</td>
+                <td class="py-3 px-4 text-right">
+                <div class="flex items-center justify-end gap-2">
+                    <button onclick="openLogsModal('${u.id}', '${u.name}')" title="查看流水账单" class="w-8 h-8 rounded-full bg-blue-50 text-blue-500 hover:bg-blue-500 hover:text-white dark:bg-blue-500/10 dark:text-blue-400 dark:hover:bg-blue-500 dark:hover:text-white transition-colors shadow-sm"><i class="fa-solid fa-list-ul text-xs"></i></button>
+                    <button onclick="openSingleBatchModal('${u.id}', '${u.name}')" title="发钱/扣款" class="w-8 h-8 rounded-full bg-gray-100 dark:bg-[#2C2C2E] text-gray-500 hover:text-brand-500 shadow-sm transition-colors"><i class="fa-solid fa-pen text-xs"></i></button>
+                </div>
+            </td></tr>`;
+        });
+        tbody.innerHTML = html || '<tr><td colspan="5" class="py-10 text-center text-gray-400 font-bold text-sm">暂无数据</td></tr>';
+    }
+    function filterTable() { 
+        const kw = document.getElementById('search-input').value.toLowerCase(); 
+        // 搜索时重置到第一页并加载所有数据进行过滤
+        if (kw) {
+            fetch('/api/points/users?page=1&page_size=9999')
+                .then(res => res.json())
+                .then(json => {
+                    if (json.status === 'success') {
+                        const filtered = json.data.filter(u => u.name.toLowerCase().includes(kw));
+                        allUsers = filtered;
+                        totalCount = filtered.length;
+                        totalPages = 1;
+                        currentPage = 1;
+                        renderTable(filtered);
+                        updatePagination();
+                        // 搜索模式下隐藏分页
+                        document.getElementById('pagination-container').style.display = 'none';
+                    }
+                });
+        } else {
+            // 清除搜索时恢复正常分页
+            document.getElementById('pagination-container').style.display = 'flex';
+            currentPage = 1;
+            loadUsers();
+        }
+    }
+    function toggleAll(el) { document.querySelectorAll('.user-cb').forEach(cb => cb.checked = el.checked); }
+
+    // 自定义通知弹窗
+    function showNotifyDialog(title, message, type = 'info') {
+        const container = document.getElementById('global-confirm-container');
+        if (!container) return;
+        
+        const icons = {
+            success: 'fa-check-circle text-green-500',
+            error: 'fa-times-circle text-red-500',
+            warning: 'fa-exclamation-triangle text-amber-500',
+            info: 'fa-info-circle text-blue-500'
+        };
+        const icon = icons[type] || icons.info;
+        
+        container.innerHTML = `
+            <div class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[300]" onclick="this.nextElementSibling.remove();container.innerHTML='';"></div>
+            <div class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[301] bg-white dark:bg-[#1C1C1E] rounded-2xl shadow-2xl w-[90%] max-w-sm overflow-hidden">
+                <div class="p-6 text-center">
+                    <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 dark:bg-white/10 flex items-center justify-center">
+                        <i class="fa-solid ${icon} text-3xl"></i>
+                    </div>
+                    <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-2">${title}</h3>
+                    <p class="text-sm text-gray-500 dark:text-gray-400 whitespace-pre-line">${message}</p>
+                </div>
+                <div class="border-t border-gray-100 dark:border-white/5">
+                    <button onclick="document.getElementById('global-confirm-container').innerHTML=''" class="w-full py-3.5 text-sm font-medium text-brand-500 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">确定</button>
+                </div>
+            </div>
+        `;
+        
+        // 3秒后自动关闭
+        setTimeout(() => { container.innerHTML = ''; }, 3000);
+    }
+
+    // 手动开奖彩票
+    async function doLotteryDraw() {
+        const confirmed = await showConfirm({
+            type: 'warning',
+            title: '手动开奖',
+            message: '确定要立即开奖吗？开奖后今天的自动开奖将失效。',
+            confirmText: '开奖'
+        });
+        if (!confirmed) return;
+        
+        try {
+            const res = await fetch('/api/bot/lottery_draw', { method: 'POST' });
+            const json = await res.json();
+            
+            if (json.status === 'success') {
+                showNotifyDialog('开奖成功', `中奖号码: ${json.data.winning_numbers}\n奖池: ${json.data.total_pool} 积分`, 'success');
+                loadLotteryPool();
+            } else {
+                showNotifyDialog('开奖失败', json.message || '未知错误', 'error');
+            }
+        } catch (e) {
+            showNotifyDialog('开奖失败', e.message, 'error');
+        }
+    }
+    
+    async function resetLotteryDraw() {
+        const confirmed = await showConfirm({
+            type: 'warning',
+            title: '清除今日开奖',
+            message: '确定要清除今日的开奖记录吗？清除后可以重新开奖。',
+            confirmText: '清除'
+        });
+        if (!confirmed) return;
+        
+        try {
+            const res = await fetch('/api/bot/lottery_reset', { method: 'POST' });
+            const json = await res.json();
+            
+            if (json.status === 'success') {
+                showNotifyDialog('清除成功', json.message || '今日开奖记录已清除，可以重新开奖', 'success');
+                loadLotteryPool();
+            } else {
+                showNotifyDialog('清除失败', json.message || '未知错误', 'error');
+            }
+        } catch (e) {
+            showNotifyDialog('清除失败', e.message, 'error');
+        }
+    }
+    
+    async function fixLotteryPool() {
+        const confirmed = await showConfirm({
+            type: 'warning',
+            title: '修复奖池',
+            message: '将根据购票记录重新计算正确的奖池值。确定继续？',
+            confirmText: '修复'
+        });
+        if (!confirmed) return;
+        
+        try {
+            const res = await fetch('/api/bot/lottery_fix_pool', { method: 'POST' });
+            const json = await res.json();
+            
+            if (json.status === 'success') {
+                showNotifyDialog('修复成功', `奖池已修复为 ${json.data.new_pool} 积分`, 'success');
+                loadLotteryPool();
+            } else {
+                showNotifyDialog('修复失败', json.message || '未知错误', 'error');
+            }
+        } catch (e) {
+            showNotifyDialog('修复失败', e.message, 'error');
+        }
+    }
+    
+    async function clearScratchCard() {
+        const confirmed = await showConfirm({
+            type: 'warning',
+            title: '清除刮刮卡',
+            message: '确定要清除当前进行中的刮刮卡吗？已刮用户的积分将被退还。',
+            confirmText: '清除'
+        });
+        if (!confirmed) return;
+        
+        try {
+            const res = await fetch('/api/bot/scratch_clear', { method: 'POST' });
+            const json = await res.json();
+            
+            if (json.status === 'success') {
+                showNotifyDialog('清除成功', json.message, 'success');
+            } else {
+                showNotifyDialog('清除失败', json.message || '未知错误', 'error');
+            }
+        } catch (e) {
+            showNotifyDialog('清除失败', e.message, 'error');
+        }
+    }
+    
+    // 加载奖池信息
+    async function loadLotteryPool() {
+        try {
+            const res = await fetch('/api/bot/lottery_pool');
+            const json = await res.json();
+            
+            if (json.status === 'success') {
+                const data = json.data;
+                const targetDate = data.target_date || '今天';
+                document.getElementById('lottery-pool-display').textContent = data.today_pool + ' 积分';
+                document.getElementById('lottery-today-tickets').textContent = data.today_tickets + ' (' + targetDate + ')';
+                document.getElementById('lottery-next-draw').textContent = data.next_draw_time || '每天 20:00 开奖';
+            }
+        } catch (e) {
+            console.error('加载奖池失败:', e);
+        }
+    }
+    
+    // 添加初始奖池
+    async function addInitPool(sign) {
+        const val = document.getElementById('lottery-init-pool').value;
+        if (!val || val <= 0) {
+            showNotifyDialog('提示', '请输入有效的数值', 'warning');
+            return;
+        }
+        const initPool = parseInt(val) * sign;
+        
+        try {
+            const res = await fetch('/api/bot/lottery_init_pool', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ init_pool: initPool })
+            });
+            const json = await res.json();
+            
+            if (json.status === 'success') {
+                const action = sign > 0 ? '增加' : '减少';
+                showNotifyDialog(`${action}成功`, `当前奖池: ${json.data.new_pool} 积分`, 'success');
+                document.getElementById('lottery-init-pool').value = '';
+                loadLotteryPool();
+            } else {
+                showNotifyDialog('添加失败', json.message || '未知错误', 'error');
+            }
+        } catch (e) {
+            showNotifyDialog('添加失败', e.message, 'error');
+        }
+    }
+
+    let batchIds = [];
+    function openBatchModal() {
+        batchIds = Array.from(document.querySelectorAll('.user-cb:checked')).map(cb => cb.value);
+        if(batchIds.length===0) return showToast('warning', '提示', '请先在表格勾选要操作的用户');
+        document.getElementById('batch_reason').value = '';
+        openModal('batch-modal');
+    }
+    function openSingleBatchModal(uid, uname) { batchIds = [uid]; document.getElementById('batch_reason').value = `手动调控`; openModal('batch-modal'); }
+
+    async function submitBatch() {
+        const amt = parseInt(document.getElementById('batch_amount').value); const reason = document.getElementById('batch_reason').value || "大盘调控";
+        const res = await fetch('/api/points/batch_update', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({user_ids: batchIds, amount: amt, reason: reason})});
+        
+        // 🔥 这里依然拦截 402 请求！批量发钱依然是纯 Pro 专属！
+        if (res.status === 402) { 
+            closeModal('batch-modal'); 
+            window.dispatchEvent(new Event('show-pro-modal')); 
+            return; 
+        }
+        
+        const json = await res.json(); showToast(json.status === 'success' ? 'success' : 'error', '操作结果', json.message);
+        if(json.status === 'success') { closeModal('batch-modal'); loadUsers(); }
+    }
+
+    // 积分流水分页状态
+    let logsCurrentPage = 1;
+    let logsTotalPages = 1;
+    let logsTotal = 0;
+    let logsUid = null;
+    let logsUname = '';
+
+    async function openLogsModal(uid, uname) {
+        logsUid = uid;
+        logsUname = uname;
+        logsCurrentPage = 1;
+        document.getElementById('logs-filter-type').value = 'all';
+        document.getElementById('logs-modal-title').innerText = uname === '全站' ? '全站全局资产流水' : `${uname} 的资产流水明细`;
+        openModal('logs-modal');
+        await loadLogsData();
+    }
+
+    async function loadLogsData() {
+        document.getElementById('logs-tbody').innerHTML = '<tr><td colspan="4" class="text-center py-16"><i class="fa-solid fa-circle-notch fa-spin text-brand-500 text-2xl"></i></td></tr>';
+        
+        const actionType = document.getElementById('logs-filter-type').value;
+        let url = logsUid 
+            ? `/api/points/logs?user_id=${logsUid}&page=${logsCurrentPage}&page_size=50&action_type=${actionType}`
+            : `/api/points/logs?page=${logsCurrentPage}&page_size=50&action_type=${actionType}`;
+        
+        const res = await fetch(url);
+        const json = await res.json();
+        
+        // 更新分页信息
+        logsTotal = json.total || 0;
+        logsTotalPages = json.total_pages || 1;
+        
+        // 更新UI
+        document.getElementById('logs-total-info').innerText = `共 ${logsTotal} 条记录`;
+        document.getElementById('logs-page-info').innerText = `第 ${logsCurrentPage} / ${logsTotalPages} 页`;
+        document.getElementById('logs-prev-btn').disabled = logsCurrentPage <= 1;
+        document.getElementById('logs-next-btn').disabled = logsCurrentPage >= logsTotalPages;
+        
+        let html = '';
+        if(json.data && json.data.length > 0) {
+            json.data.forEach(log => {
+                const isPos = log.amount > 0;
+                const color = isPos ? 'text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10' : 'text-rose-500 bg-rose-50 dark:bg-rose-500/10';
+                const prefix = isPos ? '+' : '';
+                const username = log.username || '未知用户';
+                html += `<tr class="border-b border-gray-100 dark:border-white/5 hover:bg-white dark:hover:bg-white/5 transition-colors">
+                    <td class="py-3 px-2 font-mono text-[10px] text-gray-400 whitespace-nowrap">${log.created_at.substring(5, 16).replace('T',' ')}</td>
+                    <td class="py-3 px-2 font-bold text-gray-700 dark:text-gray-300 text-xs">${logsUname==='全站'?('<span class="text-blue-500 mr-1">['+username+']</span>'):''}${log.action}</td>
+                    <td class="py-3 px-2 text-right font-mono font-black whitespace-nowrap"><span class="px-2 py-0.5 rounded border border-transparent ${isPos?'border-emerald-100 dark:border-emerald-500/20':'border-rose-100 dark:border-rose-500/20'} ${color}">${prefix}${log.amount}</span></td>
+                    <td class="py-3 px-2 text-right font-mono text-gray-500 font-bold">${log.balance}</td>
+                </tr>`;
+            });
+        } else { html = '<tr><td colspan="4" class="text-center py-16 text-gray-400 text-xs font-bold bg-white dark:bg-white/5 rounded-2xl">暂无资金流水</td></tr>'; }
+        document.getElementById('logs-tbody').innerHTML = html;
+    }
+
+    function prevLogsPage() {
+        if (logsCurrentPage > 1) {
+            logsCurrentPage--;
+            loadLogsData();
+        }
+    }
+
+    function nextLogsPage() {
+        if (logsCurrentPage < logsTotalPages) {
+            logsCurrentPage++;
+            loadLogsData();
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => { loadConfig(); loadUsers(); });
+
+    // 清除所有PK邀请
+    async function clearPKInvitations() {
+        if (!confirm('确定要清除所有PK邀请吗？此操作不可恢复。')) return;
+        
+        try {
+            const res = await fetch('/api/points/pk/clear', { method: 'POST' });
+            const json = await res.json();
+            if (json.status === 'success') {
+                alert(`已清除 ${json.count || 0} 条PK邀请`);
+            } else {
+                alert('清除失败：' + (json.message || '未知错误'));
+            }
+        } catch (e) {
+            alert('清除失败：' + e);
+        }
+    }
+    
+    // 🔥 娱乐功能筛选
+    function filterFunGames(platform) {
+        // 更新按钮状态
+        document.querySelectorAll('.fun-filter-btn').forEach(btn => {
+            btn.classList.remove('active', 'bg-purple-500', 'text-white');
+            btn.classList.add('bg-gray-100', 'dark:bg-white/10', 'text-gray-600', 'dark:text-gray-400');
+        });
+        const activeBtn = document.querySelector(`.fun-filter-btn[data-filter="${platform}"]`);
+        if (activeBtn) {
+            activeBtn.classList.remove('bg-gray-100', 'dark:bg-white/10', 'text-gray-600', 'dark:text-gray-400');
+            activeBtn.classList.add('active', 'bg-purple-500', 'text-white');
+        }
+        
+        // 筛选卡片
+        document.querySelectorAll('.fun-game-card').forEach(card => {
+            const cardPlatform = card.dataset.platform;
+            if (platform === 'all' || cardPlatform === platform || cardPlatform === 'both') {
+                card.style.display = '';
+            } else {
+                card.style.display = 'none';
+            }
+        });
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,1420 @@
+<div class="w-full pb-6">
+    
+    <div x-show="isStatsLoading" class="flex flex-col items-center justify-center py-20 gap-4">
+        <i class="fa-solid fa-circle-notch fa-spin text-3xl text-brand-500"></i>
+        <div class="text-sm text-slate-500 dark:text-slate-400">正在加载观影数据...</div>
+    </div>
+    
+    <div x-show="!isStatsLoading">
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-5">
+            <div class="lg:col-span-2 glass-panel p-6 sm:p-8 rounded-3xl flex flex-col items-center justify-center gap-3 relative overflow-hidden text-center border-t border-white/40 dark:border-white/5 shadow-lg"
+                 x-data="{
+                    avatarUploading: false, avatarMsg: '',
+                    pwModalOpen: false, oldPw: '', newPw: '', confirmPw: '', pwMsg: '', pwLoading: false,
+                    async uploadAvatar(e) {
+                        const file = e.target.files[0];
+                        if (!file) return;
+                        if (file.size > 10*1024*1024) { this.avatarMsg = '图片不能超过 10MB'; return; }
+                        this.avatarUploading = true; this.avatarMsg = '';
+                        const fd = new FormData(); fd.append('file', file);
+                        try {
+                            const res = await fetch('/api/user/avatar', { method: 'POST', body: fd });
+                            const d = await res.json();
+                            this.avatarMsg = d.message || '操作完成';
+                            if (d.status === 'success') {
+                                document.querySelector('.profile-avatar-img').src = '/api/proxy/user_image/' + userId + '?t=' + Date.now();
+                            }
+                        } catch(_) { this.avatarMsg = '网络异常'; }
+                        this.avatarUploading = false; e.target.value = '';
+                    },
+                    async changePw() {
+                        this.pwMsg = '';
+                        if (!this.oldPw) { this.pwMsg = '请输入旧密码'; return; }
+                        if (this.newPw.length < 4) { this.pwMsg = '新密码至少 4 位'; return; }
+                        if (this.newPw !== this.confirmPw) { this.pwMsg = '两次密码不一致'; return; }
+                        this.pwLoading = true;
+                        try {
+                            const res = await fetch('/api/user/password', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({old_password: this.oldPw, new_password: this.newPw}) });
+                            const d = await res.json();
+                            this.pwMsg = d.message || '操作完成';
+                            if (d.status === 'success') { this.oldPw=''; this.newPw=''; this.confirmPw=''; setTimeout(() => this.pwModalOpen = false, 1500); }
+                        } catch(_) { this.pwMsg = '网络异常'; }
+                        this.pwLoading = false;
+                    }
+                 }">
+                <div class="absolute inset-0 bg-gradient-to-b from-brand-500/5 to-transparent z-0"></div>
+                <!-- 头像（点击上传）+ 修改密码小按钮 -->
+                <div class="relative z-10">
+                    <div class="relative group cursor-pointer" @click="$refs.avatarInput.click()">
+                        <div class="w-20 h-20 sm:w-24 sm:h-24 rounded-full shadow-xl overflow-hidden shrink-0 bg-slate-200 ring-4 ring-white dark:ring-[#0f0f0f]">
+                            <img :src="'/api/proxy/user_image/' + userId" class="w-full h-full object-cover profile-avatar-img" @error="$event.target.src='https://api.dicebear.com/9.x/notionists/png?seed=' + (userId || 'User')">
+                        </div>
+                        <div class="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <i class="fa-solid fa-camera text-white text-lg" x-show="!avatarUploading"></i>
+                            <i class="fa-solid fa-spinner fa-spin text-white text-lg" x-show="avatarUploading"></i>
+                        </div>
+                        <input type="file" accept="image/*" x-ref="avatarInput" class="hidden" @change="uploadAvatar($event)">
+                    </div>
+                    <!-- 修改密码：头像右下角小圆形按钮 -->
+                    <button @click.stop="pwModalOpen = true" class="absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-white dark:bg-[#2C2C2E] border-2 border-white dark:border-[#0f0f0f] shadow-md flex items-center justify-center hover:bg-slate-100 dark:hover:bg-[#3A3A3C] transition-colors" title="修改密码">
+                        <i class="fa-solid fa-key text-[10px] text-slate-400"></i>
+                    </button>
+                </div>
+                <p x-show="avatarMsg" x-text="avatarMsg" class="text-[11px] z-10" :class="avatarMsg.includes('已更新') ? 'text-emerald-500' : 'text-rose-500'"></p>
+                <div class="z-10 mt-1">
+                    <h3 class="text-2xl font-black text-slate-900 dark:text-white flex items-center justify-center gap-2">
+                        <span x-text="userName"></span><i class="fa-solid fa-circle-check text-brand-500 text-sm"></i>
+                    </h3>
+                    <div class="mt-2 space-y-1">
+                        <div class="text-[10px] font-bold text-slate-500 bg-slate-100 dark:bg-white/5 px-2 py-0.5 rounded inline-block">入驻天数：<span x-text="userStats?.overview?.account_age_days || 1"></span> 天</div>
+                        <div class="text-[10px] font-bold text-slate-500 bg-slate-100 dark:bg-white/5 px-2 py-0.5 rounded inline-block">账号有效期：<span x-text="expireDate" :class="(expireDate === '永久有效' || expireDate.includes('2099') || expireDate.includes('3000')) ? 'text-brand-500' : 'text-rose-500'"></span></div>
+                    </div>
+                    <!-- 续费码输入 -->
+                    <div class="mt-3 w-full max-w-xs mx-auto" x-data="{renewCode:'', renewMsg:'', renewLoading:false}">
+                        <div class="flex gap-2">
+                            <input type="text" x-model="renewCode" placeholder="输入续费码" autocomplete="off" class="flex-1 px-3 py-2 rounded-xl bg-slate-100 dark:bg-white/5 border border-transparent dark:border-white/5 text-[12px] text-center font-mono outline-none focus:ring-2 focus:ring-brand-500">
+                            <button @click="renewLoading=true; renewMsg=''; fetch('/api/user/renew',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code:renewCode})}).then(r=>r.json()).then(d=>{renewLoading=false;renewMsg=d.message||'操作完成';if(d.status==='success'){setTimeout(()=>window.location.reload(),1500)}}).catch(()=>{renewLoading=false;renewMsg='网络异常'})" :disabled="renewLoading || !renewCode.trim()" class="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-[12px] font-bold shadow-sm active:scale-95 transition-all disabled:opacity-50 shrink-0">
+                                <span x-show="!renewLoading">续期</span>
+                                <i x-show="renewLoading" class="fa-solid fa-spinner fa-spin"></i>
+                            </button>
+                        </div>
+                        <p x-show="renewMsg" x-text="renewMsg" class="text-[11px] mt-1.5 text-center" :class="renewMsg.includes('成功') ? 'text-emerald-500' : 'text-rose-500'"></p>
+                    </div>
+                </div>
+
+                <!-- 修改密码 Modal -->
+                <template x-teleport="body">
+                    <div x-show="pwModalOpen" class="fixed inset-0 z-[200] flex items-center justify-center p-4" x-cloak>
+                        <div x-show="pwModalOpen" x-transition.opacity @click="pwModalOpen = false" class="absolute inset-0 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm"></div>
+                        <div x-show="pwModalOpen" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100" class="relative w-full max-w-sm bg-white dark:bg-[#1C1C1E] rounded-2xl shadow-2xl p-6 border border-slate-200 dark:border-white/10">
+                            <h3 class="text-[16px] font-black text-slate-800 dark:text-white mb-4 flex items-center gap-2"><i class="fa-solid fa-key text-brand-500"></i> 修改密码</h3>
+                            <div class="space-y-3">
+                                <input type="password" x-model="oldPw" placeholder="当前密码" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-white/5 border border-transparent dark:border-white/5 text-[13px] outline-none focus:ring-2 focus:ring-brand-500">
+                                <input type="password" x-model="newPw" placeholder="新密码（至少 4 位）" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-white/5 border border-transparent dark:border-white/5 text-[13px] outline-none focus:ring-2 focus:ring-brand-500">
+                                <input type="password" x-model="confirmPw" placeholder="确认新密码" class="w-full px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-white/5 border border-transparent dark:border-white/5 text-[13px] outline-none focus:ring-2 focus:ring-brand-500">
+                            </div>
+                            <p x-show="pwMsg" x-text="pwMsg" class="text-[12px] mt-3 text-center" :class="pwMsg.includes('已修改') ? 'text-emerald-500' : 'text-rose-500'"></p>
+                            <div class="flex gap-3 mt-4">
+                                <button @click="pwModalOpen = false; pwMsg=''" class="flex-1 py-2.5 rounded-xl text-[13px] font-bold text-slate-500 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 transition-colors">取消</button>
+                                <button @click="changePw()" :disabled="pwLoading" class="flex-1 py-2.5 rounded-xl text-[13px] font-bold text-white bg-brand-500 hover:bg-brand-600 transition-colors shadow-sm disabled:opacity-50">
+                                    <span x-show="!pwLoading">确认修改</span>
+                                    <i x-show="pwLoading" class="fa-solid fa-spinner fa-spin"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+
+                <div x-init="initPoints()" class="w-full mt-4 flex flex-col gap-3 z-10 relative">
+                    
+                    <div class="absolute right-4 -top-3 z-20 pointer-events-none flex flex-col items-center">
+                        <div x-show="!hasCheckedIn && !isLoadingPoints && !showRewardBubble"
+                             x-transition.opacity
+                             class="bg-rose-500 text-white text-[10px] font-black px-2.5 py-1 rounded-full shadow-lg shadow-rose-500/40 animate-bounce whitespace-nowrap relative">
+                            点我抽盲盒!
+                            <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-rose-500 rotate-45"></div>
+                        </div>
+
+                        <div x-show="showRewardBubble"
+                             x-transition:enter="transition ease-out duration-300"
+                             x-transition:enter-start="opacity-0 translate-y-4 scale-50"
+                             x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+                             x-transition:leave="transition ease-in duration-500"
+                             x-transition:leave-start="opacity-100 translate-y-0"
+                             x-transition:leave-end="opacity-0 -translate-y-6 scale-110"
+                             class="bg-emerald-500 text-white text-[12px] font-black px-3 py-1 rounded-full shadow-lg shadow-emerald-500/40 whitespace-nowrap relative">
+                            <i class="fa-solid fa-coins mr-1"></i> +<span x-text="checkinReward"></span> 积分
+                            <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-emerald-500 rotate-45"></div>
+                        </div>
+                    </div>
+
+                    <div @click="storeModalOpen = true" class="bg-gradient-to-br from-amber-400 to-orange-500 rounded-[20px] p-5 text-white shadow-[0_8px_30px_rgba(245,158,11,0.25)] relative overflow-hidden text-left flex justify-between items-center border border-white/20 dark:border-white/10 cursor-pointer hover:scale-[1.02] transition-transform group">
+                        <i class="fa-solid fa-coins absolute -right-2 -bottom-4 text-7xl opacity-20 group-hover:rotate-12 transition-transform duration-500"></i>
+                        <div class="relative z-10">
+                            <div class="text-[10px] font-black tracking-widest uppercase opacity-90 mb-0.5 drop-shadow-sm flex items-center gap-1">我的可用资产 <i class="fa-solid fa-chevron-right text-[8px] opacity-70"></i></div>
+                            <div class="text-3xl font-black font-mono drop-shadow-md flex items-baseline gap-1">
+                                <span x-text="isLoadingPoints ? '...' : points"></span>
+                                <span class="text-xs font-bold opacity-80">Pts</span>
+                            </div>
+                        </div>
+                        <div class="relative z-10">
+                            <button @click.stop="checkIn($event)" :disabled="hasCheckedIn || isCheckingIn" 
+                                    class="px-4 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-xl font-bold text-xs border border-white/40 transition-all shadow-sm disabled:opacity-80 disabled:cursor-not-allowed flex items-center gap-1.5" 
+                                    :class="!hasCheckedIn ? 'animate-pulse ring-2 ring-white/50 ring-offset-2 ring-offset-orange-400' : 'opacity-80 bg-white/10 border-transparent'">
+                                <i class="fa-solid" :class="hasCheckedIn ? 'fa-check-circle text-green-300' : 'fa-gift'"></i>
+                                <span x-text="hasCheckedIn ? '今日已签' : '签到盲盒'"></span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <template x-teleport="body">
+                        <div x-show="storeModalOpen" class="fixed inset-0 z-[200] flex items-center justify-center p-4 text-left" x-cloak>
+                            <div x-show="storeModalOpen" x-transition.opacity @click="storeModalOpen = false" class="absolute inset-0 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm"></div>
+                            <div x-show="storeModalOpen" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-10 scale-95" x-transition:enter-end="opacity-100 translate-y-0 scale-100" class="relative w-full max-w-[450px] bg-white dark:bg-[#111] border border-slate-200 dark:border-white/5 rounded-3xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
+                                <div class="p-5 sm:p-6 border-b border-slate-100 dark:border-white/5 flex justify-between items-center shrink-0 bg-slate-50/50 dark:bg-white/5">
+                                    <h3 class="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2"><i class="fa-solid fa-store text-brand-500"></i> 积分补给站</h3>
+                                    <button @click="storeModalOpen = false" class="w-8 h-8 rounded-full bg-slate-200/50 dark:bg-white/10 text-slate-500 hover:text-rose-500 flex justify-center items-center transition-colors"><i class="fa-solid fa-xmark text-sm"></i></button>
+                                </div>
+                                <div class="p-5 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-500/10 dark:to-orange-500/10 shrink-0 flex justify-between items-center">
+                                    <div>
+                                        <div class="text-[10px] font-bold text-amber-600 dark:text-amber-500 uppercase tracking-widest mb-0.5">当前余额</div>
+                                        <div class="text-2xl font-black font-mono text-amber-700 dark:text-amber-400" x-text="points + ' Pts'"></div>
+                                    </div>
+                                    <button @click="showMyLogs = true; loadMyLogs()" x-show="!showMyLogs" class="text-xs bg-amber-500/20 hover:bg-amber-500/30 text-amber-700 dark:text-amber-500 font-bold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5"><i class="fa-solid fa-list-ul"></i> 资产明细</button>
+                                    <i class="fa-solid fa-piggy-bank text-4xl text-amber-500/30" x-show="showMyLogs"></i>
+                                </div>
+                                <div class="p-4 sm:p-5 overflow-y-auto flex-1 bg-slate-50 dark:bg-[#0a0a0a]">
+                                    
+                                    <div x-show="!showMyLogs" class="space-y-3">
+                                        <template x-for="item in (config?.store_items || [])" :key="item.id">
+                                            <div class="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/5 rounded-[18px] p-4 flex items-center justify-between shadow-sm hover:shadow-md hover:border-brand-300 dark:hover:border-brand-500/50 transition-all group" :class="item.type === 'random_renew' ? 'ring-2 ring-purple-200 dark:ring-purple-500/30' : ''">
+                                                <div class="flex items-center gap-3.5 flex-1 min-w-0">
+                                                    <div class="w-11 h-11 rounded-full flex items-center justify-center shrink-0 shadow-inner" :class="item.type === 'random_renew' ? 'bg-purple-100 dark:bg-purple-500/20' : (item.type === 'renew' ? 'bg-emerald-100 dark:bg-emerald-500/20' : 'bg-amber-100 dark:bg-amber-500/20')">
+                                                        <i class="fa-solid text-lg" :class="item.type === 'random_renew' ? 'fa-dice text-purple-500' : (item.type === 'renew' ? 'fa-battery-half text-emerald-500' : 'fa-ticket text-amber-500')"></i>
+                                                    </div>
+                                                    <div class="flex-1 min-w-0 pr-2">
+                                                        <div class="text-[14px] font-black text-slate-800 dark:text-zinc-200 truncate flex items-center gap-1.5">
+                                                            <span x-text="item.name"></span>
+                                                            <span x-show="item.type === 'random_renew'" class="text-[9px] bg-purple-100 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 px-1.5 py-0.5 rounded-full font-bold">🎲</span>
+                                                        </div>
+                                                        <div class="text-[10px] font-bold text-slate-500 dark:text-zinc-400 mt-0.5 truncate" x-text="item.desc || '专属福利兑换'"></div>
+                                                        <div x-show="item.type === 'random_renew'" class="text-[9px] text-purple-500 dark:text-purple-400 mt-1 font-medium">
+                                                            <span x-text="'基础' + (item.base_days || 30) + '天 + 随机' + (item.random_min || -10) + '~' + (item.random_max || 60) + '天'"></span>
+                                                        </div>
+                                                        <div x-show="item.type === 'renew'" class="text-[9px] text-emerald-500 dark:text-emerald-400 mt-1 font-medium">
+                                                            <span x-text="'续期 ' + (item.val || 30) + ' 天'"></span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <button @click="redeemItem(item)" :disabled="isRedeeming || points < item.cost" class="shrink-0 px-4 py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-95 border disabled:opacity-50 disabled:active:scale-100 min-w-[90px]" :class="points >= item.cost ? (item.type === 'random_renew' ? 'bg-purple-50 text-purple-600 border-purple-200 hover:bg-purple-500 hover:text-white dark:bg-purple-500/10 dark:text-purple-400 dark:border-purple-500/20 dark:hover:bg-purple-500' : (item.type === 'renew' ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-500 hover:text-white dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20 dark:hover:bg-emerald-500' : 'bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-500 hover:text-white dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20 dark:hover:bg-amber-500')) : 'bg-slate-100 text-slate-400 border-slate-200 dark:bg-white/5 dark:border-white/5'">
+                                                    <i x-show="isRedeeming" class="fa-solid fa-spinner fa-spin"></i>
+                                                    <span x-show="!isRedeeming" x-text="item.cost + ' 积分'"></span>
+                                                    <span x-show="isRedeeming">兑换中</span>
+                                                </button>
+                                            </div>
+                                        </template>
+                                        <div x-show="!(config?.store_items?.length)" class="text-center py-10 text-xs font-bold text-slate-400"><i class="fa-solid fa-box-open text-3xl opacity-20 mb-2 block"></i>店主正在进货中...</div>
+                                    </div>
+
+                                    <div x-show="showMyLogs" class="space-y-2" style="display: none;">
+                                        <div class="flex justify-between items-center mb-3 px-1">
+                                            <span class="text-xs font-bold text-slate-500"><i class="fa-regular fa-clock"></i> 积分明细 <span class="text-slate-400 font-normal" x-text="'(' + logsTotal + '条)'" ></span></span>
+                                            <button @click="showMyLogs = false" class="text-xs text-brand-500 font-bold hover:underline"><i class="fa-solid fa-arrow-left"></i> 返回商城</button>
+                                        </div>
+                                        
+                                        <!-- 加载中 -->
+                                        <div x-show="logsLoading" class="text-center py-10 text-xs font-bold text-slate-400"><i class="fa-solid fa-spinner fa-spin text-2xl mb-2 block"></i>加载中...</div>
+                                        
+                                        <!-- 无数据 -->
+                                        <div x-show="!logsLoading && myLogs.length === 0" class="text-center py-10 text-xs font-bold text-slate-400">暂无任何积分流水</div>
+                                        
+                                        <!-- 明细列表 -->
+                                        <template x-for="log in myLogs" :key="log.created_at + log.amount">
+                                            <div class="bg-white dark:bg-white/5 p-3.5 rounded-[16px] flex justify-between items-center shadow-sm border border-slate-100 dark:border-white/5">
+                                                <div class="flex-1 pr-2">
+                                                    <div class="text-xs font-bold text-slate-800 dark:text-zinc-200" x-text="log.action"></div>
+                                                    <div class="text-[9px] text-slate-400 font-mono mt-1" x-text="log.created_at"></div>
+                                                </div>
+                                                <div class="text-right shrink-0">
+                                                    <div class="text-sm font-black font-mono" :class="log.amount > 0 ? 'text-emerald-500' : 'text-rose-500'" x-text="(log.amount > 0 ? '+' : '') + log.amount"></div>
+                                                    <div class="text-[9px] text-slate-400 font-mono" x-text="'余额: ' + log.balance"></div>
+                                                </div>
+                                            </div>
+                                        </template>
+                                        
+                                        <!-- 分页控件 -->
+                                        <div x-show="logsTotal > logsPageSize" class="flex justify-center items-center gap-2 mt-4 pt-3 border-t border-slate-200 dark:border-white/10">
+                                            <button @click="logsFirstPage()" :disabled="logsPage === 1" class="w-8 h-8 flex items-center justify-center rounded-lg text-xs font-bold transition-colors" :class="logsPage === 1 ? 'text-slate-300 dark:text-slate-600 cursor-not-allowed' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10'"><i class="fa-solid fa-angles-left"></i></button>
+                                            <button @click="logsPrevPage()" :disabled="logsPage === 1" class="w-8 h-8 flex items-center justify-center rounded-lg text-xs font-bold transition-colors" :class="logsPage === 1 ? 'text-slate-300 dark:text-slate-600 cursor-not-allowed' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10'"><i class="fa-solid fa-angle-left"></i></button>
+                                            <span class="text-xs font-bold text-slate-600 dark:text-slate-300 px-2" x-text="logsPage + ' / ' + logsTotalPages"></span>
+                                            <button @click="logsNextPage()" :disabled="logsPage >= logsTotalPages" class="w-8 h-8 flex items-center justify-center rounded-lg text-xs font-bold transition-colors" :class="logsPage >= logsTotalPages ? 'text-slate-300 dark:text-slate-600 cursor-not-allowed' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10'"><i class="fa-solid fa-angle-right"></i></button>
+                                            <button @click="logsLastPage()" :disabled="logsPage >= logsTotalPages" class="w-8 h-8 flex items-center justify-center rounded-lg text-xs font-bold transition-colors" :class="logsPage >= logsTotalPages ? 'text-slate-300 dark:text-slate-600 cursor-not-allowed' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10'"><i class="fa-solid fa-angles-right"></i></button>
+                                        </div>
+                                    </div>
+
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+
+                    <!-- 兑换结果弹窗 -->
+                    <template x-teleport="body">
+                        <div x-show="redeemResult.show" class="fixed inset-0 z-[250] flex items-center justify-center p-4" x-cloak>
+                            <div x-show="redeemResult.show" x-transition.opacity @click="redeemResult.show = false" class="absolute inset-0 bg-slate-900/70 dark:bg-black/90 backdrop-blur-sm"></div>
+                            <div x-show="redeemResult.show" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 scale-75" x-transition:enter-end="opacity-100 scale-100" class="relative w-full max-w-sm bg-white dark:bg-[#1C1C1E] rounded-3xl shadow-2xl overflow-hidden border border-slate-200 dark:border-white/10">
+                                <!-- 大奖：天选之人 -->
+                                <div x-show="redeemResult.type === 'jackpot'" class="h-36 bg-gradient-to-br from-yellow-300 via-amber-400 to-orange-500 flex items-center justify-center relative overflow-hidden">
+                                    <div class="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2280%22%3E✨%3C/text%3E%3C/svg%3E')] bg-repeat opacity-30"></div>
+                                    <div class="text-center text-white relative z-10">
+                                        <i class="fa-solid fa-crown text-5xl mb-2 animate-pulse"></i>
+                                        <div class="text-xl font-black">恭喜欧皇！</div>
+                                    </div>
+                                </div>
+                                <!-- 幸运 -->
+                                <div x-show="redeemResult.type === 'lucky'" class="h-32 bg-gradient-to-br from-emerald-400 via-teal-500 to-cyan-500 flex items-center justify-center">
+                                    <div class="text-center text-white">
+                                        <i class="fa-solid fa-clover text-5xl mb-2"></i>
+                                        <div class="text-lg font-black">幸运降临！</div>
+                                    </div>
+                                </div>
+                                <!-- 小赚 -->
+                                <div x-show="redeemResult.type === 'good'" class="h-28 bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center">
+                                    <div class="text-center text-white">
+                                        <i class="fa-solid fa-sparkles text-4xl mb-2"></i>
+                                        <div class="text-lg font-black">小有收获</div>
+                                    </div>
+                                </div>
+                                <!-- 保本 -->
+                                <div x-show="redeemResult.type === 'normal'" class="h-28 bg-gradient-to-br from-brand-500 to-teal-600 flex items-center justify-center">
+                                    <div class="text-center text-white">
+                                        <i class="fa-solid fa-circle-check text-4xl mb-2"></i>
+                                        <div class="text-lg font-black">中规中矩</div>
+                                    </div>
+                                </div>
+                                <!-- 小亏 -->
+                                <div x-show="redeemResult.type === 'unlucky'" class="h-28 bg-gradient-to-br from-slate-400 to-slate-600 flex items-center justify-center">
+                                    <div class="text-center text-white">
+                                        <i class="fa-solid fa-face-meh text-4xl mb-2"></i>
+                                        <div class="text-lg font-black">下次加油</div>
+                                    </div>
+                                </div>
+                                <!-- 倒霉 -->
+                                <div x-show="redeemResult.type === 'bad'" class="h-32 bg-gradient-to-br from-slate-600 to-slate-800 flex items-center justify-center">
+                                    <div class="text-center text-white">
+                                        <i class="fa-solid fa-cloud-rain text-4xl mb-2"></i>
+                                        <div class="text-lg font-black">运气不佳</div>
+                                    </div>
+                                </div>
+                                <!-- 普通成功 -->
+                                <div x-show="redeemResult.type === 'success'" class="h-28 bg-gradient-to-br from-brand-500 to-teal-600 flex items-center justify-center">
+                                    <div class="text-center text-white">
+                                        <i class="fa-solid fa-circle-check text-4xl mb-2"></i>
+                                        <div class="text-lg font-black">兑换成功</div>
+                                    </div>
+                                </div>
+                                <div class="p-5 text-center">
+                                    <div class="text-lg font-black text-slate-800 dark:text-white mb-2" x-text="redeemResult.title"></div>
+                                    <div class="text-sm text-slate-600 dark:text-slate-300 whitespace-pre-line mb-4" x-text="redeemResult.message"></div>
+                                    <button @click="redeemResult.show = false" class="w-full py-3 rounded-xl font-bold text-white bg-brand-500 hover:bg-brand-600 transition-colors">
+                                        知道了
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+
+                </div>
+
+                <button @click="openMyPosterStudio()" class="w-full mt-3 py-3 rounded-2xl font-black text-white bg-slate-900 dark:bg-brand-600 shadow-xl transition-transform active:scale-95 z-10 flex items-center justify-center gap-2 btn-glow">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> 生成专属观影海报
+                </button>
+                
+                <div x-data="{
+                        routes: [], expanded: false, showUrls: false,
+                        parseRoutes() {
+                            if(!serverUrl) return;
+                            try { let parsed = JSON.parse(serverUrl); if(Array.isArray(parsed)) { this.routes = parsed.sort((a, b) => (b.is_main ? 1 : 0) - (a.is_main ? 1 : 0)); } else { throw new Error(); } } catch(e) { this.routes = [{name: '默认首选线路', url: serverUrl, is_main: true}]; }
+                        },
+                        async pingAll() {
+                            for (let r of this.routes) {
+                                r.ping = '测速中'; r.color = 'text-blue-400'; r.dot = 'bg-blue-400 animate-pulse';
+                                try {
+                                    const res = await fetch('/api/ping', {
+                                        method: 'POST',
+                                        headers: {'Content-Type': 'application/json'},
+                                        body: JSON.stringify({url: r.url})
+                                    });
+                                    const json = await res.json();
+                                    if (json.status === 'success') {
+                                        let ms = json.latency;
+                                        r.ping = ms + 'ms';
+                                        if(ms < 80) { r.color='text-green-500'; r.dot='bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]'; }
+                                        else if(ms < 200) { r.color='text-amber-500'; r.dot='bg-amber-500'; }
+                                        else { r.color='text-rose-500'; r.dot='bg-rose-500'; }
+                                    } else {
+                                        r.ping = '超时'; r.color='text-rose-500'; r.dot='bg-rose-500';
+                                    }
+                                } catch(e) {
+                                    r.ping = '超时'; r.color='text-rose-500'; r.dot='bg-rose-500';
+                                }
+                            }
+                        }
+                    }"
+                    x-init="$watch('serverUrl', val => { if(val){ parseRoutes(); pingAll(); } }); if(serverUrl) { parseRoutes(); setTimeout(() => pingAll(), 500); }"
+                    class="w-full mt-2 z-10 bg-slate-50 dark:bg-[#111] rounded-xl border border-slate-200 dark:border-white/5 overflow-hidden text-left shadow-sm">
+
+                    <div x-show="expanded" style="display: none;" class="px-3 py-2.5 flex items-center justify-between border-b border-slate-100 dark:border-white/5 cursor-pointer group hover:bg-slate-100 dark:hover:bg-white/5 transition-colors" @click="expanded = false">
+                        <div class="flex items-center gap-1.5"><i class="fa-solid fa-network-wired text-brand-500"></i><span class="text-[11px] font-bold text-slate-700 dark:text-zinc-200 tracking-wide">服务器访问节点测速</span><span class="bg-brand-50 dark:bg-brand-500/20 text-brand-600 dark:text-brand-400 px-1.5 py-0.5 rounded text-[9px] font-black shadow-sm" x-show="routes.length > 1" x-text="routes.length + ' 线'"></span></div>
+                        <div class="flex items-center gap-1.5">
+                            <button @click.stop="showUrls = !showUrls" class="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-brand-500 hover:bg-slate-200 dark:hover:bg-white/10 transition-colors" title="显示/隐藏地址"><i class="fa-regular" :class="showUrls ? 'fa-eye-slash' : 'fa-eye'"></i></button>
+                            <div class="w-6 h-6 rounded bg-slate-200/50 dark:bg-[#222] flex justify-center items-center text-slate-400 group-hover:text-brand-500 transition-colors"><i class="fa-solid fa-chevron-up text-[10px] transition-transform duration-300"></i></div>
+                        </div>
+                    </div>
+
+                    <div x-show="!expanded" class="p-2 cursor-pointer group" @click="expanded = true; pingAll();">
+                        <div class="flex items-center justify-between px-1 mb-1.5">
+                            <div class="text-[10px] font-black text-slate-400 tracking-widest uppercase flex items-center gap-1.5"><i class="fa-solid fa-network-wired text-brand-500"></i> 访问节点 <span class="bg-slate-200 dark:bg-white/10 text-slate-500 dark:text-slate-300 px-1.5 rounded text-[8px]" x-show="routes.length > 1" x-text="routes.length + ' 线'"></span></div>
+                            <div class="flex items-center gap-1">
+                                <button @click.stop="showUrls = !showUrls" class="w-5 h-5 rounded flex items-center justify-center text-slate-400 hover:text-brand-500 transition-colors"><i class="fa-regular text-[10px]" :class="showUrls ? 'fa-eye-slash' : 'fa-eye'"></i></button>
+                                <div class="w-5 h-5 rounded bg-slate-200/50 dark:bg-[#222] flex justify-center items-center text-slate-400 group-hover:text-brand-500 transition-colors"><i class="fa-solid fa-chevron-down text-[9px] transition-transform duration-300"></i></div>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-center justify-between p-2 bg-white dark:bg-white/5 rounded-lg border border-slate-100 dark:border-white/5 shadow-sm group-hover:border-brand-300 transition-colors">
+                            <div class="flex items-center gap-2 overflow-hidden w-full pl-1">
+                                <div class="w-1.5 h-1.5 rounded-full shrink-0 transition-colors" :class="routes[0]?.dot || 'bg-slate-300 dark:bg-slate-600'"></div>
+                                <div class="flex flex-col truncate w-full">
+                                    <div class="text-[11px] font-bold text-slate-800 dark:text-zinc-200 flex items-center truncate"><span x-text="routes[0]?.name"></span><span class="px-1 py-[0.5px] rounded bg-brand-50 dark:bg-brand-500/20 text-brand-600 dark:text-brand-400 text-[8px] font-bold ml-1.5 border border-brand-200 dark:border-transparent shrink-0">当前首选</span></div>
+                                    <div class="text-[9px] text-slate-400 font-mono mt-0.5 truncate"><span x-show="showUrls" x-text="routes[0]?.url" class="select-all"></span><span x-show="!showUrls" class="tracking-[0.2em] text-slate-300 dark:text-slate-600">••••••••••••••••</span></div>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2 shrink-0 pl-2">
+                                <span class="text-[10px] font-mono font-bold w-9 text-right" :class="routes[0]?.color || 'text-slate-400'" x-text="routes[0]?.ping || '等待'"></span>
+                                <button @click.stop="copyToClipboard(routes[0]?.url); showToast('节点地址已复制')" class="w-6 h-6 rounded bg-slate-100 dark:bg-[#222] text-slate-400 hover:text-brand-500 hover:bg-brand-50 dark:hover:bg-brand-500/20 transition-colors flex justify-center items-center shadow-sm" title="复制地址"><i class="fa-regular fa-copy text-[10px]"></i></button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div x-show="expanded" style="display: none;">
+                        <div class="p-2 space-y-1.5">
+                            <template x-for="(r, idx) in routes" :key="idx">
+                                <div class="flex items-center justify-between p-2 bg-white dark:bg-white/5 hover:border-brand-300 dark:hover:border-brand-500/50 rounded-lg border border-slate-100 dark:border-white/5 shadow-sm transition-colors group">
+                                    <div class="flex items-center gap-2 overflow-hidden w-full pl-1">
+                                        <div class="w-1.5 h-1.5 rounded-full shrink-0 transition-colors" :class="r.dot || 'bg-slate-300 dark:bg-slate-600'"></div>
+                                        <div class="flex flex-col truncate w-full">
+                                            <div class="text-[11px] font-bold text-slate-700 dark:text-zinc-300 flex items-center truncate"><span x-text="r.name"></span><span x-show="r.is_main" class="px-1 py-[0.5px] rounded bg-brand-50 dark:bg-brand-500/20 text-brand-600 dark:text-brand-400 text-[8px] font-bold ml-1.5 border border-brand-200 dark:border-transparent shrink-0">首选</span></div>
+                                            <div class="text-[9px] text-slate-400 font-mono mt-0.5 truncate"><span x-show="showUrls" x-text="r.url" class="select-all"></span><span x-show="!showUrls" class="tracking-[0.2em] text-slate-300 dark:text-slate-600">••••••••••••••••</span></div>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center gap-2 shrink-0 pl-2">
+                                        <span class="text-[10px] font-mono font-bold w-9 text-right" :class="r.color || 'text-slate-400'" x-text="r.ping || '等待'"></span>
+                                        <button @click.stop="copyToClipboard(r.url); showToast('节点地址已复制')" class="w-6 h-6 rounded bg-slate-100 dark:bg-[#222] text-slate-400 hover:text-brand-500 hover:bg-brand-50 dark:hover:bg-brand-500/20 transition-colors flex justify-center items-center shadow-sm" title="复制地址"><i class="fa-regular fa-copy text-[10px]"></i></button>
+                                    </div>
+                                </div>
+                            </template>
+                            <button @click.stop="pingAll()" class="w-full mt-1 py-2 bg-slate-100/50 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 text-slate-500 hover:text-brand-500 text-[10px] font-bold rounded-lg transition-colors flex justify-center items-center gap-1.5 border border-slate-200/50 dark:border-transparent">
+                                <i class="fa-solid fa-rotate-right"></i> 重新测速所有节点
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="w-full mt-2 grid grid-cols-3 gap-2 z-10">
+                    <button @click="openQueueModal('request')" class="py-2.5 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-500/10 dark:text-blue-400 dark:hover:bg-blue-500/20 text-xs font-bold transition flex flex-col items-center justify-center border border-blue-200 dark:border-blue-500/20"><i class="fa-solid fa-list-check text-lg mb-1"></i> 我的心愿</button>
+                    <button @click="openQueueModal('feedback')" class="py-2.5 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 dark:bg-rose-500/10 dark:text-rose-400 dark:hover:bg-rose-500/20 text-xs font-bold transition flex flex-col items-center justify-center border border-rose-200 dark:border-rose-500/20"><i class="fa-solid fa-triangle-exclamation text-lg mb-1"></i> 我的报错</button>
+                    <button @click="openMySeriesModal()" class="py-2.5 rounded-xl bg-orange-50 text-orange-600 hover:bg-orange-100 dark:bg-orange-500/10 dark:text-orange-400 dark:hover:bg-orange-500/20 text-xs font-bold transition flex flex-col items-center justify-center border border-orange-200 dark:border-orange-500/20"><i class="fa-solid fa-tv text-lg mb-1"></i> 追剧更新</button>
+                </div>
+                
+                <!-- 🔥 媒体库设置 + 娱乐功能入口 -->
+                <div class="w-full mt-2 grid grid-cols-2 gap-2 z-10">
+                    <button @click="libSettingsModalOpen = true; loadLibrarySettings()" class="py-2.5 rounded-xl bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-500/10 dark:text-indigo-400 dark:hover:bg-indigo-500/20 text-xs font-bold transition flex flex-col items-center justify-center border border-indigo-200 dark:border-indigo-500/20"><i class="fa-solid fa-photo-film text-lg mb-1"></i> 媒体库设置</button>
+                    <button @click="entertainmentModalOpen = true" class="py-2.5 rounded-xl bg-purple-50 text-purple-600 hover:bg-purple-100 dark:bg-purple-500/10 dark:text-purple-400 dark:hover:bg-purple-500/20 text-xs font-bold transition flex flex-col items-center justify-center border border-purple-200 dark:border-purple-500/20"><i class="fa-solid fa-gamepad text-lg mb-1"></i> 娱乐功能</button>
+                </div>
+                
+            </div>
+
+            <div class="lg:col-span-2 flex flex-col gap-5">
+                <div class="glass-panel p-5 rounded-3xl flex gap-4 sm:gap-6 items-center relative overflow-hidden border-t border-white/40 dark:border-white/5 flex-1" x-show="userStats?.top_fav">
+                    <div class="absolute inset-0 bg-cover bg-center opacity-10 dark:opacity-20 blur-2xl" :style="`background-image: url(/api/proxy/smart_image?item_id=${userStats?.top_fav?.ItemId}&type=Primary)`"></div>
+                    <img :src="`/api/proxy/smart_image?item_id=${userStats?.top_fav?.ItemId}&type=Primary`" class="w-24 h-36 rounded-xl shadow-lg object-cover relative z-10 ring-2 ring-white/50 dark:ring-white/10">
+                    <div class="relative z-10 flex-1">
+                        <div class="text-[11px] font-black text-rose-500 tracking-widest uppercase mb-1.5"><i class="fa-solid fa-heart mr-1 text-sm"></i> 执念最爱</div>
+                        <h4 class="font-black text-xl text-slate-900 dark:text-white line-clamp-2 leading-tight mb-3" x-text="userStats?.top_fav?.ItemName || userStats?.top_fav?.Name"></h4>
+                        <div class="flex gap-2">
+                            <span class="text-xs bg-white/60 dark:bg-black/60 px-2 py-1 rounded border border-slate-200 dark:border-white/10 font-bold text-slate-600 dark:text-zinc-300 shadow-sm"><i class="fa-solid fa-repeat text-brand-500 mr-1"></i>N刷 <span x-text="userStats?.top_fav?.c || userStats?.top_fav?.Count"></span> 次</span>
+                            <span class="text-xs bg-white/60 dark:bg-black/60 px-2 py-1 rounded border border-slate-200 dark:border-white/10 font-bold text-slate-600 dark:text-zinc-300 shadow-sm"><i class="fa-solid fa-clock text-blue-500 mr-1"></i>沉迷 <span x-text="Math.round((userStats?.top_fav?.d || userStats?.top_fav?.Duration || 0) / 3600)"></span> 小时</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="glass-panel p-5 rounded-3xl border-t border-white/40 dark:border-white/5 flex flex-col flex-1">
+                    <h4 class="font-black text-sm text-slate-800 dark:text-white tracking-widest uppercase mb-3"><i class="fa-solid fa-award text-yellow-500 mr-1.5 text-lg"></i> 观影成就</h4>
+                    <div class="flex flex-wrap gap-2 items-start" x-show="userBadges.length > 0">
+                        <template x-for="b in userBadges" :key="b.id">
+                            <div @click="showToast(b.name + '：' + (b.desc || '已解锁该成就'))" class="cursor-pointer hover:scale-105 active:scale-95 transition-transform px-3 py-1.5 rounded-xl text-[11px] font-black shadow-sm dark:bg-opacity-20 border border-transparent flex items-center gap-1.5" :class="b.bg + ' ' + b.color">
+                                <i :class="'fa-solid ' + b.icon"></i><span x-text="b.name"></span>
+                            </div>
+                        </template>
+                    </div>
+                    <div x-show="userBadges.length === 0" class="text-xs font-bold text-slate-400 py-4 flex-1 flex items-center justify-center bg-slate-100/50 dark:bg-white/5 rounded-xl">尚在探索中...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3 sm:gap-5 mt-5">
+            <div class="glass-panel p-4 rounded-2xl border-t border-white/40 dark:border-white/5 text-center shadow-sm"><div class="text-2xl sm:text-3xl font-black font-mono text-slate-800 dark:text-white" x-text="userStats?.overview?.total_plays || 0"></div><div class="text-[10px] text-slate-500 dark:text-zinc-500 font-bold tracking-widest mt-1 uppercase">总播放次数</div></div>
+            <div class="glass-panel p-4 rounded-2xl border-t border-white/40 dark:border-white/5 text-center shadow-sm"><div class="text-2xl sm:text-3xl font-black font-mono text-transparent bg-clip-text bg-gradient-to-br from-brand-500 to-blue-500" x-text="Math.round((userStats?.overview?.total_duration || 0) / 3600)"></div><div class="text-[10px] text-slate-500 dark:text-zinc-500 font-bold tracking-widest mt-1 uppercase">总沉浸小时</div></div>
+            <div class="glass-panel p-4 rounded-2xl border-t border-white/40 dark:border-white/5 text-center shadow-sm"><div class="text-2xl sm:text-3xl font-black font-mono text-slate-800 dark:text-white" x-text="Math.round((userStats?.overview?.avg_duration || 0) / 60)"></div><div class="text-[10px] text-slate-500 dark:text-zinc-500 font-bold tracking-widest mt-1 uppercase">均次分钟</div></div>
+        </div>
+
+        <div class="glass-panel p-5 rounded-3xl mt-5 border-t border-white/40 dark:border-white/5 w-full shadow-sm"><h4 class="font-black text-sm text-slate-800 dark:text-white tracking-widest uppercase mb-4"><i class="fa-solid fa-chart-line text-blue-500 mr-1.5 text-lg"></i> 近 30 天观影频率 (小时)</h4><div class="relative h-48 sm:h-64 w-full"><canvas id="profileTrendChart"></canvas></div></div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-5 mt-5">
+            <div class="glass-panel p-5 rounded-3xl border-t border-white/40 dark:border-white/5 flex flex-col justify-center shadow-sm">
+                <h4 class="font-black text-sm text-slate-800 dark:text-white tracking-widest uppercase mb-4"><i class="fa-solid fa-scale-balanced text-teal-500 mr-1.5 text-lg"></i> 偏好天平</h4>
+                <div class="flex justify-between text-[11px] font-black mb-2"><span class="text-blue-500 tracking-wider">电影 <span x-text="getMoviePct()"></span>%</span><span class="text-purple-500 tracking-wider"><span x-text="100 - getMoviePct()"></span>% 剧集</span></div>
+                <div class="h-4 bg-slate-200 dark:bg-white/10 rounded-full overflow-hidden flex border border-slate-300 dark:border-white/5 shadow-inner"><div class="bg-gradient-to-r from-blue-400 to-blue-600 h-full transition-all duration-1000" :style="`width: ${getMoviePct()}%`"></div><div class="bg-gradient-to-r from-purple-400 to-purple-600 h-full transition-all duration-1000" :style="`width: ${100 - getMoviePct()}%`"></div></div>
+                <p class="text-[10px] text-center text-slate-500 dark:text-zinc-500 font-bold mt-4" x-text="getPrefText()"></p>
+            </div>
+            <div class="glass-panel p-5 rounded-3xl border-t border-white/40 dark:border-white/5 shadow-sm"><h4 class="font-black text-sm text-slate-800 dark:text-white tracking-widest uppercase mb-4"><i class="fa-solid fa-clock-rotate-left text-indigo-500 mr-1.5 text-lg"></i> 24H 生物钟</h4><div class="relative h-32 w-full"><canvas id="profileHourChart"></canvas></div></div>
+            <div class="glass-panel p-5 rounded-3xl border-t border-white/40 dark:border-white/5 shadow-sm"><h4 class="font-black text-sm text-slate-800 dark:text-white tracking-widest uppercase mb-4"><i class="fa-solid fa-desktop text-emerald-500 mr-1.5 text-lg"></i> 终端分布</h4><div class="relative h-32 w-full"><canvas id="profileDeviceChart"></canvas></div></div>
+            <div class="glass-panel p-5 rounded-3xl border-t border-white/40 dark:border-white/5 shadow-sm"><h4 class="font-black text-sm text-slate-800 dark:text-white tracking-widest uppercase mb-4"><i class="fa-solid fa-clapperboard text-fuchsia-500 mr-1.5 text-lg"></i> 播放软件偏好</h4><div class="relative h-32 w-full"><canvas id="profileClientChart"></canvas></div></div>
+        </div>
+
+        <div class="glass-panel p-5 rounded-3xl mt-5 border-t border-white/40 dark:border-white/5 shadow-sm">
+            <h4 class="font-black text-sm text-slate-800 dark:text-white tracking-widest uppercase mb-4"><i class="fa-solid fa-shoe-prints text-gray-400 mr-1.5 text-lg"></i> 最近播放足迹</h4>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <template x-for="log in (userStats?.logs || []).slice(0, 14)" :key="log.DateCreated || log.ItemId">
+                    <div class="flex justify-between items-center bg-white/50 dark:bg-white/5 p-2.5 rounded-2xl border border-slate-100 dark:border-white/5 hover:bg-white dark:hover:bg-white/10 transition-colors group cursor-pointer" @click="openShowcaseModal(log.ItemId, {Name: log.ItemName || log.Name})">
+                        <img :src="`/api/proxy/smart_image?item_id=${log.ItemId}&type=Primary`" class="w-10 h-14 rounded-lg object-cover bg-slate-200 dark:bg-[#111] shrink-0 mr-3 shadow-sm" @error="window.fallbackPoster($el, log.ItemName || log.Name)">
+                        <div class="min-w-0 flex-1">
+                            <div class="font-bold text-sm text-slate-800 dark:text-zinc-200 truncate group-hover:text-brand-500 transition-colors" x-text="log.ItemName || log.Name"></div>
+                            <div class="text-[10px] text-slate-500 mt-0.5 flex gap-2 items-center"><span x-text="(log.DateCreated || '').substring(5, 16).replace('T', ' ')"></span><span class="bg-slate-200 dark:bg-black/50 text-slate-600 dark:text-zinc-300 px-1.5 py-0.5 rounded font-bold" x-text="log.Client || log.Device"></span></div>
+                        </div>
+                        <div class="flex items-center gap-2 shrink-0 ml-2">
+                            <div class="text-[10px] font-black text-brand-500 bg-brand-50 dark:bg-brand-500/10 px-2 py-1 rounded-md border border-brand-100 dark:border-brand-500/20" x-text="Math.round(log.PlayDuration/60) + 'm'"></div>
+                            <button @click.stop="openFeedbackModal(log.ItemName || log.Name, log.smart_poster)" class="w-7 h-7 rounded-full bg-rose-50 text-rose-500 hover:bg-rose-500 hover:text-white dark:bg-rose-500/10 dark:text-rose-400 dark:hover:bg-rose-500 dark:hover:text-white transition-colors flex items-center justify-center border border-rose-100 dark:border-rose-500/20" title="资源有问题？点此报错"><i class="fa-solid fa-triangle-exclamation text-[10px]"></i></button>
+                        </div>
+                    </div>
+                </template>
+            </div>
+            <div x-show="!userStats?.logs || userStats.logs.length === 0" class="text-xs font-bold text-slate-400 py-4 text-center bg-slate-100/50 dark:bg-white/5 rounded-xl">暂无播放记录</div>
+        </div>
+    </div>
+</div>
+
+<!-- 🔥 我的追剧弹窗 -->
+<template x-teleport="body">
+    <div x-show="mySeriesModalOpen" class="fixed inset-0 z-[300] flex items-center justify-center p-4" x-cloak>
+        <div x-show="mySeriesModalOpen" x-transition.opacity @click="mySeriesModalOpen = false; selectedSeries = null;" class="absolute inset-0 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm"></div>
+        <div x-show="mySeriesModalOpen" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-10 scale-95" x-transition:enter-end="opacity-100 translate-y-0 scale-100" 
+             class="relative w-full max-w-md bg-white dark:bg-[#111] border border-slate-200 dark:border-white/5 rounded-3xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
+            
+            <!-- 标题 -->
+            <div class="p-5 border-b border-slate-100 dark:border-white/5 flex justify-between items-center shrink-0 bg-slate-50/50 dark:bg-white/5">
+                <div>
+                    <h3 class="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
+                        <i class="fa-solid fa-tv text-orange-500"></i> 我的追剧
+                    </h3>
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">选择剧集请求更新缺失集数</p>
+                </div>
+                <button @click="mySeriesModalOpen = false; selectedSeries = null;" class="w-8 h-8 rounded-full bg-slate-200/50 dark:bg-white/10 text-slate-500 hover:text-rose-500 flex justify-center items-center transition-colors">
+                    <i class="fa-solid fa-xmark text-sm"></i>
+                </button>
+            </div>
+            
+            <!-- 内容区 - 修复滚动 -->
+            <div class="flex-1 h-0 overflow-y-auto p-4 bg-slate-50 dark:bg-[#0a0a0a]">
+                <!-- 加载中 -->
+                <div x-show="mySeriesLoading" class="flex flex-col items-center justify-center py-12 gap-3">
+                    <i class="fa-solid fa-circle-notch fa-spin text-2xl text-orange-500"></i>
+                    <div class="text-sm text-slate-500">加载追剧列表...</div>
+                </div>
+                
+                <!-- 空状态 -->
+                <div x-show="!mySeriesLoading && mySeries.length === 0" class="text-center py-12 text-slate-400">
+                    <i class="fa-solid fa-tv text-4xl mb-3 opacity-30"></i>
+                    <p class="text-sm">暂无追剧记录</p>
+                    <p class="text-xs mt-1 text-slate-400 dark:text-slate-500">观看剧集后这里会显示</p>
+                </div>
+                
+                <!-- 剧集列表 -->
+                <div x-show="!mySeriesLoading && mySeries.length > 0 && !selectedSeries" class="space-y-3">
+                    <template x-for="series in mySeries" :key="series.series_id">
+                        <div class="bg-white dark:bg-white/5 rounded-2xl p-4 border border-slate-100 dark:border-white/5 shadow-sm">
+                            <div class="flex gap-3">
+                                <img :src="series.poster || 'https://via.placeholder.com/100x150'" class="w-16 h-24 rounded-xl object-cover bg-slate-200 dark:bg-slate-700 shrink-0">
+                                <div class="flex-1 min-w-0">
+                                    <h4 class="font-bold text-slate-800 dark:text-white text-sm truncate" x-text="series.series_name"></h4>
+                                    <div class="text-[10px] text-slate-500 mt-1">共 <span x-text="series.total_seasons"></span> 季</div>
+                                    
+                                    <!-- 季信息 -->
+                                    <div class="mt-2 space-y-1">
+                                        <template x-for="s in series.seasons" :key="s.season">
+                                            <div class="flex items-center justify-between text-[11px]">
+                                                <span class="text-slate-600 dark:text-slate-400">第 <span x-text="s.season"></span> 季</span>
+                                                <div class="flex items-center gap-2">
+                                                    <span class="text-slate-400" x-text="s.local_count + '/' + s.tmdb_total + ' 集'"></span>
+                                                    <span x-show="s.missing_eps && s.missing_eps.length > 0" class="text-orange-500 font-bold">
+                                                        缺 <span x-text="s.missing_eps.length"></span> 集
+                                                    </span>
+                                                    <span x-show="!s.missing_eps || s.missing_eps.length === 0" class="text-emerald-500">
+                                                        ✓ 完整
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 操作按钮 -->
+                            <div x-show="series.seasons && series.seasons.some(s => s.missing_eps && s.missing_eps.length > 0)" class="mt-3 pt-3 border-t border-slate-100 dark:border-white/5">
+                                <button @click="selectSeriesForUpdate(series)" class="w-full py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5">
+                                    <i class="fa-solid fa-plus"></i> 请求追新
+                                </button>
+                            </div>
+                            
+                            <!-- 追新状态显示 -->
+                            <template x-for="s in series.seasons" :key="'status-'+s.season">
+                                <div x-show="s.request_status" class="mt-2 text-[10px]">
+                                    <div class="flex items-center gap-1.5">
+                                        <span class="text-slate-500">追新状态:</span>
+                                        <span class="px-1.5 py-0.5 rounded-full font-bold" 
+                                              :class="getRequestStatusClass(s.request_status?.status)">
+                                            <span x-text="getRequestStatusText(s.request_status?.status)"></span>
+                                            <span x-show="s.request_status?.episodes" x-text="'(E' + (s.request_status?.episodes || '').replace(',', '-') + ')'"></span>
+                                        </span>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </div>
+                
+                <!-- 选择集数 -->
+                <div x-show="selectedSeries" class="space-y-3">
+                    <button @click="selectedSeries = null; selectedEpisodes = [];" class="text-xs text-slate-500 hover:text-brand-500 font-bold flex items-center gap-1">
+                        <i class="fa-solid fa-arrow-left"></i> 返回列表
+                    </button>
+                    
+                    <div class="bg-white dark:bg-white/5 rounded-2xl p-4 border border-slate-100 dark:border-white/5">
+                        <h4 class="font-bold text-slate-800 dark:text-white text-sm" x-text="selectedSeries?.series_name"></h4>
+                        <div class="text-[11px] text-slate-500 mt-1" x-show="selectedSeries?.seasons?.[0]">
+                            第 <span x-text="selectedSeries?.seasons?.[0]?.season"></span> 季 · 
+                            已有 <span x-text="selectedSeries?.seasons?.[0]?.local_count"></span> 集 · 
+                            共 <span x-text="selectedSeries?.seasons?.[0]?.tmdb_total"></span> 集
+                        </div>
+                        
+                        <!-- 集数选择 -->
+                        <div class="mt-3">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-[11px] font-bold text-slate-600 dark:text-slate-400">选择要追新的集数：</span>
+                                <div class="flex gap-2">
+                                    <button @click="clearAllEpisodes()" class="text-[10px] text-slate-400 hover:text-slate-600 font-bold">
+                                        清空
+                                    </button>
+                                    <button @click="selectAllMissingEpisodes()" class="text-[10px] text-brand-500 hover:text-brand-600 font-bold">
+                                        <span x-text="selectedEpisodes.length === (selectedSeries?.seasons?.[0]?.missing_eps?.length || 0) ? '取消全选' : '全选缺失'"></span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="flex flex-wrap gap-1.5" x-show="selectedSeries?.seasons?.[0]?.missing_eps">
+                                <template x-for="ep in (selectedSeries?.seasons?.[0]?.missing_eps || [])" :key="ep">
+                                    <div class="relative inline-block">
+                                        <button @click="toggleEpisodeSelection(ep)" 
+                                                class="w-10 h-10 rounded-lg text-xs font-bold transition-all"
+                                                :class="selectedEpisodes.includes(ep) ? 'bg-orange-500 text-white shadow-md' : 'bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-400 hover:bg-orange-100 dark:hover:bg-orange-500/20'">
+                                            E<span x-text="ep"></span>
+                                        </button>
+                                        <!-- 🔥 未播出标记 -->
+                                        <span x-show="selectedSeries?.seasons?.[0]?.unaired_eps?.includes(ep)" 
+                                              class="absolute -top-1 -right-1 text-[8px] font-bold text-rose-500 bg-rose-100 dark:bg-rose-500/20 px-1 rounded-full whitespace-nowrap">
+                                            未播
+                                        </span>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 🔥 积分消耗提示 -->
+                    <div x-show="updateCostInfo.enabled" class="mt-2 mb-3 text-center text-xs font-bold">
+                        <span class="inline-flex items-center gap-1 px-2 py-1 bg-orange-100 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400 rounded-lg">
+                            <i class="fa-solid fa-coins"></i> 本次追新将消耗 <span x-text="updateCostInfo.cost"></span> 积分
+                        </span>
+                    </div>
+                    
+                    <!-- 提交按钮 -->
+                    <button @click="submitUpdateRequest()" 
+                            :disabled="selectedEpisodes.length === 0 || submittingUpdate"
+                            class="w-full py-3 bg-orange-500 hover:bg-orange-600 disabled:bg-slate-300 dark:disabled:bg-slate-700 text-white rounded-xl text-sm font-bold transition flex items-center justify-center gap-2">
+                        <i x-show="!submittingUpdate" class="fa-solid fa-paper-plane"></i>
+                        <i x-show="submittingUpdate" class="fa-solid fa-spinner fa-spin"></i>
+                        <span x-text="submittingUpdate ? '提交中...' : '提交追新请求 (E' + selectedEpisodes.join('-') + ')'"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- 🔥 媒体库设置弹窗 -->
+<template x-teleport="body">
+    <div x-show="libSettingsModalOpen" class="fixed inset-0 z-[300] flex items-center justify-center p-4" x-cloak>
+        <div x-show="libSettingsModalOpen" x-transition.opacity @click="libSettingsModalOpen = false" class="absolute inset-0 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm"></div>
+        <div x-show="libSettingsModalOpen" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-10 scale-95" x-transition:enter-end="opacity-100 translate-y-0 scale-100" 
+             class="relative w-full max-w-md bg-white dark:bg-[#111] border border-slate-200 dark:border-white/5 rounded-3xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
+            
+            <!-- 标题 -->
+            <div class="p-5 border-b border-slate-100 dark:border-white/5 flex justify-between items-center shrink-0 bg-slate-50/50 dark:bg-white/5">
+                <div>
+                    <h3 class="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
+                        <i class="fa-solid fa-photo-film text-indigo-500"></i> 媒体库显示设置
+                    </h3>
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">选择要在播放器中隐藏的媒体库</p>
+                </div>
+                <button @click="libSettingsModalOpen = false" class="w-8 h-8 rounded-full bg-slate-200/50 dark:bg-white/10 text-slate-500 hover:text-rose-500 flex justify-center items-center transition-colors">
+                    <i class="fa-solid fa-xmark text-sm"></i>
+                </button>
+            </div>
+            
+            <!-- 内容区 -->
+            <div class="flex-1 h-0 overflow-y-auto p-4 bg-slate-50 dark:bg-[#0a0a0a]">
+                <!-- 加载中 -->
+                <div x-show="libSettingsLoading" class="flex flex-col items-center justify-center py-12 gap-3">
+                    <i class="fa-solid fa-circle-notch fa-spin text-2xl text-indigo-500"></i>
+                    <div class="text-sm text-slate-500">加载媒体库列表...</div>
+                </div>
+                
+                <!-- 媒体库列表 -->
+                <div x-show="!libSettingsLoading && libList.length > 0" class="space-y-2">
+                    <template x-for="lib in libList" :key="lib.id">
+                        <div class="flex items-center justify-between p-3 bg-white dark:bg-white/5 rounded-xl border border-slate-100 dark:border-white/5 shadow-sm">
+                            <div class="flex items-center gap-3">
+                                <i class="fa-solid fa-folder text-indigo-500"></i>
+                                <span class="text-sm font-bold text-slate-800 dark:text-white" x-text="lib.name"></span>
+                            </div>
+                            <button @click="toggleLibrary(lib.id)" 
+                                    class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                                    :class="lib.hidden ? 'bg-rose-100 text-rose-600 dark:bg-rose-500/20 dark:text-rose-400' : 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400'">
+                                <span x-text="lib.hidden ? '已隐藏' : '显示中'"></span>
+                            </button>
+                        </div>
+                    </template>
+                </div>
+                
+                <!-- 空状态 -->
+                <div x-show="!libSettingsLoading && libList.length === 0" class="text-center py-12 text-slate-400">
+                    <i class="fa-solid fa-photo-film text-4xl mb-3 opacity-30"></i>
+                    <p class="text-sm">暂无媒体库</p>
+                </div>
+            </div>
+            
+            <!-- 提示 + 保存按钮 -->
+            <div class="p-4 border-t border-slate-100 dark:border-white/5 shrink-0 bg-white dark:bg-[#1C1C1E]">
+                <div class="text-[11px] text-slate-500 dark:text-slate-400 mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-info-circle text-indigo-400"></i>
+                    <span>💡 隐藏后播放器中将不显示该媒体库，需重新登录 Emby 生效</span>
+                </div>
+                <button @click="saveLibrarySettings()" 
+                        :disabled="libSettingsSaving"
+                        class="w-full py-3 bg-indigo-500 hover:bg-indigo-600 disabled:bg-slate-300 dark:disabled:bg-slate-700 text-white rounded-xl text-sm font-bold transition flex items-center justify-center gap-2">
+                    <i x-show="!libSettingsSaving" class="fa-solid fa-check"></i>
+                    <i x-show="libSettingsSaving" class="fa-solid fa-spinner fa-spin"></i>
+                    <span x-text="libSettingsSaving ? '保存中...' : '保存设置'"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- 🔥 娱乐功能弹窗 -->
+<template x-teleport="body">
+    <div x-show="entertainmentModalOpen" class="fixed inset-0 z-[300] flex items-center justify-center p-4" x-cloak>
+        <div x-show="entertainmentModalOpen" x-transition.opacity @click="entertainmentModalOpen = false" class="absolute inset-0 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm"></div>
+        <div x-show="entertainmentModalOpen" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-10 scale-95" x-transition:enter-end="opacity-100 translate-y-0 scale-100" 
+             class="relative w-full max-w-md bg-white dark:bg-[#111] border border-slate-200 dark:border-white/5 rounded-3xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
+            
+            <!-- 标题 -->
+            <div class="p-5 border-b border-slate-100 dark:border-white/5 flex justify-between items-center shrink-0 bg-slate-50/50 dark:bg-white/5">
+                <div>
+                    <h3 class="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
+                        <i class="fa-solid fa-gamepad text-purple-500"></i> 娱乐功能
+                    </h3>
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">消耗积分赢取奖励</p>
+                </div>
+                <button @click="entertainmentModalOpen = false" class="w-8 h-8 rounded-full bg-slate-200/50 dark:bg-white/10 text-slate-500 hover:text-rose-500 flex justify-center items-center transition-colors">
+                    <i class="fa-solid fa-xmark text-sm"></i>
+                </button>
+            </div>
+            
+            <!-- 内容区 -->
+            <div class="flex-1 h-0 overflow-y-auto p-4 bg-slate-50 dark:bg-[#0a0a0a]">
+                <!-- 积分显示 -->
+                <div class="mb-4 p-3 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-500/10 dark:to-pink-500/10 rounded-xl border border-purple-100 dark:border-purple-500/20">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-[11px] font-bold text-purple-600 dark:text-purple-400">我的积分</p>
+                            <p class="text-xl font-black text-purple-700 dark:text-purple-300" x-text="userPoints || 0"></p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 游戏列表 -->
+                <div class="grid grid-cols-2 gap-3">
+                    <!-- 老虎机 -->
+                    <div class="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-4 cursor-pointer hover:shadow-lg hover:border-yellow-300 dark:hover:border-yellow-500/50 transition-all group"
+                         @click="openSlotGame()"
+                         x-show="slotEnabled">
+                        <div class="flex flex-col items-center gap-2">
+                            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                                <i class="fa-solid fa-coins text-white text-xl"></i>
+                            </div>
+                            <span class="font-bold text-sm text-slate-700 dark:text-white">幸运老虎机</span>
+                            <span class="text-[10px] text-slate-400" x-text="slotCost > 0 ? slotCost + '积分/次' : '免费'"></span>
+                        </div>
+                    </div>
+                    
+                    <!-- 刮刮乐 -->
+                    <div class="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-4 cursor-pointer hover:shadow-lg hover:border-emerald-300 dark:hover:border-emerald-500/50 transition-all group"
+                         @click="openScratchGame()"
+                         x-show="scratchEnabled">
+                        <div class="flex flex-col items-center gap-2">
+                            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                                <i class="fa-solid fa-eraser text-white text-xl"></i>
+                            </div>
+                            <span class="font-bold text-sm text-slate-700 dark:text-white">刮刮乐</span>
+                            <span class="text-[10px] text-slate-400" x-text="scratchCost + '积分/张'"></span>
+                        </div>
+                    </div>
+                    
+                    <!-- 幸运转盘 -->
+                    <div class="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-4 cursor-pointer hover:shadow-lg hover:border-rose-300 dark:hover:border-rose-500/50 transition-all group"
+                         @click="openWheelGame()"
+                         x-show="wheelEnabled">
+                        <div class="flex flex-col items-center gap-2">
+                            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-rose-400 to-pink-500 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                                <i class="fa-solid fa-circle-notch text-white text-xl"></i>
+                            </div>
+                            <span class="font-bold text-sm text-slate-700 dark:text-white">幸运转盘</span>
+                            <span class="text-[10px] text-slate-400" x-text="wheelCost > 0 ? wheelCost + '积分/次' : '免费'"></span>
+                        </div>
+                    </div>
+                    
+                    <!-- 猜数字 -->
+                    <div class="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-4 cursor-pointer hover:shadow-lg hover:border-indigo-300 dark:hover:border-indigo-500/50 transition-all group"
+                         @click="openGuessGame()"
+                         x-show="guessEnabled">
+                        <div class="flex flex-col items-center gap-2">
+                            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                                <i class="fa-solid fa-question text-white text-xl"></i>
+                            </div>
+                            <span class="font-bold text-sm text-slate-700 dark:text-white">猜数字</span>
+                            <span class="text-[10px] text-slate-400" x-text="guessCost + '积分/次'"></span>
+                        </div>
+                    </div>
+                    
+                    <!-- 彩票 -->
+                    <div class="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-4 cursor-pointer hover:shadow-lg hover:border-violet-300 dark:hover:border-violet-500/50 transition-all group"
+                         @click="openLotteryGame()"
+                         x-show="lotteryEnabled">
+                        <div class="flex flex-col items-center gap-2">
+                            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-400 to-purple-600 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                                <i class="fa-solid fa-ticket text-white text-xl"></i>
+                            </div>
+                            <span class="font-bold text-sm text-slate-700 dark:text-white">彩票</span>
+                            <span class="text-[10px] text-slate-400" x-text="lotteryCost + '积分/张'"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- 🎰 老虎机游戏弹窗 -->
+<template x-teleport="body">
+    <div x-show="slotGameOpen" class="fixed inset-0 z-[310] flex items-center justify-center p-4" x-cloak>
+        <div x-show="slotGameOpen" x-transition.opacity @click="slotGameOpen = false" class="absolute inset-0 bg-slate-900/70 dark:bg-black/90 backdrop-blur-sm"></div>
+        <div x-show="slotGameOpen" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 scale-90" x-transition:enter-end="opacity-100 scale-100"
+             class="relative w-full max-w-sm bg-white dark:bg-[#1a1a2e] border-4 border-yellow-400 dark:border-yellow-400/30 rounded-3xl shadow-2xl overflow-hidden">
+            
+            <!-- 霓虹灯边框（仅暗色模式） -->
+            <div class="hidden dark:block absolute inset-0 rounded-3xl shadow-[0_0_30px_rgba(255,215,0,0.3),inset_0_0_30px_rgba(255,215,0,0.1)] pointer-events-none"></div>
+            
+            <!-- 标题 -->
+            <div class="relative p-4 text-center border-b border-yellow-200 dark:border-yellow-500/20 bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-transparent dark:to-transparent">
+                <button @click="slotGameOpen = false" class="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-yellow-100 dark:bg-white/10 text-yellow-600 dark:text-white hover:bg-yellow-200 dark:hover:bg-white/20 flex items-center justify-center transition-colors">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+                <h3 class="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-500 via-orange-500 to-red-500 dark:from-yellow-300 dark:via-orange-400 dark:to-red-400">🎰 幸运老虎机</h3>
+                <p class="text-[10px] text-yellow-600 dark:text-yellow-200/60 mt-1">三同大奖 | 两同小奖 | 特殊图案超高倍</p>
+            </div>
+            
+            <!-- 老虎机主体 -->
+            <div class="relative p-6 bg-gradient-to-b from-yellow-50/50 to-orange-50/50 dark:from-transparent dark:to-transparent">
+                <!-- 三个转轴 -->
+                <div class="flex justify-center gap-3 mb-6">
+                    <template x-for="(reel, index) in slotReels" :key="index">
+                        <div class="w-20 h-24 bg-gradient-to-b from-yellow-100 to-yellow-200 dark:from-slate-700 dark:to-slate-800 rounded-xl border-2 border-yellow-400 dark:border-yellow-500/30 overflow-hidden shadow-lg flex items-center justify-center relative">
+                            <div class="text-4xl" :class="slotSpinning ? 'animate-spin' : ''" x-text="reel"></div>
+                            <!-- 闪烁效果 -->
+                            <div x-show="slotSpinning" class="absolute inset-0 bg-gradient-to-b from-white/30 dark:from-white/10 to-transparent animate-pulse"></div>
+                        </div>
+                    </template>
+                </div>
+                
+                <!-- 结果显示 -->
+                <div x-show="slotResult" class="text-center mb-4 p-3 rounded-xl" :class="slotWin ? 'bg-green-100 dark:bg-green-500/20 border border-green-400 dark:border-green-500/30' : 'bg-red-100 dark:bg-red-500/20 border border-red-400 dark:border-red-500/30'">
+                    <p class="text-lg font-black" :class="slotWin ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'" x-text="slotResult"></p>
+                    <p x-show="slotWinAmount > 0" class="text-sm text-yellow-600 dark:text-yellow-400 mt-1">+<span x-text="slotWinAmount"></span> 积分</p>
+                </div>
+                
+                <!-- 操作按钮 -->
+                <div class="flex gap-3">
+                    <button @click="spinSlot()" :disabled="slotSpinning || (!slotDailyFreeLeft && slotCost > userPoints)"
+                            class="flex-1 py-3 bg-gradient-to-r from-yellow-400 to-orange-500 hover:from-yellow-500 hover:to-orange-600 disabled:from-slate-300 dark:disabled:from-slate-600 disabled:to-slate-400 dark:disabled:to-slate-700 text-white font-black rounded-xl shadow-lg transition-all active:scale-95 disabled:cursor-not-allowed">
+                        <span x-show="!slotSpinning">
+                            <span x-show="slotDailyFreeLeft > 0">🎁 免费抽奖 (<span x-text="slotDailyFreeLeft"></span>次)</span>
+                            <span x-show="slotDailyFreeLeft <= 0">🎰 消耗 <span x-text="slotCost"></span> 积分</span>
+                        </span>
+                        <span x-show="slotSpinning" class="flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-spinner fa-spin"></i> 转动中...
+                        </span>
+                    </button>
+                </div>
+                
+                <!-- 奖励说明 -->
+                <div class="mt-4 p-3 bg-yellow-100/50 dark:bg-white/5 rounded-xl border border-yellow-200 dark:border-white/10">
+                    <p class="text-[10px] text-yellow-700 dark:text-yellow-200/80 font-bold mb-2">💰 奖励规则</p>
+                    <div class="grid grid-cols-3 gap-2 text-center text-[10px]">
+                        <div class="bg-white dark:bg-white/5 rounded-lg p-2">
+                            <p class="text-yellow-600 dark:text-yellow-400 font-bold">三同</p>
+                            <p class="text-yellow-700 dark:text-white/60"><span x-text="slotTripleMultiplier"></span>x</p>
+                        </div>
+                        <div class="bg-white dark:bg-white/5 rounded-lg p-2">
+                            <p class="text-orange-600 dark:text-orange-400 font-bold">两同</p>
+                            <p class="text-yellow-700 dark:text-white/60"><span x-text="slotDoubleMultiplier"></span>x</p>
+                        </div>
+                        <div class="bg-white dark:bg-white/5 rounded-lg p-2">
+                            <p class="text-red-600 dark:text-red-400 font-bold">特殊</p>
+                            <p class="text-yellow-700 dark:text-white/60"><span x-text="slotSpecialMultiplier"></span>x</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- 🎫 刮刮乐游戏弹窗 -->
+<template x-teleport="body">
+    <div x-show="scratchGameOpen" class="fixed inset-0 z-[310] flex items-center justify-center p-2 sm:p-4" x-cloak>
+        <div x-show="scratchGameOpen" x-transition.opacity @click="scratchGameOpen = false" class="absolute inset-0 bg-slate-900/70 dark:bg-black/90 backdrop-blur-sm"></div>
+        <div x-show="scratchGameOpen" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 scale-90" x-transition:enter-end="opacity-100 scale-100"
+             class="relative w-full max-w-md max-h-[95vh] sm:max-h-[90vh] bg-white dark:bg-[#1a1a2e] rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+            
+            <!-- 标题栏 -->
+            <div class="relative p-3 sm:p-4 flex items-center justify-between bg-gradient-to-r from-red-500 to-orange-500 shrink-0">
+                <button @click="scratchGameOpen = false" class="w-8 h-8 rounded-full bg-white/20 text-white hover:bg-white/30 flex items-center justify-center transition-colors">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+                <h3 class="text-base sm:text-lg font-black text-white flex items-center gap-2">
+                    <span class="text-xl sm:text-2xl">🎫</span> 幸运刮刮乐
+                </h3>
+                <div class="w-8"></div>
+            </div>
+            
+            <!-- 刮刮卡主体 -->
+            <div class="flex-1 overflow-y-auto p-3 sm:p-4 bg-gradient-to-b from-gray-100 to-gray-200 dark:from-[#1a1a2e] dark:to-[#0f0f1a]">
+                <!-- 积分显示 -->
+                <div class="flex items-center justify-between mb-3 px-3 py-2 bg-white dark:bg-white/10 rounded-xl shadow">
+                    <div class="text-sm">
+                        <span class="text-gray-500 dark:text-gray-400">我的积分：</span>
+                        <span class="text-orange-500 font-black" x-text="userPoints"></span>
+                    </div>
+                    <div class="text-xs text-gray-400 bg-gray-100 dark:bg-white/5 px-2 py-1 rounded">
+                        <span x-text="scratchCost"></span> 积分/张
+                    </div>
+                </div>
+                
+                <!-- 刮刮卡 -->
+                <div x-show="scratchGrid.length > 0" class="bg-white dark:bg-[#2a2a3e] rounded-2xl shadow-xl overflow-hidden border-2 border-gray-300 dark:border-gray-700">
+                    <!-- 中奖数字区域 -->
+                    <div class="p-2 sm:p-3 bg-gradient-to-r from-red-500 to-orange-500 text-white">
+                        <p class="text-[10px] sm:text-[11px] font-bold text-center mb-2 opacity-90">🎯 幸运数字</p>
+                        <div class="flex gap-1.5 sm:gap-2 justify-center">
+                            <template x-for="(num, index) in scratchWinNumbers" :key="index">
+                                <div class="w-9 h-9 sm:w-10 sm:h-10 bg-white rounded-lg flex items-center justify-center shadow-md">
+                                    <span class="text-red-500 font-black text-base sm:text-lg" x-text="num"></span>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                    
+                    <!-- 刮开格子区域 -->
+                    <div class="p-2 sm:p-3">
+                        <p class="text-[9px] sm:text-[10px] font-bold text-gray-400 mb-2 text-center">刮开下方格子，匹配幸运数字赢取积分</p>
+                        <div class="grid grid-cols-4 gap-1.5 sm:gap-2">
+                            <template x-for="(cell, index) in scratchGrid" :key="index">
+                                <div class="relative aspect-square rounded-lg overflow-hidden cursor-pointer transition-all duration-300"
+                                     :class="cell.revealed ? (cell.matched ? 'bg-gradient-to-br from-yellow-100 to-orange-100 dark:from-yellow-500/20 dark:to-orange-500/20 ring-2 ring-yellow-400' : 'bg-white dark:bg-[#3a3a4e]') : 'bg-gradient-to-br from-gray-200 via-gray-300 to-gray-400 dark:from-gray-500 dark:via-gray-600 dark:to-gray-700'"
+                                     @click="revealCell(index)"
+                                     style="box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);">
+                                    <!-- 未刮开状态 - 银色涂层 -->
+                                    <div x-show="!cell.revealed" class="absolute inset-0 flex items-center justify-center">
+                                        <div class="w-full h-full" style="background: repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(255,255,255,0.1) 3px, rgba(255,255,255,0.1) 6px);"></div>
+                                        <i class="fa-solid fa-hand-pointer absolute text-gray-400 dark:text-gray-500 text-sm sm:text-lg"></i>
+                                    </div>
+                                    <!-- 已刮开状态 -->
+                                    <div x-show="cell.revealed" class="absolute inset-0 flex flex-col items-center justify-center p-0.5 sm:p-1">
+                                        <span class="text-lg sm:text-xl font-black" :class="cell.matched ? 'text-red-500' : 'text-gray-600 dark:text-gray-300'" x-text="cell.number"></span>
+                                        <span class="text-[8px] sm:text-[9px] font-bold mt-0.5" :class="cell.matched ? 'text-emerald-500' : 'text-gray-400'">
+                                            💰<span x-text="cell.reward"></span>
+                                        </span>
+                                        <span x-show="cell.matched" class="absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-yellow-400 rounded-full flex items-center justify-center text-[8px] sm:text-[10px] shadow">🎉</span>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                    
+                    <!-- 总奖励显示 -->
+                    <div x-show="scratchTotalReward > 0" class="mx-2 sm:mx-3 mb-2 sm:mb-3 p-2 sm:p-3 bg-gradient-to-r from-yellow-100 to-orange-100 dark:from-yellow-500/20 dark:to-orange-500/20 rounded-xl text-center">
+                        <p class="text-yellow-700 dark:text-yellow-400 font-bold text-sm sm:text-base">🎉 恭喜！本卡获得 <span class="text-lg sm:text-xl" x-text="scratchTotalReward"></span> 积分！</p>
+                    </div>
+                </div>
+                
+                <!-- 未购买状态 -->
+                <div x-show="scratchGrid.length === 0" class="bg-white dark:bg-[#2a2a3e] rounded-2xl shadow-xl p-6 sm:p-8 text-center">
+                    <div class="text-5xl sm:text-6xl mb-4">🎫</div>
+                    <p class="text-gray-500 dark:text-gray-400 mb-2 text-sm sm:text-base">点击下方按钮购买刮刮卡</p>
+                    <p class="text-xs text-gray-400">每张 <span x-text="scratchCost"></span> 积分</p>
+                </div>
+                
+                <!-- 操作按钮 -->
+                <div class="mt-3 sm:mt-4">
+                    <button @click="buyNewCard()" :disabled="scratchBuying || userPoints < scratchCost"
+                            class="w-full py-3 sm:py-4 bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 disabled:from-gray-300 dark:disabled:from-gray-600 disabled:to-gray-400 dark:disabled:to-gray-700 text-white font-black rounded-xl sm:rounded-2xl shadow-lg transition-all active:scale-95 disabled:cursor-not-allowed text-base sm:text-lg">
+                        <span x-show="!scratchBuying">
+                            <span x-show="scratchGrid.length === 0">🎫 购买刮刮卡</span>
+                            <span x-show="scratchGrid.length > 0">🎫 再来一张</span>
+                        </span>
+                        <span x-show="scratchBuying" class="flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-spinner fa-spin"></i> 购买中...
+                        </span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- 🎡 幸运转盘弹窗 -->
+<template x-teleport="body">
+    <div x-show="wheelGameOpen" class="fixed inset-0 z-[310] flex items-center justify-center p-4" x-cloak>
+        <div x-show="wheelGameOpen" x-transition.opacity @click="wheelGameOpen = false" class="absolute inset-0 bg-slate-900/70 dark:bg-black/90 backdrop-blur-sm"></div>
+        <div x-show="wheelGameOpen" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 scale-90" x-transition:enter-end="opacity-100 scale-100"
+             class="relative w-full max-w-sm bg-white dark:bg-[#1a1a2e] rounded-3xl shadow-2xl overflow-hidden">
+            
+            <!-- 标题栏 -->
+            <div class="relative p-4 flex items-center justify-center bg-gradient-to-r from-rose-500 to-pink-500">
+                <button @click="wheelGameOpen = false" class="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/20 text-white hover:bg-white/30 flex items-center justify-center transition-colors">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+                <h3 class="text-lg font-black text-white flex items-center gap-2">
+                    <span class="text-2xl">🎡</span> 幸运转盘
+                </h3>
+            </div>
+            
+            <!-- 转盘主体 -->
+            <div class="p-4 bg-gradient-to-b from-gray-100 to-gray-200 dark:from-[#1a1a2e] dark:to-[#0f0f1a]">
+                <!-- 积分显示 -->
+                <div class="flex items-center justify-between mb-3 px-3 py-2 bg-white dark:bg-white/10 rounded-xl shadow">
+                    <div class="text-sm">
+                        <span class="text-gray-500 dark:text-gray-400">我的积分：</span>
+                        <span class="text-rose-500 font-black" x-text="userPoints"></span>
+                    </div>
+                    <div class="text-xs text-gray-400">
+                        今日：<span x-text="wheelUsedToday || 0"></span>/<span x-text="wheelMaxPerDay || 20"></span>
+                    </div>
+                </div>
+                
+                <!-- 转盘 -->
+                <div class="relative w-72 mx-auto mb-4">
+                    <!-- 标题 -->
+                    <div class="text-center mb-3">
+                        <span class="text-2xl">🎡</span>
+                        <span class="text-lg font-black text-gray-700 dark:text-white">幸运转盘</span>
+                    </div>
+                    
+                    <!-- 奖励选项 -->
+                    <div class="grid grid-cols-3 gap-3 mb-4">
+                        <template x-for="(sector, index) in wheelSectors" :key="index">
+                            <div class="relative p-4 rounded-2xl text-center transition-all duration-300"
+                                 :class="wheelLightIndex === index ? 'scale-105 ring-4 ring-yellow-400 shadow-xl' : ''"
+                                 :style="`background: linear-gradient(135deg, ${['#ff6b6b', '#ffa94d', '#ffd43b', '#69db7c', '#74c0fc', '#b197fc'][index]}, ${['#ee5a5a', '#ff922b', '#fab005', '#51cf66', '#4dabf7', '#9775fa'][index]});`">
+                                <!-- 灯光指示器 -->
+                                <div x-show="wheelLightIndex === index" 
+                                     class="absolute -top-2 left-1/2 -translate-x-1/2 w-6 h-6 bg-yellow-400 rounded-full shadow-lg animate-pulse"
+                                     style="box-shadow: 0 0 20px #fde047, 0 0 40px #fde047;">
+                                    <div class="absolute inset-0 rounded-full bg-yellow-300 animate-ping opacity-75"></div>
+                                </div>
+                                
+                                <div class="text-white text-2xl mb-1" x-text="sector?.reward > 0 ? '💰' : '😢'"></div>
+                                <div class="text-white font-black text-lg" x-text="sector?.reward > 0 ? sector.reward : '谢谢'"></div>
+                                
+                                <!-- 中奖标记 -->
+                                <div x-show="wheelWinIndex === index && !wheelSpinning" 
+                                     class="absolute -top-2 -right-2 w-8 h-8 bg-yellow-400 rounded-full flex items-center justify-center text-lg shadow-lg">
+                                    🎉
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                    
+                    <!-- 中奖结果 -->
+                    <div x-show="wheelWinReward !== null && !wheelSpinning" class="text-center p-4 rounded-xl mb-4"
+                         :class="wheelWinReward > 0 ? 'bg-gradient-to-r from-yellow-100 to-orange-100 dark:from-yellow-500/20 dark:to-orange-500/20 border-2 border-yellow-400' : 'bg-gray-100 dark:bg-white/5'">
+                        <div class="text-3xl mb-2" x-text="wheelWinReward > 0 ? '🎉' : '😢'"></div>
+                        <div class="text-xl font-black" :class="wheelWinReward > 0 ? 'text-yellow-600 dark:text-yellow-400' : 'text-gray-500'"
+                             x-text="wheelWinReward > 0 ? '恭喜获得 ' + wheelWinReward + ' 积分！' : '谢谢参与，再接再厉！'"></div>
+                    </div>
+                </div>
+                
+                <!-- 结果显示 -->
+                <div x-show="wheelResult" class="text-center mb-3 p-3 rounded-xl" :class="wheelReward > 0 ? 'bg-yellow-100 dark:bg-yellow-500/20 border border-yellow-400 dark:border-yellow-500/30' : 'bg-gray-100 dark:bg-white/5 border border-gray-300 dark:border-white/10'">
+                    <p class="font-bold" :class="wheelReward > 0 ? 'text-yellow-700 dark:text-yellow-400' : 'text-gray-600 dark:text-gray-400'" x-text="wheelResult"></p>
+                </div>
+                
+                <!-- 操作按钮 -->
+                <button @click="spinWheel()" :disabled="wheelSpinning || (!wheelDailyFreeLeft && wheelCost > userPoints)"
+                        class="w-full py-4 bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 disabled:from-gray-300 dark:disabled:from-gray-600 disabled:to-gray-400 dark:disabled:to-gray-700 text-white font-black rounded-2xl shadow-lg transition-all active:scale-95 disabled:cursor-not-allowed text-lg">
+                    <span x-show="!wheelSpinning">
+                        <span x-show="wheelDailyFreeLeft > 0">🎁 免费抽奖 (<span x-text="wheelDailyFreeLeft"></span>次)</span>
+                        <span x-show="wheelDailyFreeLeft <= 0">🎡 消耗 <span x-text="wheelCost"></span> 积分</span>
+                    </span>
+                    <span x-show="wheelSpinning" class="flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-spinner fa-spin"></i> 转动中...
+                    </span>
+                </button>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- 🎲 猜数字弹窗 -->
+<template x-teleport="body">
+    <div x-show="guessGameOpen" class="fixed inset-0 z-[310] flex items-center justify-center p-4" x-cloak>
+        <div x-show="guessGameOpen" x-transition.opacity @click="guessGameOpen = false" class="absolute inset-0 bg-slate-900/70 dark:bg-black/90 backdrop-blur-sm"></div>
+        <div x-show="guessGameOpen" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 scale-90" x-transition:enter-end="opacity-100 scale-100"
+             class="relative w-full max-w-sm bg-white dark:bg-[#1a1a2e] rounded-3xl shadow-2xl overflow-hidden">
+            
+            <!-- 标题栏 -->
+            <div class="relative p-4 flex items-center justify-center bg-gradient-to-r from-indigo-500 to-purple-500">
+                <button @click="guessGameOpen = false" class="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/20 text-white hover:bg-white/30 flex items-center justify-center transition-colors">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+                <h3 class="text-lg font-black text-white flex items-center gap-2">
+                    <span class="text-2xl">🎲</span> 猜数字
+                </h3>
+            </div>
+            
+            <!-- 游戏主体 -->
+            <div class="p-4 bg-gradient-to-b from-gray-100 to-gray-200 dark:from-[#1a1a2e] dark:to-[#0f0f1a]">
+                <!-- 积分显示 -->
+                <div class="flex items-center justify-between mb-3 px-3 py-2 bg-white dark:bg-white/10 rounded-xl shadow">
+                    <div class="text-sm">
+                        <span class="text-gray-500 dark:text-gray-400">我的积分：</span>
+                        <span class="text-indigo-500 font-black" x-text="userPoints"></span>
+                    </div>
+                    <div class="text-xs text-gray-400">
+                        消耗：<span x-text="guessCost"></span>积分
+                    </div>
+                </div>
+                
+                <!-- 游戏状态 -->
+                <div x-show="!guessPlaying" class="text-center py-8">
+                    <div class="text-6xl mb-4">🎯</div>
+                    <p class="text-gray-600 dark:text-gray-300 mb-2">猜一个 <span x-text="guessRange"></span> 之间的数字</p>
+                    <p class="text-sm text-gray-400">你有 <span x-text="guessMaxTries"></span> 次机会</p>
+                    <button @click="startGuessGame()" :disabled="userPoints < guessCost"
+                            class="mt-4 px-8 py-3 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 disabled:from-gray-300 dark:disabled:from-gray-600 disabled:to-gray-400 dark:disabled:to-gray-700 text-white font-black rounded-2xl shadow-lg transition-all active:scale-95 disabled:cursor-not-allowed">
+                        开始游戏 (<span x-text="guessCost"></span>积分)
+                    </button>
+                </div>
+                
+                <!-- 游戏进行中 -->
+                <div x-show="guessPlaying" class="text-center">
+                    <div class="mb-4 p-4 bg-white dark:bg-white/10 rounded-xl">
+                        <p class="text-sm text-gray-500 dark:text-gray-400 mb-2">剩余次数：<span class="font-bold text-indigo-500" x-text="guessTriesLeft"></span>/<span x-text="guessMaxTries"></span></p>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">已猜数字：<span class="font-bold" x-text="guessHistory.join(', ') || '无'"></span></p>
+                    </div>
+                    
+                    <div x-show="guessHint" class="mb-3 p-3 rounded-xl" :class="guessHint.includes('大了') ? 'bg-red-100 dark:bg-red-500/20' : 'bg-blue-100 dark:bg-blue-500/20'">
+                        <p class="font-bold" :class="guessHint.includes('大了') ? 'text-red-600 dark:text-red-400' : 'text-blue-600 dark:text-blue-400'" x-text="guessHint"></p>
+                    </div>
+                    
+                    <input type="number" x-model="guessInput" @keyup.enter="submitGuess()" :disabled="guessSubmitting"
+                           class="w-full px-4 py-3 text-center text-2xl font-black bg-white dark:bg-white/10 border-2 border-indigo-300 dark:border-indigo-500/50 rounded-xl outline-none focus:border-indigo-500"
+                           :placeholder="guessRange">
+                    
+                    <button @click="submitGuess()" :disabled="guessSubmitting || !guessInput"
+                            class="mt-3 w-full py-3 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 disabled:from-gray-300 dark:disabled:from-gray-600 disabled:to-gray-400 dark:disabled:to-gray-700 text-white font-black rounded-2xl shadow-lg transition-all active:scale-95 disabled:cursor-not-allowed">
+                        <span x-show="!guessSubmitting">确认猜测</span>
+                        <span x-show="guessSubmitting" class="flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-spinner fa-spin"></i> 判断中...
+                        </span>
+                    </button>
+                </div>
+                
+                <!-- 游戏结果 -->
+                <div x-show="guessResult" class="text-center py-4">
+                    <div class="text-5xl mb-3" x-text="guessWon ? '🎉' : '😢'"></div>
+                    <p class="font-bold text-lg" :class="guessWon ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'" x-text="guessResult"></p>
+                    <p x-show="guessWon" class="text-sm text-yellow-600 dark:text-yellow-400 mt-2">+<span x-text="guessReward"></span> 积分</p>
+                    <button @click="resetGuessGame()" class="mt-4 px-8 py-2 bg-gray-200 dark:bg-white/10 hover:bg-gray-300 dark:hover:bg-white/20 text-gray-700 dark:text-gray-300 font-bold rounded-xl transition-all">
+                        再玩一次
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- 🎟️ 买彩票弹窗 -->
+<template x-teleport="body">
+    <div x-show="lotteryGameOpen" class="fixed inset-0 z-[310] flex items-center justify-center p-4" x-cloak>
+        <div x-show="lotteryGameOpen" x-transition.opacity @click="lotteryGameOpen = false" class="absolute inset-0 bg-slate-900/70 dark:bg-black/90 backdrop-blur-sm"></div>
+        <div x-show="lotteryGameOpen" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 scale-90" x-transition:enter-end="opacity-100 scale-100"
+             class="relative w-full max-w-md max-h-[90vh] bg-white dark:bg-[#1a1a2e] rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+            
+            <!-- 标题栏 -->
+            <div class="relative p-5 flex items-center justify-center bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500 shrink-0">
+                <button @click="lotteryGameOpen = false" class="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/20 text-white hover:bg-white/30 flex items-center justify-center transition-colors">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+                <div class="text-center">
+                    <div class="text-3xl mb-1">🎟️</div>
+                    <h3 class="text-xl font-black text-white">每日彩票</h3>
+                </div>
+            </div>
+            
+            <!-- 彩票主体 - 可滚动 -->
+            <div class="flex-1 overflow-y-auto p-5 bg-gradient-to-b from-gray-50 to-gray-100 dark:from-[#1a1a2e] dark:to-[#0f0f1a]">
+                <!-- 奖池卡片 -->
+                <div class="relative mb-5 p-5 bg-gradient-to-br from-violet-500 via-purple-500 to-fuchsia-500 rounded-2xl shadow-xl overflow-hidden">
+                    <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
+                    <div class="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2"></div>
+                    <div class="relative">
+                        <div class="text-white/80 text-sm mb-1">🎁 当前奖池</div>
+                        <div class="text-4xl font-black text-white mb-2" x-text="lotteryPool + ' 积分'"></div>
+                        <div class="flex items-center gap-2 text-white/70 text-xs">
+                            <i class="fa-regular fa-clock"></i>
+                            <span x-text="lotteryNextDrawTime || '每天 20:00 开奖'"></span>
+                        </div>
+                        <!-- 今日开奖结果 -->
+                        <div x-show="lotteryTodayResult" class="mt-3 pt-3 border-t border-white/20">
+                            <div class="text-white/70 text-xs mb-1">🎉 今日开奖号码</div>
+                            <div class="text-2xl font-black text-yellow-300" x-text="lotteryTodayResult"></div>
+                            <!-- 中奖提示 -->
+                            <div x-show="lotteryMyWinning.length > 0" class="mt-2 text-yellow-200 text-sm'>
+                                🎊 恭喜！您有 <span x-text="lotteryMyWinning.length"></span> 张彩票中奖！共获得 <span x-text="lotteryMyPrizeTotal"></span> 积分
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 积分和次数 -->
+                <div class="flex gap-3 mb-5">
+                    <div class="flex-1 p-3 bg-white dark:bg-white/10 rounded-xl shadow text-center">
+                        <div class="text-xs text-gray-500 dark:text-gray-400 mb-1">我的积分</div>
+                        <div class="text-xl font-black text-violet-500" x-text="userPoints"></div>
+                    </div>
+                    <div class="flex-1 p-3 bg-white dark:bg-white/10 rounded-xl shadow text-center">
+                        <div class="text-xs text-gray-500 dark:text-gray-400 mb-1">今日已购</div>
+                        <div class="text-xl font-black text-purple-500"><span x-text="lotteryTodayTickets || 0"></span>/<span x-text="lotteryMaxPerDay || 10"></span></div>
+                    </div>
+                </div>
+                
+                <!-- 我的彩票号 -->
+                <div x-show="lotteryMyTickets.length > 0" class="mb-5">
+                    <div class="text-sm font-bold text-gray-600 dark:text-gray-400 mb-3 flex items-center gap-2">
+                        <i class="fa-solid fa-ticket text-violet-500"></i>
+                        我的彩票号
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <template x-for="(ticket, index) in lotteryMyTickets" :key="index">
+                            <div class="px-4 py-2 bg-gradient-to-r from-violet-500 to-purple-500 text-white font-bold rounded-xl text-lg shadow-lg">
+                                <span x-text="ticket"></span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+                
+                <!-- 购买区域 -->
+                <div class="bg-white dark:bg-white/10 rounded-2xl p-4 shadow">
+                    <!-- 机选/自选 -->
+                    <div class="flex items-center justify-between mb-4">
+                        <span class="text-sm font-bold text-gray-600 dark:text-gray-400">选号方式</span>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <span class="text-xs text-gray-500" :class="!lotteryAutoPick ? 'font-bold text-violet-500' : ''">自选</span>
+                            <div class="relative w-12 h-6 bg-gray-300 dark:bg-gray-600 rounded-full transition-colors" :class="lotteryAutoPick ? 'bg-violet-500' : ''" @click="lotteryAutoPick = !lotteryAutoPick">
+                                <div class="absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all" :class="lotteryAutoPick ? 'left-7' : 'left-1'"></div>
+                            </div>
+                            <span class="text-xs text-gray-500" :class="lotteryAutoPick ? 'font-bold text-violet-500' : ''">机选</span>
+                        </label>
+                    </div>
+                    
+                    <!-- 自选号码输入 -->
+                    <div x-show="!lotteryAutoPick" class="mb-4">
+                        <div class="text-xs text-gray-500 mb-2 text-center">输入4位数字（0000-9999）</div>
+                        <div class="flex justify-center gap-2">
+                            <input type="text" 
+                                   x-model="lotteryCustomNumber[0]"
+                                   @input="lotteryCustomNumber[0] = lotteryCustomNumber[0].replace(/[^0-9]/g, '').slice(-1)"
+                                   maxlength="1"
+                                   class="w-14 h-14 text-center text-2xl font-black bg-gray-50 dark:bg-white/5 border-2 border-violet-200 dark:border-violet-500/30 rounded-xl outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20">
+                            <input type="text" 
+                                   x-model="lotteryCustomNumber[1]"
+                                   @input="lotteryCustomNumber[1] = lotteryCustomNumber[1].replace(/[^0-9]/g, '').slice(-1)"
+                                   maxlength="1"
+                                   class="w-14 h-14 text-center text-2xl font-black bg-gray-50 dark:bg-white/5 border-2 border-violet-200 dark:border-violet-500/30 rounded-xl outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20">
+                            <input type="text" 
+                                   x-model="lotteryCustomNumber[2]"
+                                   @input="lotteryCustomNumber[2] = lotteryCustomNumber[2].replace(/[^0-9]/g, '').slice(-1)"
+                                   maxlength="1"
+                                   class="w-14 h-14 text-center text-2xl font-black bg-gray-50 dark:bg-white/5 border-2 border-violet-200 dark:border-violet-500/30 rounded-xl outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20">
+                            <input type="text" 
+                                   x-model="lotteryCustomNumber[3]"
+                                   @input="lotteryCustomNumber[3] = lotteryCustomNumber[3].replace(/[^0-9]/g, '').slice(-1)"
+                                   maxlength="1"
+                                   class="w-14 h-14 text-center text-2xl font-black bg-gray-50 dark:bg-white/5 border-2 border-violet-200 dark:border-violet-500/30 rounded-xl outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20">
+                        </div>
+                    </div>
+                    
+                    <!-- 机选提示 -->
+                    <div x-show="lotteryAutoPick" class="mb-4 text-center py-3 bg-gray-50 dark:bg-white/5 rounded-xl">
+                        <div class="text-gray-400 text-sm">🎲 系统随机生成号码</div>
+                    </div>
+                    
+                    <!-- 购买数量 -->
+                    <div class="mb-4">
+                        <div class="text-xs text-gray-500 mb-2 text-center">购买数量</div>
+                        <div class="flex items-center justify-center gap-4">
+                            <button @click="lotteryBuyCount = Math.max(1, lotteryBuyCount - 1)" 
+                                    class="w-12 h-12 rounded-xl bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-400 font-bold text-2xl hover:bg-gray-200 dark:hover:bg-white/20 transition-colors">
+                                −
+                            </button>
+                            <div class="w-16 text-center text-3xl font-black text-gray-700 dark:text-white" x-text="lotteryBuyCount"></div>
+                            <button @click="lotteryBuyCount = Math.min(lotteryMaxPerDay - lotteryTodayTickets, lotteryBuyCount + 1)" 
+                                    class="w-12 h-12 rounded-xl bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-400 font-bold text-2xl hover:bg-gray-200 dark:hover:bg-white/20 transition-colors">
+                                +
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- 费用显示 -->
+                    <div class="text-center text-sm text-gray-500 mb-4">
+                        需要支付 <span class="font-bold text-lg text-violet-500" x-text="lotteryBuyCount * lotteryCost"></span> 积分
+                    </div>
+                    
+                    <!-- 购买按钮 -->
+                    <button @click="buyLottery()" :disabled="lotteryBuying || userPoints < lotteryBuyCount * lotteryCost || lotteryTodayTickets >= lotteryMaxPerDay"
+                            class="w-full py-4 bg-gradient-to-r from-violet-500 via-purple-500 to-fuchsia-500 hover:from-violet-600 hover:via-purple-600 hover:to-fuchsia-600 disabled:from-gray-300 dark:disabled:from-gray-600 disabled:to-gray-400 dark:disabled:to-gray-700 text-white font-black rounded-2xl shadow-lg transition-all active:scale-95 disabled:cursor-not-allowed text-lg">
+                        <span x-show="!lotteryBuying">🎟️ 立即购买</span>
+                        <span x-show="lotteryBuying" class="flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-spinner fa-spin"></i> 购买中...
+                        </span>
+                    </button>
+                </div>
+                
+                <!-- 往期开奖记录 -->
+                <div class="mt-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="text-sm font-bold text-gray-600 dark:text-gray-400 flex items-center gap-2">
+                            <i class="fa-solid fa-history text-violet-500"></i>
+                            往期开奖
+                        </span>
+                        <button @click="lotteryShowHistory = !lotteryShowHistory" class="text-xs text-violet-500">
+                            <span x-text="lotteryShowHistory ? '收起' : '展开'"></span>
+                        </button>
+                    </div>
+                    <div x-show="lotteryShowHistory" class="space-y-3">
+                        <template x-for="(result, index) in lotteryHistory" :key="index">
+                            <div class="p-3 bg-gray-50 dark:bg-white/5 rounded-xl" :class="result.my_won ? 'ring-2 ring-green-400' : ''">
+                                <div class="flex items-center justify-between mb-2">
+                                    <div class="text-xs text-gray-500" x-text="result.date"></div>
+                                    <div class="flex items-center gap-2">
+                                        <div class="text-xs text-gray-400">
+                                            <span x-text="result.winners || 0"></span>人中奖
+                                        </div>
+                                        <div class="text-xs text-gray-400">
+                                            奖池 <span x-text="result.pool || 0"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="flex items-center justify-between mb-2">
+                                    <div class="text-xl font-black text-violet-500" x-text="result.winning_number || '-'"></div>
+                                    <!-- 中奖标记 -->
+                                    <div x-show="result.my_won" class="text-sm text-green-500 font-bold">
+                                        🎊 中奖 +<span x-text="result.my_prize || 0"></span>积分
+                                    </div>
+                                </div>
+                                <!-- 中奖名单 -->
+                                <div x-show="result.winners_list && result.winners_list.length > 0" class="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                                    <div class="text-xs text-gray-500 mb-1">🏆 中奖名单:</div>
+                                    <div class="flex flex-wrap gap-2">
+                                        <template x-for="(winner, wIndex) in result.winners_list" :key="wIndex">
+                                            <div class="text-xs bg-violet-100 dark:bg-violet-500/20 text-violet-600 dark:text-violet-300 px-2 py-1 rounded">
+                                                <span x-text="winner.username"></span> 
+                                                <span class="text-green-500" x-text="'+' + winner.prize_amount"></span>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                        <div x-show="lotteryHistory.length === 0" class="text-center text-gray-400 text-sm py-3">
+                            暂无开奖记录
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- 🔥 PWA 图标选择弹窗 -->
+<template x-teleport="body">
+    <div x-show="iconModalOpen" class="fixed inset-0 z-[300] flex items-center justify-center p-4" x-cloak>
+        <div x-show="iconModalOpen" x-transition.opacity @click="iconModalOpen = false" class="absolute inset-0 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm"></div>
+        <div x-show="iconModalOpen" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-10 scale-95" x-transition:enter-end="opacity-100 translate-y-0 scale-100" 
+             class="relative w-full max-w-md bg-white dark:bg-[#111] border border-slate-200 dark:border-white/5 rounded-3xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
+            
+            <!-- 标题 -->
+            <div class="p-5 border-b border-slate-100 dark:border-white/5 flex justify-between items-center shrink-0 bg-slate-50/50 dark:bg-white/5">
+                <div>
+                    <h3 class="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
+                        <i class="fa-solid fa-icons text-pink-500"></i> PWA 图标选择
+                    </h3>
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">选择你喜欢的图标</p>
+                </div>
+                <button @click="iconModalOpen = false" class="w-8 h-8 rounded-full bg-slate-200/50 dark:bg-white/10 text-slate-500 hover:text-rose-500 flex justify-center items-center transition-colors">
+                    <i class="fa-solid fa-xmark text-sm"></i>
+                </button>
+            </div>
+            
+            <!-- 内容 -->
+            <div class="flex-1 h-0 overflow-y-auto p-4 bg-slate-50 dark:bg-[#0a0a0a]">
+                <!-- 加载中 -->
+                <div x-show="iconsLoading" class="flex flex-col items-center justify-center py-12 gap-3">
+                    <i class="fa-solid fa-circle-notch fa-spin text-2xl text-pink-500"></i>
+                    <div class="text-sm text-slate-500">加载图标列表...</div>
+                </div>
+                
+                <!-- 图标列表 -->
+                <div x-show="!iconsLoading" class="grid grid-cols-3 gap-3">
+                    <template x-for="icon in availableIcons" :key="icon.id">
+                        <div @click="selectIcon(icon.id)" 
+                             class="relative p-3 rounded-xl border-2 cursor-pointer transition-all"
+                             :class="currentIcon === icon.id ? 'border-pink-500 bg-pink-50 dark:bg-pink-500/10' : 'border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 hover:border-pink-300'">
+                            <img :src="icon.url" class="w-full aspect-square rounded-lg object-cover shadow-md mb-2">
+                            <div class="text-xs font-bold text-slate-800 dark:text-white truncate" x-text="icon.name"></div>
+                            <div x-show="currentIcon === icon.id" class="absolute top-2 right-2 w-5 h-5 bg-pink-500 rounded-full flex items-center justify-center">
+                                <i class="fa-solid fa-check text-white text-xs"></i>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+                
+                <!-- 提示 -->
+                <div class="mt-4 p-3 bg-amber-50 dark:bg-amber-500/10 rounded-xl text-xs text-amber-700 dark:text-amber-400">
+                    <i class="fa-solid fa-exclamation-triangle mr-1"></i>
+                    <strong>重要：</strong>PWA 图标在安装时确定。如需更换图标，请先卸载当前 PWA 应用，然后重新添加到桌面。
+                </div>
+            </div>
+        </div>
+    </div>
+</template>

@@ -1,0 +1,401 @@
+<!-- Emby 自动重启插件配置面板 -->
+<div class="space-y-5">
+    <!-- 手动重启卡片 -->
+    <div class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-orange-500 via-red-500 to-pink-500 p-6 text-white shadow-xl">
+        <div class="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-white/10 blur-2xl"></div>
+        <div class="absolute -bottom-8 -left-8 h-24 w-24 rounded-full bg-white/10 blur-xl"></div>
+        
+        <div class="relative z-10">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
+                    <i class="fa-solid fa-rotate text-2xl"></i>
+                </div>
+                <div>
+                    <h3 class="text-lg font-bold">手动重启</h3>
+                    <p class="text-xs text-white/80">立即重启 Emby 服务器</p>
+                </div>
+            </div>
+            
+            <div class="mb-4 rounded-xl bg-white/10 p-3 backdrop-blur-sm">
+                <div class="flex items-center justify-between text-sm">
+                    <span class="text-white/70">上次重启</span>
+                    <span id="last-restart-time" class="font-bold">--</span>
+                </div>
+            </div>
+            
+            <button onclick="confirmRestart()" class="w-full py-3.5 rounded-xl bg-white text-red-500 font-bold text-sm shadow-lg transition-all hover:shadow-xl active:scale-[0.98] flex items-center justify-center gap-2">
+                <i class="fa-solid fa-power-off"></i>
+                立即重启 Emby
+            </button>
+        </div>
+    </div>
+
+    <!-- 定时重启设置 -->
+    <div class="apple-card p-5">
+        <div class="flex items-center justify-between mb-5">
+            <div class="flex items-center gap-3">
+                <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-100 dark:bg-purple-900/30 text-purple-500">
+                    <i class="fa-solid fa-clock"></i>
+                </div>
+                <div>
+                    <h3 class="text-[15px] font-bold text-gray-800 dark:text-gray-200">定时重启</h3>
+                    <p class="text-[11px] text-gray-500">设置自动重启计划</p>
+                </div>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="schedule-enabled" class="sr-only peer" onchange="toggleSchedule()">
+                <div class="w-11 h-6 bg-gray-200 peer-focus:ring-2 peer-focus:ring-purple-500/50 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500"></div>
+            </label>
+        </div>
+        
+        <div id="schedule-settings" class="space-y-4 hidden">
+            <!-- 重启模式 -->
+            <div>
+                <label class="text-[12px] font-bold text-gray-600 dark:text-gray-400 mb-2 block">重启模式</label>
+                <div class="grid grid-cols-3 gap-2">
+                    <button type="button" onclick="selectMode('daily')" data-mode="daily" class="mode-btn py-2.5 rounded-xl text-[12px] font-bold transition-all bg-gray-100 dark:bg-[#2C2C2E] text-gray-600 dark:text-gray-400 hover:bg-purple-100 dark:hover:bg-purple-900/30">
+                        每天
+                    </button>
+                    <button type="button" onclick="selectMode('weekly')" data-mode="weekly" class="mode-btn py-2.5 rounded-xl text-[12px] font-bold transition-all bg-gray-100 dark:bg-[#2C2C2E] text-gray-600 dark:text-gray-400 hover:bg-purple-100 dark:hover:bg-purple-900/30">
+                        每周
+                    </button>
+                    <button type="button" onclick="selectMode('interval')" data-mode="interval" class="mode-btn py-2.5 rounded-xl text-[12px] font-bold transition-all bg-gray-100 dark:bg-[#2C2C2E] text-gray-600 dark:text-gray-400 hover:bg-purple-100 dark:hover:bg-purple-900/30">
+                        间隔
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 重启时间 -->
+            <div>
+                <label class="text-[12px] font-bold text-gray-600 dark:text-gray-400 mb-2 block">重启时间</label>
+                <input type="time" id="restart-time" value="04:00" class="w-full px-4 py-3 rounded-xl border border-transparent bg-gray-100 dark:bg-[#2C2C2E] text-[13px] font-bold text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500/50 transition-all">
+            </div>
+            
+            <!-- 周选择 -->
+            <div id="weekday-section" class="hidden">
+                <label class="text-[12px] font-bold text-gray-600 dark:text-gray-400 mb-2 block">重启日期</label>
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" onclick="toggleWeekday(this, '1')" data-day="1" class="weekday-btn px-4 py-2 rounded-xl text-[12px] font-bold transition-all bg-gray-100 dark:bg-[#2C2C2E] text-gray-600 dark:text-gray-400">一</button>
+                    <button type="button" onclick="toggleWeekday(this, '2')" data-day="2" class="weekday-btn px-4 py-2 rounded-xl text-[12px] font-bold transition-all bg-gray-100 dark:bg-[#2C2C2E] text-gray-600 dark:text-gray-400">二</button>
+                    <button type="button" onclick="toggleWeekday(this, '3')" data-day="3" class="weekday-btn px-4 py-2 rounded-xl text-[12px] font-bold transition-all bg-gray-100 dark:bg-[#2C2C2E] text-gray-600 dark:text-gray-400">三</button>
+                    <button type="button" onclick="toggleWeekday(this, '4')" data-day="4" class="weekday-btn px-4 py-2 rounded-xl text-[12px] font-bold transition-all bg-gray-100 dark:bg-[#2C2C2E] text-gray-600 dark:text-gray-400">四</button>
+                    <button type="button" onclick="toggleWeekday(this, '5')" data-day="5" class="weekday-btn px-4 py-2 rounded-xl text-[12px] font-bold transition-all bg-gray-100 dark:bg-[#2C2C2E] text-gray-600 dark:text-gray-400">五</button>
+                    <button type="button" onclick="toggleWeekday(this, '6')" data-day="6" class="weekday-btn px-4 py-2 rounded-xl text-[12px] font-bold transition-all bg-gray-100 dark:bg-[#2C2C2E] text-gray-600 dark:text-gray-400">六</button>
+                    <button type="button" onclick="toggleWeekday(this, '0')" data-day="0" class="weekday-btn px-4 py-2 rounded-xl text-[12px] font-bold transition-all bg-gray-100 dark:bg-[#2C2C2E] text-gray-600 dark:text-gray-400">日</button>
+                </div>
+            </div>
+            
+            <!-- 间隔天数 -->
+            <div id="interval-section" class="hidden">
+                <label class="text-[12px] font-bold text-gray-600 dark:text-gray-400 mb-2 block">间隔天数</label>
+                <div class="flex items-center gap-3">
+                    <input type="number" id="interval-days" value="3" min="1" max="30" class="w-20 px-4 py-3 rounded-xl border border-transparent bg-gray-100 dark:bg-[#2C2C2E] text-[13px] font-bold text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-center">
+                    <span class="text-[13px] text-gray-500">天重启一次</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 连接设置 -->
+    <div class="apple-card p-5">
+        <div class="flex items-center gap-3 mb-5">
+            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-green-100 dark:bg-green-900/30 text-green-500">
+                <i class="fa-solid fa-server"></i>
+            </div>
+            <div>
+                <h3 class="text-[15px] font-bold text-gray-800 dark:text-gray-200">连接设置</h3>
+                <p class="text-[11px] text-gray-500">配置 Emby 服务器连接</p>
+            </div>
+        </div>
+        
+        <div class="space-y-4">
+            <div>
+                <label class="text-[12px] font-bold text-gray-600 dark:text-gray-400 mb-2 block">部署方式</label>
+                <select id="deploy-mode" onchange="toggleSSH()" class="w-full px-4 py-3 rounded-xl border border-transparent bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-[13px] font-bold text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-green-500/50 transition-all cursor-pointer">
+                    <option value="local_docker">本机 Docker</option>
+                    <option value="remote_docker">远程 Docker (SSH)</option>
+                </select>
+            </div>
+            
+            <div>
+                <label class="text-[12px] font-bold text-gray-600 dark:text-gray-400 mb-2 block">容器名称</label>
+                <input type="text" id="container-name" value="emby" placeholder="emby" class="w-full px-4 py-3 rounded-xl border border-transparent bg-gray-100 dark:bg-[#2C2C2E] text-[13px] font-bold text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-green-500/50 transition-all">
+            </div>
+            
+            <!-- SSH 设置 -->
+            <div id="ssh-settings" class="hidden space-y-4 pt-2 border-t border-gray-100 dark:border-gray-800">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-[12px] font-bold text-gray-600 dark:text-gray-400 mb-2 block">SSH 主机</label>
+                        <input type="text" id="ssh-host" placeholder="192.168.1.100:22" class="w-full px-4 py-3 rounded-xl border border-transparent bg-gray-100 dark:bg-[#2C2C2E] text-[13px] font-bold text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-green-500/50 transition-all">
+                    </div>
+                    <div>
+                        <label class="text-[12px] font-bold text-gray-600 dark:text-gray-400 mb-2 block">用户名</label>
+                        <input type="text" id="ssh-user" value="root" placeholder="root" class="w-full px-4 py-3 rounded-xl border border-transparent bg-gray-100 dark:bg-[#2C2C2E] text-[13px] font-bold text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-green-500/50 transition-all">
+                    </div>
+                </div>
+                <div>
+                    <label class="text-[12px] font-bold text-gray-600 dark:text-gray-400 mb-2 block">SSH 密码</label>
+                    <input type="password" id="ssh-password" placeholder="留空则使用私钥认证" class="w-full px-4 py-3 rounded-xl border border-transparent bg-gray-100 dark:bg-[#2C2C2E] text-[13px] font-bold text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-green-500/50 transition-all">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 重启历史 -->
+    <div class="apple-card p-5">
+        <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-3">
+                <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-500">
+                    <i class="fa-solid fa-history"></i>
+                </div>
+                <h3 class="text-[15px] font-bold text-gray-800 dark:text-gray-200">重启历史</h3>
+            </div>
+            <span id="history-count" class="text-[11px] text-gray-500">0 条记录</span>
+        </div>
+        
+        <div id="restart-history" class="space-y-2 max-h-48 overflow-y-auto">
+            <div class="text-[12px] text-gray-400 text-center py-6">
+                <i class="fa-solid fa-inbox text-2xl mb-2 block opacity-50"></i>
+                暂无重启记录
+            </div>
+        </div>
+    </div>
+
+    <!-- 保存按钮 -->
+    <button onclick="saveConfig()" class="w-full py-3.5 bg-gray-900 hover:bg-black dark:bg-gray-200 dark:hover:bg-white text-white dark:text-black rounded-xl text-[14px] font-bold shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2">
+        <i class="fa-solid fa-check"></i>
+        保存配置
+    </button>
+</div>
+
+<!-- 确认重启弹窗 -->
+<div id="restart-modal" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+    <div class="bg-white dark:bg-[#1C1C1E] rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden">
+        <div class="p-6 text-center">
+            <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                <i class="fa-solid fa-power-off text-3xl text-red-500"></i>
+            </div>
+            <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-2">确认重启 Emby？</h3>
+            <p class="text-[13px] text-gray-500 mb-6">重启期间所有用户将无法访问 Emby，请确保没有重要的观看任务。</p>
+            <div class="flex gap-3">
+                <button onclick="closeModal()" class="flex-1 py-3 bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-gray-800 dark:text-gray-200 rounded-xl text-[13px] font-bold transition-all">
+                    取消
+                </button>
+                <button onclick="doRestart()" class="flex-1 py-3 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white rounded-xl text-[13px] font-bold transition-all">
+                    确认重启
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="fixed top-4 left-1/2 -translate-x-1/2 z-[200] px-6 py-3 rounded-full shadow-xl text-[13px] font-bold transition-all opacity-0 pointer-events-none bg-gray-900 text-white dark:bg-gray-200 dark:text-black"></div>
+
+<script>
+let currentMode = 'daily';
+let selectedWeekdays = [];
+
+async function loadConfig() {
+    try {
+        const res = await fetch('/api/plugins/emby_restart/config');
+        const data = await res.json();
+        if (data.status === 'success') {
+            const v = data.data.values || {};
+            
+            // 定时设置
+            const enabled = v.restart_mode && v.restart_mode !== 'disabled';
+            document.getElementById('schedule-enabled').checked = enabled;
+            toggleSchedule();
+            
+            if (v.restart_mode) {
+                currentMode = v.restart_mode;
+                selectMode(currentMode);
+            }
+            
+            document.getElementById('restart-time').value = v.restart_time || '04:00';
+            document.getElementById('interval-days').value = v.interval_days || '3';
+            
+            // 周选择
+            selectedWeekdays = (v.restart_weekdays || '').split(',').filter(w => w);
+            document.querySelectorAll('.weekday-btn').forEach(btn => {
+                const day = btn.dataset.day;
+                if (selectedWeekdays.includes(day)) {
+                    btn.classList.add('bg-purple-500', 'text-white');
+                    btn.classList.remove('bg-gray-100', 'dark:bg-[#2C2C2E]', 'text-gray-600', 'dark:text-gray-400');
+                }
+            });
+            
+            // 连接设置
+            document.getElementById('deploy-mode').value = v.deploy_mode || 'local_docker';
+            document.getElementById('container-name').value = v.container_name || 'emby';
+            document.getElementById('ssh-host').value = v.ssh_host || '';
+            document.getElementById('ssh-user').value = v.ssh_user || 'root';
+            document.getElementById('ssh-password').value = v.ssh_password || '';
+            toggleSSH();
+        }
+    } catch (e) {
+        console.error('加载配置失败:', e);
+    }
+    
+    loadStatus();
+    loadHistory();
+}
+
+async function loadStatus() {
+    try {
+        const res = await fetch('/api/plugins/emby_restart/status');
+        const data = await res.json();
+        if (data.success) {
+            document.getElementById('last-restart-time').textContent = data.data.last_restart || '从未重启';
+        }
+    } catch (e) {}
+}
+
+async function loadHistory() {
+    try {
+        const res = await fetch('/api/plugins/emby_restart/history');
+        const data = await res.json();
+        if (data.success && data.data.length > 0) {
+            document.getElementById('history-count').textContent = `${data.data.length} 条记录`;
+            document.getElementById('restart-history').innerHTML = data.data.map(item => `
+                <div class="flex items-center justify-between py-2.5 px-3 rounded-xl ${item.success ? 'bg-green-50 dark:bg-green-900/10' : 'bg-red-50 dark:bg-red-900/10'}">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid ${item.success ? 'fa-circle-check text-green-500' : 'fa-circle-xmark text-red-500'} text-sm"></i>
+                        <span class="text-[12px] font-medium text-gray-800 dark:text-gray-200">${item.time}</span>
+                    </div>
+                    <span class="text-[11px] ${item.success ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">${item.success ? '成功' : (item.error || '失败')}</span>
+                </div>
+            `).join('');
+        }
+    } catch (e) {}
+}
+
+function toggleSchedule() {
+    const enabled = document.getElementById('schedule-enabled').checked;
+    document.getElementById('schedule-settings').classList.toggle('hidden', !enabled);
+}
+
+function selectMode(mode) {
+    currentMode = mode;
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+        if (btn.dataset.mode === mode) {
+            btn.classList.add('bg-purple-500', 'text-white');
+            btn.classList.remove('bg-gray-100', 'dark:bg-[#2C2C2E]', 'text-gray-600', 'dark:text-gray-400');
+        } else {
+            btn.classList.remove('bg-purple-500', 'text-white');
+            btn.classList.add('bg-gray-100', 'dark:bg-[#2C2C2E]', 'text-gray-600', 'dark:text-gray-400');
+        }
+    });
+    
+    document.getElementById('weekday-section').classList.toggle('hidden', mode !== 'weekly');
+    document.getElementById('interval-section').classList.toggle('hidden', mode !== 'interval');
+}
+
+function toggleWeekday(btn, day) {
+    const idx = selectedWeekdays.indexOf(day);
+    if (idx > -1) {
+        selectedWeekdays.splice(idx, 1);
+        btn.classList.remove('bg-purple-500', 'text-white');
+        btn.classList.add('bg-gray-100', 'dark:bg-[#2C2C2E]', 'text-gray-600', 'dark:text-gray-400');
+    } else {
+        selectedWeekdays.push(day);
+        btn.classList.add('bg-purple-500', 'text-white');
+        btn.classList.remove('bg-gray-100', 'dark:bg-[#2C2C2E]', 'text-gray-600', 'dark:text-gray-400');
+    }
+}
+
+function toggleSSH() {
+    const mode = document.getElementById('deploy-mode').value;
+    document.getElementById('ssh-settings').classList.toggle('hidden', mode !== 'remote_docker');
+}
+
+function confirmRestart() {
+    document.getElementById('restart-modal').classList.remove('hidden');
+    document.getElementById('restart-modal').classList.add('flex');
+}
+
+function closeModal() {
+    document.getElementById('restart-modal').classList.add('hidden');
+    document.getElementById('restart-modal').classList.remove('flex');
+}
+
+async function doRestart() {
+    closeModal();
+    showToast('正在重启...', 'info');
+    
+    try {
+        const res = await fetch('/api/plugins/emby_restart/restart', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ confirm: true })
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+            showToast('重启成功', 'success');
+            setTimeout(() => { loadStatus(); loadHistory(); }, 2000);
+        } else {
+            showToast(data.message || '重启失败', 'error');
+        }
+    } catch (e) {
+        showToast('请求失败', 'error');
+    }
+}
+
+async function saveConfig() {
+    const enabled = document.getElementById('schedule-enabled').checked;
+    
+    const config = {
+        restart_mode: enabled ? currentMode : 'disabled',
+        restart_time: document.getElementById('restart-time').value,
+        deploy_mode: document.getElementById('deploy-mode').value,
+        container_name: document.getElementById('container-name').value,
+        ssh_host: document.getElementById('ssh-host').value,
+        ssh_user: document.getElementById('ssh-user').value,
+        ssh_password: document.getElementById('ssh-password').value,
+        interval_days: document.getElementById('interval-days').value,
+        restart_weekdays: selectedWeekdays.join(',')
+    };
+    
+    try {
+        const res = await fetch('/api/plugins/emby_restart/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        });
+        const data = await res.json();
+        
+        if (data.status === 'success') {
+            showToast('配置已保存', 'success');
+            loadStatus();
+        } else {
+            showToast(data.message || '保存失败', 'error');
+        }
+    } catch (e) {
+        showToast('请求失败', 'error');
+    }
+}
+
+function showToast(msg, type = 'success') {
+    const toast = document.getElementById('toast');
+    toast.textContent = msg;
+    toast.className = 'fixed top-4 left-1/2 -translate-x-1/2 z-[200] px-6 py-3 rounded-full shadow-xl text-[13px] font-bold transition-all bg-gray-900 text-white dark:bg-gray-200 dark:text-black';
+    
+    if (type === 'error') {
+        toast.classList.add('bg-red-500', 'text-white');
+        toast.classList.remove('bg-gray-900', 'dark:bg-gray-200', 'dark:text-black');
+    } else if (type === 'info') {
+        toast.classList.add('bg-blue-500', 'text-white');
+        toast.classList.remove('bg-gray-900', 'dark:bg-gray-200', 'dark:text-black');
+    }
+    
+    setTimeout(() => {
+        toast.classList.add('opacity-0', 'pointer-events-none');
+    }, 2500);
+}
+
+// 初始化
+loadConfig();
+</script>

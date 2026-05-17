@@ -1,0 +1,1649 @@
+{% extends "layout.html" %}
+{% block title %}缺集管理 - EmbyPulse{% endblock %}
+
+{% block head %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/color-thief/2.3.0/color-thief.umd.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+<style>
+    /* === 🔥 Apple 级极简卡片质感 === */
+    .apple-card { 
+        background-color: rgba(255, 255, 255, 0.95); 
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-radius: 24px; 
+        padding: 24px; 
+        box-shadow: 0 4px 24px -8px rgba(0,0,0,0.04);
+        border: 1px solid rgba(0,0,0,0.02);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    html.dark .apple-card {
+        background-color: rgba(28, 28, 30, 0.85); 
+        box-shadow: 0 4px 24px -8px rgba(0, 0, 0, 0.4);
+        border: 1px solid rgba(255,255,255,0.04);
+    }
+
+    [x-cloak] { display: none !important; }
+    
+    @keyframes radar-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .radar-sweep { background: conic-gradient(from 0deg at 50% 50%, transparent 270deg, rgba(99, 102, 241, 0.4) 360deg); border-radius: 50%; animation: radar-spin 2s linear infinite; }
+    .dark .radar-sweep { background: conic-gradient(from 0deg at 50% 50%, transparent 270deg, rgba(129, 140, 248, 0.4) 360deg); }
+    
+    input[type="search"]::-webkit-search-decoration,
+    input[type="search"]::-webkit-search-cancel-button,
+    input[type="search"]::-webkit-search-results-button,
+    input[type="search"]::-webkit-search-results-decoration { display: none; }
+
+    /* === 🔔 Toast 通知样式 - 顶部居中胶囊气泡 === */
+    .toast-container { position: fixed; top: 40px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; align-items: center; gap: 12px; pointer-events: none; }
+    .toast-item { 
+        display: flex; align-items: center; gap: 10px; padding: 12px 20px; border-radius: 9999px; 
+        background: rgba(255,255,255,0.98); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+        box-shadow: 0 8px 32px -8px rgba(0,0,0,0.2); border: 1px solid rgba(0,0,0,0.04);
+        pointer-events: auto;
+        animation: toast-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .toast-item.toast-out { animation: toast-out 0.25s ease-in forwards; }
+    html.dark .toast-item { background: rgba(44,44,46,0.98); border-color: rgba(255,255,255,0.08); box-shadow: 0 8px 32px -8px rgba(0,0,0,0.6); }
+    .toast-icon { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; flex-shrink: 0; }
+    .toast-icon.success { background: linear-gradient(135deg, #10b981, #059669); color: white; }
+    .toast-icon.error { background: linear-gradient(135deg, #ef4444, #dc2626); color: white; }
+    .toast-icon.warning { background: linear-gradient(135deg, #f59e0b, #d97706); color: white; }
+    .toast-icon.info { background: linear-gradient(135deg, #6366f1, #4f46e5); color: white; }
+    .toast-content { flex: 1; min-width: 0; }
+    .toast-title { font-size: 13px; font-weight: 700; color: #1f2937; line-height: 1.3; }
+    html.dark .toast-title { color: #f3f4f6; }
+    .toast-message { font-size: 11px; color: #6b7280; margin-top: 2px; line-height: 1.4; }
+    html.dark .toast-message { color: #9ca3af; }
+    .toast-close { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #9ca3af; cursor: pointer; transition: all 0.2s; flex-shrink: 0; font-size: 10px; }
+    .toast-close:hover { background: rgba(0,0,0,0.05); color: #374151; }
+    html.dark .toast-close:hover { background: rgba(255,255,255,0.1); color: #e5e7eb; }
+    /* Toast 类型颜色 */
+    .toast-item.success { border-color: rgba(16, 185, 129, 0.3); }
+    .toast-item.error { border-color: rgba(239, 68, 68, 0.3); }
+    .toast-item.warning { border-color: rgba(245, 158, 11, 0.3); }
+    .toast-item.info { border-color: rgba(99, 102, 241, 0.3); }
+    html.dark .toast-item.success { border-color: rgba(16, 185, 129, 0.4); }
+    html.dark .toast-item.error { border-color: rgba(239, 68, 68, 0.4); }
+    html.dark .toast-item.warning { border-color: rgba(245, 158, 11, 0.4); }
+    html.dark .toast-item.info { border-color: rgba(99, 102, 241, 0.4); }
+    @keyframes toast-in { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes toast-out { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-20px); } }
+
+    /* === 🔥 自定义下拉菜单样式 === */
+    .custom-select { position: relative; }
+    .custom-select.open { z-index: 9999; }
+    .custom-select-trigger {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 12px 16px;
+        background: rgba(243,244,246,1);
+        border: 1px solid transparent;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-size: 13px;
+        font-weight: 500;
+        color: #374151;
+        width: 100%;
+    }
+    html.dark .custom-select-trigger {
+        background: #2C2C2E;
+        border-color: rgba(255,255,255,0.05);
+        color: #d1d5db;
+    }
+    .custom-select-trigger:hover {
+        border-color: rgba(99,102,241,0.3);
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+    html.dark .custom-select-trigger:hover {
+        border-color: rgba(129,140,248,0.3);
+        box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.15);
+    }
+    .custom-select-trigger-icon { font-size: 10px; color: #9ca3af; transition: transform 0.2s; }
+    .custom-select.open .custom-select-trigger-icon { transform: rotate(180deg); }
+    .custom-select-menu {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        margin-top: 6px;
+        max-height: 200px;
+        overflow-y: auto;
+        background: rgba(255,255,255,0.98);
+        border: 1px solid rgba(229,231,235,0.8);
+        border-radius: 12px;
+        box-shadow: 0 12px 32px -8px rgba(0,0,0,0.15);
+        z-index: 9999;
+        padding: 6px;
+        display: none;
+        animation: dropdownFadeIn 0.15s ease-out;
+    }
+    html.dark .custom-select-menu {
+        background: #1f2937;
+        border-color: #374151;
+        box-shadow: 0 12px 32px -8px rgba(0,0,0,0.5);
+    }
+    .custom-select-option {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 500;
+        color: #374151;
+        transition: all 0.15s;
+    }
+    html.dark .custom-select-option { color: #d1d5db; }
+    .custom-select-option:hover { background: #f3f4f6; }
+    html.dark .custom-select-option:hover { background: #374151; }
+    .custom-select-option.active {
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        color: white;
+    }
+    .custom-select-option-icon { font-size: 12px; width: 16px; text-align: center; }
+    @keyframes dropdownFadeIn {
+        from { opacity: 0; transform: translateY(-4px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* === 🔔 Confirm 确认框样式 === */
+    .confirm-overlay { position: fixed; inset: 0; z-index: 9998; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); }
+    .confirm-modal {
+        position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 9999;
+        width: 90%; max-width: 400px; padding: 24px; border-radius: 24px;
+        background: rgba(255,255,255,0.98); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+        box-shadow: 0 24px 48px -12px rgba(0,0,0,0.2); border: 1px solid rgba(0,0,0,0.04);
+        animation: confirm-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    html.dark .confirm-modal { background: rgba(44,44,46,0.98); border-color: rgba(255,255,255,0.08); box-shadow: 0 24px 48px -12px rgba(0,0,0,0.6); }
+    @keyframes confirm-in { from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+    .confirm-icon { width: 56px; height: 56px; border-radius: 16px; margin: 0 auto 16px; display: flex; align-items: center; justify-content: center; font-size: 24px; }
+    .confirm-icon.warning { background: linear-gradient(135deg, #fef3c7, #fde68a); color: #d97706; }
+    .confirm-icon.danger { background: linear-gradient(135deg, #fee2e2, #fecaca); color: #dc2626; }
+    html.dark .confirm-icon.warning { background: linear-gradient(135deg, rgba(217,119,6,0.2), rgba(217,119,6,0.1)); color: #fbbf24; }
+    html.dark .confirm-icon.danger { background: linear-gradient(135deg, rgba(220,38,38,0.2), rgba(220,38,38,0.1)); color: #f87171; }
+    .confirm-title { font-size: 18px; font-weight: 800; text-align: center; color: #111827; margin-bottom: 8px; }
+    html.dark .confirm-title { color: #f9fafb; }
+    .confirm-message { font-size: 14px; text-align: center; color: #6b7280; line-height: 1.5; white-space: pre-line; }
+    html.dark .confirm-message { color: #9ca3af; }
+    .confirm-buttons { display: flex; gap: 12px; margin-top: 24px; }
+    .confirm-btn { flex: 1; padding: 14px 20px; border-radius: 14px; font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.2s; }
+    .confirm-btn.cancel { background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; }
+    .confirm-btn.cancel:hover { background: #e5e7eb; }
+    html.dark .confirm-btn.cancel { background: #374151; color: #d1d5db; border-color: #4b5563; }
+    html.dark .confirm-btn.cancel:hover { background: #4b5563; }
+    .confirm-btn.danger { background: linear-gradient(135deg, #ef4444, #dc2626); color: white; border: none; box-shadow: 0 4px 12px -2px rgba(239,68,68,0.4); }
+    .confirm-btn.danger:hover { box-shadow: 0 6px 16px -2px rgba(239,68,68,0.5); transform: translateY(-1px); }
+    .confirm-btn.primary { background: linear-gradient(135deg, #6366f1, #4f46e5); color: white; border: none; box-shadow: 0 4px 12px -2px rgba(99,102,241,0.4); }
+    .confirm-btn.primary:hover { box-shadow: 0 6px 16px -2px rgba(99,102,241,0.5); transform: translateY(-1px); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div x-data="gapManager()" x-init="init()" class="w-full max-w-[1800px] mx-auto py-4 pb-40 px-4 sm:px-6 md:px-8 space-y-4 md:space-y-6" x-cloak>
+
+    <div class="apple-card flex flex-col xl:flex-row items-start xl:items-center justify-between gap-5 w-full mb-2 p-5 md:p-6">
+        <div class="flex items-center gap-4 pl-1 shrink-0 w-full xl:w-auto">
+            <div class="w-12 h-12 rounded-[14px] bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center text-xl shadow-lg shadow-indigo-500/30 shrink-0 relative overflow-hidden">
+                <div x-show="isScanning" class="absolute inset-0 radar-sweep"></div>
+                <i class="fa-solid fa-tower-broadcast relative z-10" :class="isScanning ? 'animate-pulse' : ''"></i>
+            </div>
+            <div>
+                <h2 class="text-xl md:text-[22px] font-bold tracking-tight text-gray-900 dark:text-white">媒体库缺集扫描</h2>
+                <div class="text-[12px] text-gray-500 mt-1 font-medium flex items-center gap-1.5">
+                    <i class="fa-solid fa-satellite-dish opacity-70"></i> <span>智能截胡与缺失补全网络</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex flex-col lg:flex-row items-stretch lg:items-center justify-end gap-3 w-full xl:flex-1">
+            <div class="relative w-full lg:max-w-[280px] xl:max-w-md shrink-0">
+                <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                    <i class="fa-solid fa-magnifying-glass transition-colors"></i>
+                </div>
+                <input type="search" 
+                       x-model="searchQuery" 
+                       autocomplete="off"
+                       name="gap_search_safeguard"
+                       data-lpignore="true" 
+                       data-form-type="other"
+                       placeholder="搜索缺失的剧集名称..." 
+                       class="w-full pl-10 pr-10 py-2.5 bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] border border-transparent dark:border-white/5 rounded-[12px] text-[13px] font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:bg-white dark:focus:bg-black/30 transition-all text-gray-800 dark:text-gray-200 shadow-sm placeholder-gray-400">
+                <button x-show="searchQuery" @click="searchQuery = ''" class="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 hover:text-indigo-500 transition-colors">
+                    <i class="fa-solid fa-circle-xmark"></i>
+                </button>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2 w-full lg:w-auto shrink-0">
+                <div class="flex gap-2 shrink-0">
+                    <button @click="openIgnoreModal()" class="w-10 h-10 flex items-center justify-center rounded-[12px] text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-[#2C2C2E] hover:bg-gray-200 dark:hover:bg-[#3A3A3C] transition-all shadow-sm border border-transparent dark:border-white/5 active:scale-95" title="忽略清单">
+                        <i class="fa-solid fa-trash-can-arrow-up"></i>
+                    </button>
+                    
+                    <button @click="openConfigModal()" class="w-10 h-10 flex items-center justify-center rounded-[12px] text-indigo-600 bg-indigo-50 dark:bg-indigo-500/10 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition-all shadow-sm border border-indigo-200/50 dark:border-indigo-500/20 active:scale-95" title="底层接管配置">
+                        <i class="fa-solid fa-gear"></i>
+                    </button>
+                </div>
+
+                <button @click="startScan()" :disabled="isScanning" class="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-[12px] text-[13px] font-bold transition-all shadow-sm active:scale-95 border border-transparent min-w-[120px]"
+                        :class="isScanning ? 'bg-gray-100 text-gray-400 dark:bg-[#2C2C2E] dark:text-gray-500 cursor-not-allowed dark:border-white/5' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-500/30 shadow-md'">
+                    <i x-show="!isScanning" class="fa-solid fa-satellite-dish"></i>
+                    <i x-show="isScanning" class="fa-solid fa-circle-notch fa-spin text-gray-400 dark:text-gray-500"></i>
+                    <span x-text="isScanning ? '雷达扫描中...' : '重新扫描'"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="isScanning" class="apple-card max-w-2xl mx-auto mt-10 text-center" x-cloak>
+        <div class="relative w-20 h-20 sm:w-24 sm:h-24 mx-auto mb-6">
+            <div class="absolute inset-0 border-4 border-indigo-50 dark:border-indigo-900/30 rounded-full"></div>
+            <div class="absolute inset-0 border-4 border-indigo-500 rounded-full border-t-transparent animate-spin"></div>
+            <i class="fa-solid fa-rocket text-3xl text-indigo-500 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></i>
+        </div>
+        <h3 class="text-[15px] sm:text-lg font-bold text-gray-800 dark:text-white mb-6" x-text="scanItem"></h3>
+        <div class="h-2.5 bg-gray-100 dark:bg-black/30 rounded-full overflow-hidden shadow-inner relative mx-2 sm:mx-4 border border-transparent dark:border-white/5">
+            <div class="h-full bg-gradient-to-r from-blue-500 to-indigo-500 transition-all duration-300 ease-out" :style="`width: ${scanTotal > 0 ? (scanProgress / scanTotal) * 100 : 0}%`"></div>
+        </div>
+        <div class="text-[11px] font-bold text-gray-400 dark:text-gray-500 mt-4 tracking-widest font-mono uppercase">
+            PROGRESS: <span x-text="scanProgress"></span> / <span x-text="scanTotal"></span>
+        </div>
+    </div>
+
+    <div x-show="!isScanning && hasScanned && filteredGaps.length === 0 && searchQuery" class="text-center py-32 apple-card" x-cloak>
+        <div class="w-24 h-24 bg-gray-50 dark:bg-[#2C2C2E] rounded-full flex items-center justify-center mx-auto mb-5 border border-gray-100 dark:border-white/5 shadow-sm">
+            <i class="fa-solid fa-magnifying-glass text-4xl text-gray-300 dark:text-gray-600"></i>
+        </div>
+        <h3 class="text-xl font-bold text-gray-900 dark:text-white">未找到匹配剧集</h3>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mt-2 font-medium">换个关键词试试，或者该剧很完美，没有缺集。</p>
+    </div>
+
+    <div x-show="!isScanning && filteredGaps.length > 0" class="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-4 md:gap-5 lg:gap-6" x-transition x-cloak>
+        <template x-for="series in displayedGaps" :key="series.series_id">
+            
+            <div :id="'card-' + series.series_id" class="relative apple-card !p-4 sm:!p-5 !rounded-[24px] transition-all duration-500 z-10 group hover:-translate-y-1 hover:shadow-[0_16px_32px_-12px_rgba(0,0,0,0.1)] dark:hover:shadow-[0_16px_32px_-12px_rgba(0,0,0,0.6)] overflow-hidden flex flex-row items-stretch h-[220px] sm:h-[240px] xl:h-[260px] gap-4 sm:gap-5 border border-gray-100 dark:border-white/5"
+                 :class="selectedSeries.includes(series.series_id) ? 'ring-2 ring-indigo-500 bg-indigo-50/20 dark:bg-indigo-900/10' : ''">
+                
+                <div :id="'tint-' + series.series_id" class="absolute inset-0 z-0 opacity-[0.12] dark:opacity-20 pointer-events-none transition-colors duration-1000"></div>
+
+                <div class="shrink-0 relative rounded-[14px] overflow-hidden shadow-md aspect-[2/3] h-full block group/poster border border-gray-200/50 dark:border-white/10 z-10">
+                    
+                    <label class="absolute top-2 left-2 z-30 cursor-pointer transition-all duration-400" 
+                           :class="selectedSeries.includes(series.series_id) ? 'opacity-100 scale-100' : 'opacity-0 scale-90 group-hover/poster:opacity-100 group-hover/poster:scale-100'">
+                        <input type="checkbox" :value="series.series_id" x-model="selectedSeries" class="hidden peer">
+                        <div class="w-[24px] h-[24px] rounded-full border-[1.5px] border-white/90 bg-black/30 backdrop-blur-md peer-checked:bg-indigo-500 peer-checked:border-indigo-500 shadow-sm flex items-center justify-center transition-all duration-300 group-hover/poster:bg-black/50 peer-checked:group-hover/poster:bg-indigo-600">
+                            <i class="fa-solid fa-check text-white text-[12px] opacity-0 peer-checked:opacity-100 transform scale-50 peer-checked:scale-100 transition-all duration-300"></i>
+                        </div>
+                    </label>
+
+                    <a :href="series.emby_url" target="_blank" class="w-full h-full block">
+                        <img :src="series.poster" crossorigin="anonymous" loading="lazy" :data-color-done="false" :onload="`applyThemeColor(this, 'card-${series.series_id}')`" class="w-full h-full object-cover group-hover/poster:scale-105 transition-transform duration-700 bg-gray-100 dark:bg-[#2C2C2E]">
+                        <div class="absolute inset-0 bg-black/40 opacity-0 group-hover/poster:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                            <i class="fa-solid fa-play text-white/90 text-3xl drop-shadow-lg"></i>
+                        </div>
+                    </a>
+                </div>
+
+                <div class="flex-1 min-w-0 flex flex-col justify-start z-10 h-full overflow-hidden">
+                    
+                    <div class="flex justify-between items-start gap-2 mb-3 shrink-0">
+                        <div class="min-w-0">
+                            <h3 class="text-[15px] sm:text-[16px] xl:text-[17px] font-bold text-gray-900 dark:text-white truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors" x-text="series.series_name"></h3>
+                            <div class="text-[11px] sm:text-[12px] text-gray-500 dark:text-gray-400 mt-1.5 flex items-center gap-1.5 font-medium">
+                                发现 <span class="text-rose-500 font-bold bg-rose-50 dark:bg-rose-500/10 px-1.5 py-0.5 rounded shadow-sm border border-rose-100 dark:border-rose-900/30" x-text="series.gaps.length"></span> 处断层
+                            </div>
+                        </div>
+                        <button @click.prevent="ignoreSeries(series)" class="w-8 h-8 rounded-full bg-gray-100/80 dark:bg-black/20 flex items-center justify-center text-gray-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/20 transition-all border border-gray-200/80 dark:border-white/5 backdrop-blur-md shadow-sm shrink-0" title="永久忽略该剧">
+                            <i class="fa-solid fa-eye-slash text-[12px]"></i>
+                        </button>
+                    </div>
+
+                    <div class="mt-1 overflow-y-auto pr-1.5 space-y-3 mac-scrollbar flex-1 pb-2">
+                        <template x-for="seasonGroup in series.grouped_gaps" :key="seasonGroup.season_num">
+                            <div class="flex flex-col gap-2">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-[12px] font-black text-indigo-500 dark:text-indigo-400 tracking-wider">S<span x-text="String(seasonGroup.season_num).padStart(2,'0')"></span></span>
+                                    <button @click="openResolverMulti(series, seasonGroup.season_num, seasonGroup.episodes)"
+                                            class="text-[10px] bg-indigo-50 text-indigo-600 hover:bg-indigo-500 hover:text-white px-2.5 py-0.5 rounded border border-indigo-200/50 shadow-sm dark:bg-indigo-900/30 dark:border-indigo-800 dark:text-indigo-400 transition-colors font-bold active:scale-95">
+                                        一键补齐
+                                    </button>
+                                </div>
+                                <div class="flex flex-wrap gap-1.5">
+                                    <template x-for="ep in seasonGroup.episodes" :key="ep.episode">
+                                        <button @click="openResolver(series, ep)" 
+                                                class="px-2.5 py-1.5 rounded-md border text-[11px] font-bold transition-all relative overflow-hidden shadow-sm active:scale-95"
+                                                :class="ep.status === 2 ? 'bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100 dark:bg-blue-500/20 dark:text-blue-400 dark:border-blue-500/30' : 'bg-white dark:bg-[#2C2C2E] text-rose-600 border-rose-200 hover:bg-rose-500 hover:text-white hover:border-rose-500 dark:text-rose-400 dark:border-rose-500/30 dark:hover:bg-rose-600 dark:hover:text-white'">
+                                            <div x-show="ep.status === 2" class="absolute inset-x-0 bottom-0 bg-blue-300 dark:bg-blue-500/50 animate-pulse h-1/2"></div>
+                                            <span class="relative z-10">E<span x-text="ep.episode"></span></span>
+                                        </button>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <div x-show="!isScanning && displayLimit < filteredGaps.length" class="text-center mt-10 pb-10" x-cloak>
+        <button @click="loadMore()" class="px-8 py-3.5 rounded-full bg-white dark:bg-[#2C2C2E] border border-gray-200 dark:border-white/5 text-gray-700 dark:text-gray-200 font-bold transition-all shadow-sm hover:shadow-md hover:-translate-y-0.5 active:scale-95 flex items-center justify-center gap-2 mx-auto text-[13px]">
+            <span>继续加载剩余 <span x-text="filteredGaps.length - displayLimit" class="text-indigo-500 font-black"></span> 部剧集</span> <i class="fa-solid fa-angle-down"></i>
+        </button>
+    </div>
+
+    <div x-show="!isScanning && hasScanned && gapData.length === 0" class="text-center py-32 apple-card" x-cloak>
+        <div class="w-24 h-24 bg-emerald-50 dark:bg-emerald-900/20 rounded-full flex items-center justify-center mx-auto mb-5 border border-emerald-100 dark:border-emerald-800/50 shadow-sm">
+            <i class="fa-solid fa-check-double text-4xl text-emerald-500"></i>
+        </div>
+        <h3 class="text-xl font-bold text-gray-900 dark:text-white tracking-tight">媒体库完美无暇</h3>
+        <p class="text-[13px] font-medium text-gray-500 dark:text-gray-400 mt-2">雷达未发现任何可修补的断层，强迫症极大满足。</p>
+    </div>
+
+    <div x-show="selectedSeries.length > 0" 
+         x-transition:enter="transition ease-out duration-400 cubic-bezier(0.34, 1.56, 0.64, 1)" 
+         x-transition:enter-start="opacity-0 translate-y-16 scale-90" 
+         x-transition:enter-end="opacity-100 translate-y-0 scale-100" 
+         x-transition:leave="transition ease-in duration-200" 
+         x-transition:leave-start="opacity-100 translate-y-0 scale-100" 
+         x-transition:leave-end="opacity-0 translate-y-16 scale-90" 
+         class="fixed z-[90] left-1/2 -translate-x-1/2 bottom-[88px] md:bottom-10 w-[92%] sm:w-auto max-w-2xl pointer-events-none" 
+         x-cloak>
+        
+        <div class="bg-white/90 dark:bg-[#1C1C1E]/90 backdrop-blur-2xl border border-gray-200/50 dark:border-white/10 shadow-[0_20px_40px_rgba(0,0,0,0.15)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.6)] rounded-full px-2 py-2 flex items-center justify-between gap-4 md:gap-8 pointer-events-auto">
+            
+            <div class="flex items-center pl-2 md:pl-4 shrink-0">
+                <div class="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-black text-[13px] shadow-inner border border-indigo-200/50 dark:border-indigo-500/30">
+                    <span x-text="selectedSeries.length"></span>
+                </div>
+                <span class="ml-2.5 text-[13px] font-bold text-gray-700 dark:text-gray-200 hidden sm:inline">项已选择</span>
+            </div>
+
+            <div class="flex items-center gap-1.5 pr-1">
+                <button @click="toggleSelectAll()" class="px-3 md:px-4 py-2 rounded-full text-[12px] font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#3A3A3C] transition-colors whitespace-nowrap active:scale-95">
+                    <span x-text="selectedSeries.length === displayedGaps.length ? '取消全选' : '全选本页'"></span>
+                </button>
+                <div class="w-[1px] h-5 bg-gray-200 dark:bg-gray-600 mx-1"></div>
+                <button @click="selectedSeries = []" class="w-9 h-9 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#3A3A3C] transition-colors shrink-0 active:scale-90" title="清空选择">
+                    <i class="fa-solid fa-xmark text-[14px]"></i>
+                </button>
+                <button @click="batchIgnoreSeries()" class="flex items-center gap-1.5 px-4 md:px-6 py-2.5 bg-rose-500 hover:bg-rose-600 text-white rounded-full text-[12px] md:text-[13px] font-bold shadow-md shadow-rose-500/30 transition-all active:scale-95 whitespace-nowrap ml-1 md:ml-2">
+                    <i class="fa-solid fa-eye-slash"></i> <span class="hidden sm:inline">批量忽略</span><span class="sm:inline hidden md:hidden">忽略</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 模态框：固定定位，无需 x-teleport -->
+    <div x-show="configModal.open" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" x-cloak>
+        <div @click.away="closeConfigModal()" class="bg-white dark:bg-[#1C1C1E] rounded-[24px] shadow-2xl w-full max-w-md flex flex-col overflow-hidden border border-transparent dark:border-white/5" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-10 scale-95" x-transition:enter-end="opacity-100 translate-y-0 scale-100">
+            <input type="text" style="display:none;" aria-hidden="true" autocomplete="username">
+            <input type="password" style="display:none;" aria-hidden="true" autocomplete="current-password">
+
+            <div class="px-6 py-5 border-b border-gray-100 dark:border-white/5 flex justify-between items-center bg-gray-50/50 dark:bg-black/10 z-10">
+                <h3 class="font-black text-[17px] text-gray-900 dark:text-white flex items-center gap-2">
+                    <i class="fa-solid fa-wand-magic-sparkles text-indigo-500"></i> 底层接管配置
+                </h3>
+                <button @click="closeConfigModal()" class="text-gray-400 hover:text-rose-500 transition w-8 h-8 flex items-center justify-center bg-gray-100 dark:bg-[#2C2C2E] rounded-full shadow-sm"><i class="fa-solid fa-xmark text-sm"></i></button>
+            </div>
+            <div class="p-6 space-y-5 max-h-[70vh] overflow-y-auto mac-scrollbar">
+                <p class="text-[11px] text-gray-500 dark:text-gray-400 mb-2 leading-relaxed bg-indigo-50 dark:bg-indigo-500/10 p-3 rounded-xl border border-indigo-100 dark:border-indigo-500/20">配置后，系统将在向 MP 发送整季包种子后，秘密潜入下载器中精确切除非必要集数。</p>
+
+                <!-- 🔥 缓存更新间隔设置 -->
+                <div class="bg-orange-50/50 dark:bg-orange-500/10 rounded-xl p-3 border border-orange-100 dark:border-orange-500/20">
+                    <label class="block text-[11px] font-bold text-orange-600 dark:text-orange-400 mb-1.5 uppercase tracking-wider pl-1 flex items-center gap-2">
+                        <i class="fa-solid fa-clock-rotate-left"></i> 追剧缓存更新间隔
+                    </label>
+                    <p class="text-[10px] text-gray-400 mb-2">用户中心的"我的追剧"数据从此缓存读取，设置自动刷新间隔可保持数据新鲜</p>
+                    <div class="flex items-center gap-2">
+                        <div class="custom-select flex-1" x-data="{ open: false }" @click.away="open = false">
+                            <div class="custom-select-trigger" @click="open = !open">
+                                <span x-text="configModal.cache_interval_hours === '1' ? '每 1 小时' : configModal.cache_interval_hours === '3' ? '每 3 小时' : configModal.cache_interval_hours === '6' ? '每 6 小时' : configModal.cache_interval_hours === '12' ? '每 12 小时' : '每 24 小时'"></span>
+                                <i class="fa-solid fa-chevron-down custom-select-trigger-icon"></i>
+                            </div>
+                            <div class="custom-select-menu" :style="open ? 'display: block;' : ''">
+                                <div class="custom-select-option" :class="{ 'active': configModal.cache_interval_hours === '1' }" @click="configModal.cache_interval_hours = '1'; open = false"><i class="fa-solid fa-clock custom-select-option-icon"></i> 每 1 小时</div>
+                                <div class="custom-select-option" :class="{ 'active': configModal.cache_interval_hours === '3' }" @click="configModal.cache_interval_hours = '3'; open = false"><i class="fa-solid fa-clock custom-select-option-icon"></i> 每 3 小时</div>
+                                <div class="custom-select-option" :class="{ 'active': configModal.cache_interval_hours === '6' }" @click="configModal.cache_interval_hours = '6'; open = false"><i class="fa-solid fa-clock custom-select-option-icon"></i> 每 6 小时</div>
+                                <div class="custom-select-option" :class="{ 'active': configModal.cache_interval_hours === '12' }" @click="configModal.cache_interval_hours = '12'; open = false"><i class="fa-solid fa-clock custom-select-option-icon"></i> 每 12 小时</div>
+                                <div class="custom-select-option" :class="{ 'active': configModal.cache_interval_hours === '24' }" @click="configModal.cache_interval_hours = '24'; open = false"><i class="fa-solid fa-clock custom-select-option-icon"></i> 每 24 小时</div>
+                            </div>
+                        </div>
+                        <span class="text-[11px] text-gray-500 font-medium">自动刷新</span>
+                    </div>
+                </div>
+
+                <!-- 媒体库屏蔽设置 -->
+                <div>
+                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider pl-1 flex items-center gap-2">
+                        <i class="fa-solid fa-ban text-rose-500"></i> 屏蔽媒体库
+                    </label>
+                    <p class="text-[10px] text-gray-400 mb-2">选择不参与缺集扫描的媒体库</p>
+                    <div class="space-y-2 max-h-[150px] overflow-y-auto mac-scrollbar bg-gray-50 dark:bg-[#2C2C2E] rounded-xl p-3 border border-gray-100 dark:border-white/5">
+                        <template x-if="configModal.libraries.length === 0">
+                            <div class="text-[12px] text-gray-400 text-center py-2">加载中...</div>
+                        </template>
+                        <template x-for="lib in configModal.libraries" :key="lib.id">
+                            <label class="flex items-center gap-3 p-2 rounded-lg hover:bg-white dark:hover:bg-[#3A3A3C] transition-colors cursor-pointer">
+                                <input type="checkbox" :value="lib.id" x-model="configModal.excludedLibraries" class="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                                <div class="flex-1 min-w-0">
+                                    <div class="text-[13px] font-medium text-gray-800 dark:text-gray-200 truncate" x-text="lib.name"></div>
+                                    <div class="text-[10px] text-gray-400" x-text="lib.series_count > 0 ? lib.series_count + ' 部剧集' : '空媒体库'"></div>
+                                </div>
+                            </label>
+                        </template>
+                    </div>
+                </div>
+
+                <div class="border-t border-gray-100 dark:border-white/5 pt-4">
+                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider pl-1">下载器类型</label>
+                    <div class="custom-select" x-data="{ open: false }" @click.away="open = false">
+                        <div class="custom-select-trigger" @click="open = !open">
+                            <span x-text="configModal.client_type === 'qbittorrent' ? 'qBittorrent' : configModal.client_type === 'transmission' ? 'Transmission' : '（不启用截胡，让 MP 处理）'"></span>
+                            <i class="fa-solid fa-chevron-down custom-select-trigger-icon"></i>
+                        </div>
+                        <div class="custom-select-menu" :style="open ? 'display: block;' : ''">
+                            <div class="custom-select-option" :class="{ 'active': configModal.client_type === '' }" @click="configModal.client_type = ''; open = false"><i class="fa-solid fa-ban custom-select-option-icon"></i> （不启用截胡，让 MP 处理）</div>
+                            <div class="custom-select-option" :class="{ 'active': configModal.client_type === 'qbittorrent' }" @click="configModal.client_type = 'qbittorrent'; open = false"><i class="fa-solid fa-download custom-select-option-icon"></i> qBittorrent</div>
+                            <div class="custom-select-option" :class="{ 'active': configModal.client_type === 'transmission' }" @click="configModal.client_type = 'transmission'; open = false"><i class="fa-solid fa-download custom-select-option-icon"></i> Transmission</div>
+                        </div>
+                    </div>
+                </div>
+                <div x-show="configModal.client_type !== ''">
+                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider pl-1">API 地址 (带端口)</label>
+                    <input type="text" x-model="configModal.client_url" placeholder="http://192.168.31.2:8080" class="w-full px-4 py-3 rounded-xl border border-transparent dark:border-white/5 bg-gray-100 dark:bg-[#2C2C2E] text-gray-800 dark:text-gray-100 text-[13px] font-mono outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all shadow-sm">
+                </div>
+                <div x-show="configModal.client_type !== ''">
+                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider pl-1">验证账号</label>
+                    <input type="text" x-model="configModal.client_user" placeholder="admin" class="w-full px-4 py-3 rounded-xl border border-transparent dark:border-white/5 bg-gray-100 dark:bg-[#2C2C2E] text-gray-800 dark:text-gray-100 text-[13px] font-mono outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all shadow-sm">
+                </div>
+                <div x-show="configModal.client_type !== ''">
+                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider pl-1">验证密码</label>
+                    <input type="password" autocomplete="new-password" x-model="configModal.client_pass" placeholder="••••••••" class="w-full px-4 py-3 rounded-xl border border-transparent dark:border-white/5 bg-gray-100 dark:bg-[#2C2C2E] text-gray-800 dark:text-gray-100 text-[13px] font-mono outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all shadow-sm">
+                </div>
+            </div>
+            <div class="px-6 py-5 border-t border-gray-100 dark:border-white/5 flex justify-end gap-3 shrink-0 bg-white dark:bg-[#1C1C1E]">
+                <button @click="closeConfigModal()" class="px-5 py-2.5 rounded-xl text-[13px] font-bold text-gray-600 bg-gray-100 border border-transparent hover:bg-gray-200 dark:bg-[#2C2C2E] dark:text-gray-300 dark:hover:bg-[#3A3A3C] transition-colors shadow-sm">取消</button>
+                <button @click="saveConfig()" class="px-6 py-2.5 rounded-xl text-[13px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition shadow-md active:scale-95">保存引擎配置</button>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="ignoreModal.open" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" x-cloak>
+        <div @click.away="closeIgnoreModal()" class="bg-white dark:bg-[#1C1C1E] rounded-[24px] shadow-2xl w-full max-w-2xl flex flex-col max-h-[85vh] overflow-hidden relative border border-transparent dark:border-white/5" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-10 scale-95" x-transition:enter-end="opacity-100 translate-y-0 scale-100">
+            <div class="p-5 border-b border-gray-100 dark:border-white/5 flex justify-between items-center bg-gray-50/50 dark:bg-black/10 z-20 sticky top-0 shrink-0">
+                <h3 class="font-black text-gray-900 dark:text-white flex items-center gap-2 text-[17px]">
+                    <i class="fa-solid fa-trash-can-arrow-up text-indigo-500"></i> 忽略与免检清单
+                </h3>
+                <button @click="closeIgnoreModal()" class="text-gray-400 hover:text-rose-500 transition w-8 h-8 flex items-center justify-center bg-gray-100 dark:bg-[#2C2C2E] rounded-full shadow-sm"><i class="fa-solid fa-xmark text-sm"></i></button>
+            </div>
+            
+            <div class="flex flex-col gap-2 p-3 bg-white/80 dark:bg-[#1C1C1E]/80 border-b border-gray-100 dark:border-white/5 sticky z-10 backdrop-blur-xl shrink-0 shadow-sm">
+                <!-- 搜索框 -->
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                        <i class="fa-solid fa-magnifying-glass text-xs"></i>
+                    </div>
+                    <input type="text" x-model="ignoreSearchQuery" placeholder="搜索剧集名称..." class="w-full pl-9 pr-9 py-2 bg-gray-100 dark:bg-[#2C2C2E] border border-transparent dark:border-white/5 rounded-lg text-[12px] font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/50 text-gray-800 dark:text-gray-200 placeholder-gray-400">
+                    <button x-show="ignoreSearchQuery" @click="ignoreSearchQuery = ''" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-indigo-500">
+                        <i class="fa-solid fa-circle-xmark text-xs"></i>
+                    </button>
+                </div>
+
+                <!-- 分类标签 -->
+                <div class="flex items-center gap-2">
+                    <button @click="setIgnoreFilter('all')" class="px-3 py-1.5 rounded-lg text-[11px] font-bold transition-colors" :class="ignoreFilter === 'all' ? 'bg-gray-100 dark:bg-[#2C2C2E] shadow-sm text-indigo-600 dark:text-indigo-400 border border-gray-200/50 dark:border-white/5' : 'text-gray-500 hover:bg-gray-50 dark:hover:bg-white/5'">全部</button>
+                    <button @click="setIgnoreFilter('perfect')" class="px-3 py-1.5 rounded-lg text-[11px] font-bold transition-colors" :class="ignoreFilter === 'perfect' ? 'bg-gray-100 dark:bg-[#2C2C2E] shadow-sm text-amber-600 dark:text-amber-400 border border-gray-200/50 dark:border-white/5' : 'text-gray-500 hover:bg-gray-50 dark:hover:bg-white/5'">🥇 完结免检</button>
+                    <button @click="setIgnoreFilter('ignored')" class="px-3 py-1.5 rounded-lg text-[11px] font-bold transition-colors" :class="ignoreFilter === 'ignored' ? 'bg-gray-100 dark:bg-[#2C2C2E] shadow-sm text-rose-600 dark:text-rose-400 border border-gray-200/50 dark:border-white/5' : 'text-gray-500 hover:bg-gray-50 dark:hover:bg-white/5'">🙈 手动屏蔽</button>
+
+                    <!-- 批量操作按钮 -->
+                    <div class="ml-auto flex items-center gap-1.5" x-show="filteredIgnoreItems.length > 0">
+                        <label class="flex items-center gap-1.5 cursor-pointer text-[11px] text-gray-500 hover:text-indigo-500 transition-colors">
+                            <input type="checkbox" :checked="ignoreSelectedAll" @change="toggleIgnoreSelectAll()" class="w-3.5 h-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                            <span>全选</span>
+                        </label>
+                        <button x-show="ignoreSelectedItems.length > 0" @click="batchUnignore()" class="px-2.5 py-1.5 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500 hover:text-white rounded-lg text-[10px] font-bold transition-all active:scale-95">
+                            <i class="fa-solid fa-rotate-left mr-1"></i>恢复(<span x-text="ignoreSelectedItems.length"></span>)
+                        </button>
+                        <button x-show="ignoreSelectedItems.length > 0" @click="batchDeleteIgnore()" class="px-2.5 py-1.5 bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 text-rose-600 dark:text-rose-400 hover:bg-rose-500 hover:text-white rounded-lg text-[10px] font-bold transition-all active:scale-95">
+                            <i class="fa-solid fa-trash mr-1"></i>删除(<span x-text="ignoreSelectedItems.length"></span>)
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex-1 overflow-y-auto p-4 mac-scrollbar space-y-3 bg-gray-50/30 dark:bg-black/10">
+                <template x-for="item in paginatedIgnoreItems" :key="item.id + item.target">
+                    <div class="flex items-center gap-3 p-4 bg-white dark:bg-[#1C1C1E] hover:bg-gray-50 dark:hover:bg-[#2C2C2E] rounded-2xl border border-gray-100 dark:border-white/5 transition-all shadow-sm group" :class="ignoreSelectedItems.includes(item.id + '_' + item.target) ? 'ring-2 ring-indigo-500 bg-indigo-50/20 dark:bg-indigo-900/10' : ''">
+                        <input type="checkbox" :value="item.id + '_' + item.target" :checked="ignoreSelectedItems.includes(item.id + '_' + item.target)" @change="toggleIgnoreItem(item)" class="w-4 h-4 mt-1 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 shrink-0">
+                        <div class="flex-1 min-w-0">
+                            <div class="text-[13px] sm:text-[14px] font-bold text-gray-800 dark:text-gray-200 mb-1.5 truncate" x-text="item.series_name"></div>
+                            <div class="text-[10px] flex flex-wrap gap-2 items-center">
+                                <template x-if="item.type === 'perfect'">
+                                    <span class="px-2 py-0.5 rounded-md font-black bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400 border border-amber-200/50 dark:border-amber-500/20 flex items-center gap-1 shadow-sm"><i class="fa-solid fa-medal"></i> 免检金牌</span>
+                                </template>
+                                <template x-if="item.type === 'record' && item.target === '全剧集'">
+                                    <span class="px-2 py-0.5 rounded-md font-black bg-gray-100 text-gray-600 dark:bg-[#3A3A3C] dark:text-gray-300 border border-gray-200/50 dark:border-white/5 flex items-center gap-1 shadow-sm"><i class="fa-solid fa-ban"></i> 屏蔽全剧</span>
+                                </template>
+                                <template x-if="item.type === 'record' && item.target !== '全剧集'">
+                                    <span class="px-2 py-0.5 rounded-md font-black bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400 border border-rose-200/50 dark:border-rose-500/20 flex items-center gap-1 shadow-sm"><i class="fa-solid fa-eye-slash"></i> <span x-text="item.target"></span></span>
+                                </template>
+
+                                <span class="text-gray-400 font-mono flex items-center gap-1.5"><i class="fa-regular fa-clock"></i> <span x-text="item.time ? item.time.split('.')[0] : '未知时间'"></span></span>
+                            </div>
+                        </div>
+                        <div class="flex flex-col gap-1.5 shrink-0">
+                            <button @click="unignoreItem(item)" class="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500 hover:text-white dark:hover:bg-indigo-500 dark:hover:text-white rounded-lg text-[10px] font-bold transition-all shadow-sm active:scale-95" title="恢复扫描">
+                                <i class="fa-solid fa-rotate-left"></i>
+                            </button>
+                            <button @click="deleteIgnoreItem(item)" class="px-3 py-1.5 bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 text-rose-600 dark:text-rose-400 hover:bg-rose-500 hover:text-white dark:hover:bg-rose-500 dark:hover:text-white rounded-lg text-[10px] font-bold transition-all shadow-sm active:scale-95" title="彻底删除">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                </template>
+                
+                <div x-show="paginatedIgnoreItems.length < filteredIgnoreItems.length" class="text-center py-4">
+                    <button @click="loadMoreIgnoreItems()" class="px-6 py-2.5 bg-white dark:bg-[#2C2C2E] border border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-300 text-[12px] font-bold rounded-xl shadow-sm hover:bg-gray-50 dark:hover:bg-[#3A3A3C] transition-colors active:scale-95">加载更多记录</button>
+                </div>
+
+                <div x-show="filteredIgnoreItems.length === 0" class="text-center py-20 text-gray-400 text-[13px] font-bold tracking-widest"><i class="fa-solid fa-box-open text-5xl opacity-20 mb-4 block"></i>当前过滤条件下为空</div>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="resolver.open" class="fixed inset-0 z-[100] flex items-end md:items-center justify-center p-0 md:p-4 bg-black/60 backdrop-blur-sm" x-cloak>
+        <div class="absolute inset-0" @click="closeResolver()"></div>
+        <div x-show="resolver.open" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-full md:translate-y-10 scale-95" x-transition:enter-end="opacity-100 translate-y-0 scale-100" 
+             class="relative w-full md:w-[700px] max-h-[90vh] bg-white dark:bg-[#1C1C1E] md:rounded-[24px] rounded-t-[32px] overflow-hidden shadow-2xl flex flex-col border border-transparent dark:border-white/5">
+            <div class="px-5 py-5 sm:px-6 sm:py-5 border-b border-gray-100 dark:border-white/5 flex justify-between items-center bg-gray-50/50 dark:bg-black/10 shrink-0">
+                <div>
+                    <h3 class="text-[17px] font-black text-gray-900 dark:text-white flex items-center gap-2 tracking-tight">
+                        <i class="fa-solid fa-cloud text-emerald-500" x-show="resolver.targetDesc && resolver.targetDesc.includes('影巢')"></i>
+                        <i class="fa-solid fa-dna text-indigo-500" x-show="!resolver.targetDesc || !resolver.targetDesc.includes('影巢')"></i>
+                        <span x-text="resolver.targetDesc && resolver.targetDesc.includes('影巢') ? '影巢资源列表' : '基因配型中心'"></span>
+                    </h3>
+                    <p class="text-[11px] font-medium text-gray-500 dark:text-gray-400 mt-1">
+                        <span x-show="resolver.targetDesc && resolver.targetDesc.includes('影巢')">115网盘资源，点击选择并解锁转存</span>
+                        <span x-show="!resolver.targetDesc || !resolver.targetDesc.includes('影巢')">为 <span class="font-bold text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-[#2C2C2E] px-1.5 py-0.5 rounded shadow-inner" x-text="resolver.targetDesc"></span> 寻找最佳片源</span>
+                    </p>
+                </div>
+                <button @click="closeResolver()" class="w-8 h-8 rounded-full bg-gray-100 dark:bg-[#2C2C2E] hover:text-rose-500 text-gray-500 transition-colors flex items-center justify-center shadow-sm">
+                    <i class="fa-solid fa-xmark text-sm"></i>
+                </button>
+            </div>
+            <div class="p-5 sm:p-6 overflow-y-auto flex-1 mac-scrollbar bg-white dark:bg-transparent">
+                <div class="mb-6" x-show="!resolver.targetDesc || !resolver.targetDesc.includes('影巢')">
+                    <div class="text-[10px] font-bold text-gray-400 dark:text-gray-500 tracking-widest uppercase mb-3 flex items-center gap-2"><i class="fa-solid fa-microscope"></i>提取的家族基因</div>
+                    <div class="flex gap-2 flex-wrap" x-show="!resolver.isLoading">
+                        <template x-for="gene in resolver.genes" :key="gene">
+                            <span class="px-2.5 py-1 bg-gray-50 dark:bg-[#2C2C2E] border border-gray-200/80 dark:border-white/5 text-gray-700 dark:text-gray-300 text-[11px] font-bold rounded-lg shadow-sm" x-text="gene"></span>
+                        </template>
+                    </div>
+                    <div x-show="resolver.isLoading" class="h-8 w-40 bg-gray-100 dark:bg-[#2C2C2E] rounded-lg animate-pulse"></div>
+                </div>
+                <div>
+                    <div class="text-[10px] font-bold text-gray-400 dark:text-gray-500 tracking-widest uppercase mb-3 flex items-center gap-2">
+                        <i class="fa-solid fa-cloud text-emerald-500" x-show="resolver.targetDesc && resolver.targetDesc.includes('影巢')"></i>
+                        <i class="fa-solid fa-satellite-dish" x-show="!resolver.targetDesc || !resolver.targetDesc.includes('影巢')"></i>
+                        <span x-text="resolver.targetDesc && resolver.targetDesc.includes('影巢') ? '影巢115资源' : 'MoviePilot 匹配舱'"></span>
+                        <i x-show="resolver.isLoading" class="fa-solid fa-circle-notch fa-spin text-indigo-500 ml-1"></i>
+                    </div>
+                    <div x-show="resolver.isLoading" class="space-y-3"><div class="h-20 w-full bg-gray-50 dark:bg-[#2C2C2E]/50 rounded-[16px] animate-pulse border border-gray-100 dark:border-white/5"></div></div>
+                    <div x-show="!resolver.isLoading && resolver.results.length > 0" class="space-y-3">
+
+                        <template x-for="(res, index) in resolver.results" :key="index">
+                            <label class="flex items-start gap-3.5 p-4 rounded-[16px] border cursor-pointer transition-all hover:bg-gray-50 dark:hover:bg-[#2C2C2E]/40" :class="resolver.selectedItems.includes(index) ? 'border-indigo-500 bg-indigo-50/30 dark:bg-indigo-900/10 shadow-md ring-1 ring-indigo-500/20' : 'border-gray-200/80 dark:border-white/5 shadow-sm'">
+                                <input type="checkbox" :value="index" :checked="resolver.selectedItems.includes(index)" @change="toggleResolverSelection(index)" class="w-5 h-5 mt-0.5 text-indigo-600 focus:ring-indigo-500 border-gray-300 dark:border-gray-600 dark:bg-[#1C1C1E] cursor-pointer rounded">
+                                <div class="flex-1 min-w-0">
+                                    <div class="font-bold text-[13px] sm:text-[14px] text-gray-900 dark:text-white truncate mb-1" x-text="res.ui_title"></div>
+
+                                    <template x-if="res.is_pack">
+                                        <div class="mt-1 mb-1.5 inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md font-black border bg-amber-50 text-amber-600 border-amber-200/50 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20 shadow-sm">
+                                            <i class="fa-solid fa-box-open"></i> 包含目标集的整季包 (自动截胡)
+                                        </div>
+                                    </template>
+
+                                    <!-- 新增字段：国语、中字、折扣信息、H&R -->
+                                    <div class="flex flex-wrap items-center gap-1.5 mb-2">
+                                        <template x-if="res.ui_chinese_audio">
+                                            <span class="text-[10px] px-2 py-0.5 rounded-md font-bold border bg-orange-50 text-orange-600 border-orange-200/50 dark:bg-orange-500/10 dark:text-orange-400 dark:border-orange-500/20 shadow-sm">
+                                                <i class="fa-solid fa-volume-high mr-0.5"></i>国语
+                                            </span>
+                                        </template>
+                                        <template x-if="res.ui_chinese_sub">
+                                            <span class="text-[10px] px-2 py-0.5 rounded-md font-bold border bg-blue-50 text-blue-600 border-blue-200/50 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20 shadow-sm">
+                                                <i class="fa-solid fa-closed-captioning mr-0.5"></i>中字
+                                            </span>
+                                        </template>
+                                        <template x-if="res.ui_free">
+                                            <span class="text-[10px] px-2 py-0.5 rounded-md font-bold border bg-emerald-50 text-emerald-600 border-emerald-200/50 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20 shadow-sm">
+                                                <i class="fa-solid fa-gift mr-0.5"></i>免费
+                                            </span>
+                                        </template>
+                                        <template x-if="res.ui_discount && !res.ui_free">
+                                            <span class="text-[10px] px-2 py-0.5 rounded-md font-bold border bg-rose-50 text-rose-600 border-rose-200/50 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20 shadow-sm">
+                                                <i class="fa-solid fa-tag mr-0.5"></i><span x-text="res.ui_discount"></span>
+                                            </span>
+                                        </template>
+                                        <template x-if="res.ui_hnr">
+                                            <span class="text-[10px] px-2 py-0.5 rounded-md font-bold border bg-red-50 text-red-600 border-red-200/50 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20 shadow-sm">
+                                                <i class="fa-solid fa-triangle-exclamation mr-0.5"></i>H&R
+                                            </span>
+                                        </template>
+                                        <template x-if="res.ui_resource">
+                                            <span class="text-[10px] px-2 py-0.5 rounded-md font-bold border bg-purple-50 text-purple-600 border-purple-200/50 dark:bg-purple-500/10 dark:text-purple-400 dark:border-purple-500/20 shadow-sm">
+                                                <i class="fa-solid fa-film mr-0.5"></i><span x-text="res.ui_resource"></span>
+                                            </span>
+                                        </template>
+                                        <!-- 🔥 分辨率显示 -->
+                                        <template x-if="res.ui_resolution && !res.is_hdhive">
+                                            <span class="text-[10px] px-2 py-0.5 rounded-md font-bold border bg-cyan-50 text-cyan-600 border-cyan-200/50 dark:bg-cyan-500/10 dark:text-cyan-400 dark:border-cyan-500/20 shadow-sm">
+                                                <i class="fa-solid fa-display mr-0.5"></i><span x-text="res.ui_resolution"></span>
+                                            </span>
+                                        </template>
+                                    </div>
+
+                                    <!-- 🔥 集数匹配信息（MP资源专用） -->
+                                    <template x-if="!res.is_hdhive && res.ui_extracted_episodes && res.ui_extracted_episodes.length > 0">
+                                        <div class="text-[11px] text-gray-500 dark:text-gray-400 mb-2 bg-gray-50 dark:bg-[#2C2C2E] px-2 py-1.5 rounded border border-gray-100 dark:border-white/5">
+                                            <div class="flex items-center gap-1.5 mb-1">
+                                                <i class="fa-solid fa-list-ol text-indigo-500"></i>
+                                                <span class="font-bold">提取集数:</span>
+                                                <span class="font-mono text-gray-700 dark:text-gray-300" x-text="res.ui_extracted_episodes.join(', ')"></span>
+                                            </div>
+                                            <div class="flex items-center gap-1.5" x-show="res.ui_matched_episodes && res.ui_matched_episodes.length > 0">
+                                                <i class="fa-solid fa-check-circle text-emerald-500"></i>
+                                                <span class="font-bold">匹配目标:</span>
+                                                <span class="font-mono text-emerald-600 dark:text-emerald-400" x-text="res.ui_matched_episodes.join(', ')"></span>
+                                                <span class="ml-1 px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold" x-text="res.ui_episode_match_ratio + '%'"></span>
+                                            </div>
+                                            <div class="flex items-center gap-1.5 text-rose-500" x-show="res.ui_episode_match_ratio === 0">
+                                                <i class="fa-solid fa-times-circle"></i>
+                                                <span class="font-bold">不匹配目标集数</span>
+                                            </div>
+                                        </div>
+                                    </template>
+
+                                    <!-- 中文备注 (MP资源用ui_desc，影巢资源用hdhive_info.remark) -->
+                                    <template x-if="res.ui_desc || (res.is_hdhive && res.hdhive_info && res.hdhive_info.remark)">
+                                        <div class="text-[11px] text-gray-500 dark:text-gray-400 mb-2 line-clamp-2 bg-gray-50 dark:bg-[#2C2C2E] px-2 py-1.5 rounded border border-gray-100 dark:border-white/5" x-text="res.ui_desc || (res.hdhive_info ? res.hdhive_info.remark : '')"></div>
+                                    </template>
+
+                                    <!-- MP标签 -->
+                                    <template x-if="res.ui_labels && res.ui_labels.length > 0">
+                                        <div class="flex flex-wrap gap-1 mb-2">
+                                            <template x-for="label in res.ui_labels" :key="label">
+                                                <span class="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-[#3A3A3C] text-gray-600 dark:text-gray-400 font-medium" x-text="label"></span>
+                                            </template>
+                                        </div>
+                                    </template>
+
+                                    <div class="flex flex-wrap items-center gap-2 mt-1.5">
+                                        <span class="text-[10px] px-2 py-0.5 rounded-md font-black border shadow-sm" :class="res.match_score >= 50 ? 'bg-emerald-50 text-emerald-600 border-emerald-200/50 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20' : (res.match_score > 0 ? 'bg-indigo-50 text-indigo-600 border-indigo-200/50 dark:bg-indigo-500/10 dark:text-indigo-400 dark:border-indigo-500/20' : 'bg-gray-100 text-gray-500 border-gray-200/50 dark:bg-[#3A3A3C] dark:text-gray-300 dark:border-white/5')">Score: <span x-text="res.match_score"></span></span>
+                                        <span class="text-[10px] font-mono text-gray-500 dark:text-gray-400 font-bold bg-gray-50 dark:bg-[#2C2C2E] px-1.5 py-0.5 rounded border border-gray-200/50 dark:border-white/5 shadow-sm" x-text="res.is_hdhive ? res.ui_size : formatBytes(res.ui_size)"></span>
+                                        <span class="text-[10px] text-teal-600 dark:text-teal-400 font-bold flex items-center gap-1 ml-1"><i class="fa-solid fa-server"></i> <span x-text="res.ui_site"></span></span>
+                                        <span class="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1 ml-1"><i class="fa-solid fa-seedling"></i> <span x-text="res.ui_seeders"></span></span>
+                                        <template x-for="tag in res.extracted_tags" :key="tag"><span class="text-[10px] text-indigo-500 dark:text-indigo-400 font-bold ml-1 bg-indigo-50 dark:bg-indigo-500/10 px-1.5 rounded" x-text="tag"></span></template>
+                                        <!-- 影巢资源：分享人 -->
+                                        <template x-if="res.is_hdhive && res.hdhive_info && res.hdhive_info.uploader">
+                                            <span class="text-[10px] text-amber-600 dark:text-amber-400 font-bold flex items-center gap-1 ml-1 bg-amber-50 dark:bg-amber-500/10 px-1.5 rounded">
+                                                <i class="fa-solid fa-user"></i> <span x-text="res.hdhive_info.uploader"></span>
+                                            </span>
+                                        </template>
+                                    </div>
+                                </div>
+                            </label>
+                        </template>
+
+                    </div>
+                    <div x-show="!resolver.isLoading && resolver.results.length === 0" class="text-center py-16 apple-card !shadow-none !border-dashed"><i class="fa-solid fa-satellite text-5xl text-gray-200 dark:text-gray-700 mb-4 block"></i><p class="text-[13px] font-bold text-gray-400 tracking-widest uppercase">未捕获到符合该集的资源星尘</p></div>
+                </div>
+            </div>
+            <div class="px-5 py-4 sm:px-6 sm:py-5 border-t border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-black/10 flex gap-3 pb-[env(safe-area-inset-bottom)] shrink-0">
+                <button x-show="resolver.targetType === 'single' && (!resolver.targetDesc || !resolver.targetDesc.includes('影巢'))" @click="ignoreGap()" class="px-5 py-3 rounded-xl text-[13px] font-bold text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 dark:bg-[#2C2C2E] dark:border-white/5 dark:text-gray-300 dark:hover:bg-[#3A3A3C] transition-colors shadow-sm flex items-center justify-center gap-2 active:scale-95"><i class="fa-solid fa-eye-slash"></i> <span class="hidden sm:inline">忽略单集</span></button>
+                <!-- 来源选择按钮 -->
+                <button @click="showSourceSelect()" :disabled="resolver.selectedItems.length === 0 || resolver.isSubmitting" class="flex-1 py-3 rounded-xl text-[13px] font-bold text-white transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]" :class="resolver.selectedItems.length > 0 ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-500/30' : 'bg-gray-400 dark:bg-gray-600 shadow-none border border-transparent'">
+                    <span x-show="resolver.isSubmitting" class="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full"></span>
+                    <span x-show="!resolver.isSubmitting">
+                        <i class="fa-solid fa-bolt mr-1" x-show="!resolver.targetDesc || !resolver.targetDesc.includes('影巢')"></i>
+                        <i class="fa-solid fa-lock-open mr-1" x-show="resolver.targetDesc && resolver.targetDesc.includes('影巢')"></i>
+                        <span x-text="resolver.targetDesc && resolver.targetDesc.includes('影巢') ? '一键解锁并转存' : (resolver.selectedItems.length > 1 ? `批量提交 (${resolver.selectedItems.length})` : '一键补齐')"></span>
+                    </span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 来源选择弹窗 -->
+    <div x-show="showSourceModal" x-cloak x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="transition ease-in duration-150" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" class="fixed inset-0 z-[120] flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="showSourceModal = false"></div>
+        <div class="relative bg-white dark:bg-[#1C1C1E] rounded-2xl shadow-2xl w-full max-w-sm p-6 z-10">
+            <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-4">选择数据来源</h3>
+            <div class="space-y-3">
+                <button @click="doMPSearch()" class="w-full py-4 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center justify-center gap-3 transition-colors">
+                    <i class="fa-solid fa-rocket"></i> MoviePilot
+                    <span class="text-xs opacity-70">(种子/下载)</span>
+                </button>
+                <button @click="doHDHiveSearch()" class="w-full py-4 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center justify-center gap-3 transition-colors">
+                    <i class="fa-solid fa-cloud-arrow-down"></i> 影巢
+                    <span class="text-xs opacity-70">(115直连)</span>
+                </button>
+            </div>
+            <button @click="showSourceModal = false" class="mt-4 w-full py-3 rounded-xl text-gray-500 dark:text-gray-400 font-medium hover:bg-gray-100 dark:hover:bg-white/5 transition-colors">取消</button>
+        </div>
+    </div>
+
+    <!-- 文件夹选择弹窗 -->
+    <div x-show="folderModalOpen" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="transition ease-in duration-150" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" class="fixed inset-0 z-[110] flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="folderModalOpen = false"></div>
+        <div class="relative bg-white dark:bg-[#1C1C1E] rounded-2xl shadow-2xl w-full max-w-sm p-6 z-10">
+            <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-4">选择115转存文件夹</h3>
+            <div class="space-y-2 max-h-[60vh] overflow-y-auto">
+                <template x-for="folder in pendingFolderSelect?.folders || []" :key="folder.cid">
+                    <button @click="selectFolderAndTransfer(folder.cid)" class="w-full py-3 px-4 rounded-xl bg-gray-100 dark:bg-[#2C2C2E] hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-gray-800 dark:text-gray-200 font-bold flex items-center gap-3 transition-colors">
+                        <i class="fa-solid fa-folder text-emerald-500"></i>
+                        <span x-text="folder.name"></span>
+                    </button>
+                </template>
+            </div>
+            <button @click="folderModalOpen = false" class="mt-4 w-full py-3 rounded-xl text-gray-500 dark:text-gray-400 font-medium hover:bg-gray-100 dark:hover:bg-white/5 transition-colors">取消</button>
+        </div>
+    </div>
+
+    <!-- 🔔 Toast 通知容器 -->
+    <div class="toast-container">
+        <template x-for="toast in toasts" :key="toast.id">
+            <div class="toast-item" :class="[toast.type, { 'toast-out': toast.removing }]">
+                <div class="toast-icon" :class="toast.type">
+                    <template x-if="toast.type === 'success'"><i class="fa-solid fa-check"></i></template>
+                    <template x-if="toast.type === 'error'"><i class="fa-solid fa-xmark"></i></template>
+                    <template x-if="toast.type === 'warning'"><i class="fa-solid fa-exclamation"></i></template>
+                    <template x-if="toast.type === 'info'"><i class="fa-solid fa-info"></i></template>
+                </div>
+                <div class="toast-content">
+                    <div class="toast-title" x-text="toast.title"></div>
+                    <div class="toast-message" x-show="toast.message" x-text="toast.message"></div>
+                </div>
+                <div class="toast-close" @click="removeToast(toast.id)">
+                    <i class="fa-solid fa-xmark"></i>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <!-- 🔔 Confirm 确认框 -->
+    <template x-if="confirmData.open">
+        <div>
+            <div class="confirm-overlay" @click="confirmData.onCancel"></div>
+            <div class="confirm-modal">
+                <div class="confirm-icon" :class="confirmData.type">
+                    <template x-if="confirmData.type === 'warning'"><i class="fa-solid fa-triangle-exclamation"></i></template>
+                    <template x-if="confirmData.type === 'danger'"><i class="fa-solid fa-circle-exclamation"></i></template>
+                </div>
+                <div class="confirm-title" x-text="confirmData.title"></div>
+                <div class="confirm-message" x-text="confirmData.message"></div>
+                <div class="confirm-buttons">
+                    <button class="confirm-btn cancel" @click="confirmData.onCancel" x-text="confirmData.cancelText"></button>
+                    <button class="confirm-btn" :class="confirmData.confirmBtnType || 'primary'" @click="confirmData.onConfirm" x-text="confirmData.confirmText"></button>
+                </div>
+            </div>
+        </div>
+    </template>
+</div>
+
+<script>
+const globalColorThief = new ColorThief();
+window.applyThemeColor = function(imgElement, cardId) {
+    if (imgElement.complete && imgElement.getAttribute('data-color-done') !== 'true') {
+        try {
+            const color = globalColorThief.getColor(imgElement);
+            const card = document.getElementById(cardId);
+            const tintId = cardId.replace('card-', 'tint-');
+            const tint = document.getElementById(tintId);
+            
+            if (card && tint) {
+                const isDark = document.documentElement.classList.contains('dark');
+                tint.style.background = `linear-gradient(135deg, rgb(${color[0]}, ${color[1]}, ${color[2]}) 0%, transparent 80%)`;
+                
+                const borderTint = isDark ? `rgba(${color[0]}, ${color[1]}, ${color[2]}, 0.3)` : `rgba(${color[0]}, ${color[1]}, ${color[2]}, 0.4)`;
+                const shadowTint = `0 16px 40px -10px rgba(${color[0]}, ${color[1]}, ${color[2]}, 0.5)`;
+
+                card.addEventListener('mouseenter', () => {
+                    card.style.boxShadow = shadowTint;
+                    card.style.borderColor = borderTint;
+                });
+                card.addEventListener('mouseleave', () => {
+                    card.style.boxShadow = '';
+                    card.style.borderColor = '';
+                });
+            }
+            imgElement.setAttribute('data-color-done', 'true');
+        } catch(e) {}
+    }
+};
+
+console.log('[GAPS] Script loaded, waiting for alpine:init');
+document.addEventListener('alpine:init', () => {
+    console.log('[GAPS] alpine:init event fired, registering gapManager');
+    Alpine.data('gapManager', () => {
+        console.log('[GAPS] gapManager component instantiated');
+        return {
+        isScanning: false, hasScanned: false,
+        scanProgress: 0, scanTotal: 0, scanItem: '等待启航...',
+        pollInterval: null, 
+        silentPollInterval: null, 
+
+        // 🔔 Toast 通知系统
+        toasts: [],
+        toastId: 0,
+
+        // 🔔 Confirm 确认框系统
+        confirmData: { open: false, type: 'warning', title: '', message: '', onConfirm: null, confirmText: '确定', cancelText: '取消' }, 
+        _lastResultsJson: '',     
+        
+        gapData: [],
+        searchQuery: '',          
+        displayLimit: 24, 
+        selectedSeries: [], // 🔥 批量选中的剧集 ID
+        
+        ignoreModal: { open: false, items: [], searchQuery: '' },
+        ignoreFilter: 'all',      
+        ignoreDisplayLimit: 50, // 🔥 回收站分页限制防卡顿
+        ignoreSelectedItems: [], // 🔥 选中的忽略项
+        ignoreSearchQuery: '', // 🔥 回收站搜索关键词
+        
+        configModal: { open: false, client_type: '', client_url: '', client_user: '', client_pass: '', libraries: [], excludedLibraries: [], cache_interval_hours: '6' },
+        resolver: { open: false, isLoading: false, isSubmitting: false, tmdbId: null, seriesId: '', seriesName: '', season: 0, episodes: [], targetDesc: '', targetType: 'single', genes: [], results: [], selectedItems: [], sourceEpObj: null, sourceEpsArray: [] },
+
+        // 影巢相关
+        showSourceModal: false,
+        hdhiveSearching: false,
+        hdhiveResult: null,
+
+        // 文件夹选择
+        folderModalOpen: false,
+        pendingFolderSelect: null,
+
+        init() { 
+            this.checkStatus(); 
+            this.startSilentPolling();
+            this.triggerVerify(); 
+            
+            document.addEventListener('visibilitychange', () => {
+                if (!document.hidden && !this.isScanning) {
+                    this.triggerVerify();
+                    this.checkStatusSilent();
+                }
+            });
+        },
+
+        get filteredGaps() {
+            if (!this.searchQuery) return this.gapData;
+            const q = this.searchQuery.toLowerCase();
+            return this.gapData.filter(s => s.series_name.toLowerCase().includes(q));
+        },
+
+        get displayedGaps() { 
+            return this.filteredGaps.slice(0, this.displayLimit); 
+        },
+        
+        loadMore() { this.displayLimit += 24; },
+
+        // 🔔 Toast 通知方法
+        showToast(type, title, message = '', duration = 4000) {
+            const id = ++this.toastId;
+            this.toasts.push({ id, type, title, message });
+            setTimeout(() => this.removeToast(id), duration);
+            return id;
+        },
+        removeToast(id) {
+            const idx = this.toasts.findIndex(t => t.id === id);
+            if (idx > -1) this.toasts.splice(idx, 1);
+        },
+
+        // 🔔 Confirm 确认框方法
+        showConfirm(options) {
+            return new Promise((resolve) => {
+                this.confirmData = {
+                    open: true,
+                    type: options.type || 'warning',
+                    title: options.title || '确认操作',
+                    message: options.message || '',
+                    confirmText: options.confirmText || '确定',
+                    cancelText: options.cancelText || '取消',
+                    confirmBtnType: options.confirmBtnType || 'primary',
+                    onConfirm: () => {
+                        this.confirmData.open = false;
+                        resolve(true);
+                    },
+                    onCancel: () => {
+                        this.confirmData.open = false;
+                        resolve(false);
+                    }
+                };
+            });
+        },
+
+        // 🔥 全选/取消全选本页剧集
+        toggleSelectAll() {
+            if (this.selectedSeries.length === this.displayedGaps.length && this.displayedGaps.length > 0) {
+                this.selectedSeries = [];
+            } else {
+                this.selectedSeries = this.displayedGaps.map(s => s.series_id);
+            }
+        },
+
+        // 🔥 批量忽略引擎
+        async batchIgnoreSeries() {
+            if (this.selectedSeries.length === 0) return;
+            const confirmed = await this.showConfirm({
+                type: 'danger',
+                title: '批量忽略剧集',
+                message: `确定要批量永久忽略选中的 ${this.selectedSeries.length} 部剧集吗？\n(后续可在回收站恢复)`,
+                confirmText: '确定忽略',
+                confirmBtnType: 'danger'
+            });
+            if (!confirmed) return;
+            
+            this.isScanning = true;
+            this.scanItem = "正在批量抹除缺集记录...";
+            this.scanProgress = 0;
+            this.scanTotal = this.selectedSeries.length;
+            
+            try {
+                for (const sId of this.selectedSeries) {
+                    const series = this.gapData.find(s => s.series_id === sId);
+                    if (series) {
+                        try {
+                            await fetch('/api/gaps/ignore/series', { 
+                                method: 'POST', 
+                                headers: {'Content-Type': 'application/json'}, 
+                                body: JSON.stringify({ series_id: series.series_id, series_name: series.series_name }) 
+                            });
+                        } catch(e) {}
+                    }
+                    this.scanProgress++;
+                }
+                // 清理前端数据
+                this.gapData = this.gapData.filter(s => !this.selectedSeries.includes(s.series_id));
+                this._lastResultsJson = JSON.stringify(this.gapData);
+                this.selectedSeries = [];
+            } catch (e) {
+                console.error(e);
+            } finally {
+                this.isScanning = false;
+            }
+        },
+
+        // 🔥 过滤与分页后的忽略列表（防卡顿 + 搜索）
+        get filteredIgnoreItems() {
+            let items = this.ignoreModal.items;
+
+            // 按分类过滤
+            if (this.ignoreFilter === 'perfect') {
+                items = items.filter(i => i.type === 'perfect');
+            } else if (this.ignoreFilter === 'ignored') {
+                items = items.filter(i => i.type === 'record');
+            }
+
+            // 按搜索关键词过滤
+            if (this.ignoreSearchQuery) {
+                const q = this.ignoreSearchQuery.toLowerCase();
+                items = items.filter(i => i.series_name.toLowerCase().includes(q));
+            }
+
+            return items;
+        },
+
+        get paginatedIgnoreItems() {
+            return this.filteredIgnoreItems.slice(0, this.ignoreDisplayLimit);
+        },
+
+        // 🔥 全选/取消全选
+        get ignoreSelectedAll() {
+            return this.paginatedIgnoreItems.length > 0 && this.paginatedIgnoreItems.every(i => this.ignoreSelectedItems.includes(i.id + '_' + i.target));
+        },
+
+        toggleIgnoreSelectAll() {
+            const currentPageIds = this.paginatedIgnoreItems.map(i => i.id + '_' + i.target);
+            if (this.ignoreSelectedAll) {
+                // 取消当前页全选
+                this.ignoreSelectedItems = this.ignoreSelectedItems.filter(id => !currentPageIds.includes(id));
+            } else {
+                // 选中当前页所有
+                currentPageIds.forEach(id => {
+                    if (!this.ignoreSelectedItems.includes(id)) {
+                        this.ignoreSelectedItems.push(id);
+                    }
+                });
+            }
+        },
+
+        toggleIgnoreItem(item) {
+            const key = item.id + '_' + item.target;
+            const idx = this.ignoreSelectedItems.indexOf(key);
+            if (idx > -1) {
+                this.ignoreSelectedItems.splice(idx, 1);
+            } else {
+                this.ignoreSelectedItems.push(key);
+            }
+        },
+
+        // 🔥 批量恢复
+        async batchUnignore() {
+            if (this.ignoreSelectedItems.length === 0) return;
+            const confirmed = await this.showConfirm({
+                type: 'warning',
+                title: '恢复选中项',
+                message: `确定要恢复选中的 ${this.ignoreSelectedItems.length} 项吗？`,
+                confirmText: '确定恢复'
+            });
+            if (!confirmed) return;
+
+            for (const key of this.ignoreSelectedItems) {
+                const [id, target] = key.split('_');
+                const item = this.ignoreModal.items.find(i => i.id == id && i.target === target);
+                if (item) {
+                    try {
+                        await fetch('/api/gaps/unignore', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ id: item.id, type: item.type }) });
+                    } catch(e) {}
+                }
+            }
+
+            // 刷新列表
+            this.ignoreSelectedItems = [];
+            try {
+                const res = await fetch(`/api/gaps/ignores?_t=${new Date().getTime()}`);
+                const data = await res.json();
+                if (data.status === 'success') { this.ignoreModal.items = data.data; }
+            } catch(e) {}
+        },
+
+        // 🔥 批量删除（彻底删除）
+        async batchDeleteIgnore() {
+            if (this.ignoreSelectedItems.length === 0) return;
+            const confirmed = await this.showConfirm({
+                type: 'danger',
+                title: '彻底删除',
+                message: `确定要彻底删除选中的 ${this.ignoreSelectedItems.length} 项吗？\n此操作不可恢复！`,
+                confirmText: '确定删除',
+                confirmBtnType: 'danger'
+            });
+            if (!confirmed) return;
+
+            for (const key of this.ignoreSelectedItems) {
+                const [id, target] = key.split('_');
+                try {
+                    await fetch('/api/gaps/ignore/delete', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ id: parseInt(id), target: target }) });
+                } catch(e) {}
+            }
+
+            // 刷新列表
+            this.ignoreSelectedItems = [];
+            try {
+                const res = await fetch(`/api/gaps/ignores?_t=${new Date().getTime()}`);
+                const data = await res.json();
+                if (data.status === 'success') { this.ignoreModal.items = data.data; }
+            } catch(e) {}
+        },
+
+        // 🔥 单个删除
+        async deleteIgnoreItem(item) {
+            const confirmed = await this.showConfirm({
+                type: 'danger',
+                title: '彻底删除',
+                message: `确定要彻底删除《${item.series_name}》的这条记录吗？\n此操作不可恢复！`,
+                confirmText: '确定删除',
+                confirmBtnType: 'danger'
+            });
+            if (!confirmed) return;
+            try {
+                await fetch('/api/gaps/ignore/delete', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ id: item.id, target: item.target }) });
+                this.ignoreModal.items = this.ignoreModal.items.filter(i => !(i.id === item.id && i.target === item.target));
+                this.ignoreSelectedItems = this.ignoreSelectedItems.filter(k => !k.startsWith(item.id + '_'));
+            } catch(e) { this.showToast('error', '删除失败'); }
+        },
+
+        setIgnoreFilter(filter) {
+            this.ignoreFilter = filter;
+            this.ignoreDisplayLimit = 50;
+            this.ignoreSelectedItems = []; // 切换分类时清空选择
+        },
+
+        loadMoreIgnoreItems() {
+            this.ignoreDisplayLimit += 50;
+        },
+        
+        async triggerVerify() {
+            try { await fetch('/api/gaps/scan/verify', { method: 'POST' }); } catch(e) {}
+        },
+
+        startSilentPolling() {
+            if (this.silentPollInterval) clearInterval(this.silentPollInterval);
+            this.silentPollInterval = setInterval(() => {
+                if (document.hidden || this.isScanning) return;
+                this.checkStatusSilent();
+            }, 8000); 
+        },
+
+        async checkStatusSilent() {
+            try {
+                const res = await fetch(`/api/gaps/scan/progress?_t=${new Date().getTime()}`, { cache: 'no-store' });
+                const data = await res.json();
+                if (data.status === 'success' && !data.data.is_scanning) {
+                    const newJson = JSON.stringify(data.data.results);
+                    if (this._lastResultsJson !== newJson) {
+                        this._lastResultsJson = newJson;
+                        this.mountData(data.data.results);
+                    }
+                }
+            } catch(e) {}
+        },
+
+        async openConfigModal() {
+            try {
+                // 并行获取配置和媒体库列表
+                const [configRes, libsRes] = await Promise.all([
+                    fetch(`/api/gaps/config?_t=${new Date().getTime()}`),
+                    fetch(`/api/gaps/libraries?_t=${new Date().getTime()}`)
+                ]);
+
+                const configData = await configRes.json();
+                if (configData.status === 'success') {
+                    this.configModal.client_type = configData.data.client_type || '';
+                    this.configModal.client_url = configData.data.client_url || '';
+                    this.configModal.client_user = configData.data.client_user || '';
+                    this.configModal.client_pass = configData.data.client_pass || '';
+                    this.configModal.excludedLibraries = configData.data.excluded_libraries || [];
+                    // 🔥 新增：缓存间隔配置
+                    this.configModal.cache_interval_hours = configData.data.cache_interval_hours || '6';
+                }
+
+                const libsData = await libsRes.json();
+                if (libsData.status === 'success') {
+                    this.configModal.libraries = libsData.data || [];
+                }
+            } catch(e) { console.error(e); }
+            this.configModal.open = true;
+        },
+        closeConfigModal() { this.configModal.open = false; },
+
+        async saveConfig() {
+            try {
+                const res = await fetch('/api/gaps/config', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        client_type: this.configModal.client_type, client_url: this.configModal.client_url,
+                        client_user: this.configModal.client_user, client_pass: this.configModal.client_pass,
+                        excluded_libraries: JSON.stringify(this.configModal.excludedLibraries),
+                        cache_interval_hours: this.configModal.cache_interval_hours  // 🔥 新增：缓存间隔
+                    })
+                });
+                if ((await res.json()).status === 'success') { this.closeConfigModal(); this.showToast('success', '保存成功', '配置已更新'); }
+            } catch(e) { this.showToast('error', '保存失败'); }
+        },
+
+        async checkStatus() {
+            try {
+                const res = await fetch(`/api/gaps/scan/progress?_t=${new Date().getTime()}`, { cache: 'no-store' });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    if (data.data.is_scanning) { this.startPolling(); } 
+                    else if (data.data.results && data.data.results.length > 0) {
+                        this._lastResultsJson = JSON.stringify(data.data.results);
+                        this.mountData(data.data.results);
+                    }
+                }
+            } catch(e) {}
+        },
+
+        async startScan() {
+            this.displayLimit = 24; 
+            this.selectedSeries = [];
+            try {
+                const res = await fetch('/api/gaps/scan/start', { method: 'POST' });
+                const data = await res.json();
+                if (data.status === 'success') { this.startPolling(); } else { this.showToast('error', '启动失败', data.message); }
+            } catch(e) {}
+        },
+
+        startPolling() {
+            this.isScanning = true;
+            this.pollInterval = setInterval(async () => {
+                try {
+                    const res = await fetch(`/api/gaps/scan/progress?_t=${new Date().getTime()}`, { cache: 'no-store' });
+                    const data = await res.json();
+                    if (data.status === 'success') {
+                        const state = data.data;
+                        this.isScanning = state.is_scanning; this.scanProgress = state.progress;
+                        this.scanTotal = state.total; this.scanItem = state.current_item;
+
+                        if (!this.isScanning) {
+                            clearInterval(this.pollInterval);
+                            if (state.error) this.showToast('error', '扫描出错', state.error);
+                            else {
+                                this._lastResultsJson = JSON.stringify(state.results);
+                                this.mountData(state.results);
+                            }
+                        }
+                    }
+                } catch(e) {}
+            }, 1000);
+        },
+
+        mountData(rawResults) {
+            this.gapData = rawResults.map(series => {
+                const grouped = {};
+                series.gaps.forEach(ep => { if (!grouped[ep.season]) grouped[ep.season] = []; grouped[ep.season].push(ep); });
+                const groupedArr = [];
+                for(let s in grouped) {
+                    grouped[s].sort((a,b) => a.episode - b.episode);
+                    groupedArr.push({ season_num: s, episodes: grouped[s] });
+                }
+                series.grouped_gaps = groupedArr.sort((a,b) => parseInt(a.season_num) - parseInt(b.season_num));
+                return series;
+            });
+            this.hasScanned = true;
+            
+            const currentIds = this.gapData.map(s => s.series_id);
+            this.selectedSeries = this.selectedSeries.filter(id => currentIds.includes(id));
+        },
+
+        async openIgnoreModal() {
+            console.log('[GAPS] openIgnoreModal called, ignoreModal.open before:', this.ignoreModal.open);
+            this.ignoreModal.open = true;
+            console.log('[GAPS] ignoreModal.open after:', this.ignoreModal.open);
+            this.ignoreFilter = 'all';
+            this.ignoreDisplayLimit = 50;
+            this.ignoreSearchQuery = '';
+            this.ignoreSelectedItems = [];
+            try {
+                const res = await fetch(`/api/gaps/ignores?_t=${new Date().getTime()}`);
+                const data = await res.json();
+                if (data.status === 'success') { this.ignoreModal.items = data.data; }
+            } catch(e) {}
+        },
+        
+        closeIgnoreModal() { this.ignoreModal.open = false; },
+
+        async unignoreItem(item) {
+            try {
+                const res = await fetch('/api/gaps/unignore', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ id: item.id, type: item.type }) });
+                if ((await res.json()).status === 'success') {
+                    this.ignoreModal.items = this.ignoreModal.items.filter(i => i.id !== item.id);
+                }
+            } catch(e) {}
+        },
+
+        async ignoreSeries(series) {
+            const confirmed = await this.showConfirm({
+                type: 'danger',
+                title: '忽略剧集',
+                message: `确定要永久忽略《${series.series_name}》的全部缺集提醒吗？\n(后续可在回收站恢复)`,
+                confirmText: '确定忽略',
+                confirmBtnType: 'danger'
+            });
+            if (!confirmed) return;
+            try {
+                const res = await fetch('/api/gaps/ignore/series', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ series_id: series.series_id, series_name: series.series_name }) });
+                if ((await res.json()).status === 'success') { 
+                    this.gapData = this.gapData.filter(s => s.series_id !== series.series_id); 
+                    this._lastResultsJson = JSON.stringify(this.gapData);
+                    this.selectedSeries = this.selectedSeries.filter(id => id !== series.series_id);
+                }
+            } catch(e) {}
+        },
+
+        // 保存待搜索的信息，用于来源选择后使用
+        pendingSearch: { series: null, season: 0, episodes: [], type: 'single', ep: null, epsArray: [] },
+
+        // 点击集数或一键补齐时，先弹出来源选择
+        async openResolver(series, ep) {
+            console.log('[GAPS] openResolver called', { series, ep });
+            // 保存搜索信息
+            this.pendingSearch = { series, season: ep.season, episodes: [ep.episode], type: 'single', ep, epsArray: [] };
+            console.log('[GAPS] pendingSearch set, showSourceModal before:', this.showSourceModal);
+            this.showSourceModal = true;
+            console.log('[GAPS] showSourceModal after:', this.showSourceModal);
+        },
+
+        async openResolverMulti(series, season_num, epsArray) {
+            console.log('[GAPS] openResolverMulti called', { series, season_num, epsArray });
+            const missingEps = epsArray.filter(e => e.status === 0 || e.status === 2).map(e => e.episode);
+            console.log('[GAPS] missingEps:', missingEps);
+            if(missingEps.length === 0) return;
+            // 保存搜索信息
+            this.pendingSearch = { series, season: season_num, episodes: missingEps, type: 'multi', ep: null, epsArray };
+            console.log('[GAPS] pendingSearch set, showSourceModal before:', this.showSourceModal);
+            this.showSourceModal = true;
+            console.log('[GAPS] showSourceModal after:', this.showSourceModal);
+        },
+
+        // 选择MP后执行原有逻辑
+        async doMPSearch() {
+            this.showSourceModal = false;
+            const p = this.pendingSearch;
+            if (!p.series) return;
+
+            this.resolver.open = true; this.resolver.isLoading = true; this.resolver.targetType = p.type;
+            this.resolver.tmdbId = p.series.tmdb_id;
+            this.resolver.seriesId = p.series.series_id; this.resolver.seriesName = p.series.series_name; this.resolver.season = p.season;
+            this.resolver.episodes = p.episodes;
+            this.resolver.targetDesc = p.type === 'single'
+                ? `${p.series.series_name} S${String(p.season).padStart(2,'0')}E${String(p.episodes[0]).padStart(2,'0')}`
+                : `${p.series.series_name} S${String(p.season).padStart(2,'0')} 批量提取 [${p.episodes.join(', ')}]`;
+            this.resolver.genes = []; this.resolver.results = []; this.resolver.selectedItems = [];
+            if (p.type === 'single') this.resolver.sourceEpObj = p.ep;
+            else this.resolver.sourceEpsArray = p.epsArray;
+
+            try {
+                const res = await fetch('/api/gaps/search_mp', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ series_id: p.series.series_id, series_name: p.series.series_name, season: p.season, episodes: p.episodes }) });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    this.resolver.genes = data.data.genes; this.resolver.results = data.data.results;
+                    // 🔥 只有集数匹配比例 > 0 才自动勾选第一个
+                    if(this.resolver.results.length > 0 && this.resolver.results[0].ui_episode_match_ratio > 0) this.resolver.selectedItems = [0];
+                } else { this.showToast('error', '搜索失败', data.message); }
+            } catch(e) { this.showToast('error', '网络请求异常'); }
+            this.resolver.isLoading = false;
+        },
+
+        // 选择影巢后直接搜索并展示结果
+        async doHDHiveSearch() {
+            this.showSourceModal = false;
+            const p = this.pendingSearch;
+            if (!p.series) return;
+
+            this.resolver.open = true;
+            this.resolver.isLoading = true;
+            this.resolver.results = [];
+            this.resolver.selectedItems = [];
+            this.resolver.targetDesc = `${p.series.series_name} S${String(p.season).padStart(2,'0')} - 影巢115资源`;
+
+            try {
+                const searchRes = await fetch('/api/gaps/search_hdhive', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        series_name: p.series.series_name,
+                        tmdb_id: p.series.tmdb_id,
+                        season: p.season,
+                        episodes: p.episodes,
+                        type: 'tv'
+                    })
+                });
+                const searchData = await searchRes.json();
+
+                if (searchData.status !== 'success') {
+                    this.showToast('error', '影巢搜索失败', searchData.message || '未知错误');
+                    this.resolver.isLoading = false;
+                    this.resolver.open = false;
+                    return;
+                }
+
+                // 处理返回的115资源列表
+                const resources = searchData.data;
+                if (!resources || !Array.isArray(resources) || resources.length === 0) {
+                    this.showToast('warning', '未找到资源', '未找到115网盘资源');
+                    this.resolver.isLoading = false;
+                    this.resolver.open = false;
+                    return;
+                }
+
+                // 转换为resolver可用的格式（影巢资源专用）
+                this.resolver.results = resources.map((r, index) => ({
+                    index: index,
+                    ui_title: r.title || '未知资源',
+                    ui_size: r.share_size || '未知大小',  // 直接使用share_size字符串
+                    ui_site: '影巢115',
+                    ui_seeders: r.unlock_points || 0,
+                    match_score: r.is_unlocked ? 100 : (r.unlock_points === 0 || r.unlock_points === null ? 90 : 80),
+                    // 影巢专用描述字段
+                    hdhive_info: {
+                        resolution: r.video_resolution || [],
+                        source: r.source || [],
+                        subtitle_lang: r.subtitle_language || [],
+                        subtitle_type: r.subtitle_type || [],
+                        remark: r.remark || '',
+                        is_official: r.is_official,
+                        validate_status: r.validate_status,
+                        unlocked_count: r.unlocked_users_count || 0,
+                        // 新增：分享人信息
+                        uploader: r.user ? (r.user.username || r.user.name || r.user.nickname || '') : '',
+                        // 新增：解锁状态
+                        is_unlocked: r.is_unlocked,
+                        unlock_points: r.unlock_points
+                    },
+                    ui_labels: [
+                        r.is_official ? '官方' : '',
+                        r.validate_status === 'valid' ? '有效' : '',
+                        r.is_unlocked ? '✅已解锁' : (r.unlock_points === 0 || r.unlock_points === null ? '🆓免费' : `🔴${r.unlock_points}积分`),
+                        ...(r.video_resolution || []),
+                        ...(r.source || [])
+                    ].filter(Boolean),
+                    slug: r.slug,
+                    is_pack: false,
+                    extracted_tags: ['115'],
+                    // 标记为影巢资源，用于区分显示
+                    is_hdhive: true,
+                    // 保存原始数据用于提交
+                    _raw: r
+                }));
+
+                // 默认选中第一个
+                if (this.resolver.results.length > 0) {
+                    this.resolver.selectedItems = [0];
+                }
+
+            } catch(e) {
+                this.showToast('error', '操作失败', e.message);
+            }
+            this.resolver.isLoading = false;
+        },
+
+        // 切换搜索结果选中状态（支持多选）
+        toggleResolverSelection(index) {
+            const idx = this.resolver.selectedItems.indexOf(index);
+            if (idx > -1) {
+                this.resolver.selectedItems.splice(idx, 1);
+            } else {
+                this.resolver.selectedItems.push(index);
+            }
+        },
+
+        closeResolver() { this.resolver.open = false; },
+
+        async sendToMP() {
+            if(this.resolver.selectedItems.length === 0) return;
+
+            // 批量下载：逐个提交
+            const selectedResults = this.resolver.selectedItems.map(i => this.resolver.results[i]);
+
+            this.resolver.isSubmitting = true;
+            let successCount = 0;
+            let failCount = 0;
+
+            for (const perfectTorrentObject of selectedResults) {
+                try {
+                    const res = await fetch('/api/gaps/download', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            series_id: this.resolver.seriesId,
+                            series_name: this.resolver.seriesName,
+                            tmdbid: this.resolver.tmdbId,
+                            season: this.resolver.season,
+                            episodes: this.resolver.episodes,
+                            torrent_info: perfectTorrentObject
+                        })
+                    });
+                    const data = await res.json();
+                    if (data.status === 'success') {
+                        successCount++;
+                    } else {
+                        failCount++;
+                    }
+                } catch(e) { failCount++; }
+            }
+
+            this.resolver.isSubmitting = false;
+
+            // 显示结果提示
+            if (selectedResults.length > 1) {
+                // 批量提交
+                this.showToast(successCount > 0 ? 'success' : 'error', '批量提交完成', `成功 ${successCount} 个${failCount > 0 ? `，失败 ${failCount} 个` : ''}`);
+            } else {
+                // 单个提交
+                if (successCount > 0) {
+                    this.showToast('success', '提交成功', '已提交到 MoviePilot，下载即将开始');
+                } else if (failCount > 0) {
+                    this.showToast('error', '提交失败', '请重试');
+                }
+            }
+
+            this.closeResolver();
+            await this.checkStatus();
+        },
+
+        // 显示来源选择弹窗或执行解锁
+        showSourceSelect() {
+            if(this.resolver.selectedItems.length === 0) return;
+            // 如果是影巢搜索，直接解锁
+            if(this.resolver.targetDesc && this.resolver.targetDesc.includes('影巢')) {
+                this.sendToHDHive();
+            } else if (this.resolver.results && this.resolver.results.length > 0) {
+                // MP搜索结果已加载，直接提交下载
+                this.sendToMP();
+            } else {
+                // 初始状态，弹出来源选择框
+                this.showSourceModal = true;
+            }
+        },
+
+        // 影巢搜索并转存
+        async sendToHDHive() {
+            if(this.resolver.selectedItems.length === 0) return;
+
+            const selectedResults = this.resolver.selectedItems.map(i => this.resolver.results[i]);
+            const selectedResource = selectedResults[0]; // 只处理第一个选中的
+
+            if (!selectedResource || !selectedResource.slug) {
+                this.showToast('error', '资源信息不完整');
+                return;
+            }
+
+            // 先尝试解锁，检查是否需要选择文件夹
+            this.resolver.isSubmitting = true;
+
+            try {
+                const unlockRes = await fetch('/api/gaps/download_hdhive', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        slug: selectedResource.slug
+                    })
+                });
+                const unlockData = await unlockRes.json();
+
+                if (unlockData.status === 'need_folder') {
+                    // 需要选择文件夹
+                    this.resolver.isSubmitting = false;
+                    this.showFolderSelect(unlockData.folders, selectedResource.slug);
+                    return;
+                }
+
+                if (unlockData.status === 'success') {
+                    this.showToast('success', '解锁成功', `${unlockData.title || ''}\n📁 文件夹: ${unlockData.folder || '默认'}`, 5000);
+                    this.closeResolver();
+                    await this.checkStatus();
+                } else {
+                    this.showToast('error', '解锁失败', unlockData.message || '未知错误');
+                }
+            } catch(e) {
+                this.showToast('error', '操作失败', e.message);
+            }
+
+            this.resolver.isSubmitting = false;
+        },
+
+        // 显示文件夹选择弹窗
+        showFolderSelect(folders, slug) {
+            this.pendingFolderSelect = { folders, slug };
+            this.folderModalOpen = true;
+        },
+
+        // 选择文件夹并转存
+        async selectFolderAndTransfer(folderCid) {
+            if (!this.pendingFolderSelect) return;
+
+            this.folderModalOpen = false;
+            this.resolver.isSubmitting = true;
+
+            const { slug } = this.pendingFolderSelect;
+
+            try {
+                const unlockRes = await fetch('/api/gaps/download_hdhive', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        slug: slug,
+                        folder_cid: folderCid
+                    })
+                });
+                const unlockData = await unlockRes.json();
+
+                if (unlockData.status === 'success') {
+                    this.showToast('success', '转存成功', `${unlockData.title || ''}\n📁 文件夹: ${unlockData.folder || '默认'}`, 5000);
+                    this.closeResolver();
+                    await this.checkStatus();
+                } else {
+                    this.showToast('error', '转存失败', unlockData.message || '未知错误');
+                }
+            } catch(e) {
+                this.showToast('error', '操作失败', e.message);
+            }
+
+            this.resolver.isSubmitting = false;
+            this.pendingFolderSelect = null;
+        },
+
+        async ignoreGap() {
+            try {
+                const res = await fetch('/api/gaps/ignore', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ series_id: this.resolver.seriesId, series_name: this.resolver.seriesName, season_number: this.resolver.season, episode_number: this.resolver.episodes[0] }) });
+                const data = await res.json();
+                if (data.status === 'success') { 
+                    this.closeResolver(); 
+                    await this.checkStatus();
+                }
+            } catch(e) {}
+        },
+
+        formatBytes(bytes) {
+            if(!bytes || bytes === 0) return '0 B';
+            const k = 1024, sizes = ['B', 'KB', 'MB', 'GB', 'TB'], i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        },
+
+        parseSize(sizeStr) {
+            if (!sizeStr) return 0;
+            const match = sizeStr.match(/([\d.]+)\s*(B|KB|MB|GB|TB)/i);
+            if (!match) return 0;
+            const num = parseFloat(match[1]);
+            const unit = match[2].toUpperCase();
+            const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const index = units.indexOf(unit);
+            if (index === -1) return 0;
+            return num * Math.pow(1024, index);
+        }
+    };
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,440 @@
+{% extends "layout.html" %}
+{% block title %}关于与支持 - EmbyPulse{% endblock %}
+
+{% block head %}
+<style>
+    .pro-card {
+        background: linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(249,250,251,0.9) 100%);
+        backdrop-filter: blur(20px);
+    }
+    html.dark .pro-card {
+        background: linear-gradient(135deg, rgba(30,30,32,0.95) 0%, rgba(28,28,30,0.9) 100%);
+    }
+    .device-item {
+        transition: all 0.2s ease;
+    }
+    .device-item:hover {
+        transform: translateX(4px);
+    }
+    .pulse-dot {
+        animation: pulse-ring 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    @keyframes pulse-ring {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+    .server-badge {
+        font-size: 9px;
+        padding: 2px 6px;
+        border-radius: 6px;
+        font-weight: 700;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="w-full max-w-5xl mx-auto px-4 md:px-6 py-8 pb-24">
+
+    <div class="relative overflow-hidden rounded-[28px] border border-gray-100 dark:border-gray-700/60 bg-gradient-to-br from-white via-white to-indigo-50/70 dark:from-gray-900 dark:via-gray-900 dark:to-indigo-950/40 shadow-[0_10px_30px_rgba(0,0,0,0.08)] p-6 sm:p-8 mb-10">
+        <div class="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-indigo-200/40 blur-3xl dark:bg-indigo-600/10"></div>
+        <div class="absolute -bottom-12 -left-8 w-52 h-52 rounded-full bg-blue-200/40 blur-3xl dark:bg-blue-600/10"></div>
+
+        <div class="relative z-10 flex flex-col sm:flex-row items-center gap-6">
+            <div class="w-24 h-24 bg-white dark:bg-gray-800 rounded-3xl shadow-lg border border-gray-100 dark:border-gray-700 flex items-center justify-center p-4">
+                <img src="/static/img/logo-app.png" alt="Logo" class="w-full h-full object-contain rounded-xl">
+            </div>
+            <div class="text-center sm:text-left">
+                <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+                    <h1 class="text-3xl font-black text-gray-900 dark:text-white tracking-tight">EmbyPulse 映迹</h1>
+                    {% if is_pro %}
+                    <span class="pro-glow-tag text-[9px] font-black text-white px-2 py-0.5 rounded-lg uppercase tracking-wider leading-none shadow-sm shadow-amber-500/20 italic">PRO</span>
+                    {% endif %}
+                    <span class="inline-flex items-center justify-center text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-3 py-1 rounded-full border border-indigo-100 dark:border-indigo-500/30">
+                        Version {{ version }}
+                    </span>
+                </div>
+                <p class="text-gray-600 dark:text-gray-400 mt-3 max-w-xl leading-relaxed text-sm">
+                    打造极客级别的 Emby 态势感知与自动化管控中心。监控、排期、阻断，一切尽在掌握。
+                </p>
+            </div>
+        </div>
+    </div>
+
+    {# ===== 🔥 Pro 授权状态卡片 ===== #}
+    <div class="mb-10">
+        <div class="flex items-center justify-between mb-4 px-1">
+            <h2 class="text-sm font-black text-gray-900 dark:text-white flex items-center gap-2">
+                <i class="fa-solid fa-shield-halved text-amber-500"></i>
+                授权状态
+            </h2>
+            <button onclick="refreshProStatus()" class="text-[11px] font-bold text-gray-400 hover:text-brand-500 transition-colors flex items-center gap-1">
+                <i class="fa-solid fa-arrows-rotate text-[9px]" id="pro-refresh-icon"></i>
+                刷新
+            </button>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {# -- 授权信息 -- #}
+            <div class="pro-card rounded-2xl border border-gray-100 dark:border-gray-700/60 shadow-sm p-5">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-xl {% if is_pro %}bg-gradient-to-br from-amber-400 to-orange-500{% else %}bg-gray-200 dark:bg-gray-700{% endif %} flex items-center justify-center">
+                            <i class="fa-solid fa-crown text-white text-sm"></i>
+                        </div>
+                        <span class="text-sm font-bold text-gray-900 dark:text-white">授权状态</span>
+                    </div>
+                    <span id="pro-status-badge" class="server-badge {% if is_pro %}bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400{% else %}bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400{% endif %}">
+                        {% if is_pro %}已激活{% else %}免费版{% endif %}
+                    </span>
+                </div>
+                
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center py-2 border-b border-gray-100 dark:border-gray-700/50">
+                        <span class="text-[12px] text-gray-500 dark:text-gray-400">授权码</span>
+                        <span id="pro-license-key" class="text-[12px] font-mono font-bold text-gray-900 dark:text-white">-</span>
+                    </div>
+                    <div class="flex justify-between items-center py-2 border-b border-gray-100 dark:border-gray-700/50">
+                        <span class="text-[12px] text-gray-500 dark:text-gray-400">到期时间</span>
+                        <span id="pro-expire-date" class="text-[12px] font-bold text-gray-900 dark:text-white">-</span>
+                    </div>
+                    <div class="flex justify-between items-center py-2">
+                        <span class="text-[12px] text-gray-500 dark:text-gray-400">机器码</span>
+                        <span id="pro-machine-id" class="text-[11px] font-mono text-gray-600 dark:text-gray-300 truncate max-w-[140px]" title="点击复制" onclick="copyMachineId()" style="cursor:pointer">-</span>
+                    </div>
+                </div>
+            </div>
+            
+            {# -- 设备限制 -- #}
+            <div class="pro-card rounded-2xl border border-gray-100 dark:border-gray-700/60 shadow-sm p-5">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center">
+                            <i class="fa-solid fa-mobile-screen text-white text-sm"></i>
+                        </div>
+                        <span class="text-sm font-bold text-gray-900 dark:text-white">设备限制</span>
+                    </div>
+                    <span id="device-status-badge" class="server-badge bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400">
+                        加载中...
+                    </span>
+                </div>
+                
+                <div class="flex items-end justify-center py-4">
+                    <div class="text-center">
+                        <div class="flex items-baseline justify-center gap-1">
+                            <span id="online-devices" class="text-4xl font-black text-gray-900 dark:text-white font-mono">-</span>
+                            <span class="text-lg text-gray-400">/</span>
+                            <span id="max-devices" class="text-2xl font-bold text-gray-500 dark:text-gray-400 font-mono">-</span>
+                        </div>
+                        <div class="text-[11px] text-gray-500 dark:text-gray-400 mt-1">当前在线 / 最大限制</div>
+                    </div>
+                </div>
+                
+                <div class="mt-4">
+                    <div class="w-full h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                        <div id="device-progress" class="h-2 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                    <div class="flex justify-between mt-2">
+                        <span class="text-[10px] text-gray-400">使用率</span>
+                        <span id="device-usage" class="text-[10px] font-bold text-gray-500 dark:text-gray-400">0%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-between mb-4 px-1">
+        <h2 class="text-sm font-black text-gray-900 dark:text-white">官方入口</h2>
+        <span class="text-[10px] font-bold text-gray-400">Community</span>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-5 mb-10">
+        <a href="https://github.com/zeyu8023/emby-pulse" target="_blank" class="group relative overflow-hidden rounded-2xl border border-gray-100 dark:border-gray-700/60 bg-white/90 dark:bg-gray-800/90 shadow-sm hover:shadow-lg transition-all">
+            <div class="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-indigo-50/60 dark:to-indigo-900/20"></div>
+            <div class="relative p-6 flex flex-col gap-3">
+                <div class="w-12 h-12 rounded-2xl bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-800 dark:text-gray-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                    <i class="fa-brands fa-github text-2xl"></i>
+                </div>
+                <div class="flex items-center justify-between">
+                    <h3 class="font-bold text-gray-900 dark:text-white text-sm">GitHub 仓库</h3>
+                    <span class="text-xs text-gray-400 group-hover:text-indigo-500 transition-colors">→</span>
+                </div>
+                <p class="text-xs text-gray-500 dark:text-gray-400">给项目点个 Star，关注更新动态</p>
+            </div>
+        </a>
+
+        <a href="https://t.me/Emby_Pulse2" target="_blank" class="group relative overflow-hidden rounded-2xl border border-gray-100 dark:border-gray-700/60 bg-white/90 dark:bg-gray-800/90 shadow-sm hover:shadow-lg transition-all">
+            <div class="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-blue-50/70 dark:to-blue-900/20"></div>
+            <div class="relative p-6 flex flex-col gap-3">
+                <div class="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center text-blue-500 group-hover:scale-105 transition-transform">
+                    <i class="fa-solid fa-bullhorn text-2xl"></i>
+                </div>
+                <div class="flex items-center justify-between">
+                    <h3 class="font-bold text-gray-900 dark:text-white text-sm">官方 TG 频道</h3>
+                    <span class="text-xs text-gray-400 group-hover:text-blue-500 transition-colors">→</span>
+                </div>
+                <p class="text-xs text-gray-500 dark:text-gray-400">获取最新版本资讯与公告</p>
+            </div>
+        </a>
+
+        <a href="https://t.me/Emby_Pulse" target="_blank" class="group relative overflow-hidden rounded-2xl border border-gray-100 dark:border-gray-700/60 bg-white/90 dark:bg-gray-800/90 shadow-sm hover:shadow-lg transition-all">
+            <div class="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-sky-50/70 dark:to-sky-900/20"></div>
+            <div class="relative p-6 flex flex-col gap-3">
+                <div class="w-12 h-12 rounded-2xl bg-sky-50 dark:bg-sky-900/30 flex items-center justify-center text-sky-500 group-hover:scale-105 transition-transform">
+                    <i class="fa-brands fa-telegram text-2xl"></i>
+                </div>
+                <div class="flex items-center justify-between">
+                    <h3 class="font-bold text-gray-900 dark:text-white text-sm">TG 交流群组</h3>
+                    <span class="text-xs text-gray-400 group-hover:text-sky-500 transition-colors">→</span>
+                </div>
+                <p class="text-xs text-gray-500 dark:text-gray-400">遇到问题？来这里交流</p>
+            </div>
+        </a>
+    </div>
+
+    <div class="rounded-3xl border border-amber-100 dark:border-amber-700/40 bg-gradient-to-r from-amber-50 via-orange-50 to-white dark:from-amber-900/20 dark:via-orange-900/10 dark:to-gray-900 shadow-sm overflow-hidden mb-12">
+        <div class="p-5 sm:p-8">
+            <div class="flex items-center gap-3 mb-6">
+                <div class="w-10 h-10 rounded-xl pro-glow-tag flex items-center justify-center text-white shadow-lg shadow-amber-500/30"><i class="fa-solid fa-crown text-lg"></i></div>
+                <div>
+                    <h3 class="text-lg font-black text-gray-900 dark:text-white">{% if is_pro %}你已是 Pro 用户{% else %}如何成为 Pro{% endif %}</h3>
+                    <p class="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">解锁全部高级功能，释放 EmbyPulse 完整实力</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                <div class="rounded-2xl bg-white/80 dark:bg-black/20 border border-amber-100 dark:border-amber-500/10 p-4 text-center">
+                    <div class="text-2xl mb-2">🤖</div>
+                    <div class="text-[12px] font-bold text-gray-800 dark:text-gray-200">用户 TG 机器人</div>
+                    <div class="text-[10px] text-gray-500 mt-1">注册/签到/求片/商城</div>
+                </div>
+                <div class="rounded-2xl bg-white/80 dark:bg-black/20 border border-amber-100 dark:border-amber-500/10 p-4 text-center">
+                    <div class="text-2xl mb-2">🛡️</div>
+                    <div class="text-[12px] font-bold text-gray-800 dark:text-gray-200">风控天眼系统</div>
+                    <div class="text-[10px] text-gray-500 mt-1">并发监控/自动封禁</div>
+                </div>
+                <div class="rounded-2xl bg-white/80 dark:bg-black/20 border border-amber-100 dark:border-amber-500/10 p-4 text-center">
+                    <div class="text-2xl mb-2">💰</div>
+                    <div class="text-[12px] font-bold text-gray-800 dark:text-gray-200">积分经济体系</div>
+                    <div class="text-[10px] text-gray-500 mt-1">签到/商城/求片扣费</div>
+                </div>
+                <div class="rounded-2xl bg-white/80 dark:bg-black/20 border border-amber-100 dark:border-amber-500/10 p-4 text-center">
+                    <div class="text-2xl mb-2">🧩</div>
+                    <div class="text-[12px] font-bold text-gray-800 dark:text-gray-200">插件扩展平台</div>
+                    <div class="text-[10px] text-gray-500 mt-1">115转存/影巢/智能合集</div>
+                </div>
+                <div class="rounded-2xl bg-white/80 dark:bg-black/20 border border-amber-100 dark:border-amber-500/10 p-4 text-center">
+                    <div class="text-2xl mb-2">⏰</div>
+                    <div class="text-[12px] font-bold text-gray-800 dark:text-gray-200">到期自动提醒</div>
+                    <div class="text-[10px] text-gray-500 mt-1">用户续费提醒/管理员汇总</div>
+                </div>
+                <div class="rounded-2xl bg-white/80 dark:bg-black/20 border border-amber-100 dark:border-amber-500/10 p-4 text-center">
+                    <div class="text-2xl mb-2">💓</div>
+                    <div class="text-[12px] font-bold text-gray-800 dark:text-gray-200">保号规则</div>
+                    <div class="text-[10px] text-gray-500 mt-1">最低活跃/自动清退</div>
+                </div>
+                <div class="rounded-2xl bg-white/80 dark:bg-black/20 border border-amber-100 dark:border-amber-500/10 p-4 text-center">
+                    <div class="text-2xl mb-2">🎫</div>
+                    <div class="text-[12px] font-bold text-gray-800 dark:text-gray-200">注册码/续费码</div>
+                    <div class="text-[10px] text-gray-500 mt-1">批量生成/导出管理</div>
+                </div>
+                <div class="rounded-2xl bg-white/80 dark:bg-black/20 border border-amber-100 dark:border-amber-500/10 p-4 text-center">
+                    <div class="text-2xl mb-2">🎨</div>
+                    <div class="text-[12px] font-bold text-gray-800 dark:text-gray-200">自定义通知模板</div>
+                    <div class="text-[10px] text-gray-500 mt-1">多风格/随机文案</div>
+                </div>
+            </div>
+
+            {% if is_pro %}
+            <div class="flex items-center gap-3 p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20">
+                <i class="fa-solid fa-circle-check text-emerald-500 text-xl"></i>
+                <div>
+                    <div class="text-[13px] font-bold text-emerald-700 dark:text-emerald-400">Pro 授权已激活</div>
+                    <div class="text-[11px] text-emerald-600/70 dark:text-emerald-400/60 mt-0.5">所有高级功能已解锁，感谢你的支持</div>
+                </div>
+            </div>
+            {% else %}
+            <div class="rounded-2xl bg-white/80 dark:bg-black/20 border border-amber-200 dark:border-amber-500/20 p-5">
+                <div class="flex flex-col sm:flex-row sm:items-center gap-4">
+                    <div class="flex-1">
+                        <div class="text-[14px] font-bold text-gray-900 dark:text-white mb-2">扫码打赏 79 元成为 Pro</div>
+                        <div class="text-[12px] text-gray-500 dark:text-gray-400 leading-relaxed">
+                            扫描下方赞赏码支付 <b class="text-amber-600">79 元</b>，备注你的 <b class="text-amber-600">邮箱地址</b>，激活码将在 24 小时内发送至你的邮箱。收到后在「系统设置」中输入激活码即可解锁。
+                        </div>
+                    </div>
+                    <button onclick="toggleDonate()" class="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl font-black shadow-lg shadow-orange-500/30 active:scale-95 transition-all shrink-0">
+                        <i class="fa-solid fa-qrcode"></i> 查看赞赏码
+                    </button>
+                </div>
+                <div id="donate-card" class="mt-4 overflow-hidden transition-all duration-500 ease-in-out max-h-0 opacity-0">
+                    <div class="bg-gray-50 dark:bg-gray-900/40 p-6 rounded-2xl border border-gray-100 dark:border-gray-700 flex flex-col items-center">
+                        <p class="text-[12px] text-gray-500 font-bold mb-3">微信扫码支付，备注邮箱</p>
+                        <div class="w-48 md:w-56 rounded-2xl overflow-hidden border-4 border-white dark:border-gray-800 shadow-lg">
+                            <img src="/static/img/zanshangma.png" alt="赞赏码" class="w-full h-auto object-contain">
+                        </div>
+                        <p class="text-[10px] text-gray-400 mt-3">支付后请耐心等待，激活码将发送至你备注的邮箱</p>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-8">
+        <div class="rounded-2xl border border-gray-100 dark:border-gray-700/60 bg-white dark:bg-gray-800 shadow-sm p-5">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-sm font-black text-gray-900 dark:text-white">功能矩阵</h3>
+                <span class="text-[10px] font-bold text-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-0.5 rounded-full">Core</span>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div class="rounded-xl border border-gray-100 dark:border-gray-700/60 p-3 bg-gray-50 dark:bg-gray-900/40">
+                    <div class="text-xs font-bold text-gray-900 dark:text-white">统计大盘</div>
+                    <div class="text-[10px] text-gray-500 dark:text-gray-400 mt-1">双擎统计与趋势</div>
+                </div>
+                <div class="rounded-xl border border-gray-100 dark:border-gray-700/60 p-3 bg-gray-50 dark:bg-gray-900/40">
+                    <div class="text-xs font-bold text-gray-900 dark:text-white">缺集补齐</div>
+                    <div class="text-[10px] text-gray-500 dark:text-gray-400 mt-1">一键定位与补货</div>
+                </div>
+                <div class="rounded-xl border border-gray-100 dark:border-gray-700/60 p-3 bg-gray-50 dark:bg-gray-900/40">
+                    <div class="text-xs font-bold text-gray-900 dark:text-white">求片联动</div>
+                    <div class="text-[10px] text-gray-500 dark:text-gray-400 mt-1">请求闭环管理</div>
+                </div>
+                <div class="rounded-xl border border-gray-100 dark:border-gray-700/60 p-3 bg-gray-50 dark:bg-gray-900/40">
+                    <div class="text-xs font-bold text-gray-900 dark:text-white">机器人助手</div>
+                    <div class="text-[10px] text-gray-500 dark:text-gray-400 mt-1">通知与交互</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="rounded-2xl border border-gray-100 dark:border-gray-700/60 bg-white dark:bg-gray-800 shadow-sm p-5">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-sm font-black text-gray-900 dark:text-white">部署形态</h3>
+                <span class="text-[10px] font-bold text-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-0.5 rounded-full">Flexible</span>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                <span class="px-3 py-1 rounded-full text-[10px] font-bold bg-gray-100 dark:bg-gray-900/40 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">Docker</span>
+                <span class="px-3 py-1 rounded-full text-[10px] font-bold bg-gray-100 dark:bg-gray-900/40 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">群晖 / NAS</span>
+                <span class="px-3 py-1 rounded-full text-[10px] font-bold bg-gray-100 dark:bg-gray-900/40 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">云服务器</span>
+                <span class="px-3 py-1 rounded-full text-[10px] font-bold bg-gray-100 dark:bg-gray-900/40 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">本地部署</span>
+            </div>
+            <p class="text-[11px] text-gray-500 dark:text-gray-400 mt-4">API 穿透与数据库直读双模式，适配几乎所有部署环境。</p>
+        </div>
+
+        <div class="rounded-2xl border border-gray-100 dark:border-gray-700/60 bg-white dark:bg-gray-800 shadow-sm p-5">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-sm font-black text-gray-900 dark:text-white">合作生态</h3>
+                <span class="text-[10px] font-bold text-sky-500 bg-sky-50 dark:bg-sky-900/30 px-2 py-0.5 rounded-full">Ecosystem</span>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                <span class="px-3 py-1 rounded-full text-[10px] font-bold bg-white/70 dark:bg-gray-900/40 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">Emby</span>
+                <span class="px-3 py-1 rounded-full text-[10px] font-bold bg-white/70 dark:bg-gray-900/40 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">TMDB</span>
+                <span class="px-3 py-1 rounded-full text-[10px] font-bold bg-white/70 dark:bg-gray-900/40 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">MoviePilot</span>
+                <span class="px-3 py-1 rounded-full text-[10px] font-bold bg-white/70 dark:bg-gray-900/40 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">qBittorrent</span>
+                <span class="px-3 py-1 rounded-full text-[10px] font-bold bg-white/70 dark:bg-gray-900/40 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">Transmission</span>
+                <span class="px-3 py-1 rounded-full text-[10px] font-bold bg-white/70 dark:bg-gray-900/40 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">Symedia</span>
+            </div>
+            <p class="text-[11px] text-gray-500 dark:text-gray-400 mt-4">围绕媒体生态深度联动，打通从数据到补货的完整链路。</p>
+        </div>
+    </div>
+
+    </div>
+</div>
+
+<script>
+    let proData = null;
+
+    // 初始化加载
+    document.addEventListener('DOMContentLoaded', () => {
+        refreshProStatus();
+    });
+
+    async function refreshProStatus() {
+        const icon = document.getElementById('pro-refresh-icon');
+        icon.classList.add('fa-spin');
+
+        try {
+            const res = await fetch('/api/pro/status');
+            const json = await res.json();
+            
+            if (json.status === 'success') {
+                proData = json.data;
+                updateProUI(json.data);
+            }
+        } catch (e) {
+            console.error('Pro status fetch failed:', e);
+        } finally {
+            setTimeout(() => icon.classList.remove('fa-spin'), 500);
+        }
+    }
+
+    function updateProUI(data) {
+        // 授权信息
+        if (data.license) {
+            document.getElementById('pro-license-key').textContent = data.license.license_key || '-';
+            document.getElementById('pro-expire-date').textContent = '永久有效';
+            document.getElementById('pro-machine-id').textContent = data.license.machine_id || '-';
+            
+            const badge = document.getElementById('pro-status-badge');
+            if (data.license.status === 'pro') {
+                badge.className = 'server-badge bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400';
+                badge.textContent = '已激活';
+            } else {
+                badge.className = 'server-badge bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400';
+                badge.textContent = '免费版';
+            }
+        }
+
+        // 设备限制 - 从授权服务器获取
+        if (data.device) {
+            const currentDevices = data.device.current_devices || 0;
+            const maxDevices = data.device.max_devices || 10;
+            
+            document.getElementById('online-devices').textContent = currentDevices;
+            document.getElementById('max-devices').textContent = maxDevices;
+            
+            const usage = maxDevices > 0 ? Math.round((currentDevices / maxDevices) * 100) : 0;
+            document.getElementById('device-progress').style.width = `${Math.min(usage, 100)}%`;
+            document.getElementById('device-usage').textContent = `${usage}%`;
+            
+            const deviceBadge = document.getElementById('device-status-badge');
+            if (currentDevices >= maxDevices) {
+                deviceBadge.className = 'server-badge bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400';
+                deviceBadge.textContent = '已满载';
+            } else if (usage > 70) {
+                deviceBadge.className = 'server-badge bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400';
+                deviceBadge.textContent = '较高';
+            } else {
+                deviceBadge.className = 'server-badge bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400';
+                deviceBadge.textContent = '正常';
+            }
+        } else {
+            // 未激活或无法获取设备信息
+            document.getElementById('online-devices').textContent = '-';
+            document.getElementById('max-devices').textContent = '-';
+            document.getElementById('device-usage').textContent = '-';
+        }
+    }
+
+    function copyMachineId() {
+        const machineId = document.getElementById('pro-machine-id').textContent;
+        if (machineId && machineId !== '-') {
+            navigator.clipboard.writeText(machineId);
+            const el = document.getElementById('pro-machine-id');
+            el.textContent = '已复制!';
+            setTimeout(() => el.textContent = machineId, 1500);
+        }
+    }
+
+    function toggleDonate() {
+        const card = document.getElementById('donate-card');
+        if (card.classList.contains('max-h-0')) {
+            card.classList.remove('max-h-0', 'opacity-0');
+            card.classList.add('max-h-[500px]', 'opacity-100');
+            setTimeout(() => {
+                card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 300);
+        } else {
+            card.classList.remove('max-h-[500px]', 'opacity-100');
+            card.classList.add('max-h-0', 'opacity-0');
+        }
+    }
+</script>
+{% endblock %}

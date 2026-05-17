@@ -1,0 +1,245 @@
+{% extends "plugins/plugin_base.html" %}
+{% block title %}影巢签到 - EmbyPulse{% endblock %}
+
+{% block plugin_content %}
+<div class="space-y-6">
+    <!-- 状态卡片 -->
+    <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold text-gray-800">签到状态</h3>
+            <span id="statusBadge" class="px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-600">
+                加载中...
+            </span>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div class="text-center p-4 bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg">
+                <div class="text-2xl font-bold text-purple-600" id="todayStatus">-</div>
+                <div class="text-sm text-gray-500">今日签到</div>
+            </div>
+            <div class="text-center p-4 bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg">
+                <div class="text-2xl font-bold text-green-600" id="totalCheckins">-</div>
+                <div class="text-sm text-gray-500">累计签到</div>
+            </div>
+            <div class="text-center p-4 bg-gradient-to-br from-orange-50 to-amber-50 rounded-lg">
+                <div class="text-2xl font-bold text-orange-600" id="lastPoints">-</div>
+                <div class="text-sm text-gray-500">上次积分</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 手动签到 -->
+    <div class="bg-white rounded-lg shadow p-6">
+        <h3 class="text-lg font-semibold text-gray-800 mb-4">手动签到</h3>
+        <div class="flex flex-wrap gap-3">
+            <button onclick="doCheckin(false)" 
+                    class="px-6 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                </svg>
+                普通签到
+            </button>
+            <button onclick="doCheckin(true)" 
+                    class="px-6 py-2 bg-gradient-to-r from-red-500 to-orange-500 text-white rounded-lg hover:from-red-600 hover:to-orange-600 transition-all flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                </svg>
+                赌狗签到 🎲
+            </button>
+            <button onclick="refreshStatus()" 
+                    class="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+                刷新状态
+            </button>
+            <button onclick="testLogin()" 
+                    class="px-6 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg hover:from-blue-600 hover:to-cyan-600 transition-all flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/>
+                </svg>
+                登录获取 Cookie
+            </button>
+        </div>
+        <p class="text-sm text-gray-500 mt-3">
+            💡 <strong>普通签到</strong>：稳定获得积分 |
+            🎲 <strong>赌狗签到</strong>：高风险高回报，可能获得更多积分或扣除积分
+        </p>
+        <p class="text-sm text-gray-400 mt-2">
+            🔑 配置用户名和密码后，点击「登录获取 Cookie」自动获取并保存 Cookie
+        </p>
+    </div>
+
+    <!-- 签到历史 -->
+    <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold text-gray-800">签到历史</h3>
+            <span class="text-sm text-gray-500">最近 30 条</span>
+        </div>
+        <div id="historyList" class="space-y-2">
+            <div class="text-center text-gray-400 py-8">加载中...</div>
+        </div>
+    </div>
+</div>
+
+<script>
+// 加载状态
+async function refreshStatus() {
+    try {
+        const [statusRes, historyRes] = await Promise.all([
+            fetch('/api/plugins/hdhivesign/status'),
+            fetch('/api/plugins/hdhivesign/history?limit=30')
+        ]);
+
+        // 状态
+        const statusData = await statusRes.json();
+        if (statusData.status === 'success') {
+            const data = statusData.data;
+            document.getElementById('todayStatus').textContent = data.today_checked ? '已签到 ✓' : '未签到';
+            document.getElementById('totalCheckins').textContent = data.total_checkins || 0;
+            
+            const badge = document.getElementById('statusBadge');
+            if (data.today_checked) {
+                badge.className = 'px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-700';
+                badge.textContent = '今日已签到';
+            } else {
+                badge.className = 'px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-700';
+                badge.textContent = '今日未签到';
+            }
+
+            // 最后签到积分
+            if (data.last_checkin && data.last_checkin.points !== undefined) {
+                const points = data.last_checkin.points;
+                document.getElementById('lastPoints').textContent = (points >= 0 ? '+' : '') + points;
+            } else {
+                document.getElementById('lastPoints').textContent = '-';
+            }
+        }
+
+        // 历史
+        const historyData = await historyRes.json();
+        if (historyData.status === 'success') {
+            renderHistory(historyData.data.history);
+        }
+    } catch (e) {
+        console.error('加载状态失败:', e);
+    }
+}
+
+// 渲染历史
+function renderHistory(history) {
+    const container = document.getElementById('historyList');
+    if (!history || history.length === 0) {
+        container.innerHTML = '<div class="text-center text-gray-400 py-8">暂无签到记录</div>';
+        return;
+    }
+
+    container.innerHTML = history.map(item => {
+        const isSuccess = item.status.includes('成功') || item.status.includes('已签到');
+        const isGambler = item.is_gambler;
+        const bgColor = isSuccess 
+            ? (isGambler ? 'bg-gradient-to-r from-red-50 to-orange-50' : 'bg-gradient-to-r from-green-50 to-emerald-50')
+            : 'bg-gradient-to-r from-gray-50 to-gray-100';
+        const borderColor = isSuccess 
+            ? (isGambler ? 'border-l-red-500' : 'border-l-green-500')
+            : 'border-l-gray-400';
+        const icon = isSuccess 
+            ? (isGambler ? '🎲' : '✅')
+            : '❌';
+        
+        const pointsText = item.points !== undefined ? ((item.points >= 0 ? '+' : '') + item.points + ' 积分') : '';
+        
+        return `
+            <div class="${bgColor} border-l-4 ${borderColor} rounded-lg p-3 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <span class="text-xl">${icon}</span>
+                    <div>
+                        <div class="font-medium text-gray-800">${item.status}</div>
+                        <div class="text-sm text-gray-500">${item.message || ''}</div>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <div class="text-sm font-medium ${item.points >= 0 ? 'text-green-600' : 'text-red-600'}">
+                        ${pointsText}
+                    </div>
+                    <div class="text-xs text-gray-400">${item.date || ''}</div>
+                    ${isGambler ? '<span class="text-xs text-orange-500">赌狗模式</span>' : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// 签到
+async function doCheckin(isGambler) {
+    const btn = event.target.closest('button');
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<svg class="animate-spin w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>签到中...';
+
+    try {
+        const res = await fetch('/api/plugins/hdhivesign/checkin', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({is_gambler: isGambler})
+        });
+        const data = await res.json();
+        
+        if (data.status === 'success') {
+            const result = data.data;
+            let msg = `${result.status}\n\n`;
+            if (result.points !== undefined && result.points !== null) {
+                msg += `获得积分: ${result.points >= 0 ? '+' : ''}${result.points}\n`;
+            }
+            msg += `${result.message}`;
+            alert(msg);
+            refreshStatus();
+        } else {
+            alert('签到失败: ' + data.message);
+        }
+    } catch (e) {
+        alert('签到失败: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    }
+}
+
+// 测试登录获取 Cookie
+async function testLogin() {
+    const btn = event.target.closest('button');
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<svg class="animate-spin w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>登录中...';
+
+    try {
+        const res = await fetch('/api/plugins/hdhivesign/login', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({})
+        });
+        const data = await res.json();
+        
+        if (data.status === 'success') {
+            const user = data.data.user_info || {};
+            let msg = '登录成功！Cookie 已自动保存。\n\n';
+            if (user.nickname) msg += `昵称: ${user.nickname}\n`;
+            if (user.points !== undefined) msg += `积分: ${user.points}\n`;
+            if (user.signin_days_total) msg += `累计签到: ${user.signin_days_total} 天\n`;
+            if (Object.keys(user).length === 0) msg += '（用户信息获取失败，但 Cookie 已保存）\n';
+            alert(msg);
+            refreshStatus();
+        } else {
+            alert('登录失败: ' + data.message + '\n\n请检查插件配置中的用户名和密码是否正确。');
+        }
+    } catch (e) {
+        alert('登录失败: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    }
+}
+
+// 页面加载
+document.addEventListener('DOMContentLoaded', refreshStatus);
+</script>
+{% endblock %}

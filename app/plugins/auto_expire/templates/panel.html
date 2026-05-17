@@ -1,0 +1,299 @@
+<!-- 用户到期提醒插件面板 -->
+<div class="space-y-5">
+    <!-- 状态概览卡片 -->
+    <div class="grid grid-cols-2 gap-4">
+        <div class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-amber-500 to-orange-500 p-5 text-white shadow-lg">
+            <div class="absolute -right-6 -top-6 h-20 w-20 rounded-full bg-white/10 blur-xl"></div>
+            <div class="relative z-10">
+                <div class="text-[11px] text-white/80 mb-1">即将到期（7天内）</div>
+                <div id="expiring-count" class="text-[32px] font-black leading-none">--</div>
+            </div>
+        </div>
+        <div class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-red-500 to-pink-500 p-5 text-white shadow-lg">
+            <div class="absolute -right-6 -top-6 h-20 w-20 rounded-full bg-white/10 blur-xl"></div>
+            <div class="relative z-10">
+                <div class="text-[11px] text-white/80 mb-1">今日到期</div>
+                <div id="today-count" class="text-[32px] font-black leading-none">--</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 操作按钮 -->
+    <div class="flex gap-3">
+        <button onclick="checkNow()" class="flex-1 py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl text-[13px] font-bold shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2">
+            <i class="fa-solid fa-bolt"></i>
+            立即检测
+        </button>
+        <button onclick="cleanDeleted()" class="flex-1 py-3 bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-gray-800 dark:text-gray-200 rounded-xl text-[13px] font-bold transition-all active:scale-[0.98] flex items-center justify-center gap-2">
+            <i class="fa-solid fa-broom"></i>
+            清理已删除
+        </button>
+    </div>
+
+    <!-- 即将到期用户列表 -->
+    <div class="apple-card p-5">
+        <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-3">
+                <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-900/30 text-amber-500">
+                    <i class="fa-solid fa-users"></i>
+                </div>
+                <div>
+                    <h3 class="text-[15px] font-bold text-gray-800 dark:text-gray-200">即将到期用户</h3>
+                    <p class="text-[11px] text-gray-500">7天内到期的用户列表</p>
+                </div>
+            </div>
+            <button onclick="loadUsers()" class="text-[11px] text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
+                <i class="fa-solid fa-rotate"></i>
+            </button>
+        </div>
+        
+        <div id="users-list" class="space-y-2 max-h-80 overflow-y-auto">
+            <div class="text-[12px] text-gray-400 text-center py-8">
+                <i class="fa-solid fa-inbox text-2xl mb-2 block opacity-50"></i>
+                加载中...
+            </div>
+        </div>
+    </div>
+
+    <!-- 配置设置 -->
+    <div class="apple-card p-5">
+        <div class="flex items-center gap-3 mb-5">
+            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-100 dark:bg-purple-900/30 text-purple-500">
+                <i class="fa-solid fa-gear"></i>
+            </div>
+            <div>
+                <h3 class="text-[15px] font-bold text-gray-800 dark:text-gray-200">提醒设置</h3>
+                <p class="text-[11px] text-gray-500">配置到期提醒参数</p>
+            </div>
+        </div>
+        
+        <div class="space-y-4">
+            <!-- 提前提醒天数 -->
+            <div>
+                <label class="text-[12px] font-bold text-gray-600 dark:text-gray-400 mb-2 block">提前提醒天数</label>
+                <div class="flex items-center gap-3">
+                    <input type="number" id="remind-days" value="3" min="1" max="30" class="w-20 px-4 py-3 rounded-xl border border-transparent bg-gray-100 dark:bg-[#2C2C2E] text-[13px] font-bold text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-center">
+                    <span class="text-[13px] text-gray-500">天前开始提醒用户</span>
+                </div>
+            </div>
+            
+            <!-- 巡检间隔 -->
+            <div>
+                <label class="text-[12px] font-bold text-gray-600 dark:text-gray-400 mb-2 block">巡检间隔</label>
+                <div class="flex items-center gap-3">
+                    <input type="number" id="check-interval" value="6" min="1" max="24" class="w-20 px-4 py-3 rounded-xl border border-transparent bg-gray-100 dark:bg-[#2C2C2E] text-[13px] font-bold text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-purple-500/50 transition-all text-center">
+                    <span class="text-[13px] text-gray-500">小时检查一次</span>
+                </div>
+            </div>
+            
+            <!-- 开关选项 -->
+            <div class="space-y-3 pt-2">
+                <div class="flex items-center justify-between py-2">
+                    <div>
+                        <div class="text-[13px] font-bold text-gray-800 dark:text-gray-200">通知管理员</div>
+                        <div class="text-[11px] text-gray-500">提醒用户时同时通知管理员</div>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="notify-admin" checked class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:ring-2 peer-focus:ring-purple-500/50 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500"></div>
+                    </label>
+                </div>
+                
+                <div class="flex items-center justify-between py-2">
+                    <div>
+                        <div class="text-[13px] font-bold text-gray-800 dark:text-gray-200">自动清理已删除用户</div>
+                        <div class="text-[11px] text-gray-500">巡检时自动清理 Emby 中已删除用户的过期记录</div>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="auto-clean" class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:ring-2 peer-focus:ring-purple-500/50 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500"></div>
+                    </label>
+                </div>
+                
+                <div class="flex items-center justify-between py-2">
+                    <div>
+                        <div class="text-[13px] font-bold text-gray-800 dark:text-gray-200">启用通知</div>
+                        <div class="text-[11px] text-gray-500">插件运行状态发送到全局通知</div>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="notify-enabled" checked class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:ring-2 peer-focus:ring-purple-500/50 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500"></div>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 保存按钮 -->
+    <button onclick="saveConfig()" class="w-full py-3.5 bg-gray-900 hover:bg-black dark:bg-gray-200 dark:hover:bg-white text-white dark:text-black rounded-xl text-[14px] font-bold shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2">
+        <i class="fa-solid fa-check"></i>
+        保存配置
+    </button>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="fixed top-4 left-1/2 -translate-x-1/2 z-[200] px-6 py-3 rounded-full shadow-xl text-[13px] font-bold transition-all opacity-0 pointer-events-none bg-gray-900 text-white dark:bg-gray-200 dark:text-black"></div>
+
+<script>
+async function loadConfig() {
+    try {
+        const res = await fetch('/api/plugins/auto_expire/config');
+        const data = await res.json();
+        if (data.status === 'success') {
+            const v = data.data.values || {};
+            document.getElementById('remind-days').value = v.remind_days || 3;
+            document.getElementById('check-interval').value = v.check_interval || 6;
+            document.getElementById('notify-admin').checked = v.notify_admin !== false;
+            document.getElementById('auto-clean').checked = v.auto_clean_deleted === true;
+            document.getElementById('notify-enabled').checked = v.notify_enabled !== false;
+        }
+    } catch (e) {
+        console.error('加载配置失败:', e);
+    }
+    
+    loadUsers();
+}
+
+async function loadUsers() {
+    try {
+        const res = await fetch('/api/plugins/auto_expire/expiring_users?days=7');
+        const data = await res.json();
+        
+        if (data.status === 'success') {
+            const users = data.data || [];
+            
+            // 统计
+            const today = new Date().toISOString().split('T')[0];
+            const todayCount = users.filter(u => u.expire === today).length;
+            
+            document.getElementById('expiring-count').textContent = users.length;
+            document.getElementById('today-count').textContent = todayCount;
+            
+            // 渲染列表
+            if (users.length === 0) {
+                document.getElementById('users-list').innerHTML = `
+                    <div class="text-[12px] text-gray-400 text-center py-8">
+                        <i class="fa-solid fa-check-circle text-2xl mb-2 block text-green-500"></i>
+                        暂无即将到期的用户
+                    </div>
+                `;
+            } else {
+                document.getElementById('users-list').innerHTML = users.map(u => {
+                    const isToday = u.expire === today;
+                    const isDeleted = u.is_deleted;
+                    const bgColor = isDeleted ? 'bg-gray-100 dark:bg-gray-800/50' : (isToday ? 'bg-red-50 dark:bg-red-900/10' : 'bg-amber-50 dark:bg-amber-900/10');
+                    const textColor = isDeleted ? 'text-gray-400' : (isToday ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400');
+                    const statusText = isDeleted ? '已删除' : (isToday ? '今日到期' : `${u.days_left}天后到期`);
+                    
+                    return `
+                        <div class="flex items-center justify-between py-3 px-4 rounded-xl ${bgColor}">
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-full bg-white dark:bg-gray-700 flex items-center justify-center text-gray-500">
+                                    <i class="fa-solid fa-user text-sm"></i>
+                                </div>
+                                <div>
+                                    <div class="text-[13px] font-bold text-gray-800 dark:text-gray-200">${u.name}</div>
+                                    <div class="text-[11px] text-gray-500">${u.expire}</div>
+                                </div>
+                            </div>
+                            <span class="text-[11px] font-bold ${textColor}">${statusText}</span>
+                        </div>
+                    `;
+                }).join('');
+            }
+        }
+    } catch (e) {
+        console.error('加载用户列表失败:', e);
+        document.getElementById('users-list').innerHTML = `
+            <div class="text-[12px] text-red-500 text-center py-8">
+                <i class="fa-solid fa-exclamation-circle text-2xl mb-2 block"></i>
+                加载失败
+            </div>
+        `;
+    }
+}
+
+async function checkNow() {
+    showToast('正在检测...', 'info');
+    try {
+        const res = await fetch('/api/plugins/auto_expire/check_now', { method: 'POST' });
+        const data = await res.json();
+        
+        if (data.status === 'success') {
+            const result = data.data;
+            showToast(`检测完成：${result.count} 位用户即将到期`, 'success');
+            loadUsers();
+        } else {
+            showToast(data.message || '检测失败', 'error');
+        }
+    } catch (e) {
+        showToast('请求失败', 'error');
+    }
+}
+
+async function cleanDeleted() {
+    showToast('正在清理...', 'info');
+    try {
+        const res = await fetch('/api/plugins/auto_expire/clean_deleted', { method: 'POST' });
+        const data = await res.json();
+        
+        if (data.status === 'success') {
+            const cleaned = data.data?.cleaned || 0;
+            showToast(`已清理 ${cleaned} 个已删除用户`, 'success');
+            loadUsers();
+        } else {
+            showToast(data.message || '清理失败', 'error');
+        }
+    } catch (e) {
+        showToast('请求失败', 'error');
+    }
+}
+
+async function saveConfig() {
+    const config = {
+        remind_days: parseInt(document.getElementById('remind-days').value) || 3,
+        check_interval: parseInt(document.getElementById('check-interval').value) || 6,
+        notify_admin: document.getElementById('notify-admin').checked,
+        auto_clean_deleted: document.getElementById('auto-clean').checked,
+        notify_enabled: document.getElementById('notify-enabled').checked
+    };
+    
+    try {
+        const res = await fetch('/api/plugins/auto_expire/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        });
+        const data = await res.json();
+        
+        if (data.status === 'success') {
+            showToast('配置已保存', 'success');
+        } else {
+            showToast(data.message || '保存失败', 'error');
+        }
+    } catch (e) {
+        showToast('请求失败', 'error');
+    }
+}
+
+function showToast(msg, type = 'success') {
+    const toast = document.getElementById('toast');
+    toast.textContent = msg;
+    toast.className = 'fixed top-4 left-1/2 -translate-x-1/2 z-[200] px-6 py-3 rounded-full shadow-xl text-[13px] font-bold transition-all bg-gray-900 text-white dark:bg-gray-200 dark:text-black';
+    
+    if (type === 'error') {
+        toast.classList.add('bg-red-500', 'text-white');
+        toast.classList.remove('bg-gray-900', 'dark:bg-gray-200', 'dark:text-black');
+    } else if (type === 'info') {
+        toast.classList.add('bg-blue-500', 'text-white');
+        toast.classList.remove('bg-gray-900', 'dark:bg-gray-200', 'dark:text-black');
+    }
+    
+    setTimeout(() => {
+        toast.classList.add('opacity-0', 'pointer-events-none');
+    }, 2500);
+}
+
+// 初始化
+loadConfig();
+</script>

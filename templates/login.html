@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - EmbyPulse</title>
+    
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="EmbyPulse">
+    <meta name="theme-color" content="#4f46e5">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: { 50: '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe', 300: '#a5b4fc', 400: '#818cf8', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca', 800: '#3730a3', 900: '#312e81' },
+                    },
+                    fontFamily: { sans: ['Noto Sans SC', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap');
+        body { background-color: #000; transition: background-color 0.5s ease; }
+        
+        .bg-poster {
+            position: fixed; inset: 0; z-index: -2;
+            background-size: cover; background-position: center;
+            transition: opacity 1.5s ease-in-out, transform 10s linear;
+            opacity: 0; transform: scale(1.05);
+        }
+        .bg-poster.loaded { opacity: 1; transform: scale(1); }
+
+        .bg-dimmer {
+            position: fixed; inset: 0; z-index: -1;
+            background-color: transparent;
+            transition: background-color 0.5s ease;
+            pointer-events: none;
+        }
+        html.dark .bg-dimmer {
+            background-color: rgba(0, 0, 0, 0.6);
+        }
+
+        .apple-glass {
+            background: rgba(255, 255, 255, 0.65);
+            backdrop-filter: blur(30px) saturate(180%);
+            -webkit-backdrop-filter: blur(30px) saturate(180%);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        html.dark .apple-glass {
+            background: rgba(25, 25, 28, 0.65);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+        }
+
+        .shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
+        @keyframes shake { 10%, 90% { transform: translate3d(-1px, 0, 0); } 20%, 80% { transform: translate3d(2px, 0, 0); } 30%, 50%, 70% { transform: translate3d(-4px, 0, 0); } 40%, 60% { transform: translate3d(4px, 0, 0); } }
+
+        input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:focus, input:-webkit-autofill:active {
+            transition: background-color 5000s ease-in-out 0s;
+            -webkit-text-fill-color: #111 !important;
+        }
+        html.dark input:-webkit-autofill, html.dark input:-webkit-autofill:hover, html.dark input:-webkit-autofill:focus, html.dark input:-webkit-autofill:active {
+            transition: background-color 5000s ease-in-out 0s;
+            -webkit-text-fill-color: #fff !important;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen selection:bg-brand-500 selection:text-white relative">
+
+    <button onclick="toggleTheme()" class="absolute top-5 right-5 md:top-8 md:right-8 w-11 h-11 rounded-full flex items-center justify-center z-50 bg-white/40 dark:bg-black/40 backdrop-blur-xl border border-white/40 dark:border-white/10 text-gray-800 dark:text-gray-200 hover:scale-105 active:scale-95 transition-all shadow-md">
+        <i id="theme-icon" class="fa-solid fa-moon text-lg"></i>
+    </button>
+
+    <div id="bg-img" class="bg-poster"></div>
+    <div class="bg-dimmer"></div>
+
+    <div class="apple-glass w-[85%] md:w-full max-w-[400px] mx-auto p-7 md:p-10 rounded-[28px] md:rounded-[32px] z-10" id="login-card">
+        
+        <div class="text-center mb-8 md:mb-9">
+            <img src="/static/img/logo-app.png" alt="EmbyPulse Logo" class="w-16 h-16 md:w-[76px] md:h-[76px] object-cover mx-auto mb-3 md:mb-4 rounded-[18px] md:rounded-[22px] shadow-lg border border-white/60 dark:border-white/10 bg-white dark:bg-[#1C1C1E]">
+            <h1 class="text-[24px] md:text-[28px] font-black tracking-tight text-gray-900 dark:text-white mb-1 md:mb-1.5">EmbyPulse</h1>
+            <p class="text-[12px] md:text-[13px] text-gray-600 dark:text-gray-300 font-bold tracking-widest">您的专属私域流媒体管家</p>
+        </div>
+
+        <form id="login-form" class="space-y-4 md:space-y-5" onsubmit="handleLogin(event)">
+            
+            <!-- 登录方式选择 -->
+            <div id="auth-type-container" class="hidden">
+                <label class="block text-[11px] font-bold text-gray-600 dark:text-gray-400 mb-2 pl-1 uppercase tracking-wider">登录方式</label>
+                <div class="relative">
+                    <button type="button" id="auth-type-btn" onclick="toggleAuthDropdown()" class="w-full flex items-center justify-between bg-white/70 dark:bg-black/30 border border-gray-200 dark:border-white/10 rounded-[16px] px-4 py-3.5 text-gray-900 dark:text-white text-[14px] font-medium focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 transition-all shadow-sm">
+                        <div class="flex items-center gap-2.5">
+                            <div id="auth-type-icon" class="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white text-xs">
+                                <i class="fa-solid fa-server"></i>
+                            </div>
+                            <span id="auth-type-label">Emby 账号</span>
+                        </div>
+                        <i class="fa-solid fa-chevron-down text-gray-400 text-xs transition-transform" id="auth-dropdown-arrow"></i>
+                    </button>
+                    <div id="auth-dropdown" class="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-[#2C2C2E] border border-gray-200 dark:border-white/10 rounded-[14px] shadow-xl z-50 overflow-hidden opacity-0 scale-95 pointer-events-none transition-all duration-200">
+                        <div class="py-1.5">
+                            <button type="button" onclick="selectAuthType('emby')" class="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                                <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white text-sm">
+                                    <i class="fa-solid fa-server"></i>
+                                </div>
+                                <div class="text-left">
+                                    <div class="text-[13px] font-semibold text-gray-900 dark:text-white">Emby 账号</div>
+                                    <div class="text-[11px] text-gray-500 dark:text-gray-400">使用 Emby 管理员账号登录</div>
+                                </div>
+                            </button>
+                            <button type="button" onclick="selectAuthType('local')" class="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                                <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center text-white text-sm">
+                                    <i class="fa-solid fa-user-shield"></i>
+                                </div>
+                                <div class="text-left">
+                                    <div class="text-[13px] font-semibold text-gray-900 dark:text-white">本地账号</div>
+                                    <div class="text-[11px] text-gray-500 dark:text-gray-400">使用独立管理员账号登录</div>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-[11px] font-bold text-gray-600 dark:text-gray-400 mb-2 pl-1 uppercase tracking-wider">系统账号</label>
+                <div class="flex items-center bg-white/70 dark:bg-black/30 border border-gray-200 dark:border-white/10 rounded-[16px] focus-within:ring-2 focus-within:ring-brand-500/50 focus-within:border-brand-500 focus-within:bg-white dark:focus-within:bg-black/50 transition-all shadow-sm group overflow-hidden">
+                    <div class="pl-4 pr-2 text-gray-400 group-focus-within:text-brand-500 transition-colors flex items-center justify-center">
+                        <i class="fa-solid fa-user text-[14px]"></i>
+                    </div>
+                    <input type="text" id="username" required autocomplete="username"
+                        class="flex-1 bg-transparent border-none py-3.5 pr-4 text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-0 text-[14px] font-medium"
+                        placeholder="请输入管理员账号">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-[11px] font-bold text-gray-600 dark:text-gray-400 mb-2 pl-1 uppercase tracking-wider">身份凭证</label>
+                <div class="flex items-center bg-white/70 dark:bg-black/30 border border-gray-200 dark:border-white/10 rounded-[16px] focus-within:ring-2 focus-within:ring-brand-500/50 focus-within:border-brand-500 focus-within:bg-white dark:focus-within:bg-black/50 transition-all shadow-sm group overflow-hidden">
+                    <div class="pl-4 pr-2 text-gray-400 group-focus-within:text-brand-500 transition-colors flex items-center justify-center">
+                        <i class="fa-solid fa-lock text-[14px]"></i>
+                    </div>
+                    <input type="password" id="password" autocomplete="current-password"
+                        class="flex-1 bg-transparent border-none py-3.5 pr-4 text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-0 text-[14px] font-medium"
+                        placeholder="请输入密码 (如未设置请留空)">
+                </div>
+            </div>
+
+            <!-- TOTP 验证码输入框（默认隐藏） -->
+            <div id="totp-input-container" class="hidden">
+                <label class="block text-[11px] font-bold text-gray-600 dark:text-gray-400 mb-2 pl-1 uppercase tracking-wider">验证器验证码</label>
+                <div class="flex items-center bg-white/70 dark:bg-black/30 border border-gray-200 dark:border-white/10 rounded-[16px] focus-within:ring-2 focus-within:ring-brand-500/50 focus-within:border-brand-500 focus-within:bg-white dark:focus-within:bg-black/50 transition-all shadow-sm group overflow-hidden">
+                    <div class="pl-4 pr-2 text-gray-400 group-focus-within:text-brand-500 transition-colors flex items-center justify-center">
+                        <i class="fa-solid fa-shield text-[14px]"></i>
+                    </div>
+                    <input type="text" id="totp_code" maxlength="6" autocomplete="one-time-code"
+                        class="flex-1 bg-transparent border-none py-3.5 pr-4 text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-0 text-[14px] font-medium font-mono"
+                        placeholder="输入 6 位验证码">
+                </div>
+                <p class="text-[10px] text-gray-500 mt-1 pl-1">请打开验证器应用获取 6 位验证码</p>
+            </div>
+
+            <button type="submit" id="submit-btn"
+                class="w-full bg-brand-600 hover:bg-brand-500 text-white font-bold py-3.5 rounded-[16px] shadow-[0_8px_20px_rgba(79,70,229,0.3)] dark:shadow-[0_8px_20px_rgba(79,70,229,0.4)] transform transition-all hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] flex items-center justify-center gap-2 mt-6 border border-brand-500">
+                <span id="btn-text" class="text-[15px] tracking-wide">登录大盘</span>
+                <i id="btn-icon" class="fa-solid fa-arrow-right-to-bracket text-[14px] opacity-80"></i>
+            </button>
+        </form>
+    </div>
+
+    <div class="absolute bottom-6 text-center z-10 w-full drop-shadow-md pointer-events-none">
+        <p class="text-[10px] text-white/80 font-mono tracking-tight bg-black/20 inline-block px-3 py-1 rounded-full backdrop-blur-sm" id="bg-source">Wallpaper loading...</p>
+    </div>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js');
+            });
+        }
+    </script>
+
+    <script>
+        // 认证类型
+        let currentAuthType = 'emby';
+        
+        // 页面加载时检查是否启用本地认证
+        async function checkAuthSettings() {
+            try {
+                const res = await fetch('/api/auth/settings');
+                const data = await res.json();
+                if (data.status === 'success') {
+                    const authContainer = document.getElementById('auth-type-container');
+                    const d = data.data;
+                    
+                    // 如果禁用了 Emby 登录，强制使用本地账号并隐藏选择器
+                    if (d.disable_emby_auth) {
+                        selectAuthType('local');
+                        authContainer.classList.add('hidden');
+                        return;  // 直接返回，不显示选择器
+                    }
+                    
+                    // 本地认证启用且有账号时显示选择
+                    if (d.enable_local_auth && d.has_local_admin) {
+                        authContainer.classList.remove('hidden');
+                        
+                        // 如果 Emby 未配置，自动切换到本地账号并隐藏选择器
+                        if (!d.emby_configured) {
+                            selectAuthType('local');
+                            authContainer.classList.add('hidden');
+                        }
+                    }
+                }
+            } catch (e) {
+                console.log('检查认证设置失败:', e);
+            }
+        }
+        
+        function toggleAuthDropdown() {
+            const dropdown = document.getElementById('auth-dropdown');
+            const arrow = document.getElementById('auth-dropdown-arrow');
+            const isOpen = !dropdown.classList.contains('pointer-events-none');
+            
+            if (isOpen) {
+                dropdown.classList.add('opacity-0', 'scale-95', 'pointer-events-none');
+                dropdown.classList.remove('opacity-100', 'scale-100');
+                arrow.classList.remove('rotate-180');
+            } else {
+                dropdown.classList.remove('opacity-0', 'scale-95', 'pointer-events-none');
+                dropdown.classList.add('opacity-100', 'scale-100');
+                arrow.classList.add('rotate-180');
+            }
+        }
+        
+        function selectAuthType(type) {
+            currentAuthType = type;
+            const label = document.getElementById('auth-type-label');
+            const icon = document.getElementById('auth-type-icon');
+            const usernameInput = document.getElementById('username');
+            
+            if (type === 'emby') {
+                label.textContent = 'Emby 账号';
+                icon.className = 'w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white text-xs';
+                icon.innerHTML = '<i class="fa-solid fa-server"></i>';
+                usernameInput.placeholder = '请输入 Emby 管理员账号';
+            } else {
+                label.textContent = '本地账号';
+                icon.className = 'w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center text-white text-xs';
+                icon.innerHTML = '<i class="fa-solid fa-user-shield"></i>';
+                usernameInput.placeholder = '请输入本地管理员账号';
+            }
+            
+            toggleAuthDropdown();
+        }
+        
+        // 点击外部关闭下拉菜单
+        document.addEventListener('click', (e) => {
+            const container = document.getElementById('auth-type-container');
+            if (container && !container.contains(e.target)) {
+                const dropdown = document.getElementById('auth-dropdown');
+                const arrow = document.getElementById('auth-dropdown-arrow');
+                dropdown.classList.add('opacity-0', 'scale-95', 'pointer-events-none');
+                dropdown.classList.remove('opacity-100', 'scale-100');
+                arrow.classList.remove('rotate-180');
+            }
+        });
+
+        function initTheme() {
+            const icon = document.getElementById('theme-icon');
+            if (localStorage.theme === 'dark') {
+                document.documentElement.classList.add('dark');
+                icon.className = 'fa-solid fa-sun text-lg';
+            } else {
+                document.documentElement.classList.remove('dark');
+                icon.className = 'fa-solid fa-moon text-lg';
+            }
+        }
+
+        function toggleTheme() {
+            const html = document.documentElement;
+            const icon = document.getElementById('theme-icon');
+            if (html.classList.contains('dark')) {
+                html.classList.remove('dark');
+                localStorage.theme = 'light';
+                icon.className = 'fa-solid fa-moon text-lg';
+            } else {
+                html.classList.add('dark');
+                localStorage.theme = 'dark';
+                icon.className = 'fa-solid fa-sun text-lg';
+            }
+        }
+
+        initTheme();
+        checkAuthSettings();
+
+        async function loadBackground() {
+            try {
+                const res = await fetch('/api/wallpaper');
+                const json = await res.json();
+                
+                if(json.status === 'success' && json.url) {
+                    const img = new Image();
+                    img.src = json.url;
+                    img.onload = () => {
+                        const el = document.getElementById('bg-img');
+                        el.style.backgroundImage = `url('${json.url}')`;
+                        el.classList.add('loaded'); 
+                        if(json.title) document.getElementById('bg-source').innerText = "Wallpaper by " + json.title;
+                    };
+                }
+            } catch(e) { console.error("BG Error:", e); }
+        }
+        loadBackground();
+
+        async function handleLogin(e) {
+            e.preventDefault();
+            const btn = document.getElementById('submit-btn');
+            const btnText = document.getElementById('btn-text');
+            const btnIcon = document.getElementById('btn-icon');
+            const card = document.getElementById('login-card');
+            const user = document.getElementById('username').value;
+            const pass = document.getElementById('password').value;
+            const totpInputContainer = document.getElementById('totp-input-container');
+            const totpCode = document.getElementById('totp_code').value;
+
+            btnText.innerText = "验证中...";
+            btnIcon.className = "fa-solid fa-circle-notch fa-spin text-[14px]";
+            btn.disabled = true;
+            btn.classList.add('opacity-80', 'cursor-not-allowed', 'scale-[0.98]');
+
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: user,
+                        password: pass,
+                        auth_type: currentAuthType,
+                        totp_code: totpCode
+                    })
+                });
+                const json = await res.json();
+
+                if(json.status === 'success') {
+                    btnText.innerText = "登录成功";
+                    btnIcon.className = "fa-solid fa-check text-[14px]";
+                    btn.classList.replace('bg-brand-600', 'bg-emerald-500');
+                    btn.classList.replace('border-brand-500', 'border-emerald-400');
+                    btn.classList.replace('shadow-[0_8px_20px_rgba(79,70,229,0.3)]', 'shadow-[0_8px_20px_rgba(16,185,129,0.3)]');
+                    setTimeout(() => window.location.href = '/', 400);
+                } else {
+                    // 如果需要 TOTP 验证码，显示输入框
+                    if (json.message === '需要验证器验证码') {
+                        btnText.innerText = "登录大盘";
+                        btnIcon.className = "fa-solid fa-arrow-right-to-bracket text-[14px] opacity-80";
+                        btn.disabled = false;
+                        btn.classList.remove('opacity-80', 'cursor-not-allowed', 'scale-[0.98]');
+                        
+                        totpInputContainer.classList.remove('hidden');
+                        document.getElementById('totp_code').focus();
+                        return;  // 不显示错误提示，等待用户输入验证码
+                    }
+                    throw new Error(json.message);
+                }
+            } catch (err) {
+                btnText.innerText = "登录大盘";
+                btnIcon.className = "fa-solid fa-arrow-right-to-bracket text-[14px] opacity-80";
+                btn.disabled = false;
+                btn.classList.remove('opacity-80', 'cursor-not-allowed', 'scale-[0.98]');
+                
+                card.classList.add('shake');
+                setTimeout(() => card.classList.remove('shake'), 500);
+                
+                const toast = document.createElement('div');
+                toast.className = 'fixed top-10 left-1/2 transform -translate-x-1/2 bg-white/90 dark:bg-[#2C2C2E]/90 backdrop-blur-xl text-red-500 border border-red-200 dark:border-red-500/20 px-6 py-3.5 rounded-full shadow-2xl z-50 text-[13px] font-bold flex items-center animate-bounce whitespace-nowrap';
+                toast.innerHTML = `<i class="fa-solid fa-triangle-exclamation mr-2.5 text-lg"></i> ${err.message}`;
+                document.body.appendChild(toast);
+                setTimeout(() => toast.remove(), 3000);
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,371 @@
+import os
+import asyncio
+import threading
+import socket
+import logging
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
+
+# 🔥 安全：日志脱敏过滤器
+from app.utils.sensitive_filter import SensitiveLogFilter
+
+# 应用日志过滤器到所有 logger
+for handler in logging.getLogger().handlers:
+    handler.addFilter(SensitiveLogFilter())
+for logger_name in ['uvicorn', 'uvicorn.access', 'uvicorn.error']:
+    for handler in logging.getLogger(logger_name).handlers:
+        handler.addFilter(SensitiveLogFilter())
+print("[🔒 安全] 已启用日志脱敏过滤器")
+
+# 🔒 安全：速率限制中间件
+from app.core.rate_limiter import RateLimitMiddleware, start_cleanup_timer
+start_cleanup_timer()
+
+# 🔥 修复 SQLite "database is locked" 问题：全局 Monkey Patch
+import sqlite3
+_original_connect = sqlite3.connect
+
+def _patched_connect(database, timeout=5.0, *args, **kwargs):
+    """增强版 sqlite3.connect，自动启用 WAL 模式和更长超时"""
+    # 如果调用方没有指定 timeout，使用 30 秒
+    if timeout == 5.0:  # 默认值
+        timeout = 30.0
+    conn = _original_connect(database, timeout=timeout, *args, **kwargs)
+    # 启用 WAL 模式提高并发
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=30000")  # 30秒
+        conn.execute("PRAGMA synchronous=NORMAL")  # 平衡性能和安全
+    except:
+        pass  # 只读数据库可能失败，忽略
+    return conn
+
+sqlite3.connect = _patched_connect
+print("[🔧 SQLite] 已启用 WAL 模式 + 30秒超时（解决 database is locked）")
+from app.core.session_middleware import DatabaseSessionMiddleware
+from app.core.security_headers_middleware import SecurityHeadersMiddleware
+from app.routers import dedupe
+from app.routers import notify_rules
+from app.routers import system_tools
+from app.routers import pro
+from app.routers import db_tools  # 🔥 数据库管理工具
+from app.routers import messages  # 🔥 消息中心
+from app.routers import api_tokens  # 🔑 API Token 管理
+
+# 🔥 修复在这里：完整的引入语句
+from app.services.risk_service import start_risk_monitor
+
+from app.routers import insight
+from app.core.config import PORT, CONFIG_DIR, FONT_DIR, cfg, DB_PATH, SYSTEM_DB_PATH
+from app.core.database import init_db, DB_PATH, SYSTEM_DB_PATH, auto_migrate_system_db
+from app.services.bot_service import bot
+from app.services.user_bot_service import user_bot
+from app.routers import media_request
+from app.routers import points
+from app.routers import plugins as plugins_router
+# 🔥 引入所有路由
+from app.routers import views, auth, users, stats, bot as bot_router, system, proxy, report, webhook, insight, tasks, history, calendar, search, clients, gaps, risk,notifications, notify_admin, pwa, audit
+from app.plugins import discover_plugins, get_enabled_plugins
+
+# 初始化目录和数据库
+if not os.path.exists("static"): os.makedirs("static")
+if not os.path.exists("templates"): os.makedirs("templates")
+if not os.path.exists(CONFIG_DIR): os.makedirs(CONFIG_DIR)
+if not os.path.exists(FONT_DIR): os.makedirs(FONT_DIR)
+
+# 🔒 安全：启动时清空 Session 表（强制用户重新登录）
+try:
+    conn = sqlite3.connect(SYSTEM_DB_PATH)
+    c = conn.cursor()
+    # 检查表是否存在
+    c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'")
+    if c.fetchone():
+        c.execute("DELETE FROM sessions")
+        deleted_count = c.rowcount
+        conn.commit()
+        print(f"🔒 [安全] 已清空 {deleted_count} 个 Session，所有用户需要重新登录")
+    else:
+        print("🔒 [安全] Session 表不存在，跳过清理")
+    conn.close()
+except Exception as e:
+    print(f"⚠️ [安全] 清空 Session 失败: {e}")
+
+# 🔒 安全：启动时运行安全检查
+try:
+    from app.core.security_check import run_security_checks
+    run_security_checks()
+except Exception as e:
+    print(f"[🔒 安全] 安全检查失败: {e}")
+
+# 🔥 启动时自动检测并迁移系统数据（默认关闭，设置 AUTO_MIGRATE_DB=1 启用）
+print("[🚀 启动] 正在检查数据库状态...")
+auto_migrate_enabled = os.getenv("AUTO_MIGRATE_DB", "") == "1"
+if auto_migrate_enabled:
+    migrated = auto_migrate_system_db()
+else:
+    print("[🔄 迁移检测] 自动迁移已关闭，跳过（设置 AUTO_MIGRATE_DB=1 启用）")
+    migrated = False
+init_db(skip_migration=True)  # 迁移已在上面执行（或跳过）
+
+# 🔥 自动补充缺失的系统表（新增功能，确保新部署不缺表）
+from app.core.db_manager import ensure_tables
+table_result = ensure_tables()
+if table_result["created_tables"]:
+    print(f"[🔧 自动修复] 已创建缺失表: {', '.join(table_result['created_tables'])}")
+
+# 🔥 打印数据库状态
+print(f"[📊 数据库] 系统库: {SYSTEM_DB_PATH} {'✅' if os.path.exists(SYSTEM_DB_PATH) else '❌'}")
+print(f"[📊 数据库] 播放库: {DB_PATH} {'✅' if os.path.exists(DB_PATH) else '❌ (将使用API模式)'}")
+
+# 🔥 启动天气缓存服务（后台定时刷新）
+def _start_weather_service():
+    import time
+    time.sleep(10)  # 等待服务完全启动
+    from app.routers.system_tools import preload_weather_cache
+    preload_weather_cache()
+
+threading.Thread(target=_start_weather_service, daemon=True).start()
+
+# ==============================================================================
+# 🔥 真·物理隔离：10308 专属 ASGI 独立引擎 (无视任何反代环境)
+# ==============================================================================
+async def user_portal_app(scope, receive, send):
+    if scope["type"] == "lifespan":
+        while True:
+            message = await receive()
+            if message["type"] == "lifespan.startup":
+                await send({"type": "lifespan.startup.complete"})
+            elif message["type"] == "lifespan.shutdown":
+                await send({"type": "lifespan.shutdown.complete"})
+                return
+
+    elif scope["type"] == "http":
+        path = scope.get("path", "")
+        
+        # 强制送去求片中心
+        if path == "/":
+            scope["path"] = "/request"
+            scope["raw_path"] = b"/request"
+            
+        # 铁血隔离白名单：放行求片页面、邀请注册、静态资源、以及所有受密码保护的底层 API
+        allowed = (
+            "/request", 
+            "/request_login", 
+            "/static", 
+            "/favicon.ico",
+            "/api",
+            "/invite"
+        )
+        if not scope["path"].startswith(allowed):
+            async def send_404():
+                await send({"type": "http.response.start", "status": 404, "headers": [(b"content-type", b"text/html; charset=utf-8")]})
+                await send({"type": "http.response.body", "body": "<h1>404 Not Found</h1><p>非法越界，后台管理界面已被物理阻断。</p>".encode("utf-8")})
+            return await send_404()
+            
+        await app(scope, receive, send)
+    else:
+        await app(scope, receive, send)
+
+REQUEST_PORT = int(os.getenv("REQUEST_PORT", "10308"))
+
+def start_10308_server():
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        if hasattr(socket, 'SO_REUSEPORT'):
+            try: sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+            except OSError: pass
+        sock.bind(('0.0.0.0', REQUEST_PORT))
+        sock.listen(100)
+    except OSError:
+        return
+
+    import uvicorn
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    # 错误日志才会打印，保证前台安静
+    config = uvicorn.Config(app=user_portal_app, log_level="error")
+    
+    server = uvicorn.Server(config)
+    server.install_signal_handlers = lambda: None
+    try:
+        loop.run_until_complete(server.serve(sockets=[sock]))
+    except BaseException:
+        pass
+
+# ==============================================================================
+# 🔥 定制化纯中文启动面板 (一口气输出完毕防插队)
+# ==============================================================================
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    bot.start()
+    # 🧩 Pro 专属：用户 TG 机器人（自动启动，无需手动保存配置）
+    try:
+        import sqlite3 as _sql
+        _conn = _sql.connect(SYSTEM_DB_PATH)  # 🔥 使用系统数据库
+        try:
+            _pro_row = _conn.execute("SELECT status FROM sys_license LIMIT 1").fetchone()
+        except:
+            _pro_row = None
+        _conn.close()
+        _token = cfg.get("tg_user_bot_token")
+        if _pro_row and _pro_row[0] == 'pro' and _token:
+            user_bot.start()
+    except Exception as _e:
+        print(f"⚠️ 用户机器人启动检查异常: {_e}")
+    # 唤醒 10308 独立守护引擎
+    threading.Thread(target=start_10308_server, daemon=True).start()
+    # 🔥 唤醒风控天眼
+    start_risk_monitor()
+    
+    # 🔥 启动仪表盘缓存预热（后台异步执行，不阻塞启动）
+    from app.routers.stats import preload_dashboard_cache, start_dashboard_cache_refresh_loop
+    asyncio.create_task(preload_dashboard_cache())
+    asyncio.create_task(start_dashboard_cache_refresh_loop())
+    
+    # 🔒 Pro 授权在线验证（启动时验证 + 定时心跳）
+    try:
+        from app.core.license_verification import init_license_verification
+        init_license_verification()
+    except Exception as e:
+        print(f"⚠️ Pro 授权验证初始化失败: {e}")
+    
+    # 🔥 启动用户社区首页缓存刷新（后台定时刷新）
+    def _start_community_cache_refresh():
+        import time
+        time.sleep(15)  # 等待服务完全启动
+        from app.routers.media_request import _refresh_community_cache
+        _refresh_community_cache()  # 首次刷新
+        while True:
+            time.sleep(300)  # 每 5 分钟刷新一次
+            _refresh_community_cache()
+    threading.Thread(target=_start_community_cache_refresh, daemon=True).start()
+    
+    # 🔥 拿掉 sleep，把面板一口气打印完，绝对整齐！
+    print("\n" + "="*55)
+    print("🚀 [系统启动] EmbyPulse 双引擎初始化成功！")
+    print("🤖 [消息通知] 机器人模块已就绪")
+    print("🔥 [缓存预热] 仪表盘数据正在后台预热...")
+    print("🎈 [用户社区] 首页缓存已启用，每 5 分钟自动刷新")
+    print("👁️ [风险管控] 并发天眼已开启，时刻监控越界行为！")
+    print(f"🌍 [核心后台] 管理员仪表盘运行在端口: {PORT}")
+    print(f"🎈 [用户中心] 独立求片门户运行在端口: {REQUEST_PORT}")
+    print("✅ [系统状态] 物理隔离架构已启动，安全防护中！")
+    if user_bot.running: print("🤖 [Pro专属] 用户 TG 机器人已上线！")
+    print("="*55 + "\n")
+    
+    yield
+    
+    print("\n" + "="*55)
+    print("🛑 [系统关闭] 正在停止 EmbyPulse 服务...")
+    bot.stop()
+    user_bot.stop()
+    print("💤 [系统关闭] 所有服务已安全退出。")
+    print("="*55 + "\n")
+# ==============================================================================
+
+app = FastAPI(
+    lifespan=lifespan,
+    docs_url=None,  # 🔒 关闭 Swagger UI (/docs)
+    redoc_url=None  # 🔒 关闭 ReDoc (/redoc)
+)
+
+# 中间件
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(DatabaseSessionMiddleware)
+app.add_middleware(RateLimitMiddleware)  # 🔒 速率限制
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"], allow_headers=["Content-Type", "Authorization", "X-Requested-With", "X-Telegram-Bot-Api-Secret-Token"])
+
+# 🔥 禁用浏览器缓存中间件（解决手机端缓存问题）
+from starlette.middleware.base import BaseHTTPMiddleware
+class NoCacheMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        # 🔥 对用户社区、HTML、API 响应禁用缓存
+        is_no_cache_path = (
+            request.url.path.endswith('.html') or
+            request.url.path.startswith('/api/') or
+            request.url.path == '/' or
+            request.url.path.startswith('/request') or  # 🔥 用户社区
+            request.url.path.startswith('/login') or    # 🔥 登录页
+            request.url.path.startswith('/register')    # 🔥 注册页
+        )
+        if is_no_cache_path:
+            response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0, private'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+            # 🔥 Vary 头告诉 CDN/代理不要基于请求头缓存
+            response.headers['Vary'] = 'Cookie, Authorization'
+        return response
+app.add_middleware(NoCacheMiddleware)
+
+# 静态文件
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# 公共文件（用于企微图片等）
+import os
+public_dir = os.path.join(os.getcwd(), "public")
+if not os.path.exists(public_dir):
+    os.makedirs(public_dir, exist_ok=True)
+app.mount("/public", StaticFiles(directory=public_dir), name="public")
+
+# 注册路由
+app.include_router(views.router)
+app.include_router(auth.router)
+app.include_router(users.router)
+app.include_router(stats.router)
+app.include_router(bot_router.router)
+app.include_router(system.router)
+app.include_router(api_tokens.router)  # 🔑 API Token 管理
+app.include_router(proxy.router)
+app.include_router(report.router)
+app.include_router(insight.router)
+app.include_router(webhook.router)
+app.include_router(tasks.router)
+app.include_router(history.router)
+app.include_router(calendar.router)
+app.include_router(media_request.router)
+app.include_router(search.router)
+app.include_router(clients.router)
+app.include_router(gaps.router)
+app.include_router(risk.router)  # 🔥 挂载风控 API
+app.include_router(notifications.router)  # 🔥 挂载全局通知 API
+app.include_router(notify_admin.router)  # 🔥 挂载通知管理 API
+app.include_router(dedupe.router)
+app.include_router(notify_rules.router)
+app.include_router(system_tools.router)
+app.include_router(points.router)
+app.include_router(pro.router)
+app.include_router(db_tools.router)  # 🔥 数据库管理工具 API
+app.include_router(messages.router)  # 🔥 消息中心 API
+app.include_router(pwa.router)  # 🔥 PWA 自定义图标 API
+
+# 🔥 日历通知 API
+from app.routers import calendar_notify
+app.include_router(calendar_notify.router)
+# 启动日历通知服务
+calendar_notify.init_calendar_notify_service()
+
+# 🧩 发现并注册插件（必须在 plugins_router 之前注册，避免路由冲突）
+discover_plugins()
+for _p in get_enabled_plugins():
+    try:
+        app.include_router(_p.router)
+    except Exception as e:
+        print(f"[🧩 插件] 注册路由失败: {_p.id} - {e}")
+
+# 注册插件管理路由（放在插件路由之后，避免动态路由抢占）
+app.include_router(plugins_router.router)
+
+# 🔒 审计日志路由
+app.include_router(audit.router)
+
+# 设置 app 引用，用于动态注册路由
+plugins_router.set_app(app)
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=PORT)

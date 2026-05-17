@@ -1,0 +1,2635 @@
+{% extends "layout.html" %}
+{% block title %}消息中心 - Emby Pulse{% endblock %}
+{% block head %}
+<!-- Quill Editor -->
+<link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
+<style>
+    .apple-card { 
+        background-color: rgba(255, 255, 255, 0.95); 
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-radius: 24px; 
+        box-shadow: 0 4px 24px -8px rgba(0,0,0,0.04);
+        border: 1px solid rgba(0,0,0,0.02);
+    }
+    html.dark .apple-card {
+        background-color: rgba(28, 28, 30, 0.85); 
+        box-shadow: 0 4px 24px -8px rgba(0, 0, 0, 0.4);
+        border: 1px solid rgba(255,255,255,0.04);
+    }
+    
+    .chat-bubble-admin {
+        background: linear-gradient(135deg, #007AFF, #5856D6);
+        color: white;
+        border-radius: 18px 18px 4px 18px;
+    }
+    .chat-bubble-user {
+        background: #E5E5EA;
+        border-radius: 18px 18px 18px 4px;
+    }
+    html.dark .chat-bubble-user {
+        background: #2C2C2E;
+    }
+    
+    .emoji-picker {
+        display: none;
+        position: absolute;
+        bottom: 100%;
+        left: 0;
+        margin-bottom: 8px;
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+        padding: 12px;
+        z-index: 100;
+        width: 280px;
+    }
+    html.dark .emoji-picker {
+        background: #2C2C2E;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    }
+    .emoji-picker.show {
+        display: block;
+    }
+    .emoji-btn {
+        font-size: 20px;
+        padding: 6px;
+        cursor: pointer;
+        border-radius: 8px;
+        transition: background 0.15s;
+    }
+    .emoji-btn:hover {
+        background: rgba(0,0,0,0.05);
+    }
+    html.dark .emoji-btn:hover {
+        background: rgba(255,255,255,0.1);
+    }
+    
+    .conversation-item {
+        transition: all 0.2s;
+    }
+    .conversation-item:hover {
+        background: rgba(0,122,255,0.05);
+    }
+    .conversation-item.active {
+        background: rgba(0,122,255,0.1);
+    }
+    html.dark .conversation-item:hover {
+        background: rgba(255,255,255,0.05);
+    }
+    html.dark .conversation-item.active {
+        background: rgba(255,255,255,0.1);
+    }
+    
+    .message-input {
+        resize: none;
+        max-height: 120px;
+        overflow-y: auto;
+    }
+    
+    /* 聊天区域滚动条 */
+    .chat-scroll::-webkit-scrollbar { width: 4px; }
+    .chat-scroll::-webkit-scrollbar-track { background: transparent; }
+    .chat-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 4px; }
+    html.dark .chat-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
+
+    /* === 🔔 Toast 通知样式 === */
+    .msg-toast-container { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 99999; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
+    .msg-toast-item { padding: 12px 20px; border-radius: 50px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; animation: toastIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); backdrop-filter: blur(20px); box-shadow: 0 8px 24px -8px rgba(0,0,0,0.2); pointer-events: auto; white-space: nowrap; }
+    .msg-toast-item.success { background: rgba(255,255,255,0.98); border: 1px solid rgba(16,185,129,0.2); color: #059669; }
+    .msg-toast-item.error { background: rgba(255,255,255,0.98); border: 1px solid rgba(239,68,68,0.2); color: #dc2626; }
+    .msg-toast-item.warning { background: rgba(255,255,255,0.98); border: 1px solid rgba(245,158,11,0.2); color: #d97706; }
+    .msg-toast-item.info { background: rgba(255,255,255,0.98); border: 1px solid rgba(99,102,241,0.2); color: #4f46e5; }
+    html.dark .msg-toast-item.success { background: rgba(44,44,46,0.98); border-color: rgba(16,185,129,0.3); color: #34d399; }
+    html.dark .msg-toast-item.error { background: rgba(44,44,46,0.98); border-color: rgba(239,68,68,0.3); color: #f87171; }
+    html.dark .msg-toast-item.warning { background: rgba(44,44,46,0.98); border-color: rgba(245,158,11,0.3); color: #fbbf24; }
+    html.dark .msg-toast-item.info { background: rgba(44,44,46,0.98); border-color: rgba(99,102,241,0.3); color: #818cf8; }
+    @keyframes toastIn { from { opacity: 0; transform: translateY(-10px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+    @keyframes toastOut { from { opacity: 1; transform: translateY(0) scale(1); } to { opacity: 0; transform: translateY(-10px) scale(0.95); } }
+
+    /* === 🔔 Confirm 确认框样式 === */
+    .msg-confirm-overlay { position: fixed; inset: 0; z-index: 99998; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); animation: confirmFade 0.2s ease; }
+    .msg-confirm-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 99999; width: 90%; max-width: 400px; padding: 24px; border-radius: 24px; background: rgba(255,255,255,0.98); backdrop-filter: blur(20px); box-shadow: 0 24px 48px -12px rgba(0,0,0,0.2); border: 1px solid rgba(0,0,0,0.04); animation: confirmIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+    html.dark .msg-confirm-modal { background: rgba(44,44,46,0.98); border-color: rgba(255,255,255,0.08); box-shadow: 0 24px 48px -12px rgba(0,0,0,0.6); }
+    @keyframes confirmFade { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes confirmIn { from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+    .msg-confirm-icon { width: 56px; height: 56px; border-radius: 16px; margin: 0 auto 16px; display: flex; align-items: center; justify-content: center; font-size: 24px; }
+    .msg-confirm-icon.warning { background: linear-gradient(135deg, #fef3c7, #fde68a); color: #d97706; }
+    .msg-confirm-icon.danger { background: linear-gradient(135deg, #fee2e2, #fecaca); color: #dc2626; }
+    html.dark .msg-confirm-icon.warning { background: linear-gradient(135deg, rgba(217,119,6,0.2), rgba(217,119,6,0.1)); color: #fbbf24; }
+    html.dark .msg-confirm-icon.danger { background: linear-gradient(135deg, rgba(220,38,38,0.2), rgba(220,38,38,0.1)); color: #f87171; }
+    .msg-confirm-title { font-size: 18px; font-weight: 800; text-align: center; color: #111827; margin-bottom: 8px; }
+    html.dark .msg-confirm-title { color: #f9fafb; }
+    .msg-confirm-message { font-size: 14px; text-align: center; color: #6b7280; line-height: 1.5; white-space: pre-line; }
+    html.dark .msg-confirm-message { color: #9ca3af; }
+    .msg-confirm-buttons { display: flex; gap: 12px; margin-top: 24px; }
+    .msg-confirm-btn { flex: 1; padding: 14px 20px; border-radius: 14px; font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.2s; }
+    .msg-confirm-btn.cancel { background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; }
+    .msg-confirm-btn.cancel:hover { background: #e5e7eb; }
+    html.dark .msg-confirm-btn.cancel { background: #374151; color: #d1d5db; border-color: #4b5563; }
+    html.dark .msg-confirm-btn.cancel:hover { background: #4b5563; }
+    .msg-confirm-btn.danger { background: linear-gradient(135deg, #ef4444, #dc2626); color: white; border: none; box-shadow: 0 4px 12px -2px rgba(239,68,68,0.4); }
+    .msg-confirm-btn.danger:hover { box-shadow: 0 6px 16px -2px rgba(239,68,68,0.5); transform: translateY(-1px); }
+    .msg-confirm-btn.primary { background: linear-gradient(135deg, #6366f1, #4f46e5); color: white; border: none; box-shadow: 0 4px 12px -2px rgba(99,102,241,0.4); }
+    .msg-confirm-btn.primary:hover { box-shadow: 0 6px 16px -2px rgba(99,102,241,0.5); transform: translateY(-1px); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="w-full max-w-[1600px] mx-auto py-4 pb-40 md:pb-10 px-4 sm:px-6 md:px-8">
+    <!-- 标题 -->
+    <div class="apple-card flex flex-col md:flex-row md:items-center justify-between gap-4 w-full mb-6 p-5">
+        <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-[14px] bg-gradient-to-br from-blue-500 to-cyan-500 text-white flex items-center justify-center text-xl shadow-lg shadow-blue-500/30 shrink-0">
+                <i class="fa-solid fa-comments"></i>
+            </div>
+            <div>
+                <h2 class="text-xl md:text-[22px] font-bold tracking-tight text-gray-900 dark:text-white">消息中心</h2>
+                <div class="text-[12px] text-gray-500 mt-1 font-medium flex items-center gap-1.5">
+                    <i class="fa-solid fa-paper-plane opacity-70"></i> <span>与用户实时沟通</span>
+                </div>
+            </div>
+        </div>
+        <div class="flex items-center gap-3 flex-wrap">
+            <!-- 公告管理 -->
+            <button onclick="showAnnouncementModal()" class="flex items-center justify-center w-10 h-10 sm:w-auto sm:px-4 sm:py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl text-sm font-medium transition-colors shadow-md shadow-amber-500/20" title="公告管理">
+                <i class="fa-solid fa-bullhorn"></i>
+                <span class="hidden sm:inline sm:ml-2">公告管理</span>
+            </button>
+            <!-- 机器人通知 -->
+            <button onclick="showMsgBotConfigModal()" class="flex items-center justify-center w-10 h-10 sm:w-auto sm:px-4 sm:py-2 bg-gradient-to-r from-cyan-500 to-purple-500 hover:from-cyan-600 hover:to-purple-600 text-white rounded-xl text-sm font-medium transition-colors shadow-md shadow-cyan-500/20" title="机器人通知">
+                <i class="fa-solid fa-robot"></i>
+                <span class="hidden sm:inline sm:ml-2">机器人</span>
+            </button>
+            <!-- 禁言管理 -->
+            <button onclick="showMuteModal()" class="flex items-center justify-center w-10 h-10 sm:w-auto sm:px-4 sm:py-2 bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-medium transition-colors" title="禁言管理">
+                <i class="fa-solid fa-user-slash"></i>
+                <span class="hidden sm:inline sm:ml-2">禁言</span>
+            </button>
+            <!-- 清空对话 -->
+            <button onclick="confirmClearAll()" class="flex items-center justify-center w-10 h-10 sm:w-auto sm:px-4 sm:py-2 bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 rounded-xl text-sm font-medium transition-colors" title="清空对话">
+                <i class="fa-solid fa-trash"></i>
+                <span class="hidden sm:inline sm:ml-2">清空</span>
+            </button>
+            <!-- 发起新会话 -->
+            <button onclick="showUserListModal()" class="flex items-center justify-center w-10 h-10 sm:w-auto sm:px-4 sm:py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-sm font-medium transition-colors shadow-md shadow-brand-500/20" title="发起新会话">
+                <i class="fa-solid fa-plus"></i>
+                <span class="hidden sm:inline sm:ml-2">新会话</span>
+            </button>
+            <!-- 群发消息 -->
+            <button onclick="showBroadcastModal()" class="flex items-center justify-center w-10 h-10 sm:w-auto sm:px-4 sm:py-2 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white rounded-xl text-sm font-medium transition-colors shadow-md shadow-green-500/20" title="群发消息">
+                <i class="fa-solid fa-users"></i>
+                <span class="hidden sm:inline sm:ml-2">群发</span>
+            </button>
+            <!-- 未读数 -->
+            <div id="unread-badge" class="hidden px-3 py-1.5 bg-red-500 text-white text-[12px] font-bold rounded-full shadow-sm">
+                <span id="unread-count">0</span> 条未读
+            </div>
+        </div>
+    </div>
+
+    <!-- 主体区域 -->
+    <div class="apple-card overflow-hidden" style="height: calc(100vh - 220px); min-height: 500px;">
+        <div class="flex h-full">
+            <!-- 左侧会话列表 -->
+            <div id="conversation-list" class="w-full md:w-80 lg:w-96 border-r border-gray-100 dark:border-white/5 flex flex-col h-full">
+                <!-- 搜索框 -->
+                <div class="p-3 border-b border-gray-100 dark:border-white/5">
+                    <div class="relative">
+                        <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                        <input type="text" id="search-input" placeholder="搜索用户或输入用户ID发起新对话..." 
+                            class="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-white/5 rounded-xl text-sm border-none focus:ring-2 focus:ring-brand-500 outline-none">
+                    </div>
+                    <div id="search-results" class="hidden mt-2 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-100 dark:border-white/5 max-h-60 overflow-y-auto"></div>
+                </div>
+                
+                <!-- 会话列表 -->
+                <div id="conversations" class="flex-1 overflow-y-auto chat-scroll">
+                    <div class="flex items-center justify-center h-full text-gray-400 text-sm">
+                        <div class="text-center">
+                            <i class="fa-solid fa-comments text-4xl mb-3 opacity-20"></i>
+                            <p>暂无会话</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧聊天区域 -->
+            <div id="chat-area" class="hidden md:flex flex-1 flex-col h-full">
+                <div id="chat-placeholder" class="flex-1 flex items-center justify-center text-gray-400">
+                    <div class="text-center">
+                        <i class="fa-regular fa-comment-dots text-5xl mb-4 opacity-20"></i>
+                        <p class="text-sm">选择一个会话开始聊天</p>
+                    </div>
+                </div>
+                
+                <!-- 聊天界面 -->
+                <div id="chat-container" class="hidden flex-1 flex flex-col h-full">
+                    <!-- 聊天头部 -->
+                    <div id="chat-header" class="flex items-center gap-3 p-4 border-b border-gray-100 dark:border-white/5">
+                        <button onclick="backToList()" class="md:hidden w-8 h-8 rounded-full bg-gray-100 dark:bg-white/10 flex items-center justify-center">
+                            <i class="fa-solid fa-arrow-left text-sm"></i>
+                        </button>
+                        <div id="chat-avatar" class="w-10 h-10 rounded-full bg-brand-50 dark:bg-[#2C2C2E] flex items-center justify-center text-brand-500 font-bold overflow-hidden shadow-sm border border-gray-100 dark:border-white/5"></div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2">
+                                <div id="chat-username" class="font-bold text-gray-900 dark:text-white truncate"></div>
+                                <span id="muted-badge" class="hidden px-2 py-0.5 bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400 text-[10px] font-medium rounded-full">已禁言</span>
+                            </div>
+                            <div id="chat-status" class="text-[11px] text-gray-400"></div>
+                        </div>
+                        <!-- 禁言按钮 -->
+                        <button id="mute-btn" onclick="showMuteUserModal()" class="hidden w-8 h-8 rounded-full bg-gray-100 dark:bg-white/10 flex items-center justify-center hover:bg-red-100 dark:hover:bg-red-500/20 hover:text-red-500 transition-colors" title="禁言用户">
+                            <i class="fa-solid fa-ban text-sm"></i>
+                        </button>
+                        <!-- 屏蔽通知按钮 -->
+                        <button id="block-notify-btn" onclick="toggleBlockNotify()" class="hidden w-8 h-8 rounded-full bg-gray-100 dark:bg-white/10 flex items-center justify-center hover:bg-gray-200 dark:hover:bg-white/20 transition-colors" title="屏蔽通知">
+                            <i class="fa-solid fa-bell-slash text-sm text-gray-500"></i>
+                        </button>
+                    </div>
+                    
+                    <!-- 消息区域 -->
+                    <div id="messages" class="flex-1 overflow-y-auto chat-scroll p-4 space-y-4">
+                    </div>
+                    
+                    <!-- 输入区域 -->
+                    <div id="input-area" class="p-4 border-t border-gray-100 dark:border-white/5">
+                        <div id="muted-notice" class="hidden mb-3 p-3 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-xl text-sm text-red-600 dark:text-red-400">
+                            <i class="fa-solid fa-ban mr-2"></i>
+                            <span id="muted-reason">该用户已被禁言</span>
+                        </div>
+                        <div class="relative">
+                            <div id="emoji-picker" class="emoji-picker">
+                                <div class="grid grid-cols-8 gap-1">
+                                    <span class="emoji-btn" onclick="insertEmoji('😀')">😀</span>
+                                    <span class="emoji-btn" onclick="insertEmoji('😊')">😊</span>
+                                    <span class="emoji-btn" onclick="insertEmoji('😄')">😄</span>
+                                    <span class="emoji-btn" onclick="insertEmoji('😂')">😂</span>
+                                    <span class="emoji-btn" onclick="insertEmoji('🥰')">🥰</span>
+                                    <span class="emoji-btn" onclick="insertEmoji('😍')">😍</span>
+                                    <span class="emoji-btn" onclick="insertEmoji('🤔')">🤔</span>
+                                    <span class="emoji-btn" onclick="insertEmoji('😅')">😅</span>
+                                    <span class="emoji-btn" onclick="insertEmoji('👍')">👍</span>
+                                    <span class="emoji-btn" onclick="insertEmoji('👏')">👏</span>
+                                    <span class="emoji-btn" onclick="insertEmoji('🙏')">🙏</span>
+                                    <span class="emoji-btn" onclick="insertEmoji('💪')">💪</span>
+                                    <span class="emoji-btn" onclick="insertEmoji('❤️')">❤️</span>
+                                    <span class="emoji-btn" onclick="insertEmoji('🔥')">🔥</span>
+                                    <span class="emoji-btn" onclick="insertEmoji('✨')">✨</span>
+                                    <span class="emoji-btn" onclick="insertEmoji('🎉')">🎉</span>
+                                    <span class="emoji-btn" onclick="insertEmoji('👌')">👌</span>
+                                    <span class="emoji-btn" onclick="insertEmoji('😎')">😎</span>
+                                    <span class="emoji-btn" onclick="insertEmoji('🤝')">🤝</span>
+                                    <span class="emoji-btn" onclick="insertEmoji('💯')">💯</span>
+                                    <span class="emoji-btn" onclick="insertEmoji('⭐')">⭐</span>
+                                    <span class="emoji-btn" onclick="insertEmoji('🌟')">🌟</span>
+                                    <span class="emoji-btn" onclick="insertEmoji('💡')">💡</span>
+                                    <span class="emoji-btn" onclick="insertEmoji('📌')">📌</span>
+                                </div>
+                            </div>
+                            <div class="flex items-end gap-2">
+                                <button onclick="toggleEmoji()" class="shrink-0 w-10 h-10 rounded-full bg-gray-100 dark:bg-white/10 flex items-center justify-center text-gray-500 hover:bg-gray-200 dark:hover:bg-white/20 transition-colors">
+                                    <i class="fa-regular fa-face-smile text-lg"></i>
+                                </button>
+                                <textarea id="message-input" 
+                                    class="message-input flex-1 px-4 py-2.5 bg-gray-50 dark:bg-white/5 rounded-2xl text-sm border-none focus:ring-2 focus:ring-brand-500 outline-none resize-none"
+                                    placeholder="输入消息..."
+                                    rows="1"
+                                    onkeydown="handleKeyDown(event)"></textarea>
+                                <button onclick="sendMessage()" class="shrink-0 w-10 h-10 rounded-full bg-brand-500 hover:bg-brand-600 text-white flex items-center justify-center transition-colors shadow-md shadow-brand-500/20">
+                                    <i class="fa-solid fa-paper-plane text-sm"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 用户列表弹窗 -->
+<div id="user-list-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden items-center justify-center">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md mx-4 max-h-[80vh] flex flex-col">
+        <div class="flex items-center justify-between p-4 border-b border-gray-100 dark:border-white/5">
+            <h3 class="text-lg font-bold text-gray-900 dark:text-white">选择用户</h3>
+            <button onclick="closeUserListModal()" class="w-8 h-8 rounded-full bg-gray-100 dark:bg-white/10 flex items-center justify-center hover:bg-gray-200 dark:hover:bg-white/20 transition-colors">
+                <i class="fa-solid fa-times text-gray-500"></i>
+            </button>
+        </div>
+        <div class="p-3 border-b border-gray-100 dark:border-white/5">
+            <div class="relative">
+                <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                <input type="text" id="modal-search-input" placeholder="搜索用户名或ID..." 
+                    class="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-white/5 rounded-xl text-sm border-none focus:ring-2 focus:ring-brand-500 outline-none"
+                    oninput="searchUsersInModal(this.value)">
+            </div>
+        </div>
+        <div id="user-list-content" class="flex-1 overflow-y-auto p-2">
+            <div class="flex items-center justify-center py-8 text-gray-400">
+                <div class="text-center">
+                    <i class="fa-solid fa-spinner fa-spin text-2xl mb-2"></i>
+                    <p class="text-sm">加载中...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let conversations = [];
+let currentConversation = null;
+let currentUserId = null;
+let refreshInterval = null;  // 轮询定时器
+let blockedUsers = new Set();  // 屏蔽用户列表
+
+// 失败头像URL缓存 - 避免重复请求
+const failedAvatarUrls = new Set();
+const DEFAULT_AVATAR_SVG = "data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27 fill=%27%236366f1%27%3E%3Cpath d=%27M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z%27/%3E%3C/svg%3E";
+
+// 获取头像HTML（带缓存）- 支持显示用户名首字
+function getAvatarHtml(avatarUrl, userName = '') {
+    const firstChar = userName ? userName.charAt(0).toUpperCase() : '?';
+    if (!avatarUrl || failedAvatarUrls.has(avatarUrl)) {
+        return `<span class="w-full h-full flex items-center justify-center text-brand-500 font-bold uppercase text-[15px]">${firstChar}</span>`;
+    }
+    return `<img src="${avatarUrl}" class="w-full h-full object-cover" onerror="handleAvatarError(this, '${avatarUrl}')">`;
+}
+
+// 处理头像加载失败
+function handleAvatarError(img, url) {
+    img.onerror = null;
+    failedAvatarUrls.add(url);
+    img.src = DEFAULT_AVATAR_SVG;
+}
+
+// 加载屏蔽用户列表
+async function loadBlockedUsers() {
+    try {
+        const res = await fetch('/api/messages/notify_block');
+        const data = await res.json();
+        if (data.status === 'success') {
+            blockedUsers = new Set(data.data.map(b => b.user_id));
+        }
+    } catch (e) {
+        console.error('加载屏蔽列表失败:', e);
+    }
+}
+
+// 切换屏蔽状态
+async function toggleBlockNotify() {
+    if (!currentUserId) return;
+    const btn = document.getElementById('block-notify-btn');
+    const isBlocked = blockedUsers.has(currentUserId);
+    
+    try {
+        if (isBlocked) {
+            await fetch(`/api/messages/notify_block/${currentUserId}`, { method: 'DELETE' });
+            blockedUsers.delete(currentUserId);
+            updateBlockButton();
+            if (typeof showToast === 'function') {
+                showToast('success', '已取消屏蔽', '该用户的消息通知已恢复');
+            } else {
+                msgToast('success', '已取消屏蔽该用户的消息通知');
+            }
+        } else {
+            await fetch(`/api/messages/notify_block/${currentUserId}`, { method: 'POST' });
+            blockedUsers.add(currentUserId);
+            updateBlockButton();
+            if (typeof showToast === 'function') {
+                showToast('success', '已屏蔽通知', '该用户的消息不会再通知');
+            } else {
+                msgToast('success', '已屏蔽该用户的消息通知');
+            }
+        }
+    } catch (e) {
+        console.error('操作失败:', e);
+        if (typeof showToast === 'function') {
+            showToast('error', '操作失败', '请稍后重试');
+        } else {
+            msgToast('error', '操作失败');
+        }
+    }
+}
+
+// 更新屏蔽按钮状态
+function updateBlockButton() {
+    const btn = document.getElementById('block-notify-btn');
+    if (!currentUserId) {
+        btn.classList.add('hidden');
+        return;
+    }
+    btn.classList.remove('hidden');
+    
+    const isBlocked = blockedUsers.has(currentUserId);
+    if (isBlocked) {
+        btn.innerHTML = '<i class="fa-solid fa-bell-slash text-sm text-red-500"></i>';
+        btn.title = '取消屏蔽通知';
+    } else {
+        btn.innerHTML = '<i class="fa-solid fa-bell text-sm text-gray-500"></i>';
+        btn.title = '屏蔽通知';
+    }
+}
+
+// 禁言相关变量
+let currentMuteStatus = null;  // 当前用户的禁言状态
+
+// 检查用户禁言状态
+async function checkMuteStatus() {
+    if (!currentUserId) return;
+    
+    try {
+        const res = await fetch(`/api/messages/mute/check/${currentUserId}`);
+        const data = await res.json();
+        if (data.status === 'success') {
+            currentMuteStatus = data.is_muted ? data.mute_info : null;
+            updateMuteUI();
+        }
+    } catch (e) {
+        console.error('检查禁言状态失败:', e);
+    }
+}
+
+// 更新禁言相关的 UI
+function updateMuteUI() {
+    const muteBtn = document.getElementById('mute-btn');
+    const mutedBadge = document.getElementById('muted-badge');
+    const mutedNotice = document.getElementById('muted-notice');
+    const inputArea = document.getElementById('input-area');
+    
+    if (!currentUserId) {
+        muteBtn.classList.add('hidden');
+        mutedBadge.classList.add('hidden');
+        mutedNotice.classList.add('hidden');
+        return;
+    }
+    
+    // 显示禁言按钮
+    muteBtn.classList.remove('hidden');
+    muteBtn.classList.add('flex');
+    
+    if (currentMuteStatus) {
+        // 已禁言
+        mutedBadge.classList.remove('hidden');
+        mutedNotice.classList.remove('hidden');
+        
+        // 显示禁言原因
+        let reasonText = '该用户已被禁言';
+        if (currentMuteStatus.muted_reason) {
+            reasonText += `，原因：${currentMuteStatus.muted_reason}`;
+        }
+        if (currentMuteStatus.muted_until) {
+            reasonText += `，解禁时间：${formatDateTime(currentMuteStatus.muted_until)}`;
+        } else {
+            reasonText += '（永久）';
+        }
+        document.getElementById('muted-reason').textContent = reasonText;
+        
+        // 更新按钮为解禁
+        muteBtn.innerHTML = '<i class="fa-solid fa-unlock text-sm"></i>';
+        muteBtn.title = '解除禁言';
+        muteBtn.classList.add('text-green-500');
+        muteBtn.classList.remove('text-gray-500');
+    } else {
+        // 未禁言
+        mutedBadge.classList.add('hidden');
+        mutedNotice.classList.add('hidden');
+        
+        // 更新按钮为禁言
+        muteBtn.innerHTML = '<i class="fa-solid fa-ban text-sm"></i>';
+        muteBtn.title = '禁言用户';
+        muteBtn.classList.remove('text-green-500');
+        muteBtn.classList.add('text-gray-500');
+    }
+}
+
+// 显示禁言用户弹窗 - 直接打开禁言设置浮窗并预选当前用户
+async function showMuteUserModal() {
+    if (!currentUserId) return;
+    
+    if (currentMuteStatus) {
+        // 已禁言，询问是否解禁
+        const confirmed = await msgConfirm({type: 'warning', title: '解除禁言', message: '确定要解除该用户的禁言吗？', confirmText: '确定'});
+        if (confirmed) {
+            unmuteCurrentUser();
+        }
+    } else {
+        // 未禁言，直接打开禁言设置浮窗并预选当前用户
+        const userName = currentConversation?.user_remark || currentConversation?.username || currentUserId;
+        muteSelectedUsers = [{ id: currentUserId, name: userName }];
+        muteSelectedDuration = 0;
+        document.getElementById('mute-reason-input').value = '';
+        document.getElementById('mute-user-search').value = '';
+        document.getElementById('mute-user-results').classList.add('hidden');
+        renderMuteSelectedUsers();
+        
+        // 重置时长选择
+        document.querySelectorAll('.mute-duration-btn').forEach(btn => {
+            btn.classList.remove('active', 'border-brand-500', 'bg-brand-500', 'text-white');
+            btn.classList.add('border-gray-200', 'dark:border-white/10', 'bg-white', 'dark:bg-white/5');
+            if (parseInt(btn.dataset.duration) === 0) {
+                btn.classList.add('active', 'border-brand-500', 'bg-brand-500', 'text-white');
+                btn.classList.remove('border-gray-200', 'dark:border-white/10', 'bg-white', 'dark:bg-white/5');
+            }
+        });
+        
+        document.getElementById('mute-user-modal').classList.remove('hidden');
+        document.getElementById('mute-user-modal').classList.add('flex');
+    }
+}
+
+// 禁言当前用户
+async function muteCurrentUser(duration, reason) {
+    if (!currentUserId) return;
+    
+    try {
+        const res = await fetch('/api/messages/mute', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user_id: currentUserId,
+                duration: duration > 0 ? duration : null,
+                reason: reason || null
+            })
+        });
+        const data = await res.json();
+        
+        if (data.status === 'success') {
+            if (typeof showToast === 'function') {
+                showToast('success', '禁言成功', data.message);
+            } else {
+                msgToast('success', '禁言成功');
+            }
+            checkMuteStatus();
+        } else {
+            if (typeof showToast === 'function') {
+                showToast('error', '禁言失败', data.message);
+            } else {
+                msgToast('error', '禁言失败: ' + data.message);
+            }
+        }
+    } catch (e) {
+        console.error('禁言失败:', e);
+        msgToast('error', '禁言失败');
+    }
+}
+
+// 解禁当前用户
+async function unmuteCurrentUser() {
+    if (!currentUserId) return;
+    
+    try {
+        const res = await fetch(`/api/messages/mute/${currentUserId}`, { method: 'DELETE' });
+        const data = await res.json();
+        
+        if (data.status === 'success') {
+            if (typeof showToast === 'function') {
+                showToast('success', '解禁成功', data.message);
+            } else {
+                msgToast('success', '解禁成功');
+            }
+            currentMuteStatus = null;
+            updateMuteUI();
+        } else {
+            if (typeof showToast === 'function') {
+                showToast('error', '解禁失败', data.message);
+            } else {
+                msgToast('error', '解禁失败: ' + data.message);
+            }
+        }
+    } catch (e) {
+        console.error('解禁失败:', e);
+        msgToast('error', '解禁失败');
+    }
+}
+
+// 格式化日期时间
+function formatDateTime(dateStr) {
+    if (!dateStr) return '-';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }) + ' ' + 
+           date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+}
+
+// 加载会话列表
+async function loadConversations() {
+    try {
+        const res = await fetch('/api/messages/conversations');
+        const data = await res.json();
+        if (data.status === 'success') {
+            conversations = data.data || [];
+            renderConversations();
+            updateUnreadBadge();
+        }
+    } catch (e) {
+        console.error('加载会话失败:', e);
+    }
+}
+
+// 刷新当前聊天记录（静默刷新）
+async function refreshCurrentChat() {
+    if (!currentUserId) return;
+    try {
+        const res = await fetch(`/api/messages/conversation/${currentUserId}`);
+        const data = await res.json();
+        if (data.status === 'success') {
+            renderMessages(data.data.messages);
+            // 更新会话列表的未读状态
+            loadConversations();
+        }
+    } catch (e) {
+        console.error('刷新聊天记录失败:', e);
+    }
+}
+
+// 启动轮询
+function startPolling() {
+    if (refreshInterval) clearInterval(refreshInterval);
+    refreshInterval = setInterval(refreshCurrentChat, 5000);  // 每5秒刷新一次
+}
+
+// 停止轮询
+function stopPolling() {
+    if (refreshInterval) {
+        clearInterval(refreshInterval);
+        refreshInterval = null;
+    }
+}
+
+// 渲染会话列表
+function renderConversations(filter = '') {
+    const container = document.getElementById('conversations');
+    const filtered = filter 
+        ? conversations.filter(c => (c.username || c.user_id).toLowerCase().includes(filter.toLowerCase()))
+        : conversations;
+    
+    if (filtered.length === 0) {
+        container.innerHTML = `
+            <div class="flex items-center justify-center h-full text-gray-400 text-sm">
+                <div class="text-center">
+                    <i class="fa-solid fa-comments text-4xl mb-3 opacity-20"></i>
+                    <p>${filter ? '未找到匹配的用户' : '暂无会话'}</p>
+                </div>
+            </div>`;
+        return;
+    }
+    
+    // 置顶用户排序
+    filtered.sort((a, b) => {
+        const aPinned = a.pinned ? 1 : 0;
+        const bPinned = b.pinned ? 1 : 0;
+        if (aPinned !== bPinned) return bPinned - aPinned;
+        // 按最后消息时间排序
+        return new Date(b.last_time || 0) - new Date(a.last_time || 0);
+    });
+    
+    container.innerHTML = filtered.map(conv => {
+        const displayName = conv.user_remark || conv.username || conv.user_id;
+        const unreadBadge = conv.unread_admin > 0 
+            ? `<span class="absolute -top-0.5 -right-0.5 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">${conv.unread_admin > 9 ? '9+' : conv.unread_admin}</span>` 
+            : '';
+        const lastTime = conv.last_time ? formatTime(conv.last_time) : '';
+        const lastMessage = conv.last_message ? (conv.last_message.length > 30 ? conv.last_message.substring(0, 30) + '...' : conv.last_message) : '暂无消息';
+        const isActive = currentUserId === conv.user_id;
+        const subName = conv.user_remark ? (conv.username || conv.user_id) : '';
+        const isDeleted = conv.user_deleted;
+        const isPinned = conv.pinned;
+        const pinBadge = isPinned ? '<span class="text-[9px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400 px-1.5 py-0.5 rounded ml-1"><i class="fa-solid fa-thumbtack mr-0.5"></i>置顶</span>' : '';
+        
+        // 头像显示用户名首字母（与用户管理页面一致）
+        const avatarDisplay = getAvatarHtml(conv.user_avatar, displayName);
+        
+        return `
+            <div class="conversation-item flex items-center gap-3 p-4 cursor-pointer border-b border-gray-50 dark:border-white/5 ${isActive ? 'active' : ''} group relative"
+                 onclick="openConversation('${conv.user_id}')">
+                <div class="relative shrink-0">
+                    <div class="w-10 h-10 rounded-full bg-brand-50 dark:bg-[#2C2C2E] flex items-center justify-center text-brand-500 font-bold overflow-hidden shadow-sm border border-gray-100 dark:border-white/5 ${isDeleted ? 'opacity-50' : ''}">
+                        ${avatarDisplay}
+                    </div>
+                    ${unreadBadge}
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-1.5 truncate">
+                            <span class="font-bold text-gray-900 dark:text-white truncate ${isDeleted ? 'line-through opacity-50' : ''}">${displayName}</span>
+                            ${pinBadge}
+                            ${isDeleted ? `<span class="px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-[9px] rounded">已删除</span>` : ''}
+                            ${subName ? `<span class="text-[11px] text-gray-400 truncate">(${subName})</span>` : ''}
+                        </div>
+                        <span class="text-[11px] text-gray-400 shrink-0 ml-2">${lastTime}</span>
+                    </div>
+                    <div class="text-[13px] text-gray-500 truncate mt-0.5">${lastMessage}</div>
+                </div>
+                <!-- 删除按钮 -->
+                <button onclick="event.stopPropagation(); confirmDeleteConversation('${conv.user_id}', '${displayName.replace(/'/g, "\\'")}')" 
+                        class="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-red-50 dark:bg-red-500/10 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center hover:bg-red-100 dark:hover:bg-red-500/20"
+                        title="删除对话">
+                    <i class="fa-solid fa-trash text-xs"></i>
+                </button>
+            </div>`;
+    }).join('');
+}
+
+// 确认删除单个对话
+async function confirmDeleteConversation(userId, userName) {
+    const confirmed = await msgConfirm({type: 'danger', title: '删除对话', message: `确定要删除与 ${userName} 的对话吗？\n此操作不可恢复。`, confirmText: '删除'});
+    if (confirmed) {
+        deleteConversation(userId);
+    }
+}
+
+// 删除单个对话
+async function deleteConversation(userId) {
+    try {
+        const res = await fetch(`/api/messages/conversation/${userId}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.status === 'success') {
+            // 如果删除的是当前对话，清空聊天区域
+            if (currentUserId === userId) {
+                currentUserId = null;
+                document.getElementById('chat-placeholder').classList.remove('hidden');
+                document.getElementById('chat-container').classList.add('hidden');
+            }
+            // 重新加载会话列表
+            loadConversations();
+            if (typeof showToast === 'function') {
+                showToast('success', '删除成功', '对话已删除');
+            }
+        } else {
+            msgToast('error', '删除失败: ' + data.message);
+        }
+    } catch (e) {
+        console.error('删除对话失败:', e);
+        msgToast('error', '删除失败');
+    }
+}
+
+// 确认清空所有对话
+async function confirmClearAll() {
+    if (conversations.length === 0) {
+        msgToast('warning', '暂无对话可清空');
+        return;
+    }
+    const confirmed = await msgConfirm({type: 'danger', title: '清空所有对话', message: `确定要清空所有对话吗？\n共有 ${conversations.length} 个对话将被删除。\n此操作不可恢复！`, confirmText: '清空'});
+    if (confirmed) {
+        clearAllConversations();
+    }
+}
+
+// 清空所有对话
+async function clearAllConversations() {
+    try {
+        const res = await fetch('/api/messages/conversations/all', { method: 'DELETE' });
+        const data = await res.json();
+        if (data.status === 'success') {
+            // 清空当前对话
+            currentUserId = null;
+            document.getElementById('chat-placeholder').classList.remove('hidden');
+            document.getElementById('chat-container').classList.add('hidden');
+            // 重新加载会话列表
+            loadConversations();
+            if (typeof showToast === 'function') {
+                showToast('success', '清空成功', '所有对话已清空');
+            }
+        } else {
+            msgToast('error', '清空失败: ' + data.message);
+        }
+    } catch (e) {
+        console.error('清空对话失败:', e);
+        msgToast('error', '清空失败');
+    }
+}
+
+// 打开会话
+async function openConversation(userId) {
+    currentUserId = userId;
+    
+    // 启动轮询刷新
+    startPolling();
+    
+    // 移动端显示聊天区域
+    if (window.innerWidth < 768) {
+        document.getElementById('conversation-list').classList.add('hidden');
+        document.getElementById('chat-area').classList.remove('hidden');
+        document.getElementById('chat-area').classList.add('flex');
+    }
+    
+    document.getElementById('chat-placeholder').classList.add('hidden');
+    document.getElementById('chat-container').classList.remove('hidden');
+    document.getElementById('chat-container').classList.add('flex');
+    
+    // 更新会话列表选中状态
+    renderConversations(document.getElementById('search-input').value);
+    
+    // 检查禁言状态
+    await checkMuteStatus();
+    
+    try {
+        const res = await fetch(`/api/messages/conversation/${userId}`);
+        const data = await res.json();
+        if (data.status === 'success') {
+            currentConversation = data.data.conversation;
+            renderChatHeader(data.data.conversation);
+            renderMessages(data.data.messages);
+            updateUnreadBadge();
+            updateBlockButton();  // 更新屏蔽按钮状态
+        }
+    } catch (e) {
+        console.error('加载聊天记录失败:', e);
+    }
+}
+
+// 渲染聊天头部
+function renderChatHeader(conv) {
+    currentConversation = conv;  // 先保存会话信息
+    const displayName = conv.user_remark || conv.username || conv.user_id;
+    const avatar = getAvatarHtml(conv.user_avatar, displayName);
+    
+    document.getElementById('chat-avatar').innerHTML = avatar;
+    
+    const subName = conv.user_remark ? (conv.username || conv.user_id) : '';
+    document.getElementById('chat-username').innerHTML = displayName + (subName ? `<span class="text-[12px] text-gray-400 font-normal ml-1">(${subName})</span>` : '');
+    document.getElementById('chat-status').textContent = `用户ID: ${conv.user_id}`;
+}
+
+// 渲染消息列表
+function renderMessages(messages) {
+    const container = document.getElementById('messages');
+    
+    if (!messages || messages.length === 0) {
+        container.innerHTML = `
+            <div class="flex items-center justify-center h-full text-gray-400 text-sm">
+                <div class="text-center">
+                    <i class="fa-regular fa-comment text-4xl mb-3 opacity-20"></i>
+                    <p>发送第一条消息开始对话</p>
+                </div>
+            </div>`;
+        return;
+    }
+    
+    // 获取用户头像URL - 从当前会话或会话列表中查找
+    let userAvatarUrl = currentConversation?.user_avatar || '';
+    let userName = currentConversation?.user_remark || currentConversation?.username || currentUserId;
+    if (!userAvatarUrl && currentUserId) {
+        const conv = conversations.find(c => c.user_id === currentUserId);
+        userAvatarUrl = conv?.user_avatar || '';
+        userName = conv?.user_remark || conv?.username || currentUserId;
+    }
+    
+    const userAvatar = getAvatarHtml(userAvatarUrl, userName);
+    
+    container.innerHTML = messages.map(msg => {
+        const isAdmin = msg.sender_type === 'admin';
+        const time = formatTime(msg.created_at);
+        const bubbleClass = isAdmin ? 'chat-bubble-admin ml-auto' : 'chat-bubble-user';
+        const alignClass = isAdmin ? 'justify-end' : 'justify-start';
+        
+        return `
+            <div class="flex ${alignClass} items-end gap-2">
+                ${!isAdmin ? `<div class="w-8 h-8 rounded-full bg-brand-50 dark:bg-brand-500/20 flex items-center justify-center shrink-0 overflow-hidden">
+                    ${userAvatar}
+                </div>` : ''}
+                <div class="max-w-[75%]">
+                    <div class="${bubbleClass} px-4 py-2.5 text-[14px] leading-relaxed break-words">
+                        ${escapeHtml(msg.content)}
+                    </div>
+                    <div class="text-[10px] text-gray-400 mt-1 ${isAdmin ? 'text-right' : ''}">${time}${isAdmin ? ' · 我' : ''}</div>
+                </div>
+            </div>`;
+    }).join('');
+    
+    // 滚动到底部
+    container.scrollTop = container.scrollHeight;
+}
+
+// 发送消息
+async function sendMessage() {
+    const input = document.getElementById('message-input');
+    const content = input.value.trim();
+    if (!content || !currentUserId) return;
+    
+    input.value = '';
+    input.style.height = 'auto';
+    
+    try {
+        const res = await fetch('/api/messages/send', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({user_id: currentUserId, content: content})
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+            // 重新加载聊天记录
+            openConversation(currentUserId);
+            // 更新会话列表
+            loadConversations();
+        } else {
+            msgToast('error', '发送失败: ' + data.message);
+        }
+    } catch (e) {
+        msgToast('error', '发送失败');
+    }
+}
+
+// 返回列表（移动端）
+function backToList() {
+    stopPolling();  // 停止轮询
+    currentUserId = null;
+    document.getElementById('conversation-list').classList.remove('hidden');
+    document.getElementById('chat-area').classList.add('hidden');
+    document.getElementById('chat-area').classList.remove('flex');
+}
+
+// 更新未读徽章
+async function updateUnreadBadge() {
+    try {
+        const res = await fetch('/api/messages/unread');
+        const data = await res.json();
+        if (data.status === 'success') {
+            const badge = document.getElementById('unread-badge');
+            const count = document.getElementById('unread-count');
+            if (data.count > 0) {
+                badge.classList.remove('hidden');
+                count.textContent = data.count;
+            } else {
+                badge.classList.add('hidden');
+            }
+        }
+    } catch (e) {}
+}
+
+// 表情相关
+function toggleEmoji() {
+    document.getElementById('emoji-picker').classList.toggle('show');
+}
+
+function insertEmoji(emoji) {
+    const input = document.getElementById('message-input');
+    input.value += emoji;
+    input.focus();
+    document.getElementById('emoji-picker').classList.remove('show');
+}
+
+// 点击其他地方关闭表情面板
+document.addEventListener('click', (e) => {
+    const picker = document.getElementById('emoji-picker');
+    if (!e.target.closest('#emoji-picker') && !e.target.closest('button[onclick="toggleEmoji()"]')) {
+        picker.classList.remove('show');
+    }
+});
+
+// 键盘事件
+function handleKeyDown(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+    }
+}
+
+// 工具函数
+function formatTime(timeStr) {
+    if (!timeStr) return '';
+    const date = new Date(timeStr);
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+    
+    if (isToday) {
+        return date.toLocaleTimeString('zh-CN', {hour: '2-digit', minute: '2-digit'});
+    } else {
+        return date.toLocaleDateString('zh-CN', {month: '2-digit', day: '2-digit'});
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// 搜索
+document.getElementById('search-input').addEventListener('input', (e) => {
+    const query = e.target.value.trim();
+    renderConversations(query);
+    searchUsers(query);
+});
+
+// 搜索用户
+let msgSearchTimeout = null;
+async function searchUsers(query) {
+    if (!query || query.length < 2) {
+        document.getElementById('search-results').classList.add('hidden');
+        return;
+    }
+    
+    clearTimeout(msgSearchTimeout);
+    msgSearchTimeout = setTimeout(async () => {
+        try {
+            const res = await fetch(`/api/users/search?q=${encodeURIComponent(query)}`);
+            const data = await res.json();
+            if (data.status === 'success' && data.users && data.users.length > 0) {
+                const resultsHtml = data.users.slice(0, 5).map(user => `
+                    <div class="flex items-center gap-3 p-3 hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer transition-colors" onclick="startNewConversation('${user.Id}', '${user.Name.replace(/'/g, "\\'")}')">
+                        <div class="w-10 h-10 rounded-full bg-brand-50 dark:bg-brand-500/20 flex items-center justify-center text-brand-500 font-bold overflow-hidden shrink-0">
+                            ${user.PrimaryImageTag ? `<img src="/api/proxy/user_image/${user.Id}" class="w-full h-full object-cover" onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27 fill=%27%236366f1%27%3E%3Cpath d=%27M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z%27/%3E%3C/svg%3E';">` : `<i class="fa-solid fa-user text-sm"></i>`}
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="font-bold text-gray-900 dark:text-white text-sm truncate">${user.Name}</div>
+                            <div class="text-[11px] text-gray-400 truncate">ID: ${user.Id}</div>
+                        </div>
+                        <i class="fa-solid fa-comment text-gray-300 dark:text-gray-600"></i>
+                    </div>
+                `).join('');
+                document.getElementById('search-results').innerHTML = resultsHtml;
+                document.getElementById('search-results').classList.remove('hidden');
+            } else {
+                document.getElementById('search-results').classList.add('hidden');
+            }
+        } catch (e) {
+            document.getElementById('search-results').classList.add('hidden');
+        }
+    }, 300);
+}
+
+// 发起新对话
+async function startNewConversation(userId, userName) {
+    document.getElementById('search-results').classList.add('hidden');
+    document.getElementById('search-input').value = '';
+    
+    // 直接打开对话（后端会自动创建会话）
+    openConversation(userId);
+}
+
+// 点击其他地方关闭搜索结果
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('#search-input') && !e.target.closest('#search-results')) {
+        document.getElementById('search-results').classList.add('hidden');
+    }
+});
+
+// 初始化
+loadBlockedUsers();
+loadConversations();
+// 定时刷新
+setInterval(loadConversations, 30000);
+setInterval(updateUnreadBadge, 60000);
+
+// ==================== 用户列表弹窗 ====================
+
+// 显示用户列表弹窗
+async function showUserListModal() {
+    const modal = document.getElementById('user-list-modal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    
+    // 加载所有用户
+    await loadAllUsers();
+}
+
+// 关闭用户列表弹窗
+function closeUserListModal() {
+    const modal = document.getElementById('user-list-modal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    document.getElementById('modal-search-input').value = '';
+}
+
+// 加载所有用户
+async function loadAllUsers() {
+    const container = document.getElementById('user-list-content');
+    container.innerHTML = `
+        <div class="flex items-center justify-center py-8 text-gray-400">
+            <div class="text-center">
+                <i class="fa-solid fa-spinner fa-spin text-2xl mb-2"></i>
+                <p class="text-sm">加载中...</p>
+            </div>
+        </div>`;
+    
+    try {
+        const res = await fetch('/api/users/all');
+        const data = await res.json();
+        if (data.status === 'success') {
+            renderUserList(data.users || []);
+        } else {
+            container.innerHTML = `
+                <div class="flex items-center justify-center py-8 text-gray-400">
+                    <p class="text-sm">加载失败</p>
+                </div>`;
+        }
+    } catch (e) {
+        container.innerHTML = `
+            <div class="flex items-center justify-center py-8 text-gray-400">
+                <p class="text-sm">加载失败</p>
+            </div>`;
+    }
+}
+
+// 渲染用户列表
+function renderUserList(users) {
+    const container = document.getElementById('user-list-content');
+    
+    if (!users || users.length === 0) {
+        container.innerHTML = `
+            <div class="flex items-center justify-center py-8 text-gray-400">
+                <div class="text-center">
+                    <i class="fa-solid fa-users-slash text-3xl mb-2 opacity-50"></i>
+                    <p class="text-sm">暂无用户</p>
+                </div>
+            </div>`;
+        return;
+    }
+    
+    container.innerHTML = users.map(user => {
+        const displayName = user.Remark || user.Name || user.Id;
+        const subName = user.Remark ? (user.Name || user.Id) : '';
+        return `
+        <div class="flex items-center gap-3 p-3 hover:bg-gray-50 dark:hover:bg-white/5 rounded-xl cursor-pointer transition-colors" 
+             onclick="selectUserAndChat('${user.Id}', '${(user.Remark || user.Name || user.Id).replace(/'/g, "\\'")}')">
+            <div class="w-10 h-10 rounded-full bg-brand-50 dark:bg-brand-500/20 flex items-center justify-center text-brand-500 font-bold overflow-hidden shrink-0">
+                ${user.PrimaryImageTag ? `<img src="/api/proxy/user_image/${user.Id}" class="w-full h-full object-cover" onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27 fill=%27%236366f1%27%3E%3Cpath d=%27M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z%27/%3E%3C/svg%3E';">` : `<i class="fa-solid fa-user text-sm"></i>`}
+            </div>
+            <div class="flex-1 min-w-0">
+                <div class="font-bold text-gray-900 dark:text-white text-sm truncate">${displayName}${subName ? `<span class="text-[11px] text-gray-400 font-normal ml-1">(${subName})</span>` : ''}</div>
+                <div class="text-[11px] text-gray-400 truncate">ID: ${user.Id}</div>
+            </div>
+            <i class="fa-solid fa-comment text-gray-300 dark:text-gray-600"></i>
+        </div>`;
+    }).join('');
+}
+
+// 在弹窗中搜索用户
+async function searchUsersInModal(query) {
+    if (!query || query.length < 1) {
+        await loadAllUsers();
+        return;
+    }
+    
+    const container = document.getElementById('user-list-content');
+    container.innerHTML = `
+        <div class="flex items-center justify-center py-8 text-gray-400">
+            <div class="text-center">
+                <i class="fa-solid fa-spinner fa-spin text-2xl mb-2"></i>
+                <p class="text-sm">搜索中...</p>
+            </div>
+        </div>`;
+    
+    try {
+        const res = await fetch(`/api/users/search?q=${encodeURIComponent(query)}`);
+        const data = await res.json();
+        if (data.status === 'success') {
+            renderUserList(data.users || []);
+        }
+    } catch (e) {
+        console.error('搜索失败:', e);
+    }
+}
+
+// 选择用户并发起对话
+function selectUserAndChat(userId, userName) {
+    closeUserListModal();
+    openConversation(userId);
+}
+
+// 点击弹窗外部关闭
+document.getElementById('user-list-modal').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('user-list-modal')) {
+        closeUserListModal();
+    }
+});
+</script>
+
+<!-- 禁言管理浮窗 -->
+<div id="mute-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden items-center justify-center">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-2xl mx-4 flex flex-col max-h-[85vh]">
+        <div class="flex items-center justify-between p-4 border-b border-gray-100 dark:border-white/5 shrink-0">
+            <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <i class="fa-solid fa-user-slash text-red-500"></i>
+                禁言管理
+            </h3>
+            <div class="flex items-center gap-2">
+                <button onclick="showMuteUserModalFromList()" class="flex items-center gap-1.5 px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm font-medium transition-colors">
+                    <i class="fa-solid fa-plus text-xs"></i>
+                    <span>禁言用户</span>
+                </button>
+                <button onclick="closeMuteModal()" class="w-8 h-8 rounded-full bg-gray-100 dark:bg-white/10 flex items-center justify-center hover:bg-gray-200 dark:hover:bg-white/20 transition-colors">
+                    <i class="fa-solid fa-times text-gray-500"></i>
+                </button>
+            </div>
+        </div>
+        
+        <!-- 禁言列表 - 添加 overflow-hidden 保持圆角 -->
+        <div class="flex-1 overflow-y-auto min-h-0">
+            <div id="mute-list" class="p-2">
+                <div class="flex items-center justify-center py-16 text-gray-400">
+                    <div class="text-center">
+                        <i class="fa-solid fa-user-slash text-4xl mb-3 opacity-20"></i>
+                        <p>暂无禁言用户</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 批量操作栏 -->
+        <div id="mute-batch-bar" class="hidden items-center justify-between p-4 border-t border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-white/5 rounded-b-2xl shrink-0">
+            <div class="flex items-center gap-2">
+                <input type="checkbox" id="mute-select-all" onchange="toggleMuteSelectAll()" class="w-4 h-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500">
+                <label for="mute-select-all" class="text-sm text-gray-600 dark:text-gray-400">全选</label>
+                <span id="mute-selected-count" class="text-sm text-gray-500">已选择 0 个</span>
+            </div>
+            <button onclick="batchUnmute()" class="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-medium transition-colors">
+                <i class="fa-solid fa-unlock mr-1"></i>
+                批量解禁
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- 禁言用户浮窗 -->
+<div id="mute-user-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] hidden items-center justify-center overflow-y-auto py-8">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md mx-4 flex flex-col shrink-0">
+        <div class="flex items-center justify-between p-4 border-b border-gray-100 dark:border-white/5 rounded-t-2xl shrink-0">
+            <h3 class="text-lg font-bold text-gray-900 dark:text-white">禁言用户</h3>
+            <button onclick="closeMuteUserModal()" class="w-8 h-8 rounded-full bg-gray-100 dark:bg-white/10 flex items-center justify-center hover:bg-gray-200 dark:hover:bg-white/20 transition-colors">
+                <i class="fa-solid fa-times text-gray-500"></i>
+            </button>
+        </div>
+        
+        <div class="p-4 space-y-4 overflow-y-auto">
+            <!-- 用户选择 -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">选择用户</label>
+                <div class="relative">
+                    <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                    <input type="text" id="mute-user-search" placeholder="搜索用户名或ID..." 
+                        class="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-white/5 rounded-xl text-sm border border-gray-200 dark:border-white/10 focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none"
+                        oninput="searchMuteUsers(this.value)">
+                </div>
+                <div id="mute-user-results" class="mt-2 max-h-48 overflow-y-auto bg-gray-50 dark:bg-white/5 rounded-xl hidden"></div>
+                <div id="mute-selected-users" class="mt-2 flex flex-wrap gap-2"></div>
+            </div>
+            
+            <!-- 禁言时长 -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">禁言时长</label>
+                <div class="flex flex-wrap gap-2">
+                    <button class="mute-duration-btn px-3 py-1.5 rounded-lg text-sm border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 hover:border-brand-500 transition-colors" data-duration="1" onclick="selectMuteDuration(1)">1 小时</button>
+                    <button class="mute-duration-btn px-3 py-1.5 rounded-lg text-sm border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 hover:border-brand-500 transition-colors" data-duration="24" onclick="selectMuteDuration(24)">1 天</button>
+                    <button class="mute-duration-btn px-3 py-1.5 rounded-lg text-sm border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 hover:border-brand-500 transition-colors" data-duration="168" onclick="selectMuteDuration(168)">7 天</button>
+                    <button class="mute-duration-btn px-3 py-1.5 rounded-lg text-sm border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 hover:border-brand-500 transition-colors" data-duration="720" onclick="selectMuteDuration(720)">30 天</button>
+                    <button class="mute-duration-btn active px-3 py-1.5 rounded-lg text-sm border border-brand-500 bg-brand-500 text-white transition-colors" data-duration="0" onclick="selectMuteDuration(0)">永久</button>
+                </div>
+            </div>
+            
+            <!-- 禁言原因 -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">禁言原因（可选）</label>
+                <textarea id="mute-reason-input" rows="2" placeholder="请输入禁言原因..."
+                    class="w-full px-4 py-2.5 bg-gray-50 dark:bg-white/5 rounded-xl text-sm border border-gray-200 dark:border-white/10 focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none resize-none"></textarea>
+            </div>
+        </div>
+        
+        <div class="flex items-center justify-end gap-3 p-4 border-t border-gray-100 dark:border-white/5 rounded-b-2xl shrink-0">
+            <button onclick="closeMuteUserModal()" class="px-4 py-2 bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-medium transition-colors">
+                取消
+            </button>
+            <button onclick="submitMuteUsers()" class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-medium transition-colors shadow-md shadow-red-500/20">
+                确认禁言
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+// ==================== 禁言管理 ====================
+let muteList = [];
+let muteSelectedIds = new Set();
+let muteSelectedDuration = 0;
+let muteSelectedUsers = [];
+
+// 显示禁言管理浮窗
+async function showMuteModal() {
+    document.getElementById('mute-modal').classList.remove('hidden');
+    document.getElementById('mute-modal').classList.add('flex');
+    await loadMuteList();
+}
+
+// 关闭禁言管理浮窗
+function closeMuteModal() {
+    document.getElementById('mute-modal').classList.add('hidden');
+    document.getElementById('mute-modal').classList.remove('flex');
+    muteSelectedIds.clear();
+    updateMuteBatchBar();
+}
+
+// 加载禁言列表
+async function loadMuteList() {
+    try {
+        const res = await fetch('/api/messages/mutes');
+        const data = await res.json();
+        if (data.status === 'success') {
+            muteList = data.data || [];
+            renderMuteList();
+        }
+    } catch (e) {
+        console.error('加载禁言列表失败:', e);
+    }
+}
+
+// 渲染禁言列表
+function renderMuteList() {
+    const container = document.getElementById('mute-list');
+    
+    if (muteList.length === 0) {
+        container.innerHTML = `
+            <div class="flex items-center justify-center py-16 text-gray-400">
+                <div class="text-center">
+                    <i class="fa-solid fa-user-slash text-4xl mb-3 opacity-20"></i>
+                    <p>暂无禁言用户</p>
+                </div>
+            </div>`;
+        return;
+    }
+    
+    container.innerHTML = muteList.map(mute => {
+        const displayName = mute.user_remark || mute.username || mute.user_id;
+        const avatar = getAvatarHtml(mute.user_avatar, displayName);
+        
+        const subName = mute.user_remark ? (mute.username || mute.user_id) : '';
+        
+        // 禁言时长标签
+        let durationBadge = '';
+        if (mute.muted_until) {
+            const until = new Date(mute.muted_until);
+            const now = new Date();
+            if (until <= now) {
+                durationBadge = `<span class="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-[10px] font-medium rounded-full">已过期</span>`;
+            } else {
+                const hours = Math.ceil((until - now) / (1000 * 60 * 60));
+                if (hours < 24) {
+                    durationBadge = `<span class="px-2 py-0.5 bg-orange-100 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400 text-[10px] font-medium rounded-full">${hours}小时后解禁</span>`;
+                } else {
+                    const days = Math.ceil(hours / 24);
+                    durationBadge = `<span class="px-2 py-0.5 bg-orange-100 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400 text-[10px] font-medium rounded-full">${days}天后解禁</span>`;
+                }
+            }
+        } else {
+            durationBadge = `<span class="px-2 py-0.5 bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400 text-[10px] font-medium rounded-full">永久</span>`;
+        }
+        
+        const mutedAt = mute.muted_at ? formatDateTime(mute.muted_at) : '-';
+        const isSelected = muteSelectedIds.has(mute.user_id);
+        
+        return `
+            <div class="flex items-center gap-4 px-4 py-3 hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors rounded-xl">
+                <input type="checkbox" class="mute-checkbox w-4 h-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500" 
+                    data-user-id="${mute.user_id}" ${isSelected ? 'checked' : ''} onchange="toggleMuteSelect('${mute.user_id}')">
+                <div class="flex items-center gap-3 flex-1 min-w-0">
+                    <div class="w-9 h-9 rounded-full bg-brand-50 dark:bg-brand-500/20 flex items-center justify-center text-brand-500 font-bold overflow-hidden shrink-0">
+                        ${avatar}
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <div class="font-medium text-gray-900 dark:text-white text-sm truncate">${displayName}${subName ? `<span class="text-[11px] text-gray-400 font-normal ml-1">(${subName})</span>` : ''}</div>
+                        <div class="text-[11px] text-gray-400 truncate">ID: ${mute.user_id}</div>
+                    </div>
+                </div>
+                <div class="w-24">${durationBadge}</div>
+                <div class="w-28 hidden lg:block text-xs text-gray-400 truncate">${mute.muted_reason || '-'}</div>
+                <div class="w-24 hidden md:block text-xs text-gray-400">${mutedAt}</div>
+                <button onclick="unmuteUser('${mute.user_id}')" class="w-8 h-8 rounded-lg bg-gray-100 dark:bg-white/10 hover:bg-green-100 dark:hover:bg-green-500/20 text-gray-500 hover:text-green-600 dark:hover:text-green-400 flex items-center justify-center transition-colors" title="解除禁言">
+                    <i class="fa-solid fa-unlock text-sm"></i>
+                </button>
+            </div>`;
+    }).join('');
+}
+
+// 切换选择
+function toggleMuteSelect(userId) {
+    if (muteSelectedIds.has(userId)) {
+        muteSelectedIds.delete(userId);
+    } else {
+        muteSelectedIds.add(userId);
+    }
+    updateMuteBatchBar();
+}
+
+// 全选/取消全选
+function toggleMuteSelectAll() {
+    const selectAll = document.getElementById('mute-select-all').checked;
+    muteSelectedIds.clear();
+    if (selectAll) {
+        muteList.forEach(m => muteSelectedIds.add(m.user_id));
+    }
+    document.querySelectorAll('.mute-checkbox').forEach(cb => cb.checked = selectAll);
+    updateMuteBatchBar();
+}
+
+// 更新批量操作栏
+function updateMuteBatchBar() {
+    const bar = document.getElementById('mute-batch-bar');
+    const count = document.getElementById('mute-selected-count');
+    
+    if (muteSelectedIds.size > 0) {
+        bar.classList.remove('hidden');
+        bar.classList.add('flex');
+        count.textContent = `已选择 ${muteSelectedIds.size} 个`;
+    } else {
+        bar.classList.add('hidden');
+        bar.classList.remove('flex');
+    }
+}
+
+// 解除禁言
+async function unmuteUser(userId) {
+    const confirmed = await msgConfirm({type: 'warning', title: '解除禁言', message: '确定要解除该用户的禁言吗？', confirmText: '确定'});
+    if (!confirmed) return;
+    
+    try {
+        const res = await fetch(`/api/messages/mute/${userId}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.status === 'success') {
+            if (typeof showToast === 'function') {
+                showToast('success', '解禁成功', data.message);
+            } else {
+                msgToast('error', data.message);
+            }
+            loadMuteList();
+        } else {
+            if (typeof showToast === 'function') {
+                showToast('error', '解禁失败', data.message);
+            } else {
+                msgToast('error', '解禁失败: ' + data.message);
+            }
+        }
+    } catch (e) {
+        console.error('解禁失败:', e);
+    }
+}
+
+// 批量解禁
+async function batchUnmute() {
+    if (muteSelectedIds.size === 0) return;
+    
+    const confirmed = await msgConfirm({type: 'warning', title: '批量解除禁言', message: `确定要解除 ${muteSelectedIds.size} 个用户的禁言吗？`, confirmText: '确定'});
+    if (!confirmed) return;
+    
+    try {
+        const res = await fetch('/api/messages/unmute', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_ids: Array.from(muteSelectedIds) })
+        });
+        const data = await res.json();
+        
+        if (data.status === 'success') {
+            if (typeof showToast === 'function') {
+                showToast('success', '解禁成功', data.message);
+            } else {
+                msgToast('error', data.message);
+            }
+            muteSelectedIds.clear();
+            document.getElementById('mute-select-all').checked = false;
+            loadMuteList();
+            updateMuteBatchBar();
+        } else {
+            if (typeof showToast === 'function') {
+                showToast('error', '解禁失败', data.message);
+            } else {
+                msgToast('error', '解禁失败: ' + data.message);
+            }
+        }
+    } catch (e) {
+        console.error('批量解禁失败:', e);
+    }
+}
+
+// 关闭禁言用户浮窗
+function closeMuteUserModal() {
+    document.getElementById('mute-user-modal').classList.add('hidden');
+    document.getElementById('mute-user-modal').classList.remove('flex');
+}
+
+// 显示禁言用户浮窗（从禁言管理浮窗的"禁言用户"按钮调用）
+function showMuteUserModalFromList() {
+    muteSelectedUsers = [];
+    showMuteUserModalInner();
+}
+
+// 显示禁言用户浮窗（内部函数）
+function showMuteUserModalInner() {
+    muteSelectedDuration = 0;
+    document.getElementById('mute-reason-input').value = '';
+    document.getElementById('mute-user-search').value = '';
+    document.getElementById('mute-user-results').classList.add('hidden');
+    
+    // 如果没有预选用户，清空
+    if (!muteSelectedUsers || muteSelectedUsers.length === 0) {
+        muteSelectedUsers = [];
+    }
+    renderMuteSelectedUsers();
+    
+    // 重置时长选择
+    document.querySelectorAll('.mute-duration-btn').forEach(btn => {
+        btn.classList.remove('active', 'border-brand-500', 'bg-brand-500', 'text-white');
+        btn.classList.add('border-gray-200', 'dark:border-white/10', 'bg-white', 'dark:bg-white/5');
+        if (parseInt(btn.dataset.duration) === 0) {
+            btn.classList.add('active', 'border-brand-500', 'bg-brand-500', 'text-white');
+            btn.classList.remove('border-gray-200', 'dark:border-white/10', 'bg-white', 'dark:bg-white/5');
+        }
+    });
+    
+    document.getElementById('mute-user-modal').classList.remove('hidden');
+    document.getElementById('mute-user-modal').classList.add('flex');
+}
+
+// 搜索用户
+let muteSearchTimeout = null;
+async function searchMuteUsers(query) {
+    clearTimeout(muteSearchTimeout);
+    
+    if (!query || query.length < 2) {
+        document.getElementById('mute-user-results').classList.add('hidden');
+        return;
+    }
+    
+    muteSearchTimeout = setTimeout(async () => {
+        try {
+            const res = await fetch(`/api/users/search?q=${encodeURIComponent(query)}`);
+            const data = await res.json();
+            if (data.status === 'success' && data.users && data.users.length > 0) {
+                renderMuteUserResults(data.users);
+            } else {
+                document.getElementById('mute-user-results').classList.add('hidden');
+            }
+        } catch (e) {
+            console.error('搜索用户失败:', e);
+        }
+    }, 300);
+}
+
+// 渲染用户搜索结果
+function renderMuteUserResults(users) {
+    const container = document.getElementById('mute-user-results');
+    const selectedIds = new Set(muteSelectedUsers.map(u => u.id));
+    
+    container.innerHTML = users.slice(0, 8).map(user => {
+        const isSelected = selectedIds.has(user.Id);
+        return `
+            <div class="flex items-center gap-3 p-2.5 hover:bg-gray-100 dark:hover:bg-white/5 cursor-pointer transition-colors rounded-lg ${isSelected ? 'bg-brand-50 dark:bg-brand-500/10' : ''}" 
+                 onclick="toggleMuteUserSelect('${user.Id}', '${(user.Remark || user.Name || '').replace(/'/g, "\\'")}')">
+                <div class="w-8 h-8 rounded-full bg-brand-50 dark:bg-brand-500/20 flex items-center justify-center text-brand-500 font-bold overflow-hidden shrink-0">
+                    ${user.PrimaryImageTag ? `<img src="/api/proxy/user_image/${user.Id}" class="w-full h-full object-cover" onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27 fill=%27%236366f1%27%3E%3Cpath d=%27M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z%27/%3E%3C/svg%3E';">` : `<i class="fa-solid fa-user text-xs"></i>`}
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div class="text-sm font-medium text-gray-900 dark:text-white truncate">${user.Remark || user.Name}</div>
+                    <div class="text-[11px] text-gray-400">ID: ${user.Id}</div>
+                </div>
+                ${isSelected ? '<i class="fa-solid fa-check text-brand-500"></i>' : ''}
+            </div>`;
+    }).join('');
+    
+    container.classList.remove('hidden');
+}
+
+// 切换选择用户
+function toggleMuteUserSelect(userId, userName) {
+    const idx = muteSelectedUsers.findIndex(u => u.id === userId);
+    if (idx >= 0) {
+        muteSelectedUsers.splice(idx, 1);
+    } else {
+        muteSelectedUsers.push({ id: userId, name: userName });
+    }
+    renderMuteSelectedUsers();
+    renderMuteUserResultsInPlace();
+}
+
+// 渲染已选择的用户
+function renderMuteSelectedUsers() {
+    const container = document.getElementById('mute-selected-users');
+    
+    if (muteSelectedUsers.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+    
+    container.innerHTML = muteSelectedUsers.map(user => `
+        <div class="flex items-center gap-1.5 px-2.5 py-1 bg-brand-50 dark:bg-brand-500/20 text-brand-600 dark:text-brand-400 rounded-full text-sm">
+            <span>${user.name || user.id}</span>
+            <button onclick="removeMuteUser('${user.id}')" class="w-4 h-4 rounded-full hover:bg-brand-100 dark:hover:bg-brand-500/30 flex items-center justify-center">
+                <i class="fa-solid fa-times text-[10px]"></i>
+            </button>
+        </div>
+    `).join('');
+}
+
+// 移除已选择的用户
+function removeMuteUser(userId) {
+    muteSelectedUsers = muteSelectedUsers.filter(u => u.id !== userId);
+    renderMuteSelectedUsers();
+    renderMuteUserResultsInPlace();
+}
+
+// 更新搜索结果中的选中状态
+function renderMuteUserResultsInPlace() {
+    const selectedIds = new Set(muteSelectedUsers.map(u => u.id));
+    document.querySelectorAll('#mute-user-results > div').forEach(item => {
+        const userId = item.querySelector('.text-gray-400')?.textContent?.replace('ID: ', '');
+        if (userId) {
+            const checkIcon = item.querySelector('.fa-check');
+            if (selectedIds.has(userId)) {
+                item.classList.add('bg-brand-50', 'dark:bg-brand-500/10');
+                if (!checkIcon) {
+                    item.innerHTML += '<i class="fa-solid fa-check text-brand-500"></i>';
+                }
+            } else {
+                item.classList.remove('bg-brand-50', 'dark:bg-brand-500/10');
+                if (checkIcon) checkIcon.remove();
+            }
+        }
+    });
+}
+
+// 选择禁言时长
+function selectMuteDuration(hours) {
+    muteSelectedDuration = hours;
+    document.querySelectorAll('.mute-duration-btn').forEach(btn => {
+        btn.classList.remove('active', 'border-brand-500', 'bg-brand-500', 'text-white');
+        btn.classList.add('border-gray-200', 'dark:border-white/10', 'bg-white', 'dark:bg-white/5');
+        if (parseInt(btn.dataset.duration) === hours) {
+            btn.classList.add('active', 'border-brand-500', 'bg-brand-500', 'text-white');
+            btn.classList.remove('border-gray-200', 'dark:border-white/10', 'bg-white', 'dark:bg-white/5');
+        }
+    });
+}
+
+// 提交禁言
+async function submitMuteUsers() {
+    if (muteSelectedUsers.length === 0) {
+        if (typeof showToast === 'function') {
+            showToast('error', '请选择用户', '至少选择一个用户');
+        } else {
+            msgToast('warning', '请选择用户');
+        }
+        return;
+    }
+    
+    const reason = document.getElementById('mute-reason-input').value.trim();
+    
+    try {
+        const res = await fetch('/api/messages/mute/batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user_ids: muteSelectedUsers.map(u => u.id),
+                duration: muteSelectedDuration > 0 ? muteSelectedDuration : null,
+                reason: reason || null
+            })
+        });
+        const data = await res.json();
+        
+        if (data.status === 'success') {
+            if (typeof showToast === 'function') {
+                showToast('success', '禁言成功', data.message);
+            } else {
+                msgToast('error', data.message);
+            }
+            closeMuteUserModal();
+            loadMuteList();
+        } else {
+            if (typeof showToast === 'function') {
+                showToast('error', '禁言失败', data.message);
+            } else {
+                msgToast('error', '禁言失败: ' + data.message);
+            }
+        }
+    } catch (e) {
+        console.error('禁言失败:', e);
+        if (typeof showToast === 'function') {
+            showToast('error', '禁言失败', '请稍后重试');
+        } else {
+            msgToast('error', '禁言失败');
+        }
+    }
+}
+
+// 格式化日期时间
+function formatDateTime(dateStr) {
+    if (!dateStr) return '-';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }) + ' ' + 
+           date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+}
+
+// HTML 转义函数
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// 点击浮窗外部关闭
+document.getElementById('mute-modal').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('mute-modal')) {
+        closeMuteModal();
+    }
+});
+
+document.getElementById('mute-user-modal').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('mute-user-modal')) {
+        closeMuteUserModal();
+    }
+});
+</script>
+
+<!-- 公告管理浮窗 -->
+<div id="announcement-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden items-center justify-center">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-3xl mx-4 flex flex-col max-h-[85vh]">
+        <div class="flex items-center justify-between p-4 border-b border-gray-100 dark:border-white/5 shrink-0">
+            <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <i class="fa-solid fa-bullhorn text-amber-500"></i>
+                公告管理
+            </h3>
+            <div class="flex items-center gap-2">
+                <button onclick="showAnnouncementEditModal()" class="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-lg text-sm font-medium transition-colors">
+                    <i class="fa-solid fa-plus text-xs"></i>
+                    <span>发布公告</span>
+                </button>
+                <button onclick="closeAnnouncementModal()" class="w-8 h-8 rounded-full bg-gray-100 dark:bg-white/10 flex items-center justify-center hover:bg-gray-200 dark:hover:bg-white/20 transition-colors">
+                    <i class="fa-solid fa-times text-gray-500"></i>
+                </button>
+            </div>
+        </div>
+        
+        <!-- 公告列表 -->
+        <div class="flex-1 overflow-y-auto min-h-0">
+            <div id="announcement-list" class="p-2">
+                <div class="flex items-center justify-center py-16 text-gray-400">
+                    <div class="text-center">
+                        <i class="fa-solid fa-bullhorn text-4xl mb-3 opacity-20"></i>
+                        <p>暂无公告</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 公告编辑浮窗 -->
+<div id="announcement-edit-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] hidden items-center justify-center overflow-y-auto py-8">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg mx-4 flex flex-col shrink-0">
+        <div class="flex items-center justify-between p-4 border-b border-gray-100 dark:border-white/5 rounded-t-2xl shrink-0">
+            <h3 class="text-lg font-bold text-gray-900 dark:text-white" id="announcement-edit-title">发布公告</h3>
+            <button onclick="closeAnnouncementEditModal()" class="w-8 h-8 rounded-full bg-gray-100 dark:bg-white/10 flex items-center justify-center hover:bg-gray-200 dark:hover:bg-white/20 transition-colors">
+                <i class="fa-solid fa-times text-gray-500"></i>
+            </button>
+        </div>
+        
+        <div class="p-4 space-y-4 overflow-y-auto">
+            <input type="hidden" id="announcement-edit-id" value="">
+            
+            <!-- 标题 -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">公告标题</label>
+                <input type="text" id="announcement-title-input" placeholder="请输入公告标题..."
+                    class="w-full px-4 py-2.5 bg-gray-50 dark:bg-white/5 rounded-xl text-sm border border-gray-200 dark:border-white/10 focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none">
+            </div>
+            
+            <!-- 内容 -->
+            <div>
+                <div class="flex items-center justify-between mb-2">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">公告内容</label>
+                    <span class="text-[11px] text-gray-400">富文本编辑器</span>
+                </div>
+                <!-- Quill 编辑器容器 -->
+                <div id="announcement-editor" class="h-[200px] rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#2C2C2E] overflow-hidden announcement-quill-editor"></div>
+                <!-- 隐藏的 textarea 用于存储内容 -->
+                <input type="hidden" id="announcement-content-input" value="">
+            </div>
+            
+            <!-- 优先级 -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">优先级 <span class="text-gray-400 font-normal">(数字越大越靠前)</span></label>
+                <input type="number" id="announcement-priority-input" value="0" min="0" max="999"
+                    class="w-24 px-4 py-2.5 bg-gray-50 dark:bg-white/5 rounded-xl text-sm border border-gray-200 dark:border-white/10 focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none">
+            </div>
+            
+            <!-- 启用状态 -->
+            <div class="flex items-center gap-3">
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="announcement-active-input" class="sr-only peer" checked>
+                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-amber-300 dark:peer-focus:ring-amber-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-amber-500"></div>
+                </label>
+                <span class="text-sm text-gray-700 dark:text-gray-300">启用公告</span>
+            </div>
+        </div>
+        
+        <div class="flex items-center justify-end gap-3 p-4 border-t border-gray-100 dark:border-white/5 rounded-b-2xl shrink-0">
+            <button onclick="closeAnnouncementEditModal()" class="px-4 py-2 bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-medium transition-colors">
+                取消
+            </button>
+            <button onclick="saveAnnouncement()" class="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl text-sm font-medium transition-colors shadow-md">
+                保存公告
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+// ==================== 公告管理 ====================
+let announcementList = [];
+
+// 显示公告管理浮窗
+async function showAnnouncementModal() {
+    document.getElementById('announcement-modal').classList.remove('hidden');
+    document.getElementById('announcement-modal').classList.add('flex');
+    await loadAnnouncements();
+}
+
+// 关闭公告管理浮窗
+function closeAnnouncementModal() {
+    document.getElementById('announcement-modal').classList.add('hidden');
+    document.getElementById('announcement-modal').classList.remove('flex');
+}
+
+// 加载公告列表
+async function loadAnnouncements() {
+    const container = document.getElementById('announcement-list');
+    container.innerHTML = `
+        <div class="flex items-center justify-center py-16 text-gray-400">
+            <div class="text-center">
+                <i class="fa-solid fa-spinner fa-spin text-2xl mb-2"></i>
+                <p>加载中...</p>
+            </div>
+        </div>`;
+    
+    try {
+        const res = await fetch('/api/announcements');
+        const data = await res.json();
+        if (data.status === 'success') {
+            announcementList = data.data || [];
+            renderAnnouncementList();
+        }
+    } catch (e) {
+        console.error('加载公告列表失败:', e);
+        container.innerHTML = `
+            <div class="flex items-center justify-center py-16 text-gray-400">
+                <p>加载失败</p>
+            </div>`;
+    }
+}
+
+// 渲染公告列表
+function renderAnnouncementList() {
+    const container = document.getElementById('announcement-list');
+    
+    if (announcementList.length === 0) {
+        container.innerHTML = `
+            <div class="flex items-center justify-center py-16 text-gray-400">
+                <div class="text-center">
+                    <i class="fa-solid fa-bullhorn text-4xl mb-3 opacity-20"></i>
+                    <p>暂无公告</p>
+                    <button onclick="showAnnouncementEditModal()" class="mt-3 text-amber-500 hover:text-amber-600 text-sm font-medium">
+                        <i class="fa-solid fa-plus mr-1"></i> 发布第一条公告
+                    </button>
+                </div>
+            </div>`;
+        return;
+    }
+    
+    container.innerHTML = announcementList.map(ann => {
+        const isActive = ann.is_active === 1;
+        const createdAt = ann.created_at ? new Date(ann.created_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-';
+        // 提取纯文本预览（移除 HTML 标签）
+        const plainText = ann.content.replace(/<[^>]*>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+        const contentPreview = plainText.length > 80 ? plainText.substring(0, 80) + '...' : plainText;
+        
+        return `
+            <div class="group p-4 hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors rounded-xl border border-gray-100 dark:border-white/5 mb-2">
+                <div class="flex items-start justify-between gap-3">
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2 mb-1">
+                            ${ann.priority > 0 ? `<span class="px-1.5 py-0.5 bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 text-[10px] font-bold rounded">置顶</span>` : ''}
+                            <span class="px-1.5 py-0.5 ${isActive ? 'bg-green-100 dark:bg-green-500/20 text-green-600 dark:text-green-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'} text-[10px] font-medium rounded">
+                                ${isActive ? '已启用' : '已禁用'}
+                            </span>
+                            <span class="text-[11px] text-gray-400">${createdAt}</span>
+                            <span class="text-[11px] text-gray-400"><i class="fa-solid fa-eye mr-0.5"></i>${ann.view_count || 0}</span>
+                        </div>
+                        <h4 class="font-bold text-gray-900 dark:text-white text-sm truncate">${escapeHtml(ann.title)}</h4>
+                        <p class="text-[13px] text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">${escapeHtml(contentPreview)}</p>
+                    </div>
+                    <div class="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onclick="editAnnouncement(${ann.id})" class="w-8 h-8 rounded-lg bg-gray-100 dark:bg-white/10 hover:bg-brand-100 dark:hover:bg-brand-500/20 text-gray-500 hover:text-brand-600 dark:hover:text-brand-400 flex items-center justify-center transition-colors" title="编辑">
+                            <i class="fa-solid fa-pen text-xs"></i>
+                        </button>
+                        <button onclick="toggleAnnouncementStatus(${ann.id}, ${isActive ? 0 : 1})" class="w-8 h-8 rounded-lg bg-gray-100 dark:bg-white/10 hover:bg-green-100 dark:hover:bg-green-500/20 text-gray-500 hover:text-green-600 dark:hover:text-green-400 flex items-center justify-center transition-colors" title="${isActive ? '禁用' : '启用'}">
+                            <i class="fa-solid ${isActive ? 'fa-toggle-on' : 'fa-toggle-off'} text-sm"></i>
+                        </button>
+                        <button onclick="deleteAnnouncement(${ann.id})" class="w-8 h-8 rounded-lg bg-gray-100 dark:bg-white/10 hover:bg-red-100 dark:hover:bg-red-500/20 text-gray-500 hover:text-red-600 dark:hover:text-red-400 flex items-center justify-center transition-colors" title="删除">
+                            <i class="fa-solid fa-trash text-xs"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>`;
+    }).join('');
+}
+
+// ==================== 🔥 Quill 富文本编辑器 ====================
+let announcementQuill = null;  // Quill 实例
+
+function initAnnouncementQuill() {
+    if (announcementQuill) return;  // 已初始化
+    
+    // 注册自定义字号格式
+    const SizeClass = Quill.import('attributors/class/size');
+    SizeClass.whitelist = ['small', 'normal', 'large', 'huge'];
+    Quill.register(SizeClass, true);
+    
+    announcementQuill = new Quill('#announcement-editor', {
+        theme: 'snow',
+        placeholder: '请输入公告内容...',
+        modules: {
+            toolbar: [
+                // 文字格式（内联）
+                ['bold', 'italic', 'underline', 'strike'],
+                // 字号（内联，可选中部分文字设置）
+                [{ 'size': ['small', false, 'large', 'huge'] }],
+                // 颜色（内联）
+                [{ 'color': [] }, { 'background': [] }],
+                // 标题（块级）
+                [{ 'header': [1, 2, 3, false] }],
+                // 对齐（块级）
+                [{ 'align': [] }],
+                // 链接
+                ['link'],
+                // 清除格式
+                ['clean']
+            ]
+        }
+    });
+}
+
+// 显示公告编辑浮窗
+function showAnnouncementEditModal(ann = null) {
+    // 初始化 Quill 编辑器
+    initAnnouncementQuill();
+    
+    document.getElementById('announcement-edit-id').value = ann ? ann.id : '';
+    document.getElementById('announcement-title-input').value = ann ? ann.title : '';
+    document.getElementById('announcement-content-input').value = ann ? ann.content : '';
+    document.getElementById('announcement-priority-input').value = ann ? ann.priority : 0;
+    document.getElementById('announcement-active-input').checked = ann ? ann.is_active === 1 : true;
+    document.getElementById('announcement-edit-title').textContent = ann ? '编辑公告' : '发布公告';
+    
+    // 设置 Quill 编辑器内容
+    const content = ann ? ann.content : '';
+    if (content) {
+        // 如果内容看起来像 HTML，直接用 HTML
+        if (content.includes('<') && content.includes('>')) {
+            announcementQuill.root.innerHTML = content;
+        } else {
+            // 否则作为纯文本处理（兼容旧数据）
+            announcementQuill.setText(content);
+        }
+    } else {
+        announcementQuill.setText('');
+    }
+    
+    document.getElementById('announcement-edit-modal').classList.remove('hidden');
+    document.getElementById('announcement-edit-modal').classList.add('flex');
+}
+
+// 关闭公告编辑浮窗
+function closeAnnouncementEditModal() {
+    document.getElementById('announcement-edit-modal').classList.add('hidden');
+    document.getElementById('announcement-edit-modal').classList.remove('flex');
+}
+
+// 编辑公告
+function editAnnouncement(id) {
+    const ann = announcementList.find(a => a.id === id);
+    if (ann) {
+        showAnnouncementEditModal(ann);
+    }
+}
+
+// 切换公告状态
+async function toggleAnnouncementStatus(id, isActive) {
+    try {
+        const res = await fetch(`/api/announcements/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ is_active: isActive === 1 })
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+            loadAnnouncements();
+        } else {
+            msgToast('error', '操作失败: ' + data.message);
+        }
+    } catch (e) {
+        msgToast('error', '操作失败');
+    }
+}
+
+// 删除公告
+async function deleteAnnouncement(id) {
+    const confirmed = await msgConfirm({type: 'danger', title: '删除公告', message: '确定要删除这条公告吗？', confirmText: '删除'});
+    if (!confirmed) return;
+    
+    try {
+        const res = await fetch(`/api/announcements/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.status === 'success') {
+            loadAnnouncements();
+        } else {
+            msgToast('error', '删除失败: ' + data.message);
+        }
+    } catch (e) {
+        msgToast('error', '删除失败');
+    }
+}
+
+// 保存公告
+async function saveAnnouncement() {
+    const id = document.getElementById('announcement-edit-id').value;
+    const title = document.getElementById('announcement-title-input').value.trim();
+    
+    // 从 Quill 编辑器获取 HTML 内容
+    const content = announcementQuill ? announcementQuill.root.innerHTML.trim() : '';
+    
+    const priority = parseInt(document.getElementById('announcement-priority-input').value) || 0;
+    const isActive = document.getElementById('announcement-active-input').checked;
+    
+    if (!title) {
+        msgToast('warning', '请输入公告标题');
+        return;
+    }
+    // 检查内容是否为空（排除空段落）
+    const textContent = announcementQuill ? announcementQuill.getText().trim() : '';
+    if (!textContent) {
+        msgToast('warning', '请输入公告内容');
+        return;
+    }
+    
+    try {
+        const url = id ? `/api/announcements/${id}` : '/api/announcements';
+        const method = id ? 'PUT' : 'POST';
+        const body = { title, content, priority, is_active: isActive };
+        
+        const res = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        
+        if (data.status === 'success') {
+            closeAnnouncementEditModal();
+            loadAnnouncements();
+        } else {
+            msgToast('error', '保存失败: ' + data.message);
+        }
+    } catch (e) {
+        msgToast('error', '保存失败');
+    }
+}
+
+// 点击浮窗外部关闭
+document.getElementById('announcement-modal').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('announcement-modal')) {
+        closeAnnouncementModal();
+    }
+});
+
+document.getElementById('announcement-edit-modal').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('announcement-edit-modal')) {
+        closeAnnouncementEditModal();
+    }
+});
+
+// ==================== 机器人通知配置 ====================
+let msgBotConfig = { enabled: true, reply_via_bot: false, user_bot_configured: false };
+
+async function showMsgBotConfigModal() {
+    document.getElementById('msg-bot-config-modal').classList.remove('hidden');
+    document.getElementById('msg-bot-config-modal').classList.add('flex');
+    await loadMsgBotConfig();
+}
+
+function closeMsgBotConfigModal() {
+    document.getElementById('msg-bot-config-modal').classList.add('hidden');
+    document.getElementById('msg-bot-config-modal').classList.remove('flex');
+}
+
+async function loadMsgBotConfig() {
+    try {
+        const res = await fetch('/api/messages/bot_config');
+        const data = await res.json();
+        if (data.status === 'success') {
+            msgBotConfig = data.data;
+            document.getElementById('msg-bot-notify-enabled').checked = msgBotConfig.enabled;
+            document.getElementById('msg-bot-reply-enabled').checked = msgBotConfig.reply_via_bot;
+            
+            // 如果用户机器人未配置，禁用回复选项
+            if (!msgBotConfig.user_bot_configured) {
+                document.getElementById('msg-bot-reply-enabled').disabled = true;
+                document.getElementById('msg-bot-reply-enabled').closest('label').classList.add('opacity-50');
+                document.getElementById('user-bot-not-configured-hint').classList.remove('hidden');
+            } else {
+                document.getElementById('msg-bot-reply-enabled').disabled = false;
+                document.getElementById('msg-bot-reply-enabled').closest('label').classList.remove('opacity-50');
+                document.getElementById('user-bot-not-configured-hint').classList.add('hidden');
+            }
+        }
+    } catch (e) {
+        console.error('加载机器人配置失败:', e);
+    }
+}
+
+async function saveMsgBotConfig() {
+    try {
+        const enabled = document.getElementById('msg-bot-notify-enabled').checked;
+        const reply_via_bot = document.getElementById('msg-bot-reply-enabled').checked;
+        
+        const res = await fetch('/api/messages/bot_config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled, reply_via_bot })
+        });
+        const data = await res.json();
+        
+        if (data.status === 'success') {
+            if (typeof showToast === 'function') {
+                showToast('success', '保存成功', '机器人通知配置已更新');
+            } else {
+                msgToast('success', '保存成功');
+            }
+            closeMsgBotConfigModal();
+        } else {
+            msgToast('error', '保存失败: ' + data.message);
+        }
+    } catch (e) {
+        msgToast('error', '保存失败');
+    }
+}
+
+// 🔥 DOM 事件绑定延迟到 DOMContentLoaded
+document.addEventListener('DOMContentLoaded', function() {
+    const msgBotConfigModal = document.getElementById('msg-bot-config-modal');
+    if (msgBotConfigModal) {
+        msgBotConfigModal.addEventListener('click', (e) => {
+            if (e.target === msgBotConfigModal) {
+                closeMsgBotConfigModal();
+            }
+        });
+    }
+});
+</script>
+
+<!-- 机器人通知配置浮窗 -->
+<div id="msg-bot-config-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden items-center justify-center">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md mx-4">
+        <div class="flex items-center justify-between p-4 border-b border-gray-100 dark:border-white/5">
+            <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <i class="fa-solid fa-robot text-cyan-500"></i>
+                机器人通知配置
+            </h3>
+            <button onclick="closeMsgBotConfigModal()" class="w-8 h-8 rounded-full bg-gray-100 dark:bg-white/10 flex items-center justify-center hover:bg-gray-200 dark:hover:bg-white/20 transition-colors">
+                <i class="fa-solid fa-times text-gray-500"></i>
+            </button>
+        </div>
+        
+        <div class="p-4 space-y-4">
+            <!-- 启用机器人通知 -->
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="font-medium text-gray-900 dark:text-white">启用机器人通知</div>
+                    <div class="text-sm text-gray-500 dark:text-gray-400">用户发消息时通知管理员机器人</div>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="msg-bot-notify-enabled" class="sr-only peer" checked>
+                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-cyan-300 dark:peer-focus:ring-cyan-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-cyan-500"></div>
+                </label>
+            </div>
+            
+            <!-- 通过机器人回复 -->
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="font-medium text-gray-900 dark:text-white">通过机器人回复用户</div>
+                    <div class="text-sm text-gray-500 dark:text-gray-400">管理员回复时同时发送 TG 私聊</div>
+                    <div id="user-bot-not-configured-hint" class="text-xs text-amber-500 mt-1 hidden">
+                        <i class="fa-solid fa-exclamation-triangle mr-1"></i>需先配置用户机器人
+                    </div>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="msg-bot-reply-enabled" class="sr-only peer">
+                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-cyan-300 dark:peer-focus:ring-cyan-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-cyan-500"></div>
+                </label>
+            </div>
+            
+            <!-- 说明 -->
+            <div class="p-3 bg-gray-50 dark:bg-white/5 rounded-xl text-sm text-gray-600 dark:text-gray-400">
+                <div class="font-medium mb-1">使用说明：</div>
+                <ul class="list-disc list-inside space-y-1 text-xs">
+                    <li>启用后，用户发消息会推送到管理机器人</li>
+                    <li>管理员可在机器人中直接回复用户</li>
+                    <li>回复同时会存入消息中心</li>
+                    <li>如需推送到用户 TG，需配置用户机器人</li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="flex items-center justify-end gap-3 p-4 border-t border-gray-100 dark:border-white/5">
+            <button onclick="closeMsgBotConfigModal()" class="px-4 py-2 bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-medium transition-colors">
+                取消
+            </button>
+            <button onclick="saveMsgBotConfig()" class="px-4 py-2 bg-gradient-to-r from-cyan-500 to-purple-500 hover:from-cyan-600 hover:to-purple-600 text-white rounded-xl text-sm font-medium transition-colors shadow-md">
+                保存配置
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- 群发消息浮窗 -->
+<div id="broadcast-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl w-full max-w-md mx-auto overflow-hidden">
+        <!-- 头部 -->
+        <div class="relative bg-gradient-to-r from-green-500 to-emerald-500 px-6 py-5">
+            <div class="absolute top-0 left-0 w-full h-full bg-black/10"></div>
+            <div class="relative flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+                        <i class="fa-solid fa-users text-white text-lg"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-bold text-white">群发消息</h3>
+                        <p class="text-white/70 text-xs">批量发送消息给多个用户</p>
+                    </div>
+                </div>
+                <button onclick="closeBroadcastModal()" class="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-colors">
+                    <i class="fa-solid fa-times text-white text-sm"></i>
+                </button>
+            </div>
+        </div>
+        
+        <!-- 内容 -->
+        <div class="p-5 space-y-4">
+            <!-- 用户选择 -->
+            <div>
+                <div class="flex items-center justify-between mb-2">
+                    <label class="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                        <i class="fa-solid fa-user-group mr-2 text-green-500"></i>选择用户
+                    </label>
+                    <span id="broadcast-selected-count" class="text-xs px-2 py-1 bg-green-100 dark:bg-green-500/20 text-green-600 dark:text-green-400 rounded-full font-medium">0 人</span>
+                </div>
+                <div id="broadcast-users-container" class="border border-gray-200 dark:border-white/10 rounded-2xl max-h-52 overflow-y-auto bg-gray-50 dark:bg-white/5">
+                    <div class="p-4 text-center text-gray-400 text-sm">
+                        <i class="fa-solid fa-spinner fa-spin mr-2"></i>加载用户列表...
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 mt-2">
+                    <button onclick="selectAllBroadcastUsers()" class="text-xs text-green-500 hover:text-green-600 font-medium flex items-center gap-1">
+                        <i class="fa-solid fa-check-double"></i>全选
+                    </button>
+                    <span class="text-gray-200 dark:text-gray-700">|</span>
+                    <button onclick="deselectAllBroadcastUsers()" class="text-xs text-gray-500 hover:text-gray-600 font-medium flex items-center gap-1">
+                        <i class="fa-solid fa-xmark"></i>取消
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 消息内容 -->
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                    <i class="fa-solid fa-message mr-2 text-green-500"></i>消息内容
+                </label>
+                <textarea id="broadcast-content" rows="3" placeholder="输入要群发的消息内容..." 
+                    class="w-full px-4 py-3 bg-gray-50 dark:bg-white/5 rounded-2xl text-sm border border-gray-200 dark:border-white/10 focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none resize-none transition-all"></textarea>
+                <div class="text-xs text-gray-400 mt-1 text-right">最多 5000 字</div>
+            </div>
+            
+            <!-- 提示 -->
+            <div class="flex items-start gap-3 p-3 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-500/10 dark:to-emerald-500/10 rounded-2xl">
+                <div class="w-8 h-8 rounded-full bg-green-100 dark:bg-green-500/20 flex items-center justify-center shrink-0">
+                    <i class="fa-solid fa-lightbulb text-green-500 text-sm"></i>
+                </div>
+                <div class="text-sm text-green-700 dark:text-green-400">
+                    <span class="font-medium">提示：</span>每个用户会收到独立的消息，支持表情和换行。
+                </div>
+            </div>
+        </div>
+        
+        <!-- 底部按钮 -->
+        <div class="flex items-center gap-3 p-5 border-t border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-white/5">
+            <button onclick="closeBroadcastModal()" class="flex-1 px-4 py-3 bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-xl text-sm font-medium transition-colors border border-gray-200 dark:border-white/10">
+                取消
+            </button>
+            <button onclick="sendBroadcast()" id="broadcast-send-btn" class="flex-1 px-4 py-3 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white rounded-xl text-sm font-medium transition-all shadow-lg shadow-green-500/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                <i class="fa-solid fa-paper-plane"></i>
+                <span>立即发送</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+// ==================== 群发消息功能 ====================
+let broadcastUsers = [];
+let selectedBroadcastUsers = new Set();
+
+async function showBroadcastModal() {
+    document.getElementById('broadcast-modal').classList.remove('hidden');
+    document.getElementById('broadcast-modal').classList.add('flex');
+    document.getElementById('broadcast-content').value = '';
+    selectedBroadcastUsers.clear();
+    updateBroadcastSelectedCount();
+    await loadBroadcastUsers();
+}
+
+function closeBroadcastModal() {
+    document.getElementById('broadcast-modal').classList.add('hidden');
+    document.getElementById('broadcast-modal').classList.remove('flex');
+}
+
+async function loadBroadcastUsers() {
+    const container = document.getElementById('broadcast-users-container');
+    container.innerHTML = '<div class="p-3 text-center text-gray-400 text-sm"><i class="fa-solid fa-spinner fa-spin mr-2"></i>加载用户列表...</div>';
+    
+    try {
+        const res = await fetch('/api/users/all');
+        const data = await res.json();
+        
+        if (data.status === 'success' && data.users) {
+            broadcastUsers = data.users;
+            renderBroadcastUsers();
+        } else {
+            container.innerHTML = '<div class="p-3 text-center text-gray-400 text-sm">加载失败</div>';
+        }
+    } catch (e) {
+        console.error('加载用户列表失败:', e);
+        container.innerHTML = '<div class="p-3 text-center text-red-400 text-sm">加载失败</div>';
+    }
+}
+
+function renderBroadcastUsers() {
+    const container = document.getElementById('broadcast-users-container');
+    
+    if (broadcastUsers.length === 0) {
+        container.innerHTML = '<div class="p-4 text-center text-gray-400 text-sm"><i class="fa-solid fa-users-slash mr-2"></i>暂无用户</div>';
+        return;
+    }
+    
+    let html = '<div class="divide-y divide-gray-100 dark:divide-white/5">';
+    broadcastUsers.forEach(user => {
+        const displayName = user.Remark || user.Name || user.Id;
+        const isSelected = selectedBroadcastUsers.has(user.Id);
+        html += `
+            <label class="flex items-center gap-3 p-3 hover:bg-green-50 dark:hover:bg-green-500/10 cursor-pointer transition-all group">
+                <input type="checkbox" class="broadcast-user-checkbox w-5 h-5 text-green-500 rounded-lg border-gray-300 focus:ring-2 focus:ring-green-500 focus:ring-offset-0" 
+                    data-user-id="${user.Id}" ${isSelected ? 'checked' : ''} onchange="toggleBroadcastUser('${user.Id}')">
+                <div class="flex-1 min-w-0">
+                    <div class="font-medium text-gray-900 dark:text-white truncate group-hover:text-green-600 dark:group-hover:text-green-400 transition-colors">${escapeHtml(displayName)}</div>
+                    <div class="text-xs text-gray-400 truncate">${user.Id}</div>
+                </div>
+                <i class="fa-solid fa-chevron-right text-gray-300 dark:text-gray-600 text-xs opacity-0 group-hover:opacity-100 transition-opacity"></i>
+            </label>
+        `;
+    });
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function toggleBroadcastUser(userId) {
+    if (selectedBroadcastUsers.has(userId)) {
+        selectedBroadcastUsers.delete(userId);
+    } else {
+        selectedBroadcastUsers.add(userId);
+    }
+    updateBroadcastSelectedCount();
+}
+
+function selectAllBroadcastUsers() {
+    broadcastUsers.forEach(user => selectedBroadcastUsers.add(user.Id));
+    document.querySelectorAll('.broadcast-user-checkbox').forEach(cb => cb.checked = true);
+    updateBroadcastSelectedCount();
+}
+
+function deselectAllBroadcastUsers() {
+    selectedBroadcastUsers.clear();
+    document.querySelectorAll('.broadcast-user-checkbox').forEach(cb => cb.checked = false);
+    updateBroadcastSelectedCount();
+}
+
+function updateBroadcastSelectedCount() {
+    const countEl = document.getElementById('broadcast-selected-count');
+    const count = selectedBroadcastUsers.size;
+    countEl.textContent = `${count} 人`;
+    if (count > 0) {
+        countEl.classList.remove('bg-green-100', 'dark:bg-green-500/20', 'text-green-600', 'dark:text-green-400');
+        countEl.classList.add('bg-green-500', 'text-white');
+    } else {
+        countEl.classList.add('bg-green-100', 'dark:bg-green-500/20', 'text-green-600', 'dark:text-green-400');
+        countEl.classList.remove('bg-green-500', 'text-white');
+    }
+}
+
+async function sendBroadcast() {
+    const content = document.getElementById('broadcast-content').value.trim();
+    
+    if (selectedBroadcastUsers.size === 0) {
+        if (typeof showToast === 'function') {
+            showToast('error', '请选择用户', '至少选择一个用户');
+        } else {
+            msgToast('warning', '请至少选择一个用户');
+        }
+        return;
+    }
+    
+    if (!content) {
+        if (typeof showToast === 'function') {
+            showToast('error', '请输入内容', '消息内容不能为空');
+        } else {
+            msgToast('warning', '请输入消息内容');
+        }
+        return;
+    }
+    
+    const btn = document.getElementById('broadcast-send-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>发送中...';
+    
+    try {
+        const res = await fetch('/api/messages/broadcast', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user_ids: Array.from(selectedBroadcastUsers),
+                content: content
+            })
+        });
+        const data = await res.json();
+        
+        if (data.status === 'success') {
+            if (typeof showToast === 'function') {
+                showToast('success', '发送成功', data.message);
+            } else {
+                msgToast('success', data.message);
+            }
+            closeBroadcastModal();
+            loadConversations();
+        } else {
+            if (typeof showToast === 'function') {
+                showToast('error', '发送失败', data.message);
+            } else {
+                msgToast('error', '发送失败: ' + data.message);
+            }
+        }
+    } catch (e) {
+        console.error('群发失败:', e);
+        if (typeof showToast === 'function') {
+            showToast('error', '发送失败', '请稍后重试');
+        } else {
+            msgToast('error', '发送失败');
+        }
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-paper-plane mr-2"></i>发送';
+    }
+}
+
+// 点击浮窗外部关闭
+document.getElementById('broadcast-modal').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('broadcast-modal')) {
+        closeBroadcastModal();
+    }
+});
+
+// ========== 🔔 Toast & Confirm 系统函数 ==========
+
+// Toast 通知
+function msgToast(type, message, duration = 3000) {
+    let container = document.getElementById('msg-toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'msg-toast-container';
+        container.className = 'msg-toast-container';
+        document.body.appendChild(container);
+    }
+    
+    const icons = { success: 'fa-circle-check', error: 'fa-circle-xmark', warning: 'fa-triangle-exclamation', info: 'fa-circle-info' };
+    const toast = document.createElement('div');
+    toast.className = `msg-toast-item ${type}`;
+    toast.innerHTML = `<i class="fa-solid ${icons[type]}"></i><span>${message}</span>`;
+    container.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.animation = 'toastOut 0.3s ease forwards';
+        setTimeout(() => toast.remove(), 300);
+    }, duration);
+}
+
+// Confirm 确认框
+let msgConfirmResolve = null;
+function msgConfirm(options) {
+    return new Promise((resolve) => {
+        msgConfirmResolve = resolve;
+        const container = document.getElementById('msg-confirm-container');
+        if (!container) return resolve(false);
+        
+        const icon = options.type === 'danger' ? 'fa-circle-exclamation' : 'fa-triangle-exclamation';
+        const btnClass = options.type === 'danger' ? 'danger' : 'primary';
+        
+        container.innerHTML = `
+            <div class="msg-confirm-overlay" onclick="msgConfirmCancel()"></div>
+            <div class="msg-confirm-modal">
+                <div class="msg-confirm-icon ${options.type || 'warning'}"><i class="fa-solid ${icon}"></i></div>
+                <div class="msg-confirm-title">${options.title || '确认操作'}</div>
+                <div class="msg-confirm-message">${options.message || ''}</div>
+                <div class="msg-confirm-buttons">
+                    <button class="msg-confirm-btn cancel" onclick="msgConfirmCancel()">${options.cancelText || '取消'}</button>
+                    <button class="msg-confirm-btn ${btnClass}" onclick="msgConfirmOk()">${options.confirmText || '确定'}</button>
+                </div>
+            </div>
+        `;
+    });
+}
+function msgConfirmOk() {
+    const container = document.getElementById('msg-confirm-container');
+    if (container) container.innerHTML = '';
+    if (msgConfirmResolve) msgConfirmResolve(true);
+}
+function msgConfirmCancel() {
+    const container = document.getElementById('msg-confirm-container');
+    if (container) container.innerHTML = '';
+    if (msgConfirmResolve) msgConfirmResolve(false);
+}
+</script>
+
+<!-- 🔔 Toast 通知容器 -->
+<div id="msg-toast-container" class="msg-toast-container"></div>
+
+<!-- 🔔 Confirm 认框容器 -->
+<div id="msg-confirm-container"></div>
+
+<!-- Quill Editor JS -->
+<script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
+
+<!-- Quill 暗色模式样式 -->
+<style>
+/* Quill 暗色模式 */
+html.dark .ql-toolbar.ql-snow {
+    border-color: rgba(255,255,255,0.1);
+    background: #2C2C2E;
+}
+html.dark .ql-container.ql-snow {
+    border-color: rgba(255,255,255,0.1);
+    background: #2C2C2E;
+}
+html.dark .ql-editor {
+    color: #e5e5e5;
+}
+html.dark .ql-editor.ql-blank::before {
+    color: rgba(255,255,255,0.3);
+}
+html.dark .ql-stroke {
+    stroke: rgba(255,255,255,0.6);
+}
+html.dark .ql-fill {
+    fill: rgba(255,255,255,0.6);
+}
+html.dark .ql-picker {
+    color: rgba(255,255,255,0.6);
+}
+html.dark .ql-picker-options {
+    background: #2C2C2E;
+    border-color: rgba(255,255,255,0.1);
+}
+html.dark .ql-picker-item {
+    color: rgba(255,255,255,0.8);
+}
+html.dark .ql-picker-item:hover {
+    color: #fff;
+}
+
+/* 公告编辑器圆角 */
+.announcement-quill-editor .ql-toolbar {
+    border-top-left-radius: 0.75rem;
+    border-top-right-radius: 0.75rem;
+}
+.announcement-quill-editor .ql-container {
+    border-bottom-left-radius: 0.75rem;
+    border-bottom-right-radius: 0.75rem;
+}
+
+/* 字号样式（公告显示） */
+.ql-editor .ql-size-small { font-size: 0.75rem; }
+.ql-editor .ql-size-normal { font-size: 1rem; }
+.ql-editor .ql-size-large { font-size: 1.5rem; }
+.ql-editor .ql-size-huge { font-size: 2rem; }
+
+/* 对齐样式 */
+.ql-editor .ql-align-center { text-align: center; }
+.ql-editor .ql-align-right { text-align: right; }
+.ql-editor .ql-align-justify { text-align: justify; }
+</style>
+{% endblock %}

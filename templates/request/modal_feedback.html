@@ -1,0 +1,76 @@
+<div x-show="feedbackModal.open" 
+     class="fixed inset-0 z-[100] flex items-end md:items-center justify-center p-0 md:p-4" 
+     x-cloak>
+    
+    <div x-show="feedbackModal.open" 
+         x-transition.opacity 
+         @click="feedbackModal.open = false" 
+         class="absolute inset-0 bg-slate-900/60 dark:bg-black/90 backdrop-blur-sm"></div>
+    
+    <div x-show="feedbackModal.open" 
+         x-transition:enter="transition ease-out duration-300" 
+         x-transition:enter-start="opacity-0 translate-y-full md:translate-y-10 scale-95" 
+         x-transition:enter-end="opacity-100 translate-y-0 scale-100" 
+         class="relative w-full md:w-[500px] bg-white dark:bg-[#0a0a0a] border border-slate-200 dark:border-white/5 rounded-t-3xl md:rounded-3xl shadow-2xl flex flex-col p-6 sm:p-8 overflow-hidden">
+        
+        <div class="absolute top-0 right-0 w-32 h-32 bg-rose-500/5 rounded-full -mr-16 -mt-16 blur-3xl pointer-events-none"></div>
+
+        <div class="mb-6 relative z-10">
+            <div class="flex items-center gap-3 mb-2">
+                <div class="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-500/10 flex items-center justify-center text-rose-500">
+                    <i class="fa-solid fa-triangle-exclamation text-xl"></i>
+                </div>
+                <h3 class="text-xl font-extrabold text-slate-900 dark:text-white">提交资源反馈</h3>
+            </div>
+            <p class="text-sm text-slate-500 dark:text-zinc-400">
+                您正在对 <span class="font-black text-rose-600 dark:text-rose-400" x-text="feedbackModal.itemName"></span> 进行反馈
+            </p>
+        </div>
+        
+        <div class="space-y-6 relative z-10">
+            <div>
+                <label class="block text-[11px] font-black text-slate-400 dark:text-zinc-500 uppercase tracking-[0.2em] mb-3">问题分类</label>
+                <div class="grid grid-cols-2 gap-2">
+                    <template x-for="issue in feedbackIssues" :key="issue">
+                        <button @click="feedbackModal.issueType = issue" 
+                                class="px-3 py-2.5 rounded-xl text-xs font-bold border transition-all duration-200 flex items-center justify-center text-center"
+                                :class="feedbackModal.issueType === issue ? 
+                                       'bg-rose-50 border-rose-200 text-rose-600 dark:bg-rose-500/10 dark:border-rose-500/30 dark:text-rose-400 shadow-sm ring-1 ring-rose-500/20' : 
+                                       'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 dark:bg-white/5 dark:border-white/5 dark:text-zinc-400 dark:hover:text-zinc-200'">
+                            <span x-text="issue"></span>
+                        </button>
+                    </template>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-[11px] font-black text-slate-400 dark:text-zinc-500 uppercase tracking-[0.2em] mb-2">补充说明 (选填)</label>
+                <textarea x-model="feedbackModal.desc" 
+                          rows="4" 
+                          placeholder="例如：第5集12分30秒字幕重叠，或者画面有明显的绿边..." 
+                          class="w-full bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/5 rounded-2xl p-4 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500/30 text-slate-800 dark:text-zinc-200 placeholder-slate-400 transition-all resize-none"></textarea>
+            </div>
+        </div>
+
+        <div class="flex gap-3 mt-8 mb-[env(safe-area-inset-bottom)] relative z-10">
+            <button @click="feedbackModal.open = false" 
+                    class="px-6 py-3.5 rounded-2xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:text-zinc-300 dark:hover:bg-white/20 transition-all active:scale-95">
+                取消
+            </button>
+            <button @click="submitFeedback()" 
+                    :disabled="isFeedbackSubmitting" 
+                    class="flex-1 py-3.5 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-bold transition-all shadow-lg shadow-rose-500/30 active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center gap-2">
+                
+                <span x-show="isFeedbackSubmitting" class="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full"></span>
+                <span x-show="!isFeedbackSubmitting" class="flex items-center gap-2">
+                    <i class="fa-solid fa-paper-plane"></i>
+                    提交反馈
+                </span>
+            </button>
+        </div>
+        
+        <p class="mt-4 text-center text-[10px] text-slate-400 dark:text-zinc-600 font-medium">
+            反馈提交后，服主将第一时间收到通知并进行核实
+        </p>
+    </div>
+</div>

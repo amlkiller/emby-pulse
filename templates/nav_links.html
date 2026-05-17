@@ -1,0 +1,14 @@
+<a href="/" class="nav-item flex items-center px-4 py-3 rounded-lg transition hover:bg-gray-50 
+   {% if active_page == 'dashboard' %}active{% else %}text-gray-500{% endif %}">
+    <i class="fa-solid fa-chart-line w-6 text-center"></i> <span class="ml-2">仪表盘</span>
+</a>
+
+<a href="/content" class="nav-item flex items-center px-4 py-3 rounded-lg transition hover:bg-gray-50
+   {% if active_page == 'content' %}active{% else %}text-gray-500{% endif %}">
+    <i class="fa-solid fa-film w-6 text-center"></i> <span class="ml-2">内容排行</span>
+</a>
+
+<a href="/report" class="nav-item flex items-center px-4 py-3 rounded-lg transition hover:bg-gray-50
+   {% if active_page == 'report' %}active{% else %}text-gray-500{% endif %}">
+    <i class="fa-solid fa-wand-magic-sparkles w-6 text-center"></i> <span class="ml-2">映迹工坊</span>
+</a>

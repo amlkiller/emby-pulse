@@ -1,0 +1,129 @@
+<!-- 🔥 登录弹窗 -->
+<div x-show="!isLoggedIn && isLoaded" class="fixed inset-0 z-50 flex items-center justify-center p-4" x-cloak x-init="loadLoginBackground()">
+    <!-- 🔥 TMDB 海报背景 -->
+    <div id="login-bg-poster" class="absolute inset-0 z-[-2] bg-cover bg-center transition-all duration-[1500ms] opacity-0 scale-[1.02]" style="background-image: url('/static/img/logo-app-2.png')"></div>
+    <!-- 🔥 深色遮罩层 -->
+    <div class="absolute inset-0 z-[-1] bg-black/40 dark:bg-black/60"></div>
+    
+    <!-- 🔥 夜间模式切换按钮 -->
+    <button @click="toggleTheme()" class="absolute top-5 right-5 w-10 h-10 rounded-full flex items-center justify-center z-50 
+                bg-white/30 dark:bg-black/30 backdrop-blur-xl 
+                border border-white/40 dark:border-white/10 
+                text-slate-600 dark:text-zinc-300 hover:scale-105 active:scale-95 transition-all shadow-md">
+        <i class="fa-solid" :class="isDarkMode ? 'fa-sun text-lg' : 'fa-moon text-lg'"></i>
+    </button>
+    
+    <!-- 🔥 主卡片（毛玻璃效果） -->
+    <div class="w-full max-w-md rounded-3xl p-8 relative overflow-hidden 
+                bg-white/70 dark:bg-[#1C1C1E]/70 
+                backdrop-blur-xl saturate-[180%]
+                border border-white/50 dark:border-white/10 
+                shadow-[0_20px_50px_rgba(0,0,0,0.2)] dark:shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
+        
+        <!-- 🔥 登录表单 -->
+        <div x-show="loginMode === 'login'">
+            <div class="text-center mb-8">
+                <div class="w-16 h-16 mx-auto mb-4 bg-white dark:bg-[#2C2C2E] rounded-2xl flex items-center justify-center shadow-lg border border-slate-200/50 dark:border-white/10">
+                    <img src="/static/img/logo-app-2.png" class="w-12 h-12 object-contain" alt="用户社区">
+                </div>
+                <h2 class="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">用户社区</h2>
+                <p class="text-slate-600 dark:text-zinc-400 mt-2 text-sm">请输入 Emby 账号登录（无密码用户密码留空）</p>
+            </div>
+            
+            <form @submit.prevent="login()" class="space-y-5">
+                <div class="space-y-1">
+                    <input type="text" x-model="loginForm.username" placeholder="Emby 账号" required 
+                           class="w-full px-4 py-3.5 rounded-2xl bg-white/80 dark:bg-white/5 border border-slate-300 dark:border-white/10 focus:ring-2 focus:ring-slate-400 dark:focus:ring-zinc-500 outline-none transition-all placeholder-slate-500 dark:placeholder-zinc-500 text-slate-900 dark:text-white">
+                </div>
+                <!-- 🔥 密码输入框 + 显示/隐藏按钮 -->
+                <div class="space-y-1 relative">
+                    <input :type="showLoginPassword ? 'text' : 'password'" x-model="loginForm.password" placeholder="Emby 密码（无密码可留空）" 
+                           class="w-full px-4 py-3.5 pr-12 rounded-2xl bg-white/80 dark:bg-white/5 border border-slate-300 dark:border-white/10 focus:ring-2 focus:ring-slate-400 dark:focus:ring-zinc-500 outline-none transition-all placeholder-slate-500 dark:placeholder-zinc-500 text-slate-900 dark:text-white">
+                    <button type="button" @click="showLoginPassword = !showLoginPassword" 
+                            class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300 transition-colors">
+                        <i class="fa-solid" :class="showLoginPassword ? 'fa-eye-slash' : 'fa-eye'"></i>
+                    </button>
+                </div>
+                
+                <button type="submit" :disabled="isLoggingIn" 
+                        class="w-full py-4 rounded-2xl font-bold text-white 
+                        bg-slate-700 hover:bg-slate-800 dark:bg-zinc-600 dark:hover:bg-zinc-500
+                        shadow-lg shadow-slate-700/20 dark:shadow-zinc-600/30
+                        transition-all flex items-center justify-center gap-2 group active:scale-[0.98]">
+                    <span x-show="isLoggingIn" class="animate-spin w-5 h-5 border-2 border-white/30 border-t-white rounded-full"></span>
+                    <template x-if="!isLoggingIn">
+                        <div class="flex items-center gap-2">
+                            <span>进入社区</span>
+                            <i class="fa-solid fa-arrow-right group-hover:translate-x-1 transition-transform"></i>
+                        </div>
+                    </template>
+                </button>
+            </form>
+            
+            <!-- 🔥 注册入口 -->
+            <div class="mt-6 text-center">
+                <button @click="loginMode = 'register'" 
+                        class="text-sm text-slate-600 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-300 font-medium transition-colors">
+                    <i class="fa-solid fa-user-plus mr-1.5"></i> 没有账号？使用邀请码注册
+                </button>
+            </div>
+        </div>
+        
+        <!-- 🔥 注册表单 -->
+        <div x-show="loginMode === 'register'" x-transition class="relative z-10">
+            <div class="text-center mb-8">
+                <div class="w-16 h-16 mx-auto mb-4 bg-white dark:bg-[#2C2C2E] rounded-2xl flex items-center justify-center shadow-lg border border-slate-200/50 dark:border-white/10">
+                    <img src="/static/img/logo-app-2.png" class="w-12 h-12 object-contain" alt="用户社区">
+                </div>
+                <h2 class="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">注册账号</h2>
+                <p class="text-slate-600 dark:text-zinc-400 mt-2 text-sm">使用邀请码创建您的 Emby 账号</p>
+            </div>
+            
+            <form @submit.prevent="handleRegister()" class="space-y-5">
+                <div class="space-y-1">
+                    <input type="text" x-model="registerForm.code" placeholder="邀请码" required 
+                           class="w-full px-4 py-3.5 rounded-2xl bg-white/80 dark:bg-white/5 border border-slate-300 dark:border-white/10 focus:ring-2 focus:ring-slate-400 dark:focus:ring-zinc-500 outline-none transition-all placeholder-slate-500 dark:placeholder-zinc-500 text-slate-900 dark:text-white">
+                </div>
+                <div class="space-y-1">
+                    <input type="text" x-model="registerForm.username" placeholder="用户名（字母/数字/中文）" required 
+                           class="w-full px-4 py-3.5 rounded-2xl bg-white/80 dark:bg-white/5 border border-slate-300 dark:border-white/10 focus:ring-2 focus:ring-slate-400 dark:focus:ring-zinc-500 outline-none transition-all placeholder-slate-500 dark:placeholder-zinc-500 text-slate-900 dark:text-white">
+                </div>
+                <!-- 🔥 密码输入框 + 显示/隐藏按钮 -->
+                <div class="space-y-1 relative">
+                    <input :type="showRegisterPassword ? 'text' : 'password'" x-model="registerForm.password" placeholder="密码（至少4位）" required 
+                           class="w-full px-4 py-3.5 pr-12 rounded-2xl bg-white/80 dark:bg-white/5 border border-slate-300 dark:border-white/10 focus:ring-2 focus:ring-slate-400 dark:focus:ring-zinc-500 outline-none transition-all placeholder-slate-500 dark:placeholder-zinc-500 text-slate-900 dark:text-white">
+                    <button type="button" @click="showRegisterPassword = !showRegisterPassword" 
+                            class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300 transition-colors">
+                        <i class="fa-solid" :class="showRegisterPassword ? 'fa-eye-slash' : 'fa-eye'"></i>
+                    </button>
+                </div>
+                
+                <button type="submit" :disabled="isRegistering" 
+                        class="w-full py-4 rounded-2xl font-bold text-white 
+                        bg-teal-600 hover:bg-teal-700 dark:bg-teal-700 dark:hover:bg-teal-600
+                        shadow-lg shadow-teal-600/20 dark:shadow-teal-700/30
+                        transition-all flex items-center justify-center gap-2 group active:scale-[0.98]">
+                    <span x-show="isRegistering" class="animate-spin w-5 h-5 border-2 border-white/30 border-t-white rounded-full"></span>
+                    <template x-if="!isRegistering">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-user-plus"></i>
+                            <span>注册并登录</span>
+                        </div>
+                    </template>
+                </button>
+            </form>
+            
+            <!-- 🔥 返回登录 -->
+            <div class="mt-6 text-center">
+                <button @click="loginMode = 'login'" 
+                        class="text-sm text-slate-600 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-300 font-medium transition-colors">
+                    <i class="fa-solid fa-arrow-left mr-1.5"></i> 已有账号？返回登录
+                </button>
+            </div>
+        </div>
+        
+        <div class="mt-8 text-center relative z-10">
+            <p class="text-[10px] text-slate-400 dark:text-zinc-500 font-medium tracking-widest uppercase">Powered by EmbyPulse Engine</p>
+        </div>
+    </div>
+</div>

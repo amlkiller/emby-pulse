@@ -1,0 +1,418 @@
+{% extends "layout.html" %}
+{% block title %}任务中心 - EmbyPulse{% endblock %}
+
+{% block head %}
+<style>
+    /* === 🔥 Apple 级极简卡片质感 === */
+    .apple-card { 
+        background-color: rgba(255, 255, 255, 0.95); 
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-radius: 24px; 
+        padding: 24px; 
+        box-shadow: 0 4px 24px -8px rgba(0,0,0,0.04);
+        border: 1px solid rgba(0,0,0,0.02);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    html.dark .apple-card {
+        background-color: rgba(28, 28, 30, 0.85); 
+        box-shadow: 0 4px 24px -8px rgba(0, 0, 0, 0.4);
+        border: 1px solid rgba(255,255,255,0.04);
+    }
+
+    @media (min-width: 768px) {
+        .apple-card:hover { transform: translateY(-2px); box-shadow: 0 12px 32px -8px rgba(0,0,0,0.08); }
+        html.dark .apple-card:hover { box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.6); }
+    }
+
+    .mac-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
+    .mac-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .mac-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(156, 163, 175, 0.4); border-radius: 10px; }
+    html.dark .mac-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(255, 255, 255, 0.15); }
+    html.dark .mac-scrollbar::-webkit-scrollbar-thumb:hover { background-color: rgba(255, 255, 255, 0.3); }
+
+    /* 🔥 优雅的切换开关样式 */
+    .ep-switch { position: relative; display: inline-flex; align-items: center; cursor: pointer; }
+    .ep-switch input { display: none; }
+    .ep-switch .track { width: 36px; height: 20px; background-color: #E5E5EA; border-radius: 9999px; transition: .3s; }
+    html.dark .ep-switch .track { background-color: #38383A; border: 1px solid rgba(255,255,255,0.1); }
+    .ep-switch .thumb { position: absolute; left: 2px; width: 16px; height: 16px; background-color: white; border-radius: 50%; transition: .3s; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+    .ep-switch input:checked + .track { background-color: #34C759; border-color: transparent; }
+    .ep-switch input:checked + .track + .thumb { transform: translateX(16px); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="w-full max-w-[1600px] mx-auto py-4 pb-32 px-4 sm:px-6 md:px-8 space-y-4 md:space-y-6">
+    
+    <div class="apple-card flex flex-col md:flex-row md:items-center justify-between gap-6 w-full mb-2 p-5 md:p-6 relative z-30">
+        <div class="flex items-center gap-4 pl-1 shrink-0">
+            <div class="w-12 h-12 rounded-[14px] bg-gradient-to-br from-yellow-400 to-orange-500 text-white flex items-center justify-center text-xl shadow-lg shadow-orange-500/30 shrink-0">
+                <i class="fa-solid fa-bolt"></i>
+            </div>
+            <div>
+                <h2 class="text-xl md:text-[22px] font-bold tracking-tight text-gray-900 dark:text-white">任务中心</h2>
+                <div class="text-[12px] text-gray-500 mt-1 font-medium flex items-center gap-1.5">
+                    <i class="fa-solid fa-server opacity-70"></i> <span>管理 Emby 计划任务与后台作业</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="flex items-center justify-between md:justify-end gap-3 w-full md:w-auto relative">
+            
+            <div class="flex items-center gap-2 bg-gray-50 hover:bg-gray-100 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] px-3 py-2 rounded-[14px] border border-gray-200/50 dark:border-white/5 transition-colors shadow-sm shrink-0" title="开启/关闭全局任务状态推送">
+                <span class="text-[12px] font-bold text-gray-600 dark:text-gray-300 hidden sm:inline">任务通知</span>
+                <i class="fa-solid fa-bell text-gray-500 sm:hidden text-xs"></i>
+                <label class="ep-switch m-0">
+                    <input type="checkbox" id="task-notify-switch" onchange="toggleTaskNotify(this.checked)">
+                    <span class="track"></span><span class="thumb"></span>
+                </label>
+            </div>
+
+            <div class="relative" id="running-tasks-dropdown-container">
+                <button onclick="toggleRunningDropdown()" id="running-tasks-btn" class="hidden items-center gap-2 bg-blue-50 hover:bg-blue-100 dark:bg-blue-500/10 dark:hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 px-4 py-2.5 rounded-[14px] border border-blue-200/50 dark:border-blue-500/20 text-[13px] font-bold transition-all shadow-sm active:scale-95">
+                    <span class="relative flex h-2.5 w-2.5">
+                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                      <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
+                    </span>
+                    <span id="running-tasks-count" class="hidden md:inline">0 项运行中</span>
+                    <span id="running-tasks-count-mobile" class="md:hidden">0</span>
+                    <i class="fa-solid fa-chevron-down text-[10px] ml-0.5 transition-transform duration-300" id="running-tasks-icon"></i>
+                </button>
+
+                <div id="running-tasks-panel" class="fixed top-24 left-1/2 -translate-x-1/2 md:absolute md:top-full md:left-auto md:right-0 md:translate-x-0 md:mt-3 w-[calc(100vw-2rem)] md:w-[380px] bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-3xl rounded-[24px] shadow-[0_20px_60px_rgba(0,0,0,0.15)] dark:shadow-[0_20px_60px_rgba(0,0,0,0.7)] border border-gray-200/80 dark:border-white/10 hidden flex-col z-[200] transform md:origin-top-right transition-all duration-300 scale-95 opacity-0">
+                    <div class="px-5 py-4 border-b border-gray-100/50 dark:border-white/5 flex justify-between items-center bg-gray-50/50 dark:bg-black/10 rounded-t-[24px]">
+                        <h3 class="text-[13px] font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2"><i class="fa-solid fa-gear fa-spin text-blue-500"></i> 当前执行中</h3>
+                        <div class="flex items-center gap-2">
+                            <span class="text-[10px] bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400 px-2 py-0.5 rounded-md font-mono font-bold border border-blue-200 dark:border-blue-800/50" id="panel-count-badge">0</span>
+                            <button onclick="closeRunningDropdown()" class="md:hidden w-6 h-6 rounded-full bg-gray-200/50 dark:bg-white/10 text-gray-500 flex justify-center items-center hover:text-red-500 transition-colors"><i class="fa-solid fa-xmark text-[10px]"></i></button>
+                        </div>
+                    </div>
+                    <div class="max-h-[50vh] overflow-y-auto mac-scrollbar p-3 space-y-2" id="running-tasks-list">
+                        </div>
+                </div>
+            </div>
+
+            <button onclick="loadTasks(true)" class="bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-gray-700 dark:text-gray-200 px-4 py-2.5 rounded-[14px] border border-transparent dark:border-white/5 text-[13px] font-bold transition-all shadow-sm flex items-center active:scale-95 shrink-0">
+                <i class="fa-solid fa-rotate-right md:mr-1.5" id="refresh-icon"></i> <span class="hidden md:inline">刷新状态</span>
+            </button>
+        </div>
+    </div>
+
+    <div id="task-container" class="space-y-6 md:space-y-8 mt-4 relative z-10">
+        <div class="text-center py-40" id="loading-indicator">
+            <i class="fa-solid fa-circle-notch fa-spin text-brand-500 text-4xl mb-4"></i>
+            <p class="text-gray-400 text-[11px] font-bold tracking-widest uppercase animate-pulse">正在同步服务器任务矩阵...</p>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    let pollInterval = null;
+    let isDropdownOpen = false;
+
+    document.addEventListener('click', (e) => {
+        const btn = document.getElementById('running-tasks-btn');
+        const panel = document.getElementById('running-tasks-panel');
+        if (isDropdownOpen && btn && panel && !btn.contains(e.target) && !panel.contains(e.target)) {
+            closeRunningDropdown();
+        }
+    });
+
+    function toggleRunningDropdown() { isDropdownOpen ? closeRunningDropdown() : openRunningDropdown(); }
+
+    function openRunningDropdown() {
+        isDropdownOpen = true;
+        const panel = document.getElementById('running-tasks-panel');
+        const icon = document.getElementById('running-tasks-icon');
+        panel.classList.remove('hidden');
+        setTimeout(() => {
+            panel.classList.remove('scale-95', 'opacity-0');
+            panel.classList.add('scale-100', 'opacity-100');
+            if(icon) icon.classList.add('-rotate-180');
+        }, 10);
+    }
+
+    function closeRunningDropdown() {
+        isDropdownOpen = false;
+        const panel = document.getElementById('running-tasks-panel');
+        const icon = document.getElementById('running-tasks-icon');
+        panel.classList.remove('scale-100', 'opacity-100');
+        panel.classList.add('scale-95', 'opacity-0');
+        if(icon) icon.classList.remove('-rotate-180');
+        setTimeout(() => { if(!isDropdownOpen) panel.classList.add('hidden'); }, 300);
+    }
+
+    async function init() { 
+        loadTaskConfig(); 
+        loadTasks(); 
+    }
+
+    // 🔥 加载通知开关配置
+    async function loadTaskConfig() {
+        try {
+            const res = await fetch('/api/tasks/config');
+            const json = await res.json();
+            if(json.status === 'success') {
+                document.getElementById('task-notify-switch').checked = json.enable_notify;
+            }
+        } catch(e) {}
+    }
+
+    // 🔥 切换通知开关配置
+    async function toggleTaskNotify(val) {
+        try {
+            const res = await fetch('/api/tasks/config', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({enable_notify: val})
+            });
+            const json = await res.json();
+            if(json.status !== 'success') {
+                showToast('error', '设置失败', json.message || '请稍后重试');
+                document.getElementById('task-notify-switch').checked = !val; 
+            }
+        } catch(e) {
+            document.getElementById('task-notify-switch').checked = !val;
+        }
+    }
+
+    async function loadTasks(isManualRefresh = false) {
+        const container = document.getElementById('task-container');
+        if (isManualRefresh) {
+            const icon = document.getElementById('refresh-icon');
+            if(icon) icon.classList.add('fa-spin');
+        }
+
+        try {
+            const res = await fetch('/api/tasks');
+            const json = await res.json();
+            
+            if(json.status === 'success') {
+                const data = json.data || [];
+                renderGroupedTasks(data);
+                
+                let runningTasks = [];
+                data.forEach(group => { 
+                    if(group.tasks) {
+                        group.tasks.forEach(t => { if (t.State === 'Running') runningTasks.push(t); }); 
+                    }
+                });
+                updateRunningTasksUI(runningTasks);
+
+                if (runningTasks.length > 0 && !pollInterval) {
+                    pollInterval = setInterval(() => loadTasks(false), 2000);
+                } else if (runningTasks.length === 0 && pollInterval) {
+                    clearInterval(pollInterval);
+                    pollInterval = null;
+                }
+            } else {
+                if(container.innerHTML.includes('fa-circle-notch')) {
+                    container.innerHTML = `<div class="text-center py-40 text-red-500 font-bold text-[13px] tracking-widest"><i class="fa-solid fa-circle-exclamation mr-2 text-xl"></i>获取任务失败: ${json.message || '未知错误'}</div>`;
+                }
+            }
+        } catch(e) { 
+            console.error(e); 
+            if(container.innerHTML.includes('fa-circle-notch')) {
+                container.innerHTML = `<div class="text-center py-40 text-red-500 font-bold text-[13px] tracking-widest"><i class="fa-solid fa-wifi mr-2 text-xl"></i>网络请求超时，请检查后端服务</div>`;
+            }
+        } finally {
+            if (isManualRefresh) {
+                const icon = document.getElementById('refresh-icon');
+                if(icon) setTimeout(() => icon.classList.remove('fa-spin'), 500);
+            }
+        }
+    }
+
+    function updateRunningTasksUI(tasks) {
+        const btn = document.getElementById('running-tasks-btn');
+        const countText = document.getElementById('running-tasks-count');
+        const countTextMobile = document.getElementById('running-tasks-count-mobile');
+        const badge = document.getElementById('panel-count-badge');
+        const list = document.getElementById('running-tasks-list');
+
+        if (tasks.length > 0) {
+            btn.classList.remove('hidden'); btn.classList.add('flex');
+            if(countText) countText.textContent = `${tasks.length} 项运行中`;
+            if(countTextMobile) countTextMobile.textContent = tasks.length;
+            if(badge) badge.textContent = tasks.length;
+
+            let html = '';
+            tasks.forEach(t => {
+                const progress = t.CurrentProgressPercentage || 0;
+                html += `
+                <div class="bg-white dark:bg-[#2C2C2E] rounded-xl p-3.5 border border-gray-100 dark:border-white/5 relative overflow-hidden flex flex-col gap-2 shadow-sm">
+                    <div class="absolute bottom-0 left-0 h-1 bg-gradient-to-r from-blue-400 to-blue-600 transition-all duration-1000 ease-linear" style="width: ${progress}%"></div>
+                    <div class="flex justify-between items-start">
+                        <div class="font-bold text-gray-900 dark:text-white text-[13px] truncate flex-1 pr-3" title="${t.Name}">${t.Name}</div>
+                        <button onclick="stopTask('${t.Id}')" class="text-red-500 hover:text-red-600 bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/20 px-2 py-1 rounded-md transition-colors shrink-0 flex items-center gap-1 active:scale-95 border border-red-100 dark:border-red-500/20">
+                            <i class="fa-solid fa-stop text-[10px]"></i> <span class="text-[10px] font-bold">强止</span>
+                        </button>
+                    </div>
+                    <div class="flex justify-between items-end">
+                        <div class="text-[11px] text-gray-500 dark:text-gray-400 line-clamp-1 flex-1 pr-2 leading-relaxed" title="${t.Description || ''}">${t.Description || '正在后台疯狂运转中...'}</div>
+                        <div class="text-blue-600 dark:text-blue-400 font-mono text-[12px] font-black shrink-0 tabular-nums">${progress.toFixed(1)}%</div>
+                    </div>
+                </div>`;
+            });
+            list.innerHTML = html;
+        } else {
+            btn.classList.add('hidden'); btn.classList.remove('flex');
+            if (isDropdownOpen) closeRunningDropdown();
+        }
+    }
+
+    function renderGroupedTasks(groups) {
+        const container = document.getElementById('task-container');
+        if(!groups || groups.length === 0) {
+            container.innerHTML = '<div class="text-center text-gray-400 py-32 font-bold text-[13px] tracking-widest"><i class="fa-solid fa-ghost mr-2 opacity-50"></i>暂无任务数据</div>';
+            return;
+        }
+
+        let html = '';
+        groups.forEach(group => {
+            html += `
+            <div class="animate-fade-in">
+                <div class="flex items-center mb-4 px-2">
+                    <div class="w-2 h-5 bg-brand-500 rounded-full mr-2.5"></div>
+                    <h3 class="font-black text-gray-800 dark:text-gray-200 text-[15px] tracking-wide">${group.title}</h3>
+                    <span class="ml-3 bg-gray-200 dark:bg-[#2C2C2E] text-gray-500 dark:text-gray-400 text-[10px] px-2.5 py-0.5 rounded-full font-bold shadow-sm border border-gray-300/50 dark:border-white/5">${group.tasks.length}</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            `;
+
+            group.tasks.forEach(t => {
+                const isRunning = t.State === 'Running';
+                const progress = t.CurrentProgressPercentage || 0;
+                
+                let lastRunTime = '从未执行过';
+                let statusIcon = '<span class="w-1.5 h-1.5 rounded-full bg-gray-400 inline-block mr-1.5"></span>';
+                let statusText = '无记录';
+                
+                if (t.LastExecutionResult && t.LastExecutionResult.EndTimeUtc) {
+                    let utcStr = t.LastExecutionResult.EndTimeUtc;
+                    if (!utcStr.endsWith('Z')) utcStr += 'Z';
+                    
+                    const end = new Date(utcStr);
+                    lastRunTime = end.toLocaleString('zh-CN', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'});
+                    
+                    if (t.LastExecutionResult.Status === 'Completed') {
+                        statusIcon = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block mr-1.5 shadow-[0_0_6px_rgba(16,185,129,0.6)]"></span>';
+                        statusText = '执行成功';
+                    } else if (t.LastExecutionResult.Status === 'Failed') {
+                        statusIcon = '<span class="w-1.5 h-1.5 rounded-full bg-red-500 inline-block mr-1.5 shadow-[0_0_6px_rgba(239,68,68,0.6)]"></span>';
+                        statusText = '执行失败';
+                    } else {
+                        statusIcon = '<span class="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block mr-1.5 shadow-[0_0_6px_rgba(245,158,11,0.6)]"></span>';
+                        statusText = '已取消';
+                    }
+                }
+
+                const cardBaseClass = "relative bg-white dark:bg-[#1C1C1E] rounded-[20px] overflow-hidden p-5 flex flex-col justify-between min-h-[130px] group transition-all duration-300";
+                const borderClass = isRunning 
+                    ? 'border border-blue-500 shadow-[0_8px_30px_rgba(59,130,246,0.15)] dark:shadow-[0_8px_30px_rgba(59,130,246,0.2)] ring-1 ring-blue-500 scale-[1.02] z-10' 
+                    : 'border border-gray-100 dark:border-white/5 shadow-sm hover:shadow-[0_12px_32px_rgba(0,0,0,0.06)] dark:hover:shadow-[0_12px_32px_rgba(0,0,0,0.4)] hover:-translate-y-1 hover:border-gray-200 dark:hover:border-white/10';
+
+                const safeOrig = t.OriginalName.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                const safeCurr = t.Name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+
+                html += `
+                <div class="${cardBaseClass} ${borderClass}">
+                    
+                    ${isRunning ? `<div class="absolute bottom-0 left-0 h-1.5 bg-gradient-to-r from-blue-400 to-blue-600 transition-all duration-1000 ease-linear z-10" style="width: ${progress}%"></div>` : ''}
+                    
+                    <div class="flex justify-between items-start mb-3 relative z-20">
+                        <div class="pr-3 overflow-hidden flex-1">
+                            <div class="flex items-center gap-2 group/title">
+                                <div class="font-bold text-gray-900 dark:text-white text-[14px] truncate" title="${t.OriginalName}">${t.Name}</div>
+                                <button onclick="renameTask('${safeOrig}', '${safeCurr}')" class="text-gray-300 hover:text-brand-500 dark:text-gray-600 dark:hover:text-brand-400 opacity-0 group-hover/title:opacity-100 transition-all cursor-pointer bg-gray-50 dark:bg-[#2C2C2E] w-5 h-5 rounded flex items-center justify-center border border-gray-200 dark:border-white/5" title="设置中文别名">
+                                    <i class="fa-solid fa-pen text-[9px]"></i>
+                                </button>
+                            </div>
+                            <div class="text-[11px] text-gray-500 dark:text-gray-400 mt-1.5 line-clamp-2 leading-relaxed" title="${t.Description || ''}">
+                                ${t.Description || '该任务暂无描述说明。'}
+                            </div>
+                        </div>
+                        
+                        <div class="shrink-0 ml-1">
+                            ${isRunning ? 
+                                `<button onclick="stopTask('${t.Id}')" class="w-9 h-9 flex items-center justify-center rounded-[12px] bg-red-50 text-red-500 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20 transition-all active:scale-90 shadow-sm border border-red-100 dark:border-red-500/20" title="强行终止">
+                                    <i class="fa-solid fa-stop text-xs"></i>
+                                </button>` : 
+                                `<button onclick="startTask('${t.Id}')" class="w-9 h-9 flex items-center justify-center rounded-[12px] bg-gray-50 text-gray-500 hover:text-brand-600 hover:bg-brand-50 dark:bg-[#2C2C2E] dark:text-gray-400 dark:hover:bg-brand-500/20 dark:hover:text-brand-400 transition-all active:scale-90 shadow-sm border border-gray-100 dark:border-white/5" title="立即执行">
+                                    <i class="fa-solid fa-play text-xs pl-0.5"></i>
+                                </button>`
+                            }
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400 mt-auto pt-3 border-t border-gray-100 dark:border-white/5 relative z-20">
+                        <div class="flex items-center">
+                            ${isRunning ? 
+                                `<span class="text-blue-600 dark:text-blue-400 font-black flex items-center bg-blue-50 dark:bg-blue-500/10 px-2 py-0.5 rounded-md border border-blue-100 dark:border-blue-500/20 shadow-sm animate-pulse"><i class="fa-solid fa-gear fa-spin mr-1.5"></i> 运转中 ${progress.toFixed(1)}%</span>` : 
+                                `<div class="flex items-center font-bold tracking-wide">${statusIcon} ${statusText}</div>`
+                            }
+                        </div>
+                        <div class="font-mono font-medium opacity-80 tracking-tight">${lastRunTime}</div>
+                    </div>
+                </div>`;
+            });
+
+            html += `</div></div>`;
+        });
+
+        container.innerHTML = html;
+    }
+
+    async function renameTask(originalName, currentName) {
+        const newName = prompt(`给任务 "${originalName}" 设置易读的中文别名：\n(如果留空并保存，将恢复为系统默认英文名)`, currentName === originalName ? '' : currentName);
+        
+        if (newName === null) return; 
+        
+        try {
+            const res = await fetch('/api/tasks/translate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ original_name: originalName, translated_name: newName.trim() })
+            });
+            const json = await res.json();
+            if(json.status === 'success') {
+                loadTasks(); 
+            } else {
+                showToast('error', '操作失败', json.message);
+            }
+        } catch(e) {
+            showToast('error', '网络错误', '请稍后重试');
+        }
+    }
+
+    async function startTask(id) {
+        try {
+            const res = await fetch(`/api/tasks/${id}/start`, {method: 'POST'});
+            const json = await res.json();
+            if(json.status === 'success') loadTasks();
+            else showToast('error', '启动失败', json.message);
+        } catch(e) { showToast('error', '网络错误', '请稍后重试'); }
+    }
+
+    async function stopTask(id) {
+        const confirmed = await showConfirm({
+            type: 'warning',
+            title: '警告',
+            message: '强制终止运行中的任务可能导致数据未完全同步。确定要中断吗？',
+            confirmText: '确定中断'
+        });
+        if(!confirmed) return;
+        try {
+            const res = await fetch(`/api/tasks/${id}/stop`, {method: 'POST'});
+            const json = await res.json();
+            if(json.status === 'success') loadTasks();
+            else showToast('error', '停止失败', json.message);
+        } catch(e) { showToast('error', '网络错误', '请稍后重试'); }
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+</script>
+{% endblock %}

@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  emby-pulse:
+    # 1. 更换为 Pro 版镜像名
+    image: zeyu8023/embypulse-pro:latest
+    container_name: emby-pulse
+    restart: unless-stopped
+    network_mode: host #默认后台端口号为10307，用户后台端口号为10308
+
+    volumes:
+      # --- 数据与配置 ---
+      - /volume1/docker/emby/data:/emby-data #本地数据模式需要挂载emby数据库，API模式下不需要
+      - /volume1/docker/emby-pulse/config:/workspace/config  # 配置文件目录
+      - /volume1/docker/emby-pulse/data:/workspace/data      # 持久化本地数据库 (IP 归属地数据)
+
+    environment:
+      - TZ=Asia/Shanghai
+      # 保持不变
+      - DB_PATH=/emby-data/playback_reporting.db
+      - EMBY_HOST=http://192.168.31.2:8096 #重要！必填，否则无法登录！账号密码为你emby管理员账号密码
+      
+      # 🔒 敏感 Token 配置（推荐使用 .env 文件）
+      # 方式一：直接在这里配置（不推荐，会暴露在 docker-compose.yml 中）
+      # - TG_BOT_TOKEN=123456789:ABCdef...
+      # - TG_CHAT_ID=123456789
+      # - EMBY_API_KEY=your_emby_api_key
+      # - TMDB_API_KEY=your_tmdb_api_key
+      # - WEBHOOK_TOKEN=your_secure_token
+      
+      # 方式二：使用 .env 文件（推荐）
+      # 1. 在 /volume1/docker/emby-pulse/ 目录下创建 .env 文件
+      # 2. 取消下面的注释
+      # 3. 重启容器: docker-compose down && docker-compose up -d
+    
+    # 🔒 使用 .env 文件（推荐方式）
+    # 创建 /volume1/docker/emby-pulse/.env 文件，内容如下：
+    # TG_BOT_TOKEN=你的TOKEN
+    # TG_CHAT_ID=你的CHAT_ID
+    # EMBY_API_KEY=你的API_KEY
+    # TMDB_API_KEY=你的TMDB_KEY
+    # WEBHOOK_TOKEN=你的TOKEN
+    env_file:
+      - /volume1/docker/emby-pulse/.env

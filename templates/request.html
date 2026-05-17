@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>用户社区 - EmbyPulse</title>
+    
+    <link rel="manifest" href="/request_manifest.json">
+    <link rel="apple-touch-icon" href="/static/img/logo-app-2.png?v=20260309">
+    
+    <link rel="stylesheet" href="/static/css/request.css?v=1.3.53">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- 🔥 Tailwind 需要同步加载，否则页面会先显示无样式 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 🔥 Chart.js 和 html2canvas 使用 defer，避免阻塞 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: { extend: { colors: { brand: { 50: '#f0fdfa', 100: '#ccfbf1', 500: '#14b8a6', 600: '#0d9488', 900: '#134e4a' } } } }
+        }
+    </script>
+    
+    <!-- 🔥 Quill 字号样式（欢迎消息显示） -->
+    <style>
+        .ql-size-small { font-size: 0.75rem !important; }
+        .ql-size-large { font-size: 1.5rem !important; }
+        .ql-size-huge { font-size: 2rem !important; }
+    </style>
+    
+    <!-- 🔥 只加载 request_app.js，Alpine.js 由 JS 文件内部动态加载 -->
+    <script src="/static/js/request_app.js?v=1.3.53"></script>
+</head>
+
+<body class="antialiased min-h-screen relative overflow-x-hidden transition-colors duration-500 bg-slate-50 text-slate-800 dark:bg-black dark:text-zinc-100" 
+      x-data="requestApp()" x-init="initTheme()"
+      @scroll.window="handleScroll()"
+      @touchstart="handlePullStart($event)"
+      @touchmove="handlePullMove($event)"
+      @touchend="handlePullEnd($event)">
+    
+    <div class="fixed inset-0 z-[-1] overflow-hidden pointer-events-none">
+        <div class="absolute top-[-20%] left-[-10%] w-[70%] h-[70%] rounded-full blur-3xl opacity-60 dark:opacity-10 transition-colors duration-1000"
+             :class="isDarkMode ? 'bg-indigo-900/30' : 'bg-teal-200/60'"></div>
+        <div class="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] rounded-full blur-3xl opacity-60 dark:opacity-10 transition-colors duration-1000"
+             :class="isDarkMode ? 'bg-purple-900/20' : 'bg-blue-200/50'"></div>
+    </div>
+
+    <!-- 🔥 下拉刷新指示器 -->
+    <div id="pull-indicator" class="pull-indicator">
+        <div class="flex items-center gap-2">
+            <i id="pull-icon" class="fa-solid fa-arrow-down text-brand-500"></i>
+            <span id="pull-text" class="text-sm font-medium text-slate-600 dark:text-slate-400">下拉刷新</span>
+        </div>
+    </div>
+
+    {% include 'request/modal_login.html' %}
+    
+    <!-- 🔥 欢迎消息弹窗 -->
+    <div x-show="welcomeModal.show" 
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0 scale-90"
+         x-transition:enter-end="opacity-100 scale-100"
+         x-transition:leave="transition ease-in duration-200"
+         x-transition:leave-start="opacity-100 scale-100"
+         x-transition:leave-end="opacity-0 scale-90"
+         class="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" 
+         x-cloak @click.self="welcomeModal.show = false">
+        
+        <!-- 🔥 简约设计弹窗 -->
+        <div class="bg-white dark:bg-[#1C1C1E] rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-white/20 dark:border-white/5">
+            <!-- 🔥 成功图标 -->
+            <div class="pt-8 pb-4 text-center">
+                <div class="w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-teal-400 to-emerald-500 rounded-full flex items-center justify-center shadow-lg shadow-teal-500/30">
+                    <i class="fa-solid fa-check text-4xl text-white"></i>
+                </div>
+                <h2 class="text-2xl font-extrabold text-slate-900 dark:text-white">注册成功</h2>
+                <p class="text-slate-500 dark:text-zinc-400 text-sm mt-1">欢迎加入用户社区</p>
+            </div>
+            
+            <!-- 🔥 账号信息 -->
+            <div class="px-6 pb-4">
+                <div class="bg-slate-100 dark:bg-[#2C2C2E] rounded-2xl p-4">
+                    <!-- 🔥 账号 + 有效期 -->
+                    <div class="flex items-center justify-between mb-3">
+                        <div>
+                            <div class="text-xs text-slate-400 dark:text-zinc-500 mb-1">账号</div>
+                            <div class="text-base font-bold text-slate-800 dark:text-white" x-text="userName"></div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-xs text-slate-400 dark:text-zinc-500 mb-1">有效期</div>
+                            <div class="text-sm font-bold text-teal-600 dark:text-teal-400" x-text="welcomeModal.expireText"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- 🔥 密码显示 -->
+                    <div x-show="welcomeModal.password" class="flex items-center justify-between py-2 border-t border-slate-200 dark:border-white/10">
+                        <div>
+                            <div class="text-xs text-slate-400 dark:text-zinc-500 mb-1">密码</div>
+                            <div class="text-base font-bold text-slate-800 dark:text-white" x-text="showWelcomePassword ? welcomeModal.password : '••••••••'"></div>
+                        </div>
+                        <button @click="showWelcomePassword = !showWelcomePassword" class="text-slate-400 hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300 transition-colors">
+                            <i class="fa-solid" :class="showWelcomePassword ? 'fa-eye-slash' : 'fa-eye'"></i>
+                        </button>
+                    </div>
+                    
+                    <!-- 🔥 欢迎消息（限制最大高度） -->
+                    <div x-show="welcomeModal.message" class="mt-3 pt-3 border-t border-slate-200 dark:border-white/10 max-h-32 overflow-y-auto mac-scrollbar">
+                        <div class="text-xs text-slate-600 dark:text-zinc-400 leading-relaxed" x-html="welcomeModal.message"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 🔥 开始按钮 -->
+            <div class="px-6 pb-6">
+                <button @click="welcomeModal.show = false" 
+                        class="w-full py-3.5 bg-slate-700 hover:bg-slate-800 dark:bg-zinc-600 dark:hover:bg-zinc-500 text-white font-bold rounded-xl transition-all active:scale-[0.98]">
+                    开始探索
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="isLoggedIn" x-transition.opacity.duration.500ms x-cloak>
+        
+        <nav class="fixed top-0 w-full z-40 glass-panel border-b border-slate-200/50 dark:border-white/5 rounded-none transition-all duration-300" :class="scrolled ? 'shadow-md dark:shadow-white/5' : ''">
+            <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
+                <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+                    <img src="/static/img/logo-app-2.png" class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg shadow-sm shrink-0 object-contain bg-white dark:bg-transparent">
+                    <h1 class="text-base sm:text-lg font-bold tracking-wide text-slate-800 dark:text-zinc-100 whitespace-nowrap">用户社区</h1>
+                </div>
+                
+                <div class="flex-1 flex justify-end items-center pr-2">
+                    <div x-show="currentTab === 'explore'" class="px-3 py-1 bg-white/80 dark:bg-black/80 backdrop-blur-xl border border-slate-200 dark:border-white/5 rounded-full shadow-sm text-xs font-bold text-brand-600 dark:text-brand-400">
+                        <i class="fa-solid fa-compass mr-1"></i> 全站大厅
+                    </div>
+                    <div x-show="currentTab === 'request'" class="px-3 py-1 bg-white/80 dark:bg-black/80 backdrop-blur-xl border border-slate-200 dark:border-white/5 rounded-full shadow-sm text-xs font-bold text-brand-600 dark:text-brand-400">
+                        <i class="fa-solid fa-wand-magic-sparkles mr-1"></i> 心愿工坊
+                    </div>
+                    <div x-show="currentTab === 'profile'" class="px-3 py-1 bg-white/80 dark:bg-black/80 backdrop-blur-xl border border-slate-200 dark:border-white/5 rounded-full shadow-sm text-xs font-bold text-brand-600 dark:text-brand-400 flex items-center gap-1.5 cursor-pointer" @click="window.scrollTo(0, 0)">
+                        <img :src="'/api/proxy/user_image/' + userId" class="w-4 h-4 rounded-full object-cover" @error="$event.target.src='https://api.dicebear.com/9.x/notionists/png?seed=' + (userId || 'User')">
+                        <span x-text="userName"></span>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-1 shrink-0 border-l border-slate-200 dark:border-white/10 pl-2">
+                    <button @click="toggleTheme()" class="p-2 rounded-full hover:bg-slate-200/50 dark:hover:bg-white/5 text-slate-500 dark:text-zinc-400 transition-colors">
+                        <i class="fa-solid" :class="isDarkMode ? 'fa-sun' : 'fa-moon'"></i>
+                    </button>
+                    <button @click="logout()" class="p-2 rounded-full hover:bg-red-50 dark:hover:bg-red-500/10 text-slate-500 dark:text-zinc-400 hover:text-red-500 transition-colors" title="退出登录">
+                        <i class="fa-solid fa-sign-out-alt"></i>
+                    </button>
+                </div>
+            </div>
+        </nav>
+
+        <main class="pt-24 mx-auto px-4 pb-12 sm:pb-28 transition-all duration-300" :class="currentTab === 'profile' ? 'max-w-6xl' : 'max-w-7xl'">
+            <div x-show="currentTab === 'explore'"> {% include 'request/tab_explore.html' %} </div>
+            <div x-show="currentTab === 'request'"> {% include 'request/tab_search.html' %} </div>
+            <div x-show="currentTab === 'profile'"> {% include 'request/tab_profile.html' %} </div>
+        </main>
+
+        {% include 'request/nav_bottom.html' %}
+    </div>
+
+    {% include 'request/modal_showcase.html' %}
+    {% include 'request/modal_queue.html' %}
+    {% include 'request/modal_poster.html' %}
+    {% include 'request/modal_feedback.html' %}
+    {% include 'request/modal_request_confirm.html' %}
+    {% include 'request/modal_my_series.html' %}
+    {% include 'request/modal_msg.html' %}
+
+    <div x-show="toast.show" x-transition x-cloak class="fixed top-20 left-1/2 -translate-x-1/2 z-[350] px-6 py-3 rounded-full shadow-xl border backdrop-blur-xl flex items-center gap-2 font-bold bg-white/95 dark:bg-[#111]/95 dark:border-white/10"
+         :class="toast.type === 'success' ? 'border-green-300 text-green-600 dark:text-green-400' : 'border-red-300 text-red-600 dark:text-red-400'">
+        <span x-text="toast.message"></span>
+    </div>
+
+</body>
+</html>

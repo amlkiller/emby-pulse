@@ -1,0 +1,1828 @@
+{% extends "layout.html" %}
+{% block title %}机器人助手 - EmbyPulse{% endblock %}
+
+{% block head %}
+<style>
+    /* === 🔥 Apple 级极简卡片质感 === */
+    .apple-card {
+        background-color: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-radius: 24px;
+        padding: 24px;
+        box-shadow: 0 4px 24px -8px rgba(0,0,0,0.04);
+        border: 1px solid rgba(0,0,0,0.02);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    html.dark .apple-card {
+        background-color: rgba(28, 28, 30, 0.85);
+        box-shadow: 0 4px 24px -8px rgba(0, 0, 0, 0.4);
+        border: 1px solid rgba(255,255,255,0.04);
+    }
+
+    @media (min-width: 768px) {
+        .apple-card:hover { transform: translateY(-2px); box-shadow: 0 12px 32px -8px rgba(0,0,0,0.08); }
+        html.dark .apple-card:hover { box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.6); }
+    }
+
+    .mac-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
+    .mac-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .mac-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(156, 163, 175, 0.4); border-radius: 10px; }
+    html.dark .mac-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(255, 255, 255, 0.15); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="w-full max-w-[1600px] mx-auto py-4 pb-32 px-4 sm:px-6 md:px-8 space-y-4 md:space-y-6">
+
+    <div class="apple-card flex flex-col md:flex-row md:items-center justify-between gap-6 w-full mb-2 p-5 md:p-6">
+        <div class="flex items-center gap-4 pl-1 shrink-0">
+            <div class="w-12 h-12 rounded-[14px] bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center text-[22px] shadow-lg shadow-blue-500/30 shrink-0">
+                <i class="fa-solid fa-robot"></i>
+            </div>
+            <div>
+                <h2 class="text-xl md:text-[22px] font-bold tracking-tight text-gray-900 dark:text-white">通知与机器人</h2>
+                <div class="text-[12px] text-gray-500 mt-1 font-medium flex items-center gap-1.5">
+                    <i class="fa-solid fa-satellite-dish opacity-70"></i> <span>配置双通道同步推送与指令交互</span>
+                </div>
+            </div>
+        </div>
+
+        <button onclick="saveConfig()" id="top-save-btn" class="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-brand-500 hover:bg-brand-600 text-white rounded-[14px] font-bold text-[13px] shadow-md shadow-brand-500/20 transition-all active:scale-95 shrink-0 border border-transparent">
+            <i class="fa-solid fa-floppy-disk"></i>
+            <span id="save-btn-text">保存配置</span>
+        </button>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-5 md:gap-6 items-stretch">
+
+        <div class="apple-card flex flex-col h-full p-5 md:p-6">
+            <h3 class="text-[15px] font-bold text-gray-800 dark:text-gray-200 mb-6 flex items-center shrink-0">
+                <div class="w-8 h-8 rounded-lg bg-purple-50 dark:bg-purple-500/10 text-purple-500 flex items-center justify-center mr-3 shadow-sm"><i class="fa-solid fa-toggle-on text-sm"></i></div>
+                推送场景总控
+            </h3>
+            <div class="flex-1 flex flex-col justify-start space-y-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h4 class="text-[13px] font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wide">启用底层引擎</h4>
+                        <p class="text-[11px] text-gray-500 dark:text-gray-400 mt-1">总开关,必须开启才能生效</p>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer shrink-0">
+                        <input type="checkbox" id="enable_bot" class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-[#3A3A3C] peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500 shadow-inner"></div>
+                    </label>
+                </div>
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h4 class="text-[13px] font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wide">播放状态通知</h4>
+                        <p class="text-[11px] text-gray-500 dark:text-gray-400 mt-1">有人开始或停止播放时发送</p>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer shrink-0">
+                        <input type="checkbox" id="enable_notify" class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-[#3A3A3C] peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500 shadow-inner"></div>
+                    </label>
+                </div>
+                <div>
+                    <div class="flex items-center justify-between mb-3">
+                        <div>
+                            <h4 class="text-[13px] font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wide">新资源入库通知</h4>
+                            <p class="text-[11px] text-gray-500 dark:text-gray-400 mt-1">需配合 Emby Webhook 使用</p>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer shrink-0">
+                            <input type="checkbox" id="enable_library_notify" class="sr-only peer" onchange="toggleWebhookInfo(this)">
+                            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-[#3A3A3C] peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-500 shadow-inner"></div>
+                        </label>
+                    </div>
+                    <div id="webhook-info" class="hidden bg-gray-50 dark:bg-black/20 border border-gray-200/80 dark:border-white/5 rounded-xl p-3 mt-2 transition-all shadow-sm">
+                        <p class="text-[10px] font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider pl-1">请在 Emby Webhook 填入:</p>
+                        <input type="text" id="webhook-url" readonly onclick="this.select()" class="w-full bg-white dark:bg-[#1C1C1E] border border-gray-100 dark:border-white/5 rounded-lg px-3 py-2 font-mono text-indigo-600 dark:text-indigo-400 text-[11px] focus:outline-none cursor-pointer shadow-sm">
+
+                        <!-- 入库通知渠道选择 -->
+                        <div class="mt-3 pt-3 border-t border-gray-200/50 dark:border-white/5">
+                            <p class="text-[10px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider pl-1">通知渠道</p>
+                            <div class="flex flex-wrap gap-2">
+                                <label class="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-[#2C2C2E] rounded-lg border border-gray-200 dark:border-white/10 cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-500/50 transition-colors">
+                                    <input type="checkbox" id="notify_channel_tg_bot" class="w-3.5 h-3.5 accent-indigo-500 rounded">
+                                    <i class="fa-brands fa-telegram text-blue-500 text-[11px]"></i>
+                                    <span class="text-[11px] text-gray-700 dark:text-gray-300">TG 机器人</span>
+                                </label>
+                                <label class="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-[#2C2C2E] rounded-lg border border-gray-200 dark:border-white/10 cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-500/50 transition-colors">
+                                    <input type="checkbox" id="notify_channel_tg_channel" class="w-3.5 h-3.5 accent-indigo-500 rounded">
+                                    <i class="fa-solid fa-bullhorn text-purple-500 text-[11px]"></i>
+                                    <span class="text-[11px] text-gray-700 dark:text-gray-300">TG 频道</span>
+                                </label>
+                                <label class="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-[#2C2C2E] rounded-lg border border-gray-200 dark:border-white/10 cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-500/50 transition-colors">
+                                    <input type="checkbox" id="notify_channel_wecom" class="w-3.5 h-3.5 accent-indigo-500 rounded">
+                                    <i class="fa-brands fa-weixin text-green-500 text-[11px]"></i>
+                                    <span class="text-[11px] text-gray-700 dark:text-gray-300">企业微信</span>
+                                </label>
+                            </div>
+                            <p class="text-[9px] text-gray-400 dark:text-gray-500 mt-1.5 pl-1">未选择时默认发送到所有渠道</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="apple-card flex flex-col h-full p-5 md:p-6">
+            <h3 class="text-[15px] font-bold text-gray-800 dark:text-gray-200 mb-6 flex items-center justify-between shrink-0">
+                <span class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-500/10 text-blue-500 flex items-center justify-center shadow-sm"><i class="fa-brands fa-telegram text-sm"></i></div>
+                    Telegram 通道
+                </span>
+                <button onclick="testConnection()" id="test-btn" class="bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-500/20 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all border border-blue-100 dark:border-blue-500/20 active:scale-95 shadow-sm">
+                    发送测试
+                </button>
+            </h3>
+            <div class="flex-1 flex flex-col justify-start space-y-5">
+                <div>
+                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider pl-1">Bot Token</label>
+                    <div class="relative">
+                        <input type="password" id="tg_bot_token" class="w-full px-4 py-3 rounded-xl border border-transparent bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-[13px] text-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-black/30 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all placeholder-gray-400" placeholder="从 @BotFather 获取">
+                        <button type="button" onclick="toggleShow('tg_bot_token')" class="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 text-gray-400 hover:text-blue-500 transition-colors flex items-center justify-center">
+                            <i id="icon-tg_bot_token" class="fa-solid fa-eye text-sm"></i>
+                        </button>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider pl-1">Admin Chat ID</label>
+                    <input type="text" id="tg_chat_id" class="w-full px-4 py-3 rounded-xl border border-transparent bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-[13px] text-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-black/30 focus:ring-2 focus:ring-blue-500/50 outline-none transition-all placeholder-gray-400 font-mono" placeholder="选填,限制操作人">
+                </div>
+            </div>
+        </div>
+
+        <div class="apple-card flex flex-col h-full p-5 md:p-6">
+            <h3 class="text-[15px] font-bold text-gray-800 dark:text-gray-200 mb-6 flex items-center justify-between shrink-0">
+                <span class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-lg bg-green-50 dark:bg-green-500/10 text-green-500 flex items-center justify-center shadow-sm"><i class="fa-brands fa-weixin text-sm"></i></div>
+                    企业微信 (推送)
+                </span>
+                <button onclick="testWeComConnection()" id="test-wecom-btn" class="bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-500/20 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all border border-green-100 dark:border-green-500/20 active:scale-95 shadow-sm">
+                    发送测试
+                </button>
+            </h3>
+            <div class="flex-1 flex flex-col justify-start space-y-5">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider pl-1">企业 ID</label>
+                        <input type="text" id="wecom_corpid" class="w-full px-4 py-3 rounded-xl border border-transparent bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-[13px] font-mono text-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-black/30 focus:ring-2 focus:ring-green-500/50 outline-none transition-all">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider pl-1">应用 ID</label>
+                        <input type="text" id="wecom_agentid" class="w-full px-4 py-3 rounded-xl border border-transparent bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-[13px] font-mono text-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-black/30 focus:ring-2 focus:ring-green-500/50 outline-none transition-all">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider pl-1">Secret</label>
+                        <div class="relative">
+                            <input type="password" id="wecom_corpsecret" class="w-full px-4 pr-10 py-3 rounded-xl border border-transparent bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-[13px] font-mono text-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-black/30 focus:ring-2 focus:ring-green-500/50 outline-none transition-all">
+                            <button type="button" onclick="toggleShow('wecom_corpsecret')" class="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 text-gray-400 hover:text-green-500 transition-colors flex items-center justify-center">
+                                <i id="icon-wecom_corpsecret" class="fa-solid fa-eye text-sm"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider pl-1">ToUser</label>
+                        <input type="text" id="wecom_touser" class="w-full px-4 py-3 rounded-xl border border-transparent bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-[13px] font-mono text-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-black/30 focus:ring-2 focus:ring-green-500/50 outline-none transition-all placeholder-gray-400" placeholder="@all">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="apple-card flex flex-col h-full p-5 md:p-6">
+            <h3 class="text-[15px] font-bold text-gray-800 dark:text-gray-200 mb-6 flex items-center shrink-0">
+                <div class="w-8 h-8 rounded-lg bg-teal-50 dark:bg-teal-500/10 text-teal-500 flex items-center justify-center mr-3 shadow-sm"><i class="fa-solid fa-link text-sm"></i></div>
+                企微交互指令回调
+            </h3>
+            <div class="flex-1 flex flex-col justify-start space-y-5">
+                <div>
+                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider pl-1">回调 Token (选填)</label>
+                    <div class="relative">
+                        <input type="password" id="wecom_token" class="w-full px-4 pr-10 py-3 rounded-xl border border-transparent bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-[13px] font-mono text-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-black/30 focus:ring-2 focus:ring-teal-500/50 outline-none transition-all">
+                        <button type="button" onclick="toggleShow('wecom_token')" class="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 text-gray-400 hover:text-teal-500 transition-colors flex items-center justify-center">
+                            <i id="icon-wecom_token" class="fa-solid fa-eye text-sm"></i>
+                        </button>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider pl-1">Encoding AESKey (选填)</label>
+                    <div class="relative">
+                        <input type="password" id="wecom_aeskey" class="w-full px-4 pr-10 py-3 rounded-xl border border-transparent bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-[13px] font-mono text-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-black/30 focus:ring-2 focus:ring-teal-500/50 outline-none transition-all">
+                        <button type="button" onclick="toggleShow('wecom_aeskey')" class="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 text-gray-400 hover:text-teal-500 transition-colors flex items-center justify-center">
+                            <i id="icon-wecom_aeskey" class="fa-solid fa-eye text-sm"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="bg-gray-50 dark:bg-black/20 p-3 rounded-xl border border-gray-100 dark:border-white/5 shadow-sm mt-1">
+                    <p class="text-[10px] font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider pl-1">企微后台回调 URL 填入:</p>
+                    <input type="text" id="wecom-webhook-url" readonly onclick="this.select()" class="w-full bg-white dark:bg-[#1C1C1E] border border-gray-200/80 dark:border-white/5 text-teal-600 dark:text-teal-400 rounded-lg px-3 py-2 text-[11px] font-mono cursor-pointer shadow-sm outline-none">
+                </div>
+            </div>
+        </div>
+
+        <div class="apple-card flex flex-col h-full p-5 md:p-6">
+            <h3 class="text-[15px] font-bold text-gray-800 dark:text-gray-200 mb-6 flex items-center shrink-0">
+                <div class="w-8 h-8 rounded-lg bg-gray-100 dark:bg-[#2C2C2E] text-gray-500 flex items-center justify-center mr-3 shadow-sm border border-gray-200/50 dark:border-white/5"><i class="fa-solid fa-globe text-sm"></i></div>
+                企业微信 API 代理
+            </h3>
+            <div class="flex-1 flex flex-col justify-start space-y-4">
+                <div>
+                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider pl-1">API 转发地址</label>
+                    <p class="text-[11px] text-gray-500 dark:text-gray-400 mb-4 leading-relaxed bg-blue-50/50 dark:bg-blue-900/10 p-3 rounded-xl border border-blue-100 dark:border-blue-900/30">企微限制了企业可信 IP 白名单。如果你的公网 IP 会变动,建议使用反向代理转发 qyapi 域名。</p>
+                    <input type="text" id="wecom_proxy_url" class="w-full px-4 py-3 rounded-xl border border-transparent bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-[13px] font-mono text-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-black/30 focus:ring-2 focus:ring-gray-500/50 outline-none transition-all placeholder-gray-400" placeholder="https://qyapi.weixin.qq.com">
+                </div>
+            </div>
+        </div>
+
+        <div class="apple-card flex flex-col h-full lg:col-span-2 2xl:col-span-1 p-5 md:p-6">
+            <h3 class="text-[15px] font-bold text-gray-800 dark:text-gray-200 mb-6 flex items-center shrink-0">
+                <div class="w-8 h-8 rounded-lg bg-slate-100 dark:bg-[#2C2C2E] text-slate-500 flex items-center justify-center mr-3 shadow-sm border border-gray-200/50 dark:border-white/5"><i class="fa-solid fa-terminal text-sm"></i></div>
+                内置指令速查
+            </h3>
+            <div class="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-2 gap-3 content-start">
+                <div class="flex items-center gap-3 p-3 bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/5 shadow-sm transition-colors hover:bg-gray-100 dark:hover:bg-[#2C2C2E]">
+                    <span class="font-mono text-brand-600 bg-brand-50 dark:bg-brand-500/10 dark:text-brand-400 px-2 py-1 rounded-md text-[11px] font-bold w-16 text-center border border-brand-100 dark:border-brand-500/20">/stats</span>
+                    <div class="text-[12px] font-medium text-gray-600 dark:text-gray-400 leading-tight">每日/周 播放统计报表</div>
+                </div>
+                <div class="flex items-center gap-3 p-3 bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/5 shadow-sm transition-colors hover:bg-gray-100 dark:hover:bg-[#2C2C2E]">
+                    <span class="font-mono text-brand-600 bg-brand-50 dark:bg-brand-500/10 dark:text-brand-400 px-2 py-1 rounded-md text-[11px] font-bold w-16 text-center border border-brand-100 dark:border-brand-500/20">/now</span>
+                    <div class="text-[12px] font-medium text-gray-600 dark:text-gray-400 leading-tight">服务器实时正在播放</div>
+                </div>
+                <div class="flex items-center gap-3 p-3 bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/5 shadow-sm transition-colors hover:bg-gray-100 dark:hover:bg-[#2C2C2E]">
+                    <span class="font-mono text-brand-600 bg-brand-50 dark:bg-brand-500/10 dark:text-brand-400 px-2 py-1 rounded-md text-[11px] font-bold w-16 text-center border border-brand-100 dark:border-brand-500/20">/latest</span>
+                    <div class="text-[12px] font-medium text-gray-600 dark:text-gray-400 leading-tight">最近入库的最新影视</div>
+                </div>
+                <div class="flex items-center gap-3 p-3 bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/5 shadow-sm transition-colors hover:bg-gray-100 dark:hover:bg-[#2C2C2E]">
+                    <span class="font-mono text-brand-600 bg-brand-50 dark:bg-brand-500/10 dark:text-brand-400 px-2 py-1 rounded-md text-[11px] font-bold w-16 text-center border border-brand-100 dark:border-brand-500/20">/recent</span>
+                    <div class="text-[12px] font-medium text-gray-600 dark:text-gray-400 leading-tight">全站最近十条历史</div>
+                </div>
+                <div class="flex items-center gap-3 p-3 bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/5 shadow-sm transition-colors hover:bg-gray-100 dark:hover:bg-[#2C2C2E]">
+                    <span class="font-mono text-brand-600 bg-brand-50 dark:bg-brand-500/10 dark:text-brand-400 px-2 py-1 rounded-md text-[11px] font-bold w-16 text-center border border-brand-100 dark:border-brand-500/20">/search</span>
+                    <div class="text-[12px] font-medium text-gray-600 dark:text-gray-400 leading-tight">搜索影视 (接关键词)</div>
+                </div>
+                <div class="flex items-center gap-3 p-3 bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/5 shadow-sm transition-colors hover:bg-gray-100 dark:hover:bg-[#2C2C2E]">
+                    <span class="font-mono text-brand-600 bg-brand-50 dark:bg-brand-500/10 dark:text-brand-400 px-2 py-1 rounded-md text-[11px] font-bold w-16 text-center border border-brand-100 dark:border-brand-500/20">/check</span>
+                    <div class="text-[12px] font-medium text-gray-600 dark:text-gray-400 leading-tight">服务器网络连通性检查</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="apple-card flex flex-col h-full lg:col-span-2 2xl:col-span-3 p-5 md:p-6 relative overflow-hidden">
+            {% if not is_pro %}
+            <div class="absolute inset-0 z-20 bg-white/50 dark:bg-black/50 backdrop-blur-[2px] flex items-center justify-center cursor-pointer" onclick="window.dispatchEvent(new Event('show-pro-modal'))">
+                <div class="bg-white dark:bg-[#2C2C2E] px-4 py-2 rounded-xl shadow-lg border border-amber-200 dark:border-amber-500/20 text-amber-600 dark:text-amber-400 text-sm font-bold flex items-center gap-2"><i class="fa-solid fa-crown"></i> Pro 专属功能,点击解锁</div>
+            </div>
+            {% endif %}
+            <div class="absolute -top-4 -right-4 w-16 h-16 rounded-full bg-gradient-to-br from-amber-200/30 to-orange-200/20 dark:from-amber-600/10 dark:to-orange-600/5 blur-xl"></div>
+            <h3 class="text-[15px] font-bold text-gray-800 dark:text-gray-200 mb-6 flex items-center shrink-0 relative z-10">
+                <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 text-white flex items-center justify-center mr-3 shadow-sm"><i class="fa-solid fa-robot text-sm"></i></div>
+                用户 TG 机器人
+                <span class="ml-2 text-[9px] font-black text-white bg-gradient-to-r from-amber-500 to-orange-500 px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm">Pro</span>
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 relative z-10">
+                <div>
+                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider pl-1">用户机器人 Token</label>
+                    <div class="relative">
+                        <input type="password" id="tg_user_bot_token" class="w-full px-4 py-3 rounded-xl border border-transparent bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-[13px] text-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-black/30 focus:ring-2 focus:ring-amber-500/50 outline-none transition-all placeholder-gray-400" placeholder="从 @BotFather 创建第二个机器人">
+                        <button type="button" onclick="toggleShow('tg_user_bot_token')" class="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 text-gray-400 hover:text-amber-500 transition-colors flex items-center justify-center">
+                            <i id="icon-tg_user_bot_token" class="fa-solid fa-eye text-sm"></i>
+                        </button>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider pl-1">模板用户(新注册用户套用其权限)</label>
+                    <select id="user_bot_template_user" class="w-full px-4 py-3 rounded-xl border border-transparent bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-[13px] text-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-black/30 focus:ring-2 focus:ring-amber-500/50 outline-none transition-all cursor-pointer">
+                        <option value="">不套用模板(使用默认权限)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider pl-1">注册有效期(天)</label>
+                    <input type="number" id="user_bot_reg_days" class="w-full px-4 py-3 rounded-xl border border-transparent bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-[13px] text-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-black/30 focus:ring-2 focus:ring-amber-500/50 outline-none transition-all" value="30">
+                </div>
+                <div class="flex items-center gap-4">
+                    <label class="flex items-center gap-3 cursor-pointer">
+                        <div class="relative">
+                            <input type="checkbox" id="user_bot_open_reg" class="sr-only peer" onchange="onOpenRegChange()">
+                            <div class="w-10 h-5 bg-gray-200 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500 shadow-inner"></div>
+                        </div>
+                        <span class="text-[13px] font-bold text-gray-700 dark:text-gray-300">启用开放注册</span>
+                    </label>
+                </div>
+
+                <!-- 开放注册通知设置 -->
+                <div class="p-4 bg-amber-50 dark:bg-amber-500/10 rounded-xl border border-amber-100 dark:border-amber-500/20">
+                    <div class="flex items-center gap-2 mb-3">
+                        <i class="fa-solid fa-bell text-amber-500"></i>
+                        <span class="text-[13px] font-bold text-amber-700 dark:text-amber-400">开放注册通知</span>
+                        <span class="text-[11px] text-amber-600 dark:text-amber-400">开启/关闭注册时自动推送通知</span>
+                    </div>
+                    <div class="space-y-3">
+                        <label class="flex items-center gap-3 cursor-pointer">
+                            <input type="checkbox" id="user_bot_open_reg_notify_user" class="w-4 h-4 rounded text-green-500 focus:ring-green-500">
+                            <span class="text-[12px] font-medium text-gray-700 dark:text-gray-300">通知用户机器人私聊</span>
+                            <span class="text-[11px] text-gray-400">已绑定用户会收到私聊通知</span>
+                        </label>
+                        <label class="flex items-center gap-3 cursor-pointer">
+                            <input type="checkbox" id="user_bot_open_reg_notify_group" class="w-4 h-4 rounded text-blue-500 focus:ring-blue-500">
+                            <span class="text-[12px] font-medium text-gray-700 dark:text-gray-300">通知群聊</span>
+                            <span class="text-[11px] text-gray-400">配置的群会收到通知</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 🎯 名额模式选择 -->
+                <div class="space-y-3">
+                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider pl-1">名额模式</label>
+                    <div class="flex items-center gap-6">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="reg_quota_mode" value="batch" class="w-4 h-4 text-amber-500 focus:ring-amber-500">
+                            <span class="text-[13px] font-medium text-gray-700 dark:text-gray-300">批次模式</span>
+                            <span class="text-[11px] text-gray-400">(本次开放名额)</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="reg_quota_mode" value="total" class="w-4 h-4 text-amber-500 focus:ring-amber-500">
+                            <span class="text-[13px] font-medium text-gray-700 dark:text-gray-300">总人数模式</span>
+                            <span class="text-[11px] text-gray-400">(用户总数上限)</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 名额上限 -->
+                <div>
+                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider pl-1">名额上限(0=不限)</label>
+                    <input type="number" id="user_bot_reg_quota" class="w-full px-4 py-3 rounded-xl border border-transparent bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-[13px] text-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-black/30 focus:ring-2 focus:ring-amber-500/50 outline-none transition-all" value="0">
+                    <p id="quota-hint" class="text-[11px] text-gray-400 mt-2 pl-1"></p>
+                    <!-- 名额状态显示 -->
+                    <div id="quota-status" class="mt-2 p-3 bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/5 hidden">
+                        <div class="flex items-center justify-between text-[12px]">
+                            <span class="text-gray-500 dark:text-gray-400">当前状态</span>
+                            <span id="quota-status-text" class="font-medium text-gray-700 dark:text-gray-300">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 操作按钮 -->
+                <div class="flex items-center gap-3">
+                    <button onclick="resetBatchCount()" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-gray-600 dark:text-gray-300 rounded-lg text-[12px] font-medium transition-all border border-gray-200 dark:border-white/5">
+                        <i class="fa-solid fa-rotate-left mr-1.5"></i>重置批次计数
+                    </button>
+                    <button onclick="showRegLogs()" class="px-4 py-2 bg-blue-50 hover:bg-blue-100 dark:bg-blue-500/10 dark:hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 rounded-lg text-[12px] font-medium transition-all border border-blue-100 dark:border-blue-500/20">
+                        <i class="fa-solid fa-chart-line mr-1.5"></i>查看注册日志
+                    </button>
+                </div>
+
+                <!-- 开放注册线路设置 -->
+                <div class="md:col-span-2 xl:col-span-3 p-4 bg-blue-50 dark:bg-blue-500/10 rounded-xl border border-blue-100 dark:border-blue-500/20">
+                    <div class="flex items-center gap-2 mb-3">
+                        <i class="fa-solid fa-network-wired text-blue-500"></i>
+                        <span class="text-[13px] font-bold text-blue-700 dark:text-blue-400">开放注册线路设置(可选)</span>
+                    </div>
+                    <p class="text-[11px] text-blue-600 dark:text-blue-400 mb-3">设置通过开放注册创建的用户的线路权限,优先级高于模板用户的线路设置</p>
+                    <div class="flex flex-wrap items-center gap-4 mb-3">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" id="user_bot_route_mode_allow" class="w-4 h-4 rounded text-amber-500 focus:ring-amber-500" onchange="updateRouteModeDesc()">
+                            <span class="text-[12px] font-medium text-gray-700 dark:text-gray-300">专属允许模式</span>
+                        </label>
+                        <span id="user-bot-route-mode-desc" class="text-[11px] text-gray-500 dark:text-gray-400">取消勾选:屏蔽指定线路。勾选:只允许访问指定线路。</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-[11px] font-medium text-gray-600 dark:text-gray-400 shrink-0">选择线路:</span>
+                        <div id="user-bot-routes-list" class="flex flex-wrap gap-2 flex-1">
+                            <span class="text-[11px] text-gray-400">加载中...</span>
+                        </div>
+                    </div>
+                    <input type="hidden" id="user_bot_allow_routes" value="">
+                    <input type="hidden" id="user_bot_block_routes" value="">
+                </div>
+
+                <div>
+                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider pl-1">用户中心网页链接</label>
+                    <input type="text" id="user_bot_portal_url" class="w-full px-4 py-3 rounded-xl border border-transparent bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-[13px] font-mono text-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-black/30 focus:ring-2 focus:ring-amber-500/50 outline-none transition-all placeholder-gray-400" placeholder="如 https://your-domain:10308">
+                </div>
+            </div>
+            <p class="text-[11px] text-gray-400 mt-4 leading-relaxed relative z-10">需要在 @BotFather 创建一个独立的机器人用于面向用户。支持注册/签到/积分/求片/续期等自助服务。此功能为 Pro 专属。</p>
+
+            <!-- 群聊设置 -->
+            <div class="mt-6 pt-6 border-t border-gray-100 dark:border-white/5">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-users text-amber-500"></i>
+                        <span class="text-[13px] font-bold text-gray-700 dark:text-gray-300">群聊设置</span>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="user_bot_group_enabled" class="sr-only peer">
+                        <div class="w-10 h-5 bg-gray-200 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500 shadow-inner"></div>
+                        <span class="ml-2 text-[11px] text-gray-500 dark:text-gray-400">启用</span>
+                    </label>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2">
+                        允许的群 ID
+                        <span class="font-normal text-gray-400 ml-1">(一行一个,留空则所有群都允许)</span>
+                    </label>
+                    <textarea id="user_bot_allowed_groups" rows="3"
+                        class="w-full px-4 py-3 rounded-xl border border-transparent bg-gray-100 dark:bg-[#2C2C2E] text-[13px] font-mono text-gray-800 dark:text-gray-100 focus:ring-2 focus:ring-amber-500/50 outline-none transition-all placeholder-gray-400"
+                        placeholder="-100123456789&#10;-100987654321"></textarea>
+                    <p class="text-[10px] text-gray-400 mt-1">💡 获取群 ID:将机器人加入群后,转发群消息给 @userinfobot</p>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2">群内允许的指令</label>
+                    <div class="flex flex-wrap gap-3">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" name="group_cmd" value="checkin" checked class="w-4 h-4 rounded text-amber-500 focus:ring-amber-500">
+                            <span class="text-[12px] text-gray-600 dark:text-gray-400">签到</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" name="group_cmd" value="help" checked class="w-4 h-4 rounded text-amber-500 focus:ring-amber-500">
+                            <span class="text-[12px] text-gray-600 dark:text-gray-400">帮助</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" name="group_cmd" value="points" class="w-4 h-4 rounded text-amber-500 focus:ring-amber-500">
+                            <span class="text-[12px] text-gray-600 dark:text-gray-400">积分</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" name="group_cmd" value="rank" class="w-4 h-4 rounded text-amber-500 focus:ring-amber-500">
+                            <span class="text-[12px] text-gray-600 dark:text-gray-400">排行榜</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" name="group_cmd" value="transfer" class="w-4 h-4 rounded text-amber-500 focus:ring-amber-500">
+                            <span class="text-[12px] text-gray-600 dark:text-gray-400">转赠</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" name="group_cmd" value="rob" class="w-4 h-4 rounded text-amber-500 focus:ring-amber-500">
+                            <span class="text-[12px] text-gray-600 dark:text-gray-400">打劫</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" name="group_cmd" value="upk" class="w-4 h-4 rounded text-amber-500 focus:ring-amber-500">
+                            <span class="text-[12px] text-gray-600 dark:text-gray-400">用户PK</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" name="group_cmd" value="redpacket" class="w-4 h-4 rounded text-amber-500 focus:ring-amber-500">
+                            <span class="text-[12px] text-gray-600 dark:text-gray-400">红包</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" name="group_cmd" value="grab" class="w-4 h-4 rounded text-amber-500 focus:ring-amber-500">
+                            <span class="text-[12px] text-gray-600 dark:text-gray-400">抢红包</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" name="group_cmd" value="pk" class="w-4 h-4 rounded text-amber-500 focus:ring-amber-500">
+                            <span class="text-[12px] text-gray-600 dark:text-gray-400">PK</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" name="group_cmd" value="lottery" class="w-4 h-4 rounded text-amber-500 focus:ring-amber-500">
+                            <span class="text-[12px] text-gray-600 dark:text-gray-400">彩票</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" name="group_cmd" value="scratch" class="w-4 h-4 rounded text-amber-500 focus:ring-amber-500">
+                            <span class="text-[12px] text-gray-600 dark:text-gray-400">刮刮乐</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2">群欢迎消息</label>
+                    <textarea id="user_bot_welcome_msg" rows="2"
+                        class="w-full px-4 py-3 rounded-xl border border-transparent bg-gray-100 dark:bg-[#2C2C2E] text-[13px] text-gray-800 dark:text-gray-100 focus:ring-2 focus:ring-amber-500/50 outline-none transition-all placeholder-gray-400"
+                        placeholder="欢迎加入!发送 /checkin 签到获取积分,更多功能请私聊机器人。"></textarea>
+                </div>
+
+                <!-- 同步 TG 用户名 -->
+                <div class="mt-4 p-4 bg-blue-50 dark:bg-blue-500/10 rounded-xl border border-blue-100 dark:border-blue-500/20">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-sync text-blue-500"></i>
+                            <span class="text-[13px] font-bold text-blue-700 dark:text-blue-400">同步 TG 用户名</span>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="showTgBindings()" class="px-4 py-2 bg-blue-100 hover:bg-blue-200 dark:bg-blue-500/20 dark:hover:bg-blue-500/30 text-blue-600 dark:text-blue-400 text-[12px] font-bold rounded-lg transition-colors">
+                                <i class="fa-solid fa-users mr-1"></i> 查看
+                            </button>
+                            <button onclick="syncTgUsernames()" class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-[12px] font-bold rounded-lg transition-colors">
+                                <i class="fa-solid fa-refresh mr-1"></i> 同步
+                            </button>
+                        </div>
+                    </div>
+                    <p class="text-[11px] text-blue-600 dark:text-blue-400 mt-2">将已绑定用户的 TG 用户名同步到数据库,用于群聊 @ 转赠功能</p>
+                </div>
+
+                <!-- 🔥 使用限制 - 关注频道/加入群聊 -->
+                <div class="mt-4 p-4 bg-emerald-50 dark:bg-emerald-500/10 rounded-xl border border-emerald-100 dark:border-emerald-500/20">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-lock text-emerald-500"></i>
+                            <span class="text-[13px] font-bold text-emerald-700 dark:text-emerald-400">使用限制</span>
+                            <span class="text-[11px] text-emerald-600 dark:text-emerald-400">要求用户关注频道/加入群聊</span>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="user_bot_restriction_enabled" class="sr-only peer">
+                            <div class="w-10 h-5 bg-gray-200 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500 shadow-inner"></div>
+                            <span class="ml-2 text-[11px] text-gray-500 dark:text-gray-400">启用</span>
+                        </label>
+                    </div>
+
+                    <div class="space-y-3">
+                        <!-- 🔥 缓存时间配置 -->
+                        <div class="p-3 bg-white/50 dark:bg-black/10 rounded-lg border border-emerald-100/50 dark:border-emerald-500/10">
+                            <div class="flex items-center justify-between mb-2">
+                                <label class="text-[11px] font-bold text-emerald-700 dark:text-emerald-400">
+                                    <i class="fa-solid fa-clock mr-1"></i> 检查结果缓存时间
+                                </label>
+                                <div class="flex items-center gap-2">
+                                    <input type="number" id="user_bot_restriction_cache_ttl" min="0" max="3600"
+                                        class="w-20 px-2 py-1 rounded-lg border border-emerald-200 dark:border-emerald-500/30 bg-white dark:bg-[#1C1C1E] text-[12px] text-center text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-emerald-500/30 outline-none">
+                                    <span class="text-[11px] text-gray-500 dark:text-gray-400">秒</span>
+                                </div>
+                            </div>
+                            <div class="text-[10px] text-emerald-600/80 dark:text-emerald-400/80 leading-relaxed space-y-1">
+                                <p><strong>💡 说明:</strong></p>
+                                <p>• 用户通过检查后,结果会被缓存,缓存期内无需重复检查</p>
+                                <p>• <strong>设为 0</strong>:每次都检查(最严格,但响应慢)</p>
+                                <p>• <strong>建议 60-120 秒</strong>:平衡速度与安全性</p>
+                                <p>• <strong>设为 300+ 秒</strong>:响应快,但用户取关后仍可使用一段时间</p>
+                                <p class="text-amber-600 dark:text-amber-400">⚠️ 缓存期内,即使用户取关/退群,仍可使用机器人</p>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-[11px] font-bold text-emerald-600 dark:text-emerald-400 mb-1.5">
+                                <i class="fa-solid fa-bullhorn mr-1"></i> 必须关注的频道
+                                <span class="font-normal text-emerald-500/70">(一行一个,支持 @用户名 或频道 ID)</span>
+                            </label>
+                            <textarea id="user_bot_required_channels" rows="2"
+                                class="w-full px-3 py-2 rounded-lg border border-emerald-200 dark:border-emerald-500/30 bg-white dark:bg-[#1C1C1E] text-[12px] text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-emerald-500/30 outline-none transition-all placeholder-gray-400"
+                                placeholder="@EmbyPulse_News&#10;-1001234567890"></textarea>
+                            <p class="text-[10px] text-emerald-500/70 mt-1">💡 机器人需被添加为频道管理员</p>
+                        </div>
+
+                        <div class="mt-4">
+                            <div class="flex items-center justify-between mb-3">
+                                <label class="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                                    <i class="fa-solid fa-users mr-1"></i> 必须加入的群聊
+                                </label>
+                                <button onclick="addRequiredGroup()" class="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-lg text-[11px] font-bold transition-all border border-emerald-100 dark:border-emerald-500/20 hover:bg-emerald-100 dark:hover:bg-emerald-500/20">
+                                    <i class="fa-solid fa-plus mr-1"></i>添加群聊
+                                </button>
+                            </div>
+
+                            <div id="required-groups-list" class="space-y-2">
+                                <!-- 动态渲染的群聊卡片 -->
+                            </div>
+
+                            <input type="hidden" id="user_bot_required_groups" value="">
+                            <p class="text-[10px] text-emerald-500/70 mt-2">💡 机器人需被添加为群管理员</p>
+                        </div>
+                    </div>
+
+                    <p class="text-[10px] text-emerald-600 dark:text-emerald-400 mt-3">⚠️ 启用后,用户使用机器人前需先关注指定频道/加入指定群聊</p>
+                </div>
+
+                <!-- 手动开奖彩票 -->
+                <div class="mt-4 p-4 bg-violet-50 dark:bg-violet-500/10 rounded-xl border border-violet-100 dark:border-violet-500/20">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-ticket text-violet-500"></i>
+                            <span class="text-[13px] font-bold text-violet-700 dark:text-violet-400">手动开奖彩票</span>
+                        </div>
+                        <button onclick="doLotteryDraw()" class="px-4 py-2 bg-violet-500 hover:bg-violet-600 text-white text-[12px] font-bold rounded-lg transition-colors">
+                            <i class="fa-solid fa-dice mr-1"></i> 开奖
+                        </button>
+                    </div>
+                    <p class="text-[11px] text-violet-600 dark:text-violet-400 mt-2">手动开奖后,今天的自动开奖将失效</p>
+                </div>
+            </div>
+
+            <!-- 频道入库通知 -->
+            <div class="mt-6 pt-6 border-t border-gray-100 dark:border-white/5">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-bullhorn text-amber-500"></i>
+                        <span class="text-[13px] font-bold text-gray-700 dark:text-gray-300">频道入库通知</span>
+                    </div>
+                    <button onclick="addNotifyChannel()" class="px-3 py-1.5 bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-lg text-[11px] font-bold transition-all border border-amber-100 dark:border-amber-500/20 hover:bg-amber-100 dark:hover:bg-amber-500/20">
+                        <i class="fa-solid fa-plus mr-1"></i>添加频道
+                    </button>
+                </div>
+
+                <div id="notify-channels-list" class="space-y-3">
+                    <!-- 动态渲染的频道卡片 -->
+                </div>
+
+                <p class="text-[10px] text-gray-400 mt-3">💡 机器人需被添加为频道管理员才能发送消息。公开频道可用 @用户名,私有频道需填数字 ID。</p>
+            </div>
+        </div>
+
+        <div class="apple-card flex flex-col h-full lg:col-span-2 2xl:col-span-3 p-5 md:p-6">
+            <h3 class="text-[15px] font-bold text-gray-800 dark:text-gray-200 mb-6 flex items-center justify-between shrink-0">
+                <span class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-500/10 text-rose-500 flex items-center justify-center shadow-sm"><i class="fa-solid fa-ban text-sm"></i></div>
+                    TG 用户黑名单
+                </span>
+                <span class="text-[11px] text-gray-400 font-medium hidden sm:block">被拉黑用户无法使用开放注册</span>
+            </h3>
+            <div class="flex-1 flex flex-col space-y-4">
+                <div class="flex flex-col sm:flex-row gap-3">
+                    <input type="text" id="blacklist-tg-id" placeholder="输入 TG 用户 ID" class="flex-1 px-4 py-3 rounded-xl border border-transparent bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-[13px] text-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-black/30 focus:ring-2 focus:ring-rose-500/50 outline-none transition-all placeholder-gray-400">
+                    <input type="text" id="blacklist-reason" placeholder="原因(可选)" class="flex-1 px-4 py-3 rounded-xl border border-transparent bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-[13px] text-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-black/30 focus:ring-2 focus:ring-rose-500/50 outline-none transition-all placeholder-gray-400">
+                    <button onclick="addToBlacklist()" class="px-5 py-3 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-[13px] font-bold shadow-md shadow-rose-500/20 transition-all active:scale-95 shrink-0">
+                        <i class="fa-solid fa-plus mr-1"></i> 拉黑
+                    </button>
+                </div>
+                <div class="flex-1 bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/5 overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left min-w-[500px]">
+                            <thead class="bg-gray-100 dark:bg-[#2C2C2E]">
+                                <tr>
+                                    <th class="px-4 py-3 text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">TG 用户 ID</th>
+                                    <th class="px-4 py-3 text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">原因</th>
+                                    <th class="px-4 py-3 text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider whitespace-nowrap">拉黑时间</th>
+                                    <th class="px-4 py-3 text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider text-right">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="blacklist-tbody" class="divide-y divide-gray-100 dark:divide-white/5">
+                                <tr>
+                                    <td colspan="4" class="px-4 py-8 text-center text-gray-400 text-[13px]">
+                                        <i class="fa-solid fa-circle-notch fa-spin mr-2"></i>加载中...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let globalToken = 'embypulse';
+
+    async function init() {
+        try {
+            const res = await fetch('/api/bot/settings');
+            const json = await res.json();
+            if(json.status === 'success') {
+                const d = json.data;
+                
+                // 🔒 敏感字段处理（环境变量 + 配置文件）
+                function setSensitiveInput(id, value, envKey, isReadonly, placeholder = '••••••••（已设置）') {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    
+                    // 🔒 如果是环境变量控制，禁用输入框
+                    if (isReadonly) {
+                        el.value = '';  // 清空值，显示占位符
+                        el.placeholder = placeholder;
+                        el.disabled = true;
+                        el.classList.add('cursor-not-allowed', 'opacity-60');
+                        el.classList.remove('bg-gray-100', 'hover:bg-gray-200', 'dark:bg-[#2C2C2E]', 'dark:hover:bg-[#3A3A3C]');
+                        el.classList.add('bg-gray-200', 'dark:bg-[#3A3A3C]');
+                        
+                        // 隐藏眼睛按钮
+                        const eyeBtn = el.parentElement.querySelector('button');
+                        if (eyeBtn) {
+                            eyeBtn.style.display = 'none';
+                        }
+                        
+                        // 添加提示文字
+                        const parentDiv = el.closest('div');
+                        if (parentDiv && !parentDiv.querySelector('.env-readonly-tip')) {
+                            const tipEl = document.createElement('p');
+                            tipEl.className = 'env-readonly-tip text-[11px] text-amber-500 dark:text-amber-400 mt-1.5 flex items-center gap-1.5';
+                            tipEl.innerHTML = `<i class="fa-solid fa-lock text-[10px]"></i> 此字段由环境变量 <code class="px-1 py-0.5 bg-amber-100 dark:bg-amber-900/30 rounded text-amber-600 dark:text-amber-300 font-mono">${envKey}</code> 设置，无法在界面修改`;
+                            parentDiv.appendChild(tipEl);
+                        }
+                    } else {
+                        // 配置文件来源，允许修改
+                        if (value && value.includes('****')) {
+                            // 脱敏值，显示占位符
+                            el.value = '';  
+                            el.placeholder = placeholder;
+                        } else {
+                            el.value = value || '';  
+                        }
+                        el.disabled = false;
+                        el.classList.remove('cursor-not-allowed', 'opacity-60', 'bg-gray-200', 'dark:bg-[#3A3A3C]');
+                        el.classList.add('bg-gray-100', 'hover:bg-gray-200', 'dark:bg-[#2C2C2E]', 'dark:hover:bg-[#3A3A3C]');
+                    }
+                }
+                
+                // TG
+                setSensitiveInput('tg_bot_token', d.tg_bot_token, 'TG_BOT_TOKEN', d.tg_bot_token_readonly, '••••••••（由环境变量设置）');
+                document.getElementById('tg_chat_id').value = d.tg_chat_id || '';
+                
+                // WeCom
+                document.getElementById('wecom_corpid').value = d.wecom_corpid || '';
+                setSensitiveInput('wecom_corpsecret', d.wecom_corpsecret, 'WECOM_CORPSECRET', d.wecom_corpsecret_readonly, '••••••••（由环境变量设置）');
+                document.getElementById('wecom_agentid').value = d.wecom_agentid || '';
+                document.getElementById('wecom_touser').value = d.wecom_touser || '@all';
+                document.getElementById('wecom_proxy_url').value = d.wecom_proxy_url || 'https://qyapi.weixin.qq.com';
+                setSensitiveInput('wecom_token', d.wecom_token, 'WECOM_TOKEN', d.wecom_token_readonly, '••••••••（由环境变量设置）');
+                setSensitiveInput('wecom_aeskey', d.wecom_aeskey, 'WECOM_AESKEY', d.wecom_aeskey_readonly, '••••••••（由环境变量设置）');
+
+                // Switches
+                document.getElementById('enable_bot').checked = d.enable_bot || false;
+                document.getElementById('enable_notify').checked = d.enable_notify || false;
+                const libNotify = document.getElementById('enable_library_notify');
+                libNotify.checked = d.enable_library_notify || false;
+                
+                // 入库通知渠道选择
+                try {
+                    const libChannels = d.library_notify_channels ? JSON.parse(d.library_notify_channels) : [];
+                    document.getElementById('notify_channel_tg_bot').checked = libChannels.includes('tg_bot');
+                    document.getElementById('notify_channel_tg_channel').checked = libChannels.includes('tg_channel');
+                    document.getElementById('notify_channel_wecom').checked = libChannels.includes('wecom');
+                } catch(e) {}
+
+                // 用户机器人
+                setSensitiveInput('tg_user_bot_token', d.tg_user_bot_token, 'TG_USER_BOT_TOKEN', d.tg_user_bot_token_readonly, '••••••••（由环境变量设置）');
+                document.getElementById('user_bot_reg_days').value = d.user_bot_reg_days || 30;
+                document.getElementById('user_bot_open_reg').checked = d.user_bot_open_reg || false;
+                document.getElementById('user_bot_open_reg_notify_user').checked = d.user_bot_open_reg_notify_user || false;
+                document.getElementById('user_bot_open_reg_notify_group').checked = d.user_bot_open_reg_notify_group || false;
+                document.getElementById('user_bot_reg_quota').value = d.user_bot_reg_quota || 0;
+                document.getElementById('user_bot_portal_url').value = d.user_bot_portal_url || '';
+
+                // 名额模式
+                const quotaMode = d.user_bot_reg_quota_mode || 'total';
+                document.querySelectorAll('input[name="reg_quota_mode"]').forEach(radio => {
+                    radio.checked = radio.value === quotaMode;
+                });
+                updateQuotaHint();
+
+                // 加载名额状态(延迟执行,确保 DOM 渲染完成)
+                setTimeout(loadQuotaStatus, 100);
+
+                // 开放注册线路设置
+                const routeModeAllow = d.user_bot_route_mode === 'allow';
+                document.getElementById('user_bot_route_mode_allow').checked = routeModeAllow;
+                document.getElementById('user_bot_allow_routes').value = d.user_bot_allow_routes || '';
+                document.getElementById('user_bot_block_routes').value = d.user_bot_block_routes || '';
+                updateRouteModeDesc();
+                await loadUserBotRoutes();
+
+                // 群聊设置
+                document.getElementById('user_bot_group_enabled').checked = d.user_bot_group_enabled || false;
+                document.getElementById('user_bot_allowed_groups').value = d.user_bot_allowed_groups || '';
+                document.getElementById('user_bot_welcome_msg').value = d.user_bot_welcome_msg || '';
+                const groupCommands = (d.user_bot_group_commands || 'checkin,help').split(',');
+                document.querySelectorAll('input[name="group_cmd"]').forEach(cb => {
+                    cb.checked = groupCommands.includes(cb.value);
+                });
+
+                // 🔥 使用限制设置
+                document.getElementById('user_bot_restriction_enabled').checked = d.user_bot_restriction_enabled || false;
+                document.getElementById('user_bot_required_channels').value = d.user_bot_required_channels || '';
+                document.getElementById('user_bot_required_groups').value = d.user_bot_required_groups || '';
+                document.getElementById('user_bot_restriction_cache_ttl').value = d.user_bot_restriction_cache_ttl || 120;
+
+                // 频道通知设置
+                loadNotifyChannels(d.notify_channels || '');
+
+                // 🔥 使用限制 - 群聊配置
+                loadRequiredGroups(d.user_bot_required_groups || '');
+
+                // 加载模板用户下拉列表
+                try {
+                    const usersRes = await fetch('/api/users');
+                    const usersJson = await usersRes.json();
+                    const sel = document.getElementById('user_bot_template_user');
+                    if (usersJson.status === 'success' && usersJson.data) {
+                        usersJson.data.forEach(u => {
+                            const opt = document.createElement('option');
+                            opt.value = u.UserId;
+                            opt.textContent = u.UserName;
+                            sel.appendChild(opt);
+                        });
+                    }
+                    sel.value = d.user_bot_template_user || '';
+                } catch(e) {}
+
+                globalToken = d.webhook_token || 'embypulse';
+
+                // Webhook URLs
+                const host = window.location.protocol + "//" + window.location.host;
+                document.getElementById('wecom-webhook-url').value = `${host}/api/bot/wecom_webhook`;
+
+                toggleWebhookInfo(libNotify);
+            }
+        } catch(e) { console.error(e); }
+    }
+
+    function toggleWebhookInfo(el) {
+        const infoBox = document.getElementById('webhook-info');
+        const urlInput = document.getElementById('webhook-url');
+        if (el.checked) {
+            infoBox.classList.remove('hidden');
+            const host = window.location.protocol + "//" + window.location.host;
+            urlInput.value = `${host}/api/v1/webhook?token=${globalToken}`;
+        } else {
+            infoBox.classList.add('hidden');
+        }
+    }
+
+    // 同步 TG 用户名
+    async function syncTgUsernames() {
+        // 自定义确认弹窗
+        const confirmed = await showConfirmDialog('同步 TG 用户名', '确定要同步所有已绑定用户的 TG 用户名吗?这将调用 Telegram API 获取用户信息。');
+        if (!confirmed) return;
+
+        // 显示加载状态
+        const btn = event.target.closest('button');
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> 同步中...';
+        btn.disabled = true;
+
+        try {
+            const res = await fetch('/api/bot/sync_tg_usernames', { method: 'POST' });
+            const json = await res.json();
+
+            if (json.status === 'success') {
+                showNotifyDialog('同步成功', `更新了 ${json.data.updated} 个用户\n跳过了 ${json.data.skipped} 个用户(已有用户名或无法获取)`, 'success');
+            } else {
+                showNotifyDialog('同步失败', json.message || '未知错误', 'error');
+            }
+        } catch (e) {
+            showNotifyDialog('同步失败', e.message || '网络错误', 'error');
+        } finally {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
+    }
+
+    // 查看 TG 绑定用户
+    async function showTgBindings() {
+        try {
+            const res = await fetch('/api/bot/tg_bindings');
+            const json = await res.json();
+
+            if (json.status === 'success') {
+                const bindings = json.data || [];
+                let html = `
+                    <div class="max-h-[60vh] overflow-y-auto">
+                        <div class="mb-3 text-[12px] text-gray-500">共 ${bindings.length} 个已绑定用户</div>
+                        <table class="w-full text-[11px]">
+                            <thead class="bg-gray-50 dark:bg-black/20 sticky top-0">
+                                <tr>
+                                    <th class="px-2 py-2 text-left">Emby 用户</th>
+                                    <th class="px-2 py-2 text-left">TG 用户名</th>
+                                    <th class="px-2 py-2 text-left">TG 显示名</th>
+                                    <th class="px-2 py-2 text-left">绑定时间</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100 dark:divide-white/5">
+                `;
+
+                if (bindings.length === 0) {
+                    html += `<tr><td colspan="4" class="px-2 py-4 text-center text-gray-400">暂无绑定用户</td></tr>`;
+                } else {
+                    for (const b of bindings) {
+                        const tgUsername = b.tg_username ? `@${b.tg_username}` : '<span class="text-gray-300">未设置</span>';
+                        const tgName = b.tg_display_name || '<span class="text-gray-300">未设置</span>';
+                        html += `
+                            <tr class="hover:bg-gray-50 dark:hover:bg-white/5">
+                                <td class="px-2 py-2">${b.emby_username || b.emby_user_id}</td>
+                                <td class="px-2 py-2">${tgUsername}</td>
+                                <td class="px-2 py-2">${tgName}</td>
+                                <td class="px-2 py-2 text-gray-400">${b.bound_at || '-'}</td>
+                            </tr>
+                        `;
+                    }
+                }
+
+                html += `</tbody></table></div>`;
+
+                // 使用弹窗显示
+                const modal = document.createElement('div');
+                modal.id = 'tg-bindings-modal';
+                modal.className = 'fixed inset-0 bg-black/50 flex items-center justify-center z-50';
+                modal.innerHTML = `
+                    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden">
+                        <div class="flex items-center justify-between p-4 border-b border-gray-100 dark:border-white/5">
+                            <h3 class="text-[14px] font-bold text-gray-700 dark:text-gray-300">已绑定用户列表</h3>
+                            <button onclick="document.getElementById('tg-bindings-modal').remove()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                                <i class="fa-solid fa-times"></i>
+                            </button>
+                        </div>
+                        <div class="p-4">${html}</div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+                modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+            } else {
+                showNotifyDialog('获取失败', json.message || '未知错误', 'error');
+            }
+        } catch (e) {
+            showNotifyDialog('获取失败', e.message || '网络错误', 'error');
+        }
+    }
+
+    // 手动开奖彩票
+    async function doLotteryDraw() {
+        const confirmed = await showConfirmDialog('手动开奖', '确定要立即开奖吗?开奖后今天的自动开奖将失效。');
+        if (!confirmed) return;
+
+        try {
+            const res = await fetch('/api/bot/lottery_draw', { method: 'POST' });
+            const json = await res.json();
+
+            if (json.status === 'success') {
+                showNotifyDialog('开奖成功', `中奖号码: ${json.data.winning_numbers}\n奖池: ${json.data.total_pool} 积分`, 'success');
+            } else {
+                showNotifyDialog('开奖失败', json.message || '未知错误', 'error');
+            }
+        } catch (e) {
+            showNotifyDialog('开奖失败', e.message, 'error');
+        }
+    }
+
+    // 自定义确认弹窗
+    function showConfirmDialog(title, message) {
+        return new Promise((resolve) => {
+            const overlay = document.createElement('div');
+            overlay.className = 'fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm opacity-0 transition-opacity duration-300';
+            overlay.innerHTML = `
+                <div class="bg-white dark:bg-[#1C1C1E] w-full max-w-sm mx-4 rounded-[20px] shadow-2xl transform scale-95 transition-transform overflow-hidden">
+                    <div class="p-5 border-b border-gray-100 dark:border-white/5">
+                        <h3 class="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                            <i class="fa-solid fa-question-circle text-blue-500"></i> ${title}
+                        </h3>
+                    </div>
+                    <div class="p-5">
+                        <p class="text-sm text-gray-600 dark:text-gray-300 whitespace-pre-line">${message}</p>
+                    </div>
+                    <div class="p-4 flex gap-3 border-t border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-black/20">
+                        <button onclick="this.closest('.fixed')._resolve(false)" class="flex-1 py-2.5 bg-gray-200 dark:bg-white/10 text-gray-700 dark:text-gray-300 rounded-xl font-bold text-sm hover:bg-gray-300 dark:hover:bg-white/20 transition-colors">取消</button>
+                        <button onclick="this.closest('.fixed')._resolve(true)" class="flex-1 py-2.5 bg-blue-500 text-white rounded-xl font-bold text-sm hover:bg-blue-600 transition-colors">确定</button>
+                    </div>
+                </div>
+            `;
+            overlay._resolve = (value) => {
+                overlay.classList.add('opacity-0');
+                setTimeout(() => overlay.remove(), 300);
+                resolve(value);
+            };
+            document.body.appendChild(overlay);
+            requestAnimationFrame(() => overlay.classList.remove('opacity-0'));
+        });
+    }
+
+    // 自定义通知弹窗
+    function showNotifyDialog(title, message, type = 'info') {
+        const iconMap = {
+            success: 'fa-check-circle text-emerald-500',
+            error: 'fa-times-circle text-rose-500',
+            info: 'fa-info-circle text-blue-500'
+        };
+        const overlay = document.createElement('div');
+        overlay.className = 'fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm opacity-0 transition-opacity duration-300';
+        overlay.innerHTML = `
+            <div class="bg-white dark:bg-[#1C1C1E] w-full max-w-sm mx-4 rounded-[20px] shadow-2xl transform scale-95 transition-transform overflow-hidden">
+                <div class="p-5 border-b border-gray-100 dark:border-white/5">
+                    <h3 class="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                        <i class="fa-solid ${iconMap[type]}"></i> ${title}
+                    </h3>
+                </div>
+                <div class="p-5">
+                    <p class="text-sm text-gray-600 dark:text-gray-300 whitespace-pre-line">${message}</p>
+                </div>
+                <div class="p-4 flex justify-center border-t border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-black/20">
+                    <button onclick="this.closest('.fixed').remove()" class="px-8 py-2.5 bg-blue-500 text-white rounded-xl font-bold text-sm hover:bg-blue-600 transition-colors">确定</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+        requestAnimationFrame(() => {
+            overlay.classList.remove('opacity-0');
+            overlay.querySelector('button').focus();
+        });
+    }
+
+    async function saveConfig() {
+        const btnBtn = document.getElementById('top-save-btn');
+        const textSpan = document.getElementById('save-btn-text');
+        const icon = btnBtn.querySelector('i');
+
+        icon.className = "fa-solid fa-spinner fa-spin";
+        textSpan.textContent = "保存中...";
+        btnBtn.disabled = true;
+
+        // 🔒 安全：构建 payload 时检查敏感字段是否禁用
+        function getSensitiveValue(id) {
+            const el = document.getElementById(id);
+            if (!el) return '';
+            // 如果输入框被禁用（环境变量控制），不发送值
+            if (el.disabled) return '****';  // 发送脱敏标记，告诉后端不要更新
+            return el.value;
+        }
+
+        const payload = {
+            tg_bot_token: getSensitiveValue('tg_bot_token'),
+            tg_chat_id: document.getElementById('tg_chat_id').value,
+            wecom_corpid: document.getElementById('wecom_corpid').value,
+            wecom_corpsecret: getSensitiveValue('wecom_corpsecret'),
+            wecom_agentid: document.getElementById('wecom_agentid').value,
+            wecom_touser: document.getElementById('wecom_touser').value || '@all',
+            wecom_proxy_url: document.getElementById('wecom_proxy_url').value || 'https://qyapi.weixin.qq.com',
+            wecom_token: getSensitiveValue('wecom_token'),
+            wecom_aeskey: getSensitiveValue('wecom_aeskey'),
+            enable_bot: document.getElementById('enable_bot').checked,
+            enable_notify: document.getElementById('enable_notify').checked,
+            enable_library_notify: document.getElementById('enable_library_notify').checked,
+            tg_user_bot_token: getSensitiveValue('tg_user_bot_token'),
+            user_bot_open_reg: document.getElementById('user_bot_open_reg').checked,
+            user_bot_open_reg_notify_user: document.getElementById('user_bot_open_reg_notify_user').checked,
+            user_bot_open_reg_notify_group: document.getElementById('user_bot_open_reg_notify_group').checked,
+            user_bot_max_reg: 0, // 兼容旧字段
+            user_bot_reg_days: parseInt(document.getElementById('user_bot_reg_days').value) || 30,
+            user_bot_template_user: document.getElementById('user_bot_template_user').value,
+            user_bot_portal_url: document.getElementById('user_bot_portal_url').value,
+            user_bot_route_mode: document.getElementById('user_bot_route_mode_allow').checked ? 'allow' : 'block',
+            user_bot_allow_routes: document.getElementById('user_bot_allow_routes').value,
+            user_bot_block_routes: document.getElementById('user_bot_block_routes').value,
+            // 🎯 新增名额模式配置
+            user_bot_reg_quota_mode: document.querySelector('input[name="reg_quota_mode"]:checked')?.value || 'total',
+            user_bot_reg_quota: parseInt(document.getElementById('user_bot_reg_quota').value) || 0,
+            user_bot_reg_batch_used: 0, // 兼容字段,由后端管理
+            // 🎯 群聊设置
+            user_bot_group_enabled: document.getElementById('user_bot_group_enabled').checked,
+            user_bot_allowed_groups: document.getElementById('user_bot_allowed_groups').value,
+            user_bot_group_commands: Array.from(document.querySelectorAll('input[name="group_cmd"]:checked')).map(cb => cb.value).join(','),
+            user_bot_welcome_msg: document.getElementById('user_bot_welcome_msg').value,
+            // 🔥 使用限制
+            user_bot_restriction_enabled: document.getElementById('user_bot_restriction_enabled').checked,
+            user_bot_required_channels: document.getElementById('user_bot_required_channels').value,
+            user_bot_required_groups: document.getElementById('user_bot_required_groups').value,
+            user_bot_restriction_cache_ttl: parseInt(document.getElementById('user_bot_restriction_cache_ttl').value) || 120,
+            // 🎯 频道通知
+            notify_channels: getNotifyChannelsJson(),
+            // 🎯 入库通知渠道选择
+            library_notify_channels: JSON.stringify([
+                ...(document.getElementById('notify_channel_tg_bot').checked ? ['tg_bot'] : []),
+                ...(document.getElementById('notify_channel_tg_channel').checked ? ['tg_channel'] : []),
+                ...(document.getElementById('notify_channel_wecom').checked ? ['wecom'] : [])
+            ])
+        };
+
+        try {
+            const res = await fetch('/api/bot/settings', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+            const json = await res.json();
+            if (json.status === 'success') {
+                icon.className = "fa-solid fa-check";
+                textSpan.textContent = "保存成功并重载";
+                btnBtn.classList.replace('bg-brand-500', 'bg-emerald-500');
+                btnBtn.classList.replace('hover:bg-brand-600', 'hover:bg-emerald-600');
+
+                setTimeout(() => {
+                    icon.className = "fa-solid fa-floppy-disk";
+                    textSpan.textContent = "保存配置";
+                    btnBtn.classList.replace('bg-emerald-500', 'bg-brand-500');
+                    btnBtn.classList.replace('hover:bg-emerald-600', 'hover:bg-brand-600');
+                    btnBtn.disabled = false;
+                }, 2000);
+                init();
+                // 刷新名额状态
+                setTimeout(loadQuotaStatus, 500);
+            } else {
+                showToast('error', '保存失败', '请检查配置');
+                resetBtn();
+            }
+        } catch(e) {
+            showToast('error', '网络错误', '请稍后重试');
+            resetBtn();
+        }
+
+        function resetBtn() {
+            icon.className = "fa-solid fa-floppy-disk";
+            textSpan.textContent = "保存配置";
+            btnBtn.disabled = false;
+        }
+
+        // 返回 Promise 以便其他函数可以 await
+        return Promise.resolve();
+    }
+
+    async function testConnection() {
+        const btn = document.getElementById('test-btn');
+        const ogText = btn.innerHTML;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+        btn.disabled = true;
+        await saveConfig();
+        try {
+            const res = await fetch('/api/bot/test', { method: 'POST' });
+            const json = await res.json();
+            if (json.status === 'success') {
+                showToast('success', '测试成功', '消息已发送至 Telegram');
+            } else {
+                showToast('error', '发送失败', json.message);
+            }
+        } catch(e) { showToast('error', '网络错误', '请稍后重试'); }
+        finally { btn.innerHTML = ogText; btn.disabled = false; }
+    }
+
+    async function testWeComConnection() {
+        const btn = document.getElementById('test-wecom-btn');
+        const ogText = btn.innerHTML;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+        btn.disabled = true;
+        await saveConfig();
+        try {
+            const res = await fetch('/api/bot/test_wecom', { method: 'POST' });
+            const json = await res.json();
+            if (json.status === 'success') {
+                showToast('success', '测试成功', '消息已发送至企业微信');
+            } else {
+                showToast('error', '发送失败', json.message);
+            }
+        } catch(e) { showToast('error', '网络错误', '请稍后重试'); }
+        finally { btn.innerHTML = ogText; btn.disabled = false; }
+    }
+
+    function toggleShow(id) {
+        const input = document.getElementById(id);
+        const icon = document.getElementById('icon-' + id);
+        if(input.type === 'password') {
+            input.type = 'text';
+            icon.classList.remove('fa-eye');
+            icon.classList.add('fa-eye-slash');
+        } else {
+            input.type = 'password';
+            icon.classList.remove('fa-eye-slash');
+            icon.classList.add('fa-eye');
+        }
+    }
+
+    // ========== 黑名单管理 ==========
+    async function loadBlacklist() {
+        try {
+            const res = await fetch('/api/bot/user_blacklist');
+            const json = await res.json();
+            const tbody = document.getElementById('blacklist-tbody');
+            if (json.status === 'success') {
+                const list = json.data || [];
+                if (list.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="4" class="px-4 py-8 text-center text-gray-400 text-[13px]">
+                                <i class="fa-solid fa-check-circle mr-2 text-emerald-500"></i>暂无黑名单用户
+                            </td>
+                        </tr>
+                    `;
+                } else {
+                    tbody.innerHTML = list.map(item => `
+                        <tr class="hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                            <td class="px-4 py-3 text-[13px] font-mono text-gray-700 dark:text-gray-300">${item.tg_user_id}</td>
+                            <td class="px-4 py-3 text-[13px] text-gray-600 dark:text-gray-400">${item.reason || '-'}</td>
+                            <td class="px-4 py-3 text-[12px] text-gray-500 dark:text-gray-500">${item.created_at || '-'}</td>
+                            <td class="px-4 py-3 text-right">
+                                <button onclick="removeFromBlacklist('${item.tg_user_id}')" class="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-lg text-[11px] font-bold transition-all active:scale-95">
+                                    <i class="fa-solid fa-check mr-1"></i>移除
+                                </button>
+                            </td>
+                        </tr>
+                    `).join('');
+                }
+            } else {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="4" class="px-4 py-8 text-center text-red-400 text-[13px]">
+                            <i class="fa-solid fa-exclamation-circle mr-2"></i>加载失败
+                        </td>
+                    </tr>
+                `;
+            }
+        } catch(e) {
+            console.error(e);
+            document.getElementById('blacklist-tbody').innerHTML = `
+                <tr>
+                    <td colspan="4" class="px-4 py-8 text-center text-red-400 text-[13px]">
+                        <i class="fa-solid fa-exclamation-circle mr-2"></i>网络错误
+                    </td>
+                </tr>
+            `;
+        }
+    }
+
+    async function addToBlacklist() {
+        const tgId = document.getElementById('blacklist-tg-id').value.trim();
+        const reason = document.getElementById('blacklist-reason').value.trim();
+        if (!tgId) {
+            showToast('warning', '提示', '请输入 TG 用户 ID');
+            return;
+        }
+        try {
+            const res = await fetch('/api/bot/user_blacklist/add', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({tg_id: tgId, reason: reason || '管理员手动拉黑'})
+            });
+            const json = await res.json();
+            if (json.status === 'success') {
+                document.getElementById('blacklist-tg-id').value = '';
+                document.getElementById('blacklist-reason').value = '';
+                loadBlacklist();
+            } else {
+                showToast('error', '添加失败', json.message || '请稍后重试');
+            }
+        } catch(e) {
+            showToast('error', '网络错误', '请稍后重试');
+        }
+    }
+
+    async function removeFromBlacklist(tgId) {
+        const confirmed = await showConfirm({
+            type: 'warning',
+            title: '确认移除',
+            message: `确定要将用户 ${tgId} 从黑名单移除吗?`,
+            confirmText: '确定'
+        });
+        if (!confirmed) return;
+        try {
+            const res = await fetch('/api/bot/user_blacklist/remove', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({tg_user_id: tgId})
+            });
+            const json = await res.json();
+            if (json.status === 'success') {
+                loadBlacklist();
+            } else {
+                showToast('error', '移除失败', json.message || '请稀后重试');
+            }
+        } catch(e) {
+            showToast('error', '网络错误', '请稀后重试');
+        }
+    }
+
+    // ========== 开放注册线路设置 ==========
+    let userBotAllRoutes = [];
+
+    function updateRouteModeDesc() {
+        const isAllowMode = document.getElementById('user_bot_route_mode_allow').checked;
+        const desc = document.getElementById('user-bot-route-mode-desc');
+        if (isAllowMode) {
+            desc.textContent = '专属允许模式:用户只能看到被勾选的线路,可跨越全局屏蔽设置';
+        } else {
+            desc.textContent = '屏蔽模式:用户看到所有未屏蔽的线路,可额外屏蔽指定线路';
+        }
+        renderUserBotRoutesList();
+    }
+
+    async function loadUserBotRoutes() {
+        try {
+            const res = await fetch('/api/routes');
+            const json = await res.json();
+            if (json.status === 'success' && json.data) {
+                userBotAllRoutes = json.data.filter(r => r.show_to_users !== false);
+            }
+        } catch(e) {
+            console.error('加载线路列表失败', e);
+        }
+        renderUserBotRoutesList();
+    }
+
+    function renderUserBotRoutesList() {
+        const container = document.getElementById('user-bot-routes-list');
+        const isAllowMode = document.getElementById('user_bot_route_mode_allow').checked;
+        const savedRoutes = isAllowMode
+            ? (document.getElementById('user_bot_allow_routes').value || '').split(',').filter(r => r)
+            : (document.getElementById('user_bot_block_routes').value || '').split(',').filter(r => r);
+
+        if (userBotAllRoutes.length === 0) {
+            container.innerHTML = '<span class="text-[11px] text-gray-400">暂无可用线路</span>';
+            return;
+        }
+
+        container.innerHTML = userBotAllRoutes.map(r => {
+            const checked = savedRoutes.includes(r.name) ? 'checked' : '';
+            return `
+                <label class="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-gray-200 dark:border-white/10 cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5 text-[11px] transition-all">
+                    <input type="checkbox" value="${r.name}" class="user-bot-route-cb w-3 h-3 rounded text-amber-500 focus:ring-amber-500" ${checked} onchange="updateUserBotRoutes()">
+                    <span class="text-gray-600 dark:text-gray-300">${r.name}</span>
+                </label>
+            `;
+        }).join('');
+    }
+
+    function updateUserBotRoutes() {
+        const isAllowMode = document.getElementById('user_bot_route_mode_allow').checked;
+        const checked = document.querySelectorAll('#user-bot-routes-list .user-bot-route-cb:checked');
+        const routeNames = Array.from(checked).map(cb => cb.value);
+
+        if (isAllowMode) {
+            document.getElementById('user_bot_allow_routes').value = routeNames.join(',');
+            document.getElementById('user_bot_block_routes').value = '';
+        } else {
+            document.getElementById('user_bot_allow_routes').value = '';
+            document.getElementById('user_bot_block_routes').value = routeNames.join(',');
+        }
+    }
+
+    // ========== 名额模式提示 ==========
+    function updateQuotaHint() {
+        const mode = document.querySelector('input[name="reg_quota_mode"]:checked')?.value || 'total';
+        const hint = document.getElementById('quota-hint');
+        if (mode === 'batch') {
+            hint.innerHTML = '<i class="fa-solid fa-info-circle mr-1"></i>批次模式:设置本次开放注册的名额,用完后自动关闭注册。';
+        } else {
+            hint.innerHTML = '<i class="fa-solid fa-info-circle mr-1"></i>总人数模式:当 Emby 用户总数达到上限时自动关闭注册。';
+        }
+        // 加载状态
+        loadQuotaStatus();
+    }
+
+    // 加载名额状态
+    async function loadQuotaStatus() {
+        const quota = parseInt(document.getElementById('user_bot_reg_quota').value) || 0;
+        const statusDiv = document.getElementById('quota-status');
+        const statusText = document.getElementById('quota-status-text');
+
+        if (quota <= 0) {
+            statusDiv.classList.add('hidden');
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/bot/reg_quota_status');
+            const json = await res.json();
+            if (json.status === 'success') {
+                const data = json.data;
+                statusDiv.classList.remove('hidden');
+
+                if (data.quota_mode === 'batch') {
+                    const remaining = quota - data.batch_used;
+                    statusText.innerHTML = `<span class="text-amber-500">批次模式</span>:已注册 <b>${data.batch_used}</b> 人,剩余 <b class="${remaining <= 0 ? 'text-red-500' : 'text-green-500'}">${remaining}</b> 名额`;
+                } else {
+                    const remaining = quota - data.total_users;
+                    statusText.innerHTML = `<span class="text-blue-500">总人数模式</span>:当前 <b>${data.total_users}</b> 人,剩余 <b class="${remaining <= 0 ? 'text-red-500' : 'text-green-500'}">${remaining}</b> 名额`;
+                }
+            }
+        } catch(e) {
+            console.error('加载名额状态失败', e);
+        }
+    }
+
+    // 名额模式切换监听
+    document.querySelectorAll('input[name="reg_quota_mode"]').forEach(radio => {
+        radio.addEventListener('change', updateQuotaHint);
+    });
+
+    // 名额上限变化监听
+    document.getElementById('user_bot_reg_quota').addEventListener('change', loadQuotaStatus);
+
+    // ========== 重置批次计数 ==========
+    async function resetBatchCount() {
+        const confirmed = await showConfirm({
+            type: 'warning',
+            title: '确认重置',
+            message: '确定要重置批次计数吗?这将把"已注册人数"归零,重新开始计数。',
+            confirmText: '确定'
+        });
+        if (!confirmed) return;
+        try {
+            const res = await fetch('/api/bot/reg_batch_reset', { method: 'POST' });
+            const json = await res.json();
+            if (json.status === 'success') {
+                showToast('success', '重置成功', '批次计数已归零');
+            } else {
+                showToast('error', '重置失败', json.message || '请稀后重试');
+            }
+        } catch(e) {
+            showToast('error', '网络错误', '请稀后重试');
+        }
+    }
+
+    // ========== 注册日志浮窗 ==========
+    async function showRegLogs() {
+        // 创建浮窗
+        let modal = document.getElementById('reg-logs-modal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'reg-logs-modal';
+            modal.className = 'fixed inset-0 z-50 flex items-center justify-center p-4 hidden';
+            modal.innerHTML = `
+                <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeRegLogs()"></div>
+                <div class="relative bg-white dark:bg-[#1C1C1E] rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
+                    <div class="flex items-center justify-between p-4 border-b border-gray-100 dark:border-white/10">
+                        <h3 class="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                            <i class="fa-solid fa-chart-line text-amber-500"></i>
+                            开放注册日志
+                        </h3>
+                        <div class="flex items-center gap-2">
+                            <select id="reg-logs-days" onchange="loadRegLogs()" class="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-[#2C2C2E] text-sm text-gray-700 dark:text-gray-300 border-0 outline-none">
+                                <option value="7">最近 7 天</option>
+                                <option value="30">最近 30 天</option>
+                                <option value="90">最近 90 天</option>
+                                <option value="365">全部</option>
+                            </select>
+                            <button onclick="clearRegLogs()" class="px-3 py-1.5 bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 rounded-lg text-sm font-medium transition-all">
+                                <i class="fa-solid fa-trash mr-1"></i>清空
+                            </button>
+                            <button onclick="closeRegLogs()" class="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-gray-500 dark:text-gray-400 transition-all">
+                                <i class="fa-solid fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="reg-logs-stats" class="p-4 bg-gray-50 dark:bg-black/20 border-b border-gray-100 dark:border-white/5">
+                        <div class="flex items-center gap-6">
+                            <div class="text-center">
+                                <div class="text-2xl font-bold text-amber-500" id="reg-stats-today">-</div>
+                                <div class="text-xs text-gray-500 dark:text-gray-400">今日注册</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="text-2xl font-bold text-blue-500" id="reg-stats-week">-</div>
+                                <div class="text-xs text-gray-500 dark:text-gray-400">本周注册</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="text-2xl font-bold text-green-500" id="reg-stats-total">-</div>
+                                <div class="text-xs text-gray-500 dark:text-gray-400">累计注册</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="reg-logs-content" class="p-4 overflow-y-auto" style="max-height: calc(80vh - 200px);">
+                        <div class="text-center py-8 text-gray-400">
+                            <i class="fa-solid fa-spinner fa-spin text-2xl"></i>
+                            <div class="mt-2">加载中...</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+        modal.classList.remove('hidden');
+        loadRegLogs();
+        loadRegStats();
+    }
+
+    function closeRegLogs() {
+        const modal = document.getElementById('reg-logs-modal');
+        if (modal) modal.classList.add('hidden');
+    }
+
+    async function loadRegLogs() {
+        const days = document.getElementById('reg-logs-days')?.value || 7;
+        const content = document.getElementById('reg-logs-content');
+        content.innerHTML = '<div class="text-center py-8 text-gray-400"><i class="fa-solid fa-spinner fa-spin text-2xl"></i><div class="mt-2">加载中...</div></div>';
+
+        try {
+            const res = await fetch(`/api/bot/reg_logs?days=${days}`);
+            const json = await res.json();
+            if (json.status === 'success' && json.data && json.data.length > 0) {
+                // 按日期分组
+                const grouped = {};
+                json.data.forEach(log => {
+                    const date = log.created_at?.split(' ')[0] || log.created_at?.split('T')[0] || '未知日期';
+                    if (!grouped[date]) grouped[date] = [];
+                    grouped[date].push(log);
+                });
+
+                let html = '';
+                Object.keys(grouped).sort((a, b) => b.localeCompare(a)).forEach(date => {
+                    const logs = grouped[date];
+                    html += `
+                        <div class="mb-4">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="text-sm font-bold text-gray-700 dark:text-gray-300">${date}</span>
+                                <span class="text-xs text-gray-400">共 ${logs.length} 人</span>
+                            </div>
+                            <div class="space-y-2">
+                                ${logs.map(log => `
+                                    <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-[#2C2C2E] rounded-xl">
+                                        <div class="flex items-center gap-3">
+                                            <div class="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white text-sm font-bold">
+                                                ${(log.emby_username || '?')[0].toUpperCase()}
+                                            </div>
+                                            <div>
+                                                <div class="text-sm font-medium text-gray-800 dark:text-white">${log.emby_username || '未知'}</div>
+                                                <div class="text-xs text-gray-400">TG: ${log.tg_user_id || '-'}</div>
+                                            </div>
+                                        </div>
+                                        <div class="text-xs text-gray-400">${log.created_at?.split(' ')[1]?.slice(0, 8) || log.created_at?.split('T')[1]?.slice(0, 8) || '-'}</div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `;
+                });
+                content.innerHTML = html;
+            } else {
+                content.innerHTML = `
+                    <div class="text-center py-12 text-gray-400">
+                        <i class="fa-solid fa-inbox text-4xl mb-3 opacity-50"></i>
+                        <div>暂无注册记录</div>
+                    </div>
+                `;
+            }
+        } catch(e) {
+            content.innerHTML = `<div class="text-center py-8 text-red-400"><i class="fa-solid fa-exclamation-circle mr-2"></i>加载失败</div>`;
+        }
+    }
+
+    async function loadRegStats() {
+        try {
+            const res = await fetch('/api/bot/reg_stats');
+            const json = await res.json();
+            if (json.status === 'success') {
+                document.getElementById('reg-stats-today').textContent = json.data.today || 0;
+                document.getElementById('reg-stats-week').textContent = json.data.week || 0;
+                document.getElementById('reg-stats-total').textContent = json.data.total || 0;
+            }
+        } catch(e) {
+            console.error('加载统计失败', e);
+        }
+    }
+
+    async function clearRegLogs() {
+        const confirmed = await showConfirm({
+            type: 'danger',
+            title: '确认清空',
+            message: '确定要清空所有注册日志吗?此操作不可恢复。',
+            confirmText: '确定清空'
+        });
+        if (!confirmed) return;
+        try {
+            const res = await fetch('/api/bot/reg_logs/clear', { method: 'POST' });
+            const json = await res.json();
+            if (json.status === 'success') {
+                showToast('success', '清空成功', '日志已清空');
+                loadRegLogs();
+                loadRegStats();
+            } else {
+                showToast('error', '清空失败', json.message || '请稀后重试');
+            }
+        } catch(e) {
+            showToast('error', '网络错误', '请稀后重试');
+        }
+    }
+
+    // ==================== 使用限制 - 群聊管理 ====================
+    let requiredGroups = [];
+
+    function loadRequiredGroups(jsonStr) {
+        try {
+            // 支持新旧格式
+            if (jsonStr && jsonStr.trim().startsWith('[')) {
+                requiredGroups = JSON.parse(jsonStr);
+            } else if (jsonStr && jsonStr.trim()) {
+                // 旧格式:一行一个 ID,转换为新格式
+                const ids = jsonStr.split('\n').filter(g => g.trim());
+                requiredGroups = ids.map(id => ({id: id.trim(), name: id.trim(), link: ''}));
+            } else {
+                requiredGroups = [];
+            }
+        } catch(e) {
+            requiredGroups = [];
+        }
+        renderRequiredGroups();
+    }
+
+    function getRequiredGroupsJson() {
+        return JSON.stringify(requiredGroups);
+    }
+
+    function renderRequiredGroups() {
+        const container = document.getElementById('required-groups-list');
+        if (!requiredGroups || requiredGroups.length === 0) {
+            container.innerHTML = `
+                <div class="text-center py-4 text-gray-400 text-[12px]">
+                    <i class="fa-solid fa-users text-xl mb-2 opacity-50"></i>
+                    <div>暂无群聊限制,点击上方按钮添加</div>
+                </div>
+            `;
+            document.getElementById('user_bot_required_groups').value = ''; return;
+        }
+
+        container.innerHTML = requiredGroups.map((grp, idx) => `
+            <div class="p-3 bg-emerald-50/50 dark:bg-emerald-500/5 rounded-lg border border-emerald-100 dark:border-emerald-500/20">
+                <div class="flex flex-wrap items-end gap-2">
+                    <div class="flex flex-col gap-0.5">
+                        <span class="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">群 ID</span>
+                        <input type="text" value="${grp.id || ''}"
+                            onchange="updateRequiredGroup(${idx}, 'id', this.value)"
+                            placeholder="-1001234567890"
+                            class="w-36 px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#1C1C1E] border border-emerald-200 dark:border-emerald-500/30 text-[11px] font-mono text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-emerald-500/30 outline-none">
+                    </div>
+                    <div class="flex flex-col gap-0.5">
+                        <span class="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">群名称</span>
+                        <input type="text" value="${grp.name || ''}"
+                            onchange="updateRequiredGroup(${idx}, 'name', this.value)"
+                            placeholder="用户群"
+                            class="w-28 px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#1C1C1E] border border-emerald-200 dark:border-emerald-500/30 text-[11px] text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-emerald-500/30 outline-none">
+                    </div>
+                    <div class="flex flex-col gap-0.5 flex-1 min-w-[180px]">
+                        <span class="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">邀请链接</span>
+                        <input type="text" value="${grp.link || ''}"
+                            onchange="updateRequiredGroup(${idx}, 'link', this.value)"
+                            placeholder="https://t.me/+xxxxx"
+                            class="px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#1C1C1E] border border-emerald-200 dark:border-emerald-500/30 text-[11px] text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-emerald-500/30 outline-none">
+                    </div>
+                    <button onclick="removeRequiredGroup(${idx})" class="px-2.5 py-1.5 bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 rounded-lg text-[11px] font-medium hover:bg-rose-100 dark:hover:bg-rose-500/20 transition-all">
+                        <i class="fa-solid fa-times"></i>
+                    </button>
+                </div>
+            </div>
+        `).join('');
+
+        document.getElementById('user_bot_required_groups').value = JSON.stringify(requiredGroups);
+    }
+
+    function addRequiredGroup() {
+        requiredGroups.push({id: '', name: '', link: ''});
+        renderRequiredGroups();
+    }
+
+    function updateRequiredGroup(idx, field, value) {
+        requiredGroups[idx][field] = value;
+        document.getElementById('user_bot_required_groups').value = JSON.stringify(requiredGroups);
+    }
+
+    function removeRequiredGroup(idx) {
+        requiredGroups.splice(idx, 1);
+        renderRequiredGroups();
+    }
+
+    // ==================== 频道通知管理 ====================
+    let notifyChannels = [];
+
+    function loadNotifyChannels(jsonStr) {
+        try {
+            notifyChannels = jsonStr ? JSON.parse(jsonStr) : [];
+        } catch(e) {
+            notifyChannels = [];
+        }
+        renderNotifyChannels();
+    }
+
+    function getNotifyChannelsJson() {
+        return JSON.stringify(notifyChannels);
+    }
+
+    function renderNotifyChannels() {
+        const container = document.getElementById('notify-channels-list');
+        if (!notifyChannels || notifyChannels.length === 0) {
+            container.innerHTML = `
+                <div class="text-center py-6 text-gray-400 text-[12px]">
+                    <i class="fa-solid fa-bullhorn text-2xl mb-2 opacity-50"></i>
+                    <div>暂无频道配置,点击上方按钮添加</div>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = notifyChannels.map((ch, idx) => `
+            <div class="p-4 bg-gray-50 dark:bg-black/20 rounded-xl border border-gray-100 dark:border-white/5">
+                <div class="flex flex-wrap items-center gap-3 mb-3">
+                    <input type="text" value="${ch.chat_id || ''}"
+                        onchange="updateChannel(${idx}, 'chat_id', this.value)"
+                        placeholder="频道 ID 或 @用户名"
+                        class="flex-1 min-w-[200px] px-3 py-2 rounded-lg bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-white/5 text-[12px] font-mono">
+                    <input type="text" value="${ch.name || ''}"
+                        onchange="updateChannel(${idx}, 'name', this.value)"
+                        placeholder="频道名称"
+                        class="w-32 px-3 py-2 rounded-lg bg-white dark:bg-[#1C1C1E] border border-gray-200 dark:border-white/5 text-[12px]">
+                    <label class="flex items-center gap-1.5 cursor-pointer">
+                        <input type="checkbox" ${ch.enabled !== false ? 'checked' : ''}
+                            onchange="updateChannel(${idx}, 'enabled', this.checked)"
+                            class="w-4 h-4 rounded text-green-500 focus:ring-green-500">
+                        <span class="text-[11px] text-gray-600 dark:text-gray-400">启用</span>
+                    </label>
+                    <button onclick="testChannel(${idx})" class="px-3 py-1.5 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-lg text-[11px] font-medium hover:bg-blue-100 dark:hover:bg-blue-500/20 transition-all">
+                        <i class="fa-solid fa-paper-plane mr-1"></i>测试
+                    </button>
+                    <button onclick="removeChannel(${idx})" class="px-3 py-1.5 bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 rounded-lg text-[11px] font-medium hover:bg-rose-100 dark:hover:bg-rose-500/20 transition-all">
+                        <i class="fa-solid fa-trash mr-1"></i>删除
+                    </button>
+                </div>
+                <div class="flex flex-wrap items-center gap-3">
+                    <span class="text-[11px] text-gray-500 dark:text-gray-400">通知类型:</span>
+                    <label class="flex items-center gap-1.5 cursor-pointer">
+                        <input type="checkbox" ${(ch.notify_types || []).includes('movie') ? 'checked' : ''}
+                            onchange="toggleChannelType(${idx}, 'movie', this.checked)"
+                            class="w-4 h-4 rounded text-amber-500 focus:ring-amber-500">
+                        <span class="text-[11px] text-gray-600 dark:text-gray-400">🎬 电影</span>
+                    </label>
+                    <label class="flex items-center gap-1.5 cursor-pointer">
+                        <input type="checkbox" ${(ch.notify_types || []).includes('series') ? 'checked' : ''}
+                            onchange="toggleChannelType(${idx}, 'series', this.checked)"
+                            class="w-4 h-4 rounded text-amber-500 focus:ring-amber-500">
+                        <span class="text-[11px] text-gray-600 dark:text-gray-400">📺 剧集</span>
+                    </label>
+                    <label class="flex items-center gap-1.5 cursor-pointer">
+                        <input type="checkbox" ${(ch.notify_types || []).includes('episode') ? 'checked' : ''}
+                            onchange="toggleChannelType(${idx}, 'episode', this.checked)"
+                            class="w-4 h-4 rounded text-amber-500 focus:ring-amber-500">
+                        <span class="text-[11px] text-gray-600 dark:text-gray-400">🎞️ 单集</span>
+                    </label>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function addNotifyChannel() {
+        notifyChannels.push({
+            chat_id: '',
+            name: '',
+            enabled: true,
+            notify_types: ['movie', 'series', 'episode']
+        });
+        renderNotifyChannels();
+    }
+
+    function updateChannel(idx, key, value) {
+        if (notifyChannels[idx]) {
+            notifyChannels[idx][key] = value;
+        }
+    }
+
+    function toggleChannelType(idx, type, checked) {
+        if (!notifyChannels[idx]) return;
+        if (!notifyChannels[idx].notify_types) {
+            notifyChannels[idx].notify_types = [];
+        }
+        if (checked && !notifyChannels[idx].notify_types.includes(type)) {
+            notifyChannels[idx].notify_types.push(type);
+        } else if (!checked) {
+            notifyChannels[idx].notify_types = notifyChannels[idx].notify_types.filter(t => t !== type);
+        }
+    }
+
+    async function removeChannel(idx) {
+        const confirmed = await showConfirm({
+            type: 'warning',
+            title: '确认删除',
+            message: '确定删除此频道配置?',
+            confirmText: '确定'
+        });
+        if (confirmed) {
+            notifyChannels.splice(idx, 1);
+            renderNotifyChannels();
+        }
+    }
+
+    async function testChannel(idx) {
+        const ch = notifyChannels[idx];
+        if (!ch || !ch.chat_id) {
+            showToast('warning', '提示', '请先填写频道 ID');
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/bot/test_channel', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ chat_id: ch.chat_id, name: ch.name })
+            });
+            const json = await res.json();
+            if (json.status === 'success') {
+                showToast('success', '测试成功', json.message);
+            } else {
+                showToast('error', '测试失败', json.message);
+            }
+        } catch(e) {
+            showToast('error', '网络错误', '请稀后重试');
+        }
+    }
+
+    init();
+    loadBlacklist();
+
+    // ========== 开放注册开关变化 ==========
+    async function onOpenRegChange() {
+        const isOpen = document.getElementById('user_bot_open_reg').checked;
+        const notifyUser = document.getElementById('user_bot_open_reg_notify_user').checked;
+        const notifyGroup = document.getElementById('user_bot_open_reg_notify_group').checked;
+
+        // 如果关闭了开放注册,或者没有开启任何通知,则不发送
+        if (!notifyUser && !notifyGroup) return;
+
+        // 先保存配置
+        await saveConfig();
+
+        // 发送通知
+        try {
+            const res = await fetch('/api/bot/open_reg_notify', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ is_open: isOpen })
+            });
+            const json = await res.json();
+            if (json.status === 'success') {
+                console.log('开放注册通知已发送');
+            }
+        } catch(e) {
+            console.error('发送开放注册通知失败', e);
+        }
+    }
+</script>
+{% endblock %}

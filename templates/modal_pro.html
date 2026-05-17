@@ -1,0 +1,96 @@
+<div id="pro-activation-modal" 
+     class="fixed inset-0 z-[200] hidden items-center justify-center bg-black/60 backdrop-blur-md p-4 transition-opacity duration-300"
+     onclick="handleBackdropClick(event)">
+    
+    <div id="pro-modal-content" class="bg-white dark:bg-[#1C1C1E] w-full max-w-sm rounded-[28px] shadow-2xl p-8 border border-gray-100 dark:border-white/5 text-center transform transition-transform duration-300">
+        
+        <div class="w-20 h-20 bg-gradient-to-br from-amber-400 to-orange-500 rounded-3xl mx-auto flex items-center justify-center text-white text-4xl shadow-xl shadow-orange-500/20 mb-6">
+            <i class="fa-solid fa-crown"></i>
+        </div>
+        <h3 class="text-2xl font-black text-gray-900 dark:text-white mb-2">解锁 Pro 尊享功能</h3>
+        <p class="text-[13px] text-gray-500 mb-8 leading-relaxed">批量管理、积分引擎、客户端管控等高级功能仅对 Pro 用户开放，请输入您的激活码以解锁。</p>
+        
+        <div class="space-y-4">
+            <input type="text" id="license-key-input" placeholder="请输入激活码..." class="w-full px-5 py-4 rounded-2xl bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-white/10 outline-none focus:ring-2 focus:ring-amber-500 text-center font-mono font-bold transition-all text-gray-800 dark:text-white">
+            
+            <button id="activate-pro-btn" onclick="submitActivation()" class="w-full py-4 bg-gray-900 dark:bg-white text-white dark:text-black rounded-2xl font-bold text-[15px] shadow-lg active:scale-95 transition-all flex justify-center items-center gap-2">
+                <span id="btn-text">立即激活解锁</span>
+                <i id="btn-spinner" class="fa-solid fa-circle-notch fa-spin hidden"></i>
+            </button>
+            
+            <a href="/about" class="block text-[12px] text-amber-600 font-bold hover:underline">没有激活码？查看获取方式</a>
+        </div>
+    </div>
+</div>
+
+<script>
+window.addEventListener('show-pro-modal', () => {
+    const modal = document.getElementById('pro-activation-modal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+});
+
+// 🔥 新增：关闭弹窗函数
+function closeProModal() {
+    const modal = document.getElementById('pro-activation-modal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+}
+
+// 🔥 新增：点击空白处判定逻辑
+function handleBackdropClick(event) {
+    const modalContent = document.getElementById('pro-modal-content');
+    // 如果点击的不是弹窗内容本身，也不是弹窗内的子元素，就说明点到了空白背景
+    if (!modalContent.contains(event.target)) {
+        closeProModal();
+    }
+}
+
+// 🔥 新增：支持 ESC 键关闭，提升体验
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeProModal();
+});
+
+async function submitActivation() {
+    const keyInput = document.getElementById('license-key-input');
+    const btn = document.getElementById('activate-pro-btn');
+    const btnText = document.getElementById('btn-text');
+    const spinner = document.getElementById('btn-spinner');
+    const key = keyInput.value.trim();
+
+    if (!key) { showToast('warning', '提示', '请输入激活码'); return; }
+
+    btn.disabled = true;
+    btnText.innerText = "正在验证授权...";
+    spinner.classList.remove('hidden');
+
+    try {
+        const res = await fetch('/api/pro/activate', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ license_key: key })
+        });
+        const data = await res.json();
+
+        if (data.status === 'success') {
+            showToast('success', '激活成功', data.message);
+            location.reload();
+        } else {
+            showToast('error', '激活失败', data.message);
+            resetBtn();
+        }
+    } catch (e) {
+        showToast('error', '网络异常', '请稀后重试');
+        resetBtn();
+    }
+}
+
+function resetBtn() {
+    const btn = document.getElementById('activate-pro-btn');
+    const btnText = document.getElementById('btn-text');
+    const spinner = document.getElementById('btn-spinner');
+    btn.disabled = false;
+    btnText.innerText = "立即激活解锁";
+    spinner.classList.add('hidden');
+}
+</script>

@@ -1,0 +1,996 @@
+{% extends "layout.html" %}
+{% block title %}内容风云榜 - EmbyPulse{% endblock %}
+{% block head %}
+<style>
+    /* 领奖台卡片微动效 */
+    .podium-card { transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+    .podium-card:hover { transform: translateY(-8px); z-index: 30; }
+    
+    .rank-1-border { border: 2px solid rgba(245, 158, 11, 0.8); box-shadow: 0 15px 35px -10px rgba(245, 158, 11, 0.4); }
+    .rank-2-border { border: 2px solid rgba(203, 213, 225, 0.8); box-shadow: 0 15px 35px -10px rgba(203, 213, 225, 0.3); }
+    .rank-3-border { border: 2px solid rgba(180, 83, 9, 0.8); box-shadow: 0 15px 35px -10px rgba(180, 83, 9, 0.3); }
+
+    .crown-icon { 
+        position: absolute; top: -20px; left: 50%; transform: translateX(-50%); 
+        font-size: 1.8rem; color: #f59e0b; filter: drop-shadow(0 3px 5px rgba(0,0,0,0.3)); 
+        z-index: 20; 
+    }
+    
+    /* 🔥 时间维度按钮组 */
+    .period-btn-group {
+        display: flex;
+        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 2px;
+        gap: 1px;
+    }
+    .dark .period-btn-group {
+        background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+        border-color: #374151;
+    }
+    .period-btn {
+        padding: 4px 8px;
+        border-radius: 8px;
+        font-size: 10px;
+        font-weight: 600;
+        color: #64748b;
+        transition: all 0.2s;
+        white-space: nowrap;
+    }
+    .dark .period-btn { color: #94a3b8; }
+    .period-btn:hover {
+        background: rgba(99, 102, 241, 0.1);
+        color: #6366f1;
+    }
+    .dark .period-btn:hover { color: #818cf8; }
+    .period-btn.active {
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        color: white;
+        box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+    }
+    
+    /* 🔥 用户选择下拉框 */
+    .user-dropdown { position: relative; }
+    .user-trigger {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 10px;
+        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        min-width: 90px;
+    }
+    .dark .user-trigger {
+        background: linear-gradient(135deg, #374151 0%, #1f2937 100%);
+        border-color: #4b5563;
+    }
+    .user-trigger:hover {
+        border-color: #6366f1;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+    .dark .user-trigger:hover { border-color: #818cf8; box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.15); }
+    .user-trigger-icon { font-size: 11px; color: #64748b; transition: transform 0.2s; }
+    .dark .user-trigger-icon { color: #94a3b8; }
+    .user-dropdown.open .user-trigger-icon { transform: rotate(180deg); }
+    
+    .user-menu {
+        position: absolute;
+        top: calc(100% + 6px);
+        right: 0;
+        min-width: 160px;
+        max-height: 280px;
+        overflow-y: auto;
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        box-shadow: 0 12px 32px -8px rgba(0,0,0,0.15);
+        z-index: 100;
+        padding: 6px;
+        display: none;
+        animation: dropdownFadeIn 0.15s ease-out;
+    }
+    .dark .user-menu {
+        background: #1f2937;
+        border-color: #374151;
+        box-shadow: 0 12px 32px -8px rgba(0,0,0,0.5);
+    }
+    .user-dropdown.open .user-menu { display: block; }
+    
+    .user-menu-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 600;
+        color: #374151;
+        transition: all 0.15s;
+    }
+    .dark .user-menu-item { color: #d1d5db; }
+    .user-menu-item:hover { background: #f3f4f6; }
+    .dark .user-menu-item:hover { background: #374151; }
+    .user-menu-item.active {
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        color: white;
+    }
+    .user-menu-item-icon { font-size: 13px; width: 16px; text-align: center; }
+    
+    /* 🔥 排除类型下拉框 */
+    .exclude-dropdown { position: relative; }
+    .exclude-trigger {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 10px;
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    .exclude-trigger:hover {
+        background: rgba(99, 102, 241, 0.08);
+        border-color: rgba(99, 102, 241, 0.2);
+    }
+    .dark .exclude-trigger:hover {
+        background: rgba(99, 102, 241, 0.15);
+        border-color: rgba(99, 102, 241, 0.3);
+    }
+    .exclude-trigger.has-filters {
+        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+        border-color: #f59e0b;
+    }
+    .dark .exclude-trigger.has-filters {
+        background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(245, 158, 11, 0.1) 100%);
+        border-color: #f59e0b;
+    }
+    
+    .exclude-menu {
+        position: absolute;
+        top: calc(100% + 6px);
+        right: 0;
+        min-width: 180px;
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        box-shadow: 0 12px 32px -8px rgba(0,0,0,0.15);
+        z-index: 100;
+        padding: 6px;
+        display: none;
+        animation: dropdownFadeIn 0.15s ease-out;
+    }
+    .dark .exclude-menu {
+        background: #1f2937;
+        border-color: #374151;
+        box-shadow: 0 12px 32px -8px rgba(0,0,0,0.5);
+    }
+    .exclude-dropdown.open .exclude-menu { display: block; }
+    
+    .exclude-menu-header {
+        font-size: 10px;
+        font-weight: 700;
+        color: #9ca3af;
+        padding: 6px 10px 4px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .exclude-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 500;
+        color: #374151;
+        transition: all 0.15s;
+    }
+    .dark .exclude-item { color: #d1d5db; }
+    .exclude-item:hover { background: #f3f4f6; }
+    .dark .exclude-item:hover { background: #374151; }
+    .exclude-item.active {
+        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+        color: #92400e;
+        font-weight: 600;
+    }
+    .dark .exclude-item.active {
+        background: linear-gradient(135deg, rgba(245, 158, 11, 0.25) 0%, rgba(245, 158, 11, 0.15) 100%);
+        color: #fbbf24;
+    }
+    .exclude-item-icon { font-size: 13px; width: 16px; text-align: center; }
+    .exclude-item-check { margin-left: auto; font-size: 11px; color: #f59e0b; }
+    .dark .exclude-item-check { color: #fbbf24; }
+    
+    /* 排除计数徽章 */
+    .exclude-badge {
+        display: none;
+        min-width: 18px;
+        height: 18px;
+        padding: 0 5px;
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        color: white;
+        font-size: 10px;
+        font-weight: 700;
+        border-radius: 9px;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 2px 6px rgba(245, 158, 11, 0.3);
+    }
+    .exclude-badge.show { display: flex; }
+    
+    @keyframes dropdownFadeIn {
+        from { opacity: 0; transform: translateY(-4px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto w-full px-4 md:px-8 py-6 pb-24">
+    
+    <div class="flex flex-col md:flex-row justify-between items-center mb-10 gap-4">
+        <div class="text-center md:text-left">
+            <h1 class="text-2xl md:text-3xl font-black text-gray-900 dark:text-white flex items-center gap-3 justify-center md:justify-start tracking-tight">
+                <i class="fa-solid fa-trophy text-amber-500"></i> 年度风云榜
+            </h1>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 font-medium">全服播放热度与时长综合排行</p>
+        </div>
+        
+        <div class="flex flex-wrap justify-center items-center gap-2 bg-white dark:bg-gray-800 p-1.5 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+            <!-- 🔥 时间维度按钮组 -->
+            <div class="period-btn-group">
+                <button onclick="setPeriod('today')" class="period-btn" data-period="today">今日</button>
+                <button onclick="setPeriod('week')" class="period-btn" data-period="week">本周</button>
+                <button onclick="setPeriod('month')" class="period-btn" data-period="month">本月</button>
+                <button onclick="setPeriod('quarter')" class="period-btn" data-period="quarter">季度</button>
+                <button onclick="setPeriod('year')" class="period-btn" data-period="year">年度</button>
+                <button onclick="setPeriod('all')" class="period-btn active" data-period="all">全部</button>
+            </div>
+            
+            <div class="h-4 w-px bg-gray-200 dark:bg-gray-700 mx-1"></div>
+            
+            <div class="flex">
+                <button onclick="setCategory('all')" class="cat-btn px-3 py-1.5 rounded-lg text-xs font-bold transition bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white" data-cat="all">全局</button>
+                <button onclick="setCategory('Movie')" class="cat-btn px-3 py-1.5 rounded-lg text-xs font-bold transition text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-600" data-cat="Movie">电影</button>
+                <button onclick="setCategory('Episode')" class="cat-btn px-3 py-1.5 rounded-lg text-xs font-bold transition text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-600" data-cat="Episode">剧集</button>
+            </div>
+            
+            <div class="h-4 w-px bg-gray-200 dark:bg-gray-700 mx-1"></div>
+            
+            <div class="flex bg-gray-50 dark:bg-gray-900 rounded-lg p-0.5 border border-gray-100 dark:border-gray-700 shadow-inner">
+                <button onclick="setSort('count')" class="sort-btn px-2.5 py-1 rounded text-[11px] font-bold transition bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm" data-sort="count"><i class="fa-solid fa-fire mr-1"></i>播放量</button>
+                <button onclick="setSort('time')" class="sort-btn px-2.5 py-1 rounded text-[11px] font-bold transition text-gray-400 hover:text-gray-700 dark:hover:text-gray-300" data-sort="time"><i class="fa-regular fa-clock mr-1"></i>总时长</button>
+            </div>
+            
+            <!-- 🔥 用户选择下拉框 -->
+            <div class="h-4 w-px bg-gray-200 dark:bg-gray-700 mx-1 hidden sm:block"></div>
+            
+            <!-- 🔥 导出海报按钮 -->
+            <button onclick="exportPoster()" class="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white text-xs font-bold rounded-lg shadow-md hover:shadow-lg transition-all">
+                <i class="fa-solid fa-image"></i>
+                <span class="hidden sm:inline">导出海报</span>
+            </button>
+            
+            <div class="h-4 w-px bg-gray-200 dark:bg-gray-700 mx-1 hidden sm:block"></div>
+            <div class="user-dropdown" id="user-dropdown">
+                <button onclick="toggleUserDropdown()" class="user-trigger">
+                    <i class="fa-solid fa-user-group text-indigo-500 user-menu-item-icon"></i>
+                    <span class="text-xs font-bold text-gray-700 dark:text-gray-200" id="user-display">🌏 全服</span>
+                    <i class="fa-solid fa-chevron-down user-trigger-icon"></i>
+                </button>
+                <div class="user-menu" id="user-menu">
+                    <div class="user-menu-item active" data-value="all" onclick="selectUser('all', '🌏 全服')">
+                        <i class="fa-solid fa-globe user-menu-item-icon text-indigo-500"></i>
+                        <span>全服</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 🔥 排除类型下拉框 -->
+            <div class="h-4 w-px bg-gray-200 dark:bg-gray-700 mx-1 hidden sm:block"></div>
+            <div class="exclude-dropdown" id="exclude-dropdown">
+                <button onclick="toggleExcludeDropdown()" class="exclude-trigger" id="exclude-trigger">
+                    <i class="fa-solid fa-filter text-gray-500 dark:text-gray-400"></i>
+                    <span class="text-[11px] font-bold text-gray-500 dark:text-gray-400 hidden sm:inline">排除</span>
+                    <span class="exclude-badge" id="exclude-count">0</span>
+                    <i class="fa-solid fa-chevron-down text-[10px] text-gray-400 dark:text-gray-500"></i>
+                </button>
+                <div class="exclude-menu" id="exclude-menu">
+                    <div class="exclude-menu-header">排除媒体类型</div>
+                    <div class="exclude-item" data-type="Audio" onclick="toggleExcludeType('Audio')">
+                        <i class="fa-solid fa-music exclude-item-icon text-gray-400"></i>
+                        <span>🎵 音乐</span>
+                        <i class="fa-solid fa-check exclude-item-check hidden" id="check-Audio"></i>
+                    </div>
+                    <div class="exclude-item" data-type="MusicVideo" onclick="toggleExcludeType('MusicVideo')">
+                        <i class="fa-solid fa-video exclude-item-icon text-gray-400"></i>
+                        <span>🎬 MV</span>
+                        <i class="fa-solid fa-check exclude-item-check hidden" id="check-MusicVideo"></i>
+                    </div>
+                    <div class="exclude-item" data-type="Book" onclick="toggleExcludeType('Book')">
+                        <i class="fa-solid fa-book exclude-item-icon text-gray-400"></i>
+                        <span>📚 书籍</span>
+                        <i class="fa-solid fa-check exclude-item-check hidden" id="check-Book"></i>
+                    </div>
+                    <div class="exclude-item" data-type="Photo" onclick="toggleExcludeType('Photo')">
+                        <i class="fa-solid fa-image exclude-item-icon text-gray-400"></i>
+                        <span>📷 照片</span>
+                        <i class="fa-solid fa-check exclude-item-check hidden" id="check-Photo"></i>
+                    </div>
+                    <div class="exclude-item" data-type="Trailer" onclick="toggleExcludeType('Trailer')">
+                        <i class="fa-solid fa-film exclude-item-icon text-gray-400"></i>
+                        <span>🎞️ 预告片</span>
+                        <i class="fa-solid fa-check exclude-item-check hidden" id="check-Trailer"></i>
+                    </div>
+                    <div class="exclude-item" data-type="LiveTvChannel" onclick="toggleExcludeType('LiveTvChannel')">
+                        <i class="fa-solid fa-tv exclude-item-icon text-gray-400"></i>
+                        <span>📺 直播频道</span>
+                        <i class="fa-solid fa-check exclude-item-check hidden" id="check-LiveTvChannel"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="loading" class="text-center py-32 text-gray-400">
+        <i class="fa-solid fa-circle-notch fa-spin text-4xl mb-3"></i>
+        <p class="text-sm font-bold tracking-widest animate-pulse">正在生成影视战报...</p>
+    </div>
+
+    <div id="content-area" class="hidden animate-fade-in space-y-12">
+        
+        <div class="flex flex-row items-end justify-center gap-3 md:gap-8 px-2" id="podium-section"></div>
+
+        <div class="max-w-5xl mx-auto w-full">
+            <div class="flex justify-between items-center mb-4 px-2">
+                <h3 class="font-bold text-gray-700 dark:text-gray-300 text-sm tracking-wider flex items-center gap-2">
+                    <i class="fa-solid fa-layer-group text-gray-400"></i> 极客入围名单
+                </h3>
+                <span class="text-[10px] md:text-xs font-mono font-bold text-gray-500 bg-gray-200/50 dark:bg-gray-800 px-2.5 py-1 rounded-md">Top 4 - 50</span>
+            </div>
+            
+            <div id="list-section" class="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let state = { user: 'all', category: 'all', sortBy: 'count', period: 'all', excludeTypes: [] };
+    let currentData = [];  // 🔥 缓存当前数据用于导出
+
+    async function init() {
+        await loadUsers();
+        loadContent();
+        
+        // 点击外部关闭所有下拉菜单
+        document.addEventListener('click', (e) => {
+            const userDropdown = document.getElementById('user-dropdown');
+            const excludeDropdown = document.getElementById('exclude-dropdown');
+            
+            if (userDropdown && !userDropdown.contains(e.target)) {
+                userDropdown.classList.remove('open');
+            }
+            if (excludeDropdown && !excludeDropdown.contains(e.target)) {
+                excludeDropdown.classList.remove('open');
+            }
+        });
+    }
+
+    // 🔥 时间维度切换
+    function setPeriod(period) {
+        state.period = period;
+        document.querySelectorAll('.period-btn').forEach(btn => {
+            if(btn.dataset.period === period) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+        loadContent();
+    }
+
+    // 🔥 用户下拉框控制
+    function toggleUserDropdown() {
+        const dropdown = document.getElementById('user-dropdown');
+        const excludeDropdown = document.getElementById('exclude-dropdown');
+        excludeDropdown.classList.remove('open');
+        dropdown.classList.toggle('open');
+    }
+
+    function selectUser(value, label) {
+        state.user = value;
+        document.getElementById('user-display').textContent = label;
+        
+        // 更新选中状态
+        document.querySelectorAll('.user-menu-item').forEach(item => {
+            if (item.dataset.value === value) {
+                item.classList.add('active');
+            } else {
+                item.classList.remove('active');
+            }
+        });
+        
+        document.getElementById('user-dropdown').classList.remove('open');
+        loadContent();
+    }
+
+    // 🔥 排除下拉框控制
+    function toggleExcludeDropdown() {
+        const dropdown = document.getElementById('exclude-dropdown');
+        const userDropdown = document.getElementById('user-dropdown');
+        userDropdown.classList.remove('open');
+        dropdown.classList.toggle('open');
+    }
+
+    function toggleExcludeType(type) {
+        const idx = state.excludeTypes.indexOf(type);
+        if (idx === -1) {
+            state.excludeTypes.push(type);
+        } else {
+            state.excludeTypes.splice(idx, 1);
+        }
+        updateExcludeUI();
+        loadContent();
+    }
+
+    function updateExcludeUI() {
+        const trigger = document.getElementById('exclude-trigger');
+        const countEl = document.getElementById('exclude-count');
+        
+        // 更新选中状态和触发按钮样式
+        document.querySelectorAll('.exclude-item').forEach(item => {
+            const type = item.dataset.type;
+            const checkIcon = document.getElementById(`check-${type}`);
+            if (state.excludeTypes.includes(type)) {
+                item.classList.add('active');
+                if (checkIcon) checkIcon.classList.remove('hidden');
+            } else {
+                item.classList.remove('active');
+                if (checkIcon) checkIcon.classList.add('hidden');
+            }
+        });
+        
+        // 更新计数徽章和触发按钮样式
+        if (state.excludeTypes.length > 0) {
+            countEl.textContent = state.excludeTypes.length;
+            countEl.classList.add('show');
+            trigger.classList.add('has-filters');
+        } else {
+            countEl.classList.remove('show');
+            trigger.classList.remove('has-filters');
+        }
+    }
+
+    function setCategory(cat) {
+        state.category = cat;
+        document.querySelectorAll('.cat-btn').forEach(btn => {
+            if(btn.dataset.cat === cat) {
+                btn.className = "cat-btn px-3 py-1.5 rounded-lg text-xs font-bold transition bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white";
+            } else {
+                btn.className = "cat-btn px-3 py-1.5 rounded-lg text-xs font-bold transition text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-600";
+            }
+        });
+        loadContent();
+    }
+
+    function setSort(sortType) {
+        state.sortBy = sortType;
+        document.querySelectorAll('.sort-btn').forEach(btn => {
+            if(btn.dataset.sort === sortType) {
+                btn.className = "sort-btn px-2.5 py-1 rounded text-[11px] font-bold transition bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm";
+            } else {
+                btn.className = "sort-btn px-2.5 py-1 rounded text-[11px] font-bold transition text-gray-400 hover:text-gray-700 dark:hover:text-gray-300";
+            }
+        });
+        loadContent();
+    }
+
+    async function loadUsers() {
+        try {
+            const res = await fetch('/api/users');
+            const json = await res.json();
+            const menu = document.getElementById('user-menu');
+            if(json.status === 'success') {
+                json.data.forEach(user => {
+                    const item = document.createElement('div');
+                    item.className = 'user-menu-item';
+                    item.dataset.value = user.UserId;
+                    item.innerHTML = `
+                        <i class="fa-solid fa-user user-menu-item-icon text-gray-400"></i>
+                        <span>${user.UserName}</span>
+                    `;
+                    item.onclick = () => selectUser(user.UserId, `👤 ${user.UserName}`);
+                    menu.appendChild(item);
+                });
+            }
+        } catch (e) { console.error("用户加载失败", e); }
+    }
+
+    async function loadContent() {
+        const loading = document.getElementById('loading');
+        const content = document.getElementById('content-area');
+        loading.classList.remove('hidden'); 
+        content.classList.add('hidden');
+
+        try {
+            // 构建请求 URL，包含排除类型参数
+            let url = `/api/stats/top_movies?user_id=${state.user}&category=${state.category}&period=${state.period}&sort_by=${state.sortBy}`;
+            if (state.excludeTypes.length > 0) {
+                url += `&exclude_types=${state.excludeTypes.join(',')}`;
+            }
+            
+            const res = await fetch(url);
+            const json = await res.json();
+            
+            if(json.status === 'success' && json.data && json.data.length > 0) {
+                const list = json.data;
+                currentData = list;  // 🔥 缓存数据
+
+                const top3 = [];
+                if(list[0]) top3.push({...list[0], rank: 1});
+                if(list[1]) top3.push({...list[1], rank: 2});
+                if(list[2]) top3.push({...list[2], rank: 3});
+                const others = list.slice(3);
+
+                renderPodium(top3);
+                renderList(others);
+                
+                loading.classList.add('hidden'); 
+                content.classList.remove('hidden');
+            } else {
+                loading.innerHTML = `<div class="py-10"><i class="fa-solid fa-ghost text-5xl text-gray-300 dark:text-gray-700 mb-4"></i><p class="text-sm font-bold text-gray-400">该维度下暂无播放记录</p></div>`;
+            }
+        } catch (e) { 
+            console.error(e); 
+            loading.innerText = "数据加载异常"; 
+        }
+    }
+
+    function renderPodium(items) {
+        const container = document.getElementById('podium-section');
+        let html = '';
+        
+        items.forEach(item => {
+            const imgUrl = `/api/proxy/smart_image?item_id=${item.ItemId}&name=${encodeURIComponent(item.ItemName)}&type=Primary`;
+            
+            const isFirst = item.rank === 1;
+            let widthClass = isFirst ? 'w-[38%] md:w-60' : 'w-[28%] md:w-44';
+            let heightClass = isFirst ? 'aspect-[2/3] md:h-80' : 'aspect-[2/3] md:h-64 opacity-95 hover:opacity-100'; 
+            let borderClass = `rank-${item.rank}-border`;
+            
+            let crownHtml = isFirst ? '<i class="fa-solid fa-crown crown-icon"></i>' : '';
+            let rankColors = {
+                1: 'bg-gradient-to-r from-amber-400 to-amber-600 text-white shadow-md shadow-amber-500/40',
+                2: 'bg-gradient-to-r from-slate-300 to-slate-400 text-slate-800 shadow-md',
+                3: 'bg-gradient-to-r from-orange-500 to-orange-700 text-white shadow-md'
+            };
+            
+            let orderClass = '';
+            if (item.rank === 1) orderClass = 'order-2 z-20 -mx-1 md:-mx-3 mb-1 md:mb-3'; 
+            if (item.rank === 2) orderClass = 'order-1 z-10';       
+            if (item.rank === 3) orderClass = 'order-3 z-10';       
+
+            // 动态高亮排名的维度
+            let countClass = state.sortBy === 'count' ? 'text-white font-bold' : 'text-gray-400';
+            let timeClass = state.sortBy === 'time' ? 'text-white font-bold' : 'text-gray-400';
+
+            html += `
+            <div class="podium-card relative flex flex-col items-center group shrink-0 ${orderClass} ${widthClass} cursor-pointer" onclick="showItemDetail('${item.ItemId}', '${item.ItemName.replace(/'/g, "\\'")}')">
+                ${crownHtml}
+                <div class="relative w-full rounded-2xl overflow-hidden ${borderClass} ${heightClass} bg-gray-200 dark:bg-gray-800 shadow-xl">
+                    <img src="${imgUrl}" class="w-full h-full object-cover group-hover:scale-110 transition duration-700 ease-out" loading="lazy">
+                    
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/95 via-black/30 to-transparent opacity-90 group-hover:opacity-100 transition-opacity"></div>
+                    
+                    <div class="absolute bottom-0 left-0 right-0 p-3 md:p-5 text-center">
+                        <div class="inline-block ${rankColors[item.rank]} text-[10px] md:text-xs font-black px-2 md:px-3 py-0.5 rounded-md mb-1.5 md:mb-2 tracking-wide">
+                            TOP ${item.rank}
+                        </div>
+                        <h3 class="text-white font-bold text-xs md:text-base line-clamp-2 leading-tight drop-shadow-md mb-1">${item.ItemName}</h3>
+                        
+                        <div class="flex items-center justify-center gap-1.5 text-[9px] md:text-[11px] font-mono opacity-90 mt-1.5">
+                            <span class="flex items-center ${countClass}"><i class="fa-solid fa-play mr-1 text-[8px]"></i>${item.PlayCount}</span>
+                            <span class="text-white/20">|</span>
+                            <span class="flex items-center ${timeClass}"><i class="fa-regular fa-clock mr-1 text-[9px]"></i>${Math.round(item.TotalTime/60)}m</span>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+        });
+        container.innerHTML = html;
+    }
+
+    function renderList(items) {
+        const container = document.getElementById('list-section');
+        if(items.length === 0) { 
+            container.innerHTML = '<div class="p-8 text-center text-gray-400 text-sm md:col-span-2">无更多数据</div>'; 
+            return; 
+        }
+
+        let html = '';
+        items.forEach((item, index) => {
+            const rank = index + 4;
+            const imgUrl = `/api/proxy/smart_image?item_id=${item.ItemId}&name=${encodeURIComponent(item.ItemName)}&type=Primary`;
+
+            // 动态高亮
+            let countIconColor = state.sortBy === 'count' ? 'text-indigo-500' : 'text-gray-400';
+            let countTextColor = state.sortBy === 'count' ? 'text-indigo-600 dark:text-indigo-400 font-bold' : 'text-gray-500 dark:text-gray-400';
+            let timeIconColor = state.sortBy === 'time' ? 'text-indigo-500' : 'text-gray-400';
+            let timeTextColor = state.sortBy === 'time' ? 'text-indigo-600 dark:text-indigo-400 font-bold' : 'text-gray-500 dark:text-gray-400';
+
+            // 去除热度渐变底，纯净卡片
+            html += `
+            <div class="relative bg-white dark:bg-gray-800 rounded-2xl p-2.5 md:p-3 flex items-center gap-3 md:gap-4 border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-md hover:-translate-y-0.5 hover:border-indigo-200 dark:hover:border-indigo-800 transition-all duration-300 overflow-hidden group cursor-pointer" onclick="showItemDetail('${item.ItemId}', '${item.ItemName.replace(/'/g, "\\'")}')">
+                
+                <div class="w-7 md:w-10 text-center font-black text-xl md:text-2xl italic text-gray-300 dark:text-gray-600 group-hover:text-indigo-400 transition-colors">
+                    ${rank}
+                </div>
+                
+                <div class="w-11 h-16 md:w-14 md:h-20 rounded-xl overflow-hidden shadow-sm shrink-0 border border-gray-100 dark:border-gray-700 bg-gray-200 dark:bg-gray-800">
+                    <img src="${imgUrl}" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" loading="lazy">
+                </div>
+                
+                <div class="flex-1 min-w-0 pr-2">
+                    <h4 class="text-sm md:text-base font-bold text-gray-800 dark:text-gray-100 truncate mb-1.5 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">${item.ItemName}</h4>
+                    
+                    <div class="flex items-center gap-2 md:gap-3 text-[10px] md:text-xs">
+                        <span class="bg-gray-50 dark:bg-gray-900/50 px-2 py-1 rounded-md flex items-center gap-1.5 border border-gray-100 dark:border-gray-700/50 ${countTextColor}">
+                            <i class="fa-solid fa-fire ${countIconColor} text-[10px]"></i> ${item.PlayCount} 次
+                        </span>
+                        <span class="bg-gray-50 dark:bg-gray-900/50 px-2 py-1 rounded-md flex items-center gap-1.5 border border-gray-100 dark:border-gray-700/50 ${timeTextColor}">
+                            <i class="fa-regular fa-clock ${timeIconColor} text-[10px]"></i> ${Math.round(item.TotalTime/60)} 分钟
+                        </span>
+                    </div>
+                </div>
+            </div>`;
+        });
+        container.innerHTML = html;
+    }
+
+    // ==================== 🔥 详情弹窗 ====================
+    let detailModal = null;
+    
+    async function showItemDetail(itemId, itemName) {
+        // 创建弹窗
+        if (!detailModal) {
+            detailModal = document.createElement('div');
+            detailModal.id = 'item-detail-modal';
+            detailModal.className = 'fixed inset-0 z-[200] hidden items-center justify-center p-4 backdrop-blur-sm bg-black/50';
+            detailModal.onclick = (e) => { if (e.target === detailModal) closeItemDetail(); };
+            document.body.appendChild(detailModal);
+        }
+        
+        detailModal.classList.remove('hidden');
+        detailModal.classList.add('flex');
+        detailModal.innerHTML = `
+            <div class="bg-white dark:bg-gray-900 w-full max-w-lg rounded-2xl shadow-2xl max-h-[80vh] overflow-hidden flex flex-col">
+                <div class="p-4 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
+                    <h3 class="font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                        <i class="fa-solid fa-circle-info text-indigo-500"></i> 媒体详情
+                    </h3>
+                    <button onclick="closeItemDetail()" class="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-700 transition">
+                        <i class="fa-solid fa-xmark text-gray-500"></i>
+                    </button>
+                </div>
+                <div class="p-4 overflow-y-auto flex-1" id="detail-content">
+                    <div class="flex justify-center items-center py-10"><i class="fa-solid fa-spinner fa-spin text-2xl text-gray-300"></i></div>
+                </div>
+            </div>
+        `;
+        
+        try {
+            // 🔥 传递剧名参数，用于查询整部剧的播放记录
+            const url = `/api/stats/item_detail?item_id=${itemId}` + (itemName ? `&item_name=${encodeURIComponent(itemName)}` : '');
+            const res = await fetch(url);
+            const json = await res.json();
+            
+            if (json.status === 'success') {
+                renderDetailContent(json.data);
+            } else {
+                document.getElementById('detail-content').innerHTML = `
+                    <div class="text-center py-10 text-gray-400">
+                        <i class="fa-solid fa-exclamation-circle text-3xl mb-2"></i>
+                        <p>${json.message || '加载失败'}</p>
+                    </div>
+                `;
+            }
+        } catch (e) {
+            document.getElementById('detail-content').innerHTML = `
+                <div class="text-center py-10 text-gray-400">
+                    <i class="fa-solid fa-exclamation-circle text-3xl mb-2"></i>
+                    <p>网络错误</p>
+                </div>
+            `;
+        }
+    }
+    
+    function renderDetailContent(data) {
+        const item = data.ItemInfo;
+        const stats = data.Stats;
+        const topUsers = data.TopUsers || [];
+        const recentPlays = data.RecentPlays || [];
+        
+        let html = `
+            <!-- 媒体信息 -->
+            <div class="flex gap-4 mb-4">
+                <div class="w-24 h-36 rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800 shrink-0 shadow-md">
+                    <img src="/api/proxy/image/${encodeURIComponent(item.Id)}/primary" class="w-full h-full object-cover" onerror="this.src='/static/img/logo-app.png'">
+                </div>
+                <div class="flex-1 min-w-0">
+                    <h4 class="font-bold text-lg text-gray-800 dark:text-white mb-2">${item.Name || '未知'}</h4>
+                    ${item.ProductionYear ? `<p class="text-xs text-gray-500 mb-1"><i class="fa-solid fa-calendar mr-1"></i>${item.ProductionYear}年</p>` : ''}
+                    ${item.CommunityRating ? `<p class="text-xs text-gray-500 mb-1"><i class="fa-solid fa-star text-amber-500 mr-1"></i>${item.CommunityRating.toFixed(1)}</p>` : ''}
+                    ${item.Genres ? `<p class="text-xs text-gray-500"><i class="fa-solid fa-tags mr-1"></i>${item.Genres.slice(0, 3).join(' / ')}</p>` : ''}
+                </div>
+            </div>
+            
+            <!-- 播放统计 -->
+            <div class="grid grid-cols-2 gap-3 mb-4">
+                <div class="bg-indigo-50 dark:bg-indigo-500/10 rounded-xl p-3 text-center">
+                    <p class="text-2xl font-black text-indigo-600 dark:text-indigo-400">${stats.TotalPlays}</p>
+                    <p class="text-xs text-gray-500 mt-1">总播放次数</p>
+                </div>
+                <div class="bg-purple-50 dark:bg-purple-500/10 rounded-xl p-3 text-center">
+                    <p class="text-2xl font-black text-purple-600 dark:text-purple-400">${stats.TotalTimeHours}h</p>
+                    <p class="text-xs text-gray-500 mt-1">总观看时长</p>
+                </div>
+            </div>
+            
+            <!-- 谁在看 -->
+            ${topUsers.length > 0 ? `
+            <div class="mb-4">
+                <h5 class="text-sm font-bold text-gray-700 dark:text-gray-300 mb-2"><i class="fa-solid fa-users text-indigo-500 mr-1"></i>谁在看</h5>
+                <div class="space-y-2">
+                    ${topUsers.slice(0, 5).map((u, i) => `
+                        <div class="flex items-center gap-3 p-2 rounded-lg bg-gray-50 dark:bg-gray-800">
+                            <span class="w-5 h-5 rounded-full ${i === 0 ? 'bg-amber-500' : i === 1 ? 'bg-gray-400' : i === 2 ? 'bg-orange-500' : 'bg-gray-300 dark:bg-gray-600'} text-white text-xs flex items-center justify-center font-bold">${i + 1}</span>
+                            <span class="flex-1 text-sm text-gray-700 dark:text-gray-300 truncate">${u.UserName}</span>
+                            <span class="text-xs text-gray-500">${u.PlayCount}次</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+            ` : ''}
+            
+            <!-- 最近播放 -->
+            ${recentPlays.length > 0 ? `
+            <div>
+                <h5 class="text-sm font-bold text-gray-700 dark:text-gray-300 mb-2"><i class="fa-solid fa-history text-indigo-500 mr-1"></i>最近播放</h5>
+                <div class="space-y-1.5 max-h-40 overflow-y-auto">
+                    ${recentPlays.slice(0, 10).map(p => `
+                        <div class="flex items-center justify-between text-xs p-2 rounded-lg bg-gray-50 dark:bg-gray-800">
+                            <span class="text-gray-700 dark:text-gray-300">${p.UserName}</span>
+                            <span class="text-gray-400">${p.DateCreated ? p.DateCreated.slice(5, 16).replace('T', ' ') : '-'}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+            ` : ''}
+        `;
+        
+        document.getElementById('detail-content').innerHTML = html;
+    }
+    
+    function closeItemDetail() {
+        if (detailModal) {
+            detailModal.classList.add('hidden');
+            detailModal.classList.remove('flex');
+        }
+    }
+
+    // ==================== 🔥 导出海报 ====================
+    async function exportPoster() {
+        if (!currentData || currentData.length === 0) {
+            alert('暂无数据可导出');
+            return;
+        }
+        
+        const btn = event.target.closest('button');
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 生成中...';
+        btn.disabled = true;
+        
+        try {
+            // 创建 Canvas
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            // 🔥 动态计算高度：根据数据量
+            const topCount = Math.min(currentData.length, 10);
+            const baseHeight = 620;  // 标题 + Top 3 区域
+            const listHeight = topCount > 3 ? 50 + (topCount - 3) * 50 : 0;  // 列表区域
+            const height = baseHeight + listHeight;
+            
+            const width = 1080;
+            canvas.width = width;
+            canvas.height = height;
+            
+            // 背景
+            const gradient = ctx.createLinearGradient(0, 0, 0, height);
+            gradient.addColorStop(0, '#1e1b4b');
+            gradient.addColorStop(0.5, '#312e81');
+            gradient.addColorStop(1, '#1e1b4b');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, width, height);
+            
+            // 装饰性光晕
+            ctx.fillStyle = 'rgba(99, 102, 241, 0.15)';
+            ctx.beginPath();
+            ctx.arc(width / 2, 200, 300, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // 标题
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 56px Arial, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('🎬 影视风云榜', width / 2, 80);
+            
+            // 时间维度标签
+            const periodLabels = { today: '今日', week: '本周', month: '本月', quarter: '本季度', year: '年度', all: '全部时间' };
+            ctx.font = '22px Arial, sans-serif';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.fillText(periodLabels[state.period] || '全部时间', width / 2, 115);
+            
+            // 加载封面图
+            const loadImage = (url) => {
+                return new Promise((resolve) => {
+                    const img = new Image();
+                    img.crossOrigin = 'anonymous';
+                    img.onload = () => resolve(img);
+                    img.onerror = () => resolve(null);
+                    img.src = url;
+                });
+            };
+            
+            // 绘制 Top 3
+            const top3 = currentData.slice(0, 3);
+            const cardWidth = 300;
+            const cardHeight = 420;
+            const gap = 30;
+            const startX = (width - (cardWidth * 3 + gap * 2)) / 2;
+            const cardY = 150;
+            
+            for (let i = 0; i < Math.min(top3.length, 3); i++) {
+                const item = top3[i];
+                const x = startX + i * (cardWidth + gap);
+                
+                // 卡片背景
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+                ctx.beginPath();
+                ctx.roundRect(x, cardY, cardWidth, cardHeight, 20);
+                ctx.fill();
+                
+                // 排名徽章
+                const badgeColors = ['#fbbf24', '#9ca3af', '#d97706'];
+                ctx.fillStyle = badgeColors[i];
+                ctx.beginPath();
+                ctx.arc(x + cardWidth / 2, cardY + 35, 28, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 26px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(`${i + 1}`, x + cardWidth / 2, cardY + 43);
+                
+                // 封面图 - 使用 PosterId 或 ItemId
+                const posterId = item.PosterId || item.ItemId;
+                const imgUrl = `/api/proxy/smart_image?item_id=${posterId}&name=${encodeURIComponent(item.ItemName)}&type=Primary`;
+                const img = await loadImage(imgUrl);
+                const posterSize = 200;
+                const posterX = x + (cardWidth - posterSize) / 2;
+                const posterY = cardY + 75;
+                const posterH = posterSize * 1.4;
+                const cornerRadius = 12;
+                
+                // 🔥 绘制圆角矩形裁剪区域
+                ctx.save();
+                ctx.beginPath();
+                ctx.roundRect(posterX, posterY, posterSize, posterH, cornerRadius);
+                ctx.clip();
+                
+                if (img) {
+                    // 计算裁剪区域，保持比例
+                    const imgRatio = img.width / img.height;
+                    let sw, sh, sx, sy;
+                    if (imgRatio > 0.7) {
+                        sh = img.height;
+                        sw = sh * 0.7;
+                        sx = (img.width - sw) / 2;
+                        sy = 0;
+                    } else {
+                        sw = img.width;
+                        sh = sw / 0.7;
+                        sx = 0;
+                        sy = (img.height - sh) / 2;
+                    }
+                    ctx.drawImage(img, sx, sy, sw, sh, posterX, posterY, posterSize, posterH);
+                } else {
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+                    ctx.fillRect(posterX, posterY, posterSize, posterH);
+                }
+                ctx.restore();
+                
+                // 标题
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 18px Arial';
+                ctx.textAlign = 'center';
+                const title = item.ItemName.length > 14 ? item.ItemName.slice(0, 14) + '...' : item.ItemName;
+                ctx.fillText(title, x + cardWidth / 2, cardY + cardHeight - 70);
+                
+                // 🔥 播放统计 - 根据排序方式高亮显示
+                const countStr = `${item.PlayCount}次`;
+                const timeStr = `${Math.round(item.TotalTime / 60)}分钟`;
+                const displayStr = state.sortBy === 'time' ? `${timeStr} · ${countStr}` : `${countStr} · ${timeStr}`;
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                ctx.font = '15px Arial';
+                ctx.fillText(displayStr, x + cardWidth / 2, cardY + cardHeight - 45);
+            }
+            
+            // 绘制 Top 4-10 列表
+            const others = currentData.slice(3, topCount);
+            const listY = cardY + cardHeight + 40;
+            
+            if (others.length > 0) {
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 28px Arial';
+                ctx.textAlign = 'left';
+                ctx.fillText('🏆 更多热门', 50, listY);
+                
+                for (let i = 0; i < others.length; i++) {
+                    const item = others[i];
+                    const y = listY + 45 + i * 50;
+                    
+                    // 排名
+                    ctx.fillStyle = '#6366f1';
+                    ctx.font = 'bold 20px Arial';
+                    ctx.textAlign = 'left';
+                    ctx.fillText(`${i + 4}`, 50, y);
+                    
+                    // 标题
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = '18px Arial';
+                    const title = item.ItemName.length > 18 ? item.ItemName.slice(0, 18) + '...' : item.ItemName;
+                    ctx.fillText(title, 90, y);
+                    
+                    // 🔥 播放统计 - 显示次数和时长
+                    const countStr = `${item.PlayCount}次`;
+                    const timeStr = `${Math.round(item.TotalTime / 60)}分钟`;
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+                    ctx.font = '14px Arial';
+                    ctx.textAlign = 'right';
+                    ctx.fillText(`${countStr} · ${timeStr}`, width - 50, y);
+                }
+            }
+            
+            // 底部水印
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.font = '18px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('EmbyPulse Pro', width / 2, height - 20);
+            
+            // 下载
+            const link = document.createElement('a');
+            link.download = `风云榜_${periodLabels[state.period]}_${new Date().toISOString().slice(0, 10)}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+            
+        } catch (e) {
+            console.error('导出失败:', e);
+            alert('导出失败，请重试');
+        } finally {
+            btn.innerHTML = originalHtml;
+            btn.disabled = false;
+        }
+    }
+
+    init();
+</script>
+{% endblock %}

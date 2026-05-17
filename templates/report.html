@@ -1,0 +1,997 @@
+{% extends "layout.html" %}
+{% block title %}映迹工坊 - EmbyPulse{% endblock %}
+
+{% block head %}
+<script src="https://cdn.bootcdn.net/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
+<style>
+    /* === 自定义下拉菜单样式 === */
+    .custom-select { position: relative; }
+    .custom-select.open { z-index: 9999; }
+    .custom-select-trigger {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 12px 16px;
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 14px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-size: 13px;
+        font-weight: 600;
+        color: #374151;
+        width: 100%;
+    }
+    .dark .custom-select-trigger {
+        background: #2C2C2E;
+        border-color: rgba(255,255,255,0.1);
+        color: #d1d5db;
+    }
+    .custom-select-trigger:hover {
+        border-color: #6366f1;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+    .dark .custom-select-trigger:hover {
+        border-color: #818cf8;
+        box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.15);
+    }
+    .custom-select-trigger-icon { font-size: 10px; color: #9ca3af; transition: transform 0.2s; }
+    .custom-select.open .custom-select-trigger-icon { transform: rotate(180deg); }
+    
+    .custom-select-menu {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        margin-top: 6px;
+        max-height: 240px;
+        overflow-y: auto;
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 14px;
+        box-shadow: 0 12px 32px -8px rgba(0,0,0,0.15);
+        z-index: 9999;
+        padding: 6px;
+        display: none;
+    }
+    .dark .custom-select-menu {
+        background: #1f2937;
+        border-color: #374151;
+        box-shadow: 0 12px 32px -8px rgba(0,0,0,0.5);
+    }
+    
+    .custom-select-option {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 500;
+        color: #374151;
+        transition: all 0.15s;
+    }
+    .dark .custom-select-option { color: #d1d5db; }
+    .custom-select-option:hover { background: #f3f4f6; }
+    .dark .custom-select-option:hover { background: #374151; }
+    .custom-select-option.active {
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        color: white;
+    }
+    .custom-select-option-icon { font-size: 14px; width: 20px; text-align: center; color: #6366f1; }
+    .custom-select-option.active .custom-select-option-icon { color: white; }
+    
+    /* === 🔥 Apple 级极简卡片质感 === */
+    .apple-card {
+        background-color: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-radius: 24px;
+        padding: 24px;
+        box-shadow: 0 4px 24px -8px rgba(0,0,0,0.04);
+        border: 1px solid rgba(0,0,0,0.02);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    html.dark .apple-card {
+        background-color: rgba(28, 28, 30, 0.85);
+        box-shadow: 0 4px 24px -8px rgba(0, 0, 0, 0.4);
+        border: 1px solid rgba(255,255,255,0.04);
+    }
+
+    .mac-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
+    .mac-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .mac-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(156, 163, 175, 0.4); border-radius: 10px; }
+    html.dark .mac-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(255, 255, 255, 0.15); }
+
+    /* ==================================
+       🔥 海报生成引擎原生 CSS (受保护区域)
+       ================================== */
+    :root {
+        --theme-bg: #1a1a1a;
+        --theme-card: rgba(255,255,255,0.08);
+        --theme-text: white;
+        --theme-highlight: #eab308;
+        --theme-pill-bg: rgba(255,255,255,0.15);
+        --theme-pill-text: white;
+    }
+
+    .poster-canvas {
+        width: 400px; height: fit-content; min-height: auto; padding-bottom: 20px;
+        background: var(--theme-bg); color: var(--theme-text); position: relative;
+        overflow: hidden; display: flex; flex-direction: column;
+        box-shadow: 0 30px 60px rgba(0,0,0,0.2); line-height: 1.6;
+        font-family: "Microsoft YaHei", "Noto Sans SC", sans-serif !important;
+        transition: background 0.3s; transform-origin: top center;
+        -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+        border-radius: 24px;
+    }
+
+    #poster-bg-img { position: absolute; inset: 0; z-index: 0; background-size: cover; background-position: center; transform: scale(1.2); opacity: 0; transition: opacity 0.5s; height: 100%; }
+    #poster-bg-gradient { position: absolute; inset: 0; z-index: 1; background: linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.5) 100%); height: 100%; transition: background 0.3s; }
+
+    .p-content { position: relative; z-index: 10; padding: 40px 30px; display: block; }
+    .p-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
+    .user-box { display: flex; align-items: center; gap: 12px; }
+
+    .avatar {
+        width: 54px; height: 54px; border-radius: 50%;
+        background-color: #e5e7eb; display: flex; align-items: center; justify-content: center;
+        font-size: 26px; color: white; border: 2px solid rgba(255,255,255,0.8);
+        box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        background-size: cover !important; background-position: center !important; background-repeat: no-repeat !important;
+        z-index: 20; position: relative;
+    }
+
+    .user-info h1 { font-size: 24px; font-weight: 900; margin: 0; padding: 4px 0; color: var(--theme-text); transition: color 0.3s;}
+    .user-info p { font-size: 11px; opacity: 0.7; text-transform: uppercase; letter-spacing: 1px; margin: 0; padding-bottom: 2px; color: var(--theme-text); transition: color 0.3s;}
+
+    .server-pill { background: var(--theme-card); padding: 5px 12px; border-radius: 20px; font-size: 10px; border: 1px solid rgba(255,255,255,0.1); text-align: center; color: var(--theme-text); transition: color 0.3s, background 0.3s; display: block; line-height: 1.2; }
+    .server-pill span { display: block; font-weight: 900; font-size: 13px; color: #4ade80; margin-bottom: 2px; }
+
+    .stats-row { display: flex; gap: 10px; margin-bottom: 25px; }
+    .stat-card { flex: 1; background: var(--theme-card); padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); text-align: center; backdrop-filter: blur(10px); transition: background 0.3s;}
+    .stat-val { font-size: 28px; font-weight: 900; line-height: 1; margin-bottom: 4px; padding-bottom: 4px; color: var(--theme-text); transition: color 0.3s;}
+    .stat-label { font-size: 9px; opacity: 0.6; text-transform: uppercase; font-weight: bold; color: var(--theme-text); transition: color 0.3s;}
+
+    .podium-container { display: flex; justify-content: center; align-items: flex-end; gap: 10px; margin-bottom: 30px; margin-top: 10px; }
+    .podium-item { position: relative; display: flex; flex-direction: column; align-items: center; }
+    .podium-item.rank-2, .podium-item.rank-3 { width: 95px; }
+    .podium-item.rank-1 { width: 115px; z-index: 10; }
+
+    .podium-cover { width: 100%; aspect-ratio: 2/3; border-radius: 8px; background-color: #333; box-shadow: 0 10px 20px rgba(0,0,0,0.3); position: relative; border: 2px solid transparent; object-fit: cover; display: block; }
+    .podium-item.rank-1 .podium-cover { border-color: #eab308; box-shadow: 0 0 20px rgba(234, 179, 8, 0.4); }
+    .podium-item.rank-2 .podium-cover { border-color: #94a3b8; }
+    .podium-item.rank-3 .podium-cover { border-color: #b45309; }
+
+    .medal { position: absolute; top: -10px; left: calc(50% - 12px); width: 24px; height: 24px; border-radius: 50%; text-align: center; font-size: 12px; font-weight: bold; color: white; z-index: 10; box-shadow: 0 4px 6px rgba(0,0,0,0.3); line-height: 24px; box-sizing: border-box; }
+    .medal.rank-1 { background: linear-gradient(135deg, #fcd34d, #b45309); width: 32px; height: 32px; top: -16px; left: calc(50% - 16px); font-size: 14px; line-height: 32px; }
+    .medal i { display: block; margin-top: 1px; }
+    .medal.rank-2 { background: linear-gradient(135deg, #e2e8f0, #64748b); }
+    .medal.rank-3 { background: linear-gradient(135deg, #fdba74, #9a3412); }
+
+    .podium-info { text-align: center; margin-top: 8px; width: 100%; color: var(--theme-text); transition: color 0.3s;}
+    .podium-title { font-size: 11px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; padding-bottom: 4px; }
+    .podium-meta { font-size: 9px; opacity: 0.7; }
+
+    .rank-list { display: flex; flex-direction: column; gap: 8px; }
+    .rank-row { display: flex; align-items: center; padding: 10px 10px; background: var(--theme-card); border-radius: 10px; backdrop-filter: blur(5px); min-height: 50px; color: var(--theme-text); transition: background 0.3s, color 0.3s;}
+    .rank-idx { font-size: 12px; font-weight: 900; opacity: 0.4; width: 25px; text-align: center; }
+    .rank-poster-sm { width: 32px; height: 48px; border-radius: 4px; background-color: #333; margin-right: 12px; flex-shrink: 0; object-fit: cover; display: block; border: none; }
+
+    /* 🔥 图片加载骨架屏 */
+    .poster-loading {
+        background: linear-gradient(90deg, #333 25%, #444 50%, #333 75%);
+        background-size: 200% 100%;
+        animation: poster-shimmer 1.5s infinite;
+    }
+    @keyframes poster-shimmer {
+        0% { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
+    }
+
+    .rank-info { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+    .rank-name { font-size: 12px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-bottom: 4px; margin-bottom: -2px; }
+    .rank-meta-row { font-size: 9px; opacity: 0.7; display: flex; gap: 8px; }
+
+    .mood-area { margin-top: 25px; display: flex; flex-direction: column; gap: 12px; }
+    .mood-card { background: linear-gradient(135deg, var(--theme-card), rgba(255,255,255,0.02)); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 16px; position: relative; overflow: hidden; color: var(--theme-text); transition: color 0.3s, background 0.3s;}
+    .mood-icon { position: absolute; right: -10px; bottom: -15px; font-size: 60px; opacity: 0.08; transform: rotate(-15deg); }
+    .mood-title { font-size: 11px; font-weight: 900; letter-spacing: 1px; color: var(--theme-highlight); margin-bottom: 12px; display: flex; align-items: center; gap: 6px; transition: color 0.3s; line-height: 1;}
+    .mood-title i { font-size: 14px; }
+
+    .mood-data-container { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+    .mood-data-box { background: var(--theme-pill-bg); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; justify-content: center; border: 1px solid rgba(255,255,255,0.05); min-width: 80px; }
+    .mood-data-val { font-size: 16px; font-weight: 900; color: var(--theme-pill-text); line-height: 1; margin-bottom: 4px; }
+    .mood-data-sub { font-size: 9px; opacity: 0.7; text-transform: uppercase; font-weight: bold; }
+
+    .mood-tags-container { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+    .mood-tag-pill { background: var(--theme-pill-bg); color: var(--theme-pill-text); font-size: 12px; font-weight: bold; padding: 6px 12px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; gap: 6px; }
+
+    .mood-desc { font-size: 11px; line-height: 1.5; opacity: 0.7; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 10px; margin-top: 4px; }
+
+    .p-footer { margin-top: 30px; text-align: center; font-size: 10px; letter-spacing: 2px; font-weight: bold; }
+    .empty-box { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.4; min-height: 200px; text-align: center; color: var(--theme-text); transition: color 0.3s;}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="w-full max-w-[1600px] mx-auto py-4 pb-32 px-4 sm:px-6 md:px-8 space-y-4 md:space-y-6">
+
+    <div class="apple-card flex flex-col md:flex-row md:items-center justify-between gap-6 w-full mb-2 p-5 md:p-6">
+        <div class="flex items-center gap-4 pl-1 shrink-0">
+            <div class="w-12 h-12 rounded-[14px] bg-gradient-to-br from-pink-500 to-rose-500 text-white flex items-center justify-center text-xl shadow-lg shadow-rose-500/30 shrink-0">
+                <i class="fa-solid fa-wand-magic-sparkles"></i>
+            </div>
+            <div>
+                <h2 class="text-xl md:text-[22px] font-bold tracking-tight text-gray-900 dark:text-white">映迹工坊</h2>
+                <div class="text-[12px] text-gray-500 mt-1 font-medium flex items-center gap-1.5">
+                    <i class="fa-solid fa-palette opacity-70"></i> <span>智能生成用户专属的月度/年度观影海报</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="hidden lg:flex items-center gap-3 w-full md:w-auto">
+            <button onclick="savePoster()" class="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-brand-500 hover:bg-brand-600 text-white rounded-[14px] font-bold text-[13px] shadow-md shadow-brand-500/20 transition-all active:scale-95 shrink-0 border border-transparent">
+                <i class="fa-solid fa-download"></i> <span class="save-btn-text">保存并下载海报</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 md:gap-6 items-stretch">
+
+        <div class="lg:col-span-8 apple-card flex items-start justify-center overflow-x-auto mac-scrollbar bg-gray-50/50 dark:bg-black/10 min-h-[600px] p-6 md:p-10 relative">
+            <div id="scale-wrapper" class="flex items-start justify-center transform-origin-top transition-transform duration-300">
+
+                <div id="capture-target" class="poster-canvas">
+                    <div id="poster-bg-img" data-src=""></div>
+                    <div id="poster-bg-gradient"></div>
+                    <div class="p-content">
+                        <div class="p-header">
+                            <div class="user-box">
+                                <div class="avatar" id="p-avatar"></div>
+                                <div class="user-info">
+                                    <h1 id="p-user">User</h1>
+                                    <p id="p-period">全量观影报告</p>
+                                </div>
+                            </div>
+                            <div class="server-pill"><span id="p-server">0</span>全服总播</div>
+                        </div>
+                        <div class="stats-row">
+                            <div class="stat-card">
+                                <div class="stat-val" id="p-hours">0</div>
+                                <div class="stat-label">专注时长 (H)</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-val" id="p-plays">0</div>
+                                <div class="stat-label">播放次数</div>
+                            </div>
+                        </div>
+
+                        <!-- 🔥 扩展统计区域 -->
+                        <div class="stats-row" id="extra-stats-row" style="display:none;">
+                            <div class="stat-card" id="stat-days-card">
+                                <div class="stat-val" id="p-days">0</div>
+                                <div class="stat-label">观影天数</div>
+                            </div>
+                            <div class="stat-card" id="stat-avg-card">
+                                <div class="stat-val" id="p-avg">0</div>
+                                <div class="stat-label">日均时长 (H)</div>
+                            </div>
+                            <div class="stat-card" id="stat-streak-card" style="display:none;">
+                                <div class="stat-val" id="p-streak">0</div>
+                                <div class="stat-label">连续天数</div>
+                            </div>
+                        </div>
+
+                        <div id="content-area">
+                            <div id="podium-area" class="podium-container" style="display:none;">
+                                <div class="podium-item rank-2" id="rank2-box" style="visibility: hidden;">
+                                    <div class="medal rank-2">2</div>
+                                    <img class="podium-cover" id="rank2-img">
+                                    <div class="podium-info"><div class="podium-title" id="rank2-title">-</div><div class="podium-meta" id="rank2-meta">0次</div></div>
+                                </div>
+                                <div class="podium-item rank-1" id="rank1-box" style="visibility: hidden;">
+                                    <div class="medal rank-1"><i class="fa-solid fa-crown"></i></div>
+                                    <img class="podium-cover" id="rank1-img">
+                                    <div class="podium-info"><div class="podium-title" id="rank1-title">-</div><div class="podium-meta" id="rank1-meta">0次</div></div>
+                                </div>
+                                <div class="podium-item rank-3" id="rank3-box" style="visibility: hidden;">
+                                    <div class="medal rank-3">3</div>
+                                    <img class="podium-cover" id="rank3-img">
+                                    <div class="podium-info"><div class="podium-title" id="rank3-title">-</div><div class="podium-meta" id="rank3-meta">0次</div></div>
+                                </div>
+                            </div>
+
+                            <div class="rank-list" id="rank-list"></div>
+
+                            <div class="mood-area" id="mood-area"></div>
+                        </div>
+
+                        <div id="empty-area" class="empty-box" style="display:none;"><i class="fa-solid fa-ghost" style="font-size: 40px; margin-bottom: 10px;"></i><p>该时段暂无记录</p></div>
+                        <div class="p-footer" id="p-footer" style="color: rgba(255,255,255,0.4);">GENERATED BY EMBY PULSE</div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <div class="lg:col-span-4 apple-card flex flex-col p-6 h-full">
+            <h3 class="text-[15px] font-bold text-gray-800 dark:text-gray-200 mb-6 flex items-center shrink-0">
+                <div class="w-8 h-8 rounded-lg bg-gray-100 dark:bg-[#2C2C2E] text-gray-500 flex items-center justify-center mr-3 shadow-sm border border-gray-200/50 dark:border-white/5"><i class="fa-solid fa-sliders text-sm"></i></div>
+                参数构建台
+            </h3>
+
+            <div class="flex-1 flex flex-col justify-start space-y-6">
+                <div>
+                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider pl-1">数据来源对象</label>
+                    <div class="custom-select" id="user-select-dropdown">
+                        <div class="custom-select-trigger" onclick="toggleUserSelect()">
+                            <div class="flex items-center gap-2">
+                                <i class="fa-solid fa-user-astronaut text-indigo-500"></i>
+                                <span id="user-select-display">加载中...</span>
+                            </div>
+                            <i class="fa-solid fa-chevron-down custom-select-trigger-icon"></i>
+                        </div>
+                        <div class="custom-select-menu" id="user-select-menu">
+                            <!-- 动态填充 -->
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider pl-1">分析时间切片</label>
+                    <div class="grid grid-cols-4 gap-2 btn-group bg-gray-50 dark:bg-black/20 p-1.5 rounded-[16px] border border-gray-100 dark:border-white/5 shadow-inner">
+                        <button class="btn px-2 py-2.5 rounded-[12px] border border-transparent bg-transparent text-[12px] font-bold text-gray-600 dark:text-gray-400 hover:bg-white dark:hover:bg-[#3A3A3C] hover:shadow-sm transition-all" onclick="setPeriod('all', this)">全量</button>
+                        <button class="btn px-2 py-2.5 rounded-[12px] border border-transparent bg-transparent text-[12px] font-bold text-gray-600 dark:text-gray-400 hover:bg-white dark:hover:bg-[#3A3A3C] hover:shadow-sm transition-all" onclick="setPeriod('year', this)">年度</button>
+                        <button class="btn active px-2 py-2.5 rounded-[12px] border border-brand-200 dark:border-brand-500/30 bg-white dark:bg-brand-900/30 text-[12px] font-bold text-brand-600 dark:text-brand-400 shadow-sm transition-all" onclick="setPeriod('month', this)">本月</button>
+                        <button class="btn px-2 py-2.5 rounded-[12px] border border-transparent bg-transparent text-[12px] font-bold text-gray-600 dark:text-gray-400 hover:bg-white dark:hover:bg-[#3A3A3C] hover:shadow-sm transition-all" onclick="setPeriod('week', this)">本周</button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider pl-1">海报色彩引擎</label>
+                    <div class="grid grid-cols-4 gap-3 mb-3">
+                        <!-- 经典纯色 -->
+                        <div class="h-10 rounded-[12px] cursor-pointer border border-white/20 shadow-sm flex items-center justify-center text-[10px] font-bold text-white transition-transform hover:scale-105 active:scale-95" style="background: #1a1a1a;" onclick="setTheme('#1a1a1a', 'white', '#eab308')">黑金</div>
+                        <div class="h-10 rounded-[12px] cursor-pointer border border-white/20 shadow-sm flex items-center justify-center text-[10px] font-bold text-white transition-transform hover:scale-105 active:scale-95" style="background: #2e1065;" onclick="setTheme('#2e1065', 'white', '#c084fc')">赛博</div>
+                        <div class="h-10 rounded-[12px] cursor-pointer border border-white/20 shadow-sm flex items-center justify-center text-[10px] font-bold text-white transition-transform hover:scale-105 active:scale-95" style="background: #0f172a;" onclick="setTheme('#0f172a', 'white', '#38bdf8')">深海</div>
+                        <div class="h-10 rounded-[12px] cursor-pointer border border-white/20 shadow-sm flex items-center justify-center text-[10px] font-bold text-white transition-transform hover:scale-105 active:scale-95" style="background: #064e3b;" onclick="setTheme('#064e3b', 'white', '#34d399')">极光</div>
+                        <div class="h-10 rounded-[12px] cursor-pointer border border-white/20 shadow-sm flex items-center justify-center text-[10px] font-bold text-white transition-transform hover:scale-105 active:scale-95" style="background: #7f1d1d;" onclick="setTheme('#7f1d1d', 'white', '#f87171')">熔岩</div>
+                        <div class="h-10 rounded-[12px] cursor-pointer border border-white/20 shadow-sm flex items-center justify-center text-[10px] font-bold text-white transition-transform hover:scale-105 active:scale-95" style="background: #525252;" onclick="setTheme('#525252', 'white', '#e5e7eb')">水泥</div>
+                        <div class="h-10 rounded-[12px] cursor-pointer border border-white/20 shadow-sm flex items-center justify-center text-[10px] font-bold text-white transition-transform hover:scale-105 active:scale-95" style="background: #1e3a5f;" onclick="setTheme('#1e3a5f', 'white', '#60a5fa')">星夜</div>
+                        <div class="h-10 rounded-[12px] cursor-pointer border border-white/20 shadow-sm flex items-center justify-center text-[10px] font-bold text-white transition-transform hover:scale-105 active:scale-95" style="background: #3d1f5c;" onclick="setTheme('#3d1f5c', 'white', '#a78bfa')">暗紫</div>
+                        <!-- 渐变主题 -->
+                        <div class="h-10 rounded-[12px] cursor-pointer border border-white/20 shadow-sm flex items-center justify-center text-[10px] font-bold text-white transition-transform hover:scale-105 active:scale-95" style="background: linear-gradient(135deg, #c2410c, #7c2d12);" onclick="setTheme('linear-gradient(135deg, #c2410c, #7c2d12)', 'white', '#fdba74')">落日</div>
+                        <div class="h-10 rounded-[12px] cursor-pointer border border-white/20 shadow-sm flex items-center justify-center text-[10px] font-bold text-white transition-transform hover:scale-105 active:scale-95" style="background: linear-gradient(135deg, #0f766e, #134e4a);" onclick="setTheme('linear-gradient(135deg, #0f766e, #134e4a)', 'white', '#5eead4')">翡翠</div>
+                        <div class="h-10 rounded-[12px] cursor-pointer border border-white/20 shadow-sm flex items-center justify-center text-[10px] font-bold text-white transition-transform hover:scale-105 active:scale-95" style="background: linear-gradient(135deg, #7c3aed, #4c1d95);" onclick="setTheme('linear-gradient(135deg, #7c3aed, #4c1d95)', 'white', '#c4b5fd')">暮光</div>
+                        <div class="h-10 rounded-[12px] cursor-pointer border border-white/20 shadow-sm flex items-center justify-center text-[10px] font-bold text-white transition-transform hover:scale-105 active:scale-95" style="background: linear-gradient(135deg, #db2777, #9f1239);" onclick="setTheme('linear-gradient(135deg, #db2777, #9f1239)', 'white', '#f9a8d4')">霓虹</div>
+                        <div class="h-10 rounded-[12px] cursor-pointer border border-white/20 shadow-sm flex items-center justify-center text-[10px] font-bold text-white transition-transform hover:scale-105 active:scale-95" style="background: linear-gradient(135deg, #0ea5e9, #0369a1);" onclick="setTheme('linear-gradient(135deg, #0ea5e9, #0369a1)', 'white', '#7dd3fc')">海洋</div>
+                        <div class="h-10 rounded-[12px] cursor-pointer border border-white/20 shadow-sm flex items-center justify-center text-[10px] font-bold text-white transition-transform hover:scale-105 active:scale-95" style="background: linear-gradient(135deg, #65a30d, #365314);" onclick="setTheme('linear-gradient(135deg, #65a30d, #365314)', 'white', '#bef264')">森林</div>
+                        <div class="h-10 rounded-[12px] cursor-pointer border border-white/20 shadow-sm flex items-center justify-center text-[10px] font-bold text-white transition-transform hover:scale-105 active:scale-95" style="background: linear-gradient(135deg, #f59e0b, #b45309);" onclick="setTheme('linear-gradient(135deg, #f59e0b, #b45309)', 'white', '#fcd34d')">琥珀</div>
+                        <div class="h-10 rounded-[12px] cursor-pointer border border-gray-200 shadow-sm flex items-center justify-center text-[10px] font-bold text-gray-800 transition-transform hover:scale-105 active:scale-95" style="background: #ffffff;" onclick="setTheme('#ffffff', '#333', '#3b82f6')">纯白</div>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider pl-1">统计项目 <span class="text-gray-400 font-normal">(可多选)</span></label>
+                    <div class="space-y-2">
+                        <label class="flex items-center gap-3 p-2.5 rounded-xl bg-gray-50 dark:bg-black/20 cursor-pointer hover:bg-gray-100 dark:hover:bg-black/30 transition-colors border border-transparent hover:border-gray-200 dark:hover:border-white/10">
+                            <input type="checkbox" id="stat-days" class="w-4 h-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500" checked onchange="updateStats()">
+                            <span class="text-[12px] font-medium text-gray-700 dark:text-gray-300">观影天数</span>
+                        </label>
+                        <label class="flex items-center gap-3 p-2.5 rounded-xl bg-gray-50 dark:bg-black/20 cursor-pointer hover:bg-gray-100 dark:hover:bg-black/30 transition-colors border border-transparent hover:border-gray-200 dark:hover:border-white/10">
+                            <input type="checkbox" id="stat-avg" class="w-4 h-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500" checked onchange="updateStats()">
+                            <span class="text-[12px] font-medium text-gray-700 dark:text-gray-300">日均时长</span>
+                        </label>
+                        <label class="flex items-center gap-3 p-2.5 rounded-xl bg-gray-50 dark:bg-black/20 cursor-pointer hover:bg-gray-100 dark:hover:bg-black/30 transition-colors border border-transparent hover:border-gray-200 dark:hover:border-white/10">
+                            <input type="checkbox" id="stat-streak" class="w-4 h-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500" onchange="updateStats()">
+                            <span class="text-[12px] font-medium text-gray-700 dark:text-gray-300">连续观影</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="pt-2">
+                    <button onclick="toggleCoverBg()" id="cover-bg-btn" class="w-full flex items-center justify-center gap-2 px-5 py-3.5 bg-gray-50 hover:bg-gray-100 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-gray-700 dark:text-gray-300 rounded-[14px] font-bold text-[12px] transition-all border border-dashed border-gray-300 dark:border-gray-600 active:scale-95 shadow-sm">
+                        <i class="fa-solid fa-image text-brand-500"></i> 叠加年度最佳封面作为透视背景
+                    </button>
+                </div>
+            </div>
+
+            <div class="mt-8 pt-6 border-t border-gray-100 dark:border-white/5 lg:hidden">
+                <button onclick="savePoster()" class="w-full flex items-center justify-center gap-2 px-6 py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-[16px] font-black text-[15px] shadow-lg shadow-emerald-500/30 transition-all active:scale-95">
+                    <i class="fa-solid fa-download"></i> <span class="save-btn-text">立即保存至相册</span>
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    window.onerror = function(msg) { showToast('error', '发生错误', msg); return false; };
+</script>
+<script>
+    let currentUserId = '';
+    let currentUserName = 'User';
+    let currentPeriod = 'month';
+    let isCoverBgEnabled = false;
+    let top1PhysicalBlurredBase64 = null;
+
+    // 🔥 修复比例缩放逻辑,确保手机端海报居中且可看
+    function fitScale() {
+        const wrapper = document.getElementById('scale-wrapper');
+        const container = wrapper.parentElement;
+        const w = container.clientWidth - 48; // 减去 padding
+        if (w < 400) {
+            const scale = w / 400;
+            wrapper.style.transform = `scale(${scale})`;
+            // 如果缩放了,要扣掉对应的高度差,防止下方大片留白
+            setTimeout(() => {
+                const targetH = document.getElementById('capture-target').offsetHeight;
+                wrapper.style.height = (targetH * scale) + 'px';
+            }, 100);
+        } else {
+            wrapper.style.transform = 'none';
+            wrapper.style.height = 'auto';
+        }
+    }
+
+    window.addEventListener('resize', fitScale);
+
+    window.tmdbCache = {};
+    window.fallbackReportPoster = async function(imgEl, title, isTop1 = false) {
+        if(imgEl.getAttribute('data-fallback-done')) return;
+        imgEl.setAttribute('data-fallback-done', 'true');
+
+        imgEl.src = '/static/img/logo-app-2.png';
+        imgEl.style.objectFit = "contain";
+        imgEl.style.padding = "20px";
+
+        if(window.tmdbCache[title]) {
+            imgEl.src = window.tmdbCache[title];
+            imgEl.style.objectFit = "cover";
+            imgEl.style.padding = "0";
+            return;
+        }
+
+        try {
+            const res = await fetch(`/api/requests/search?query=${encodeURIComponent(title)}`);
+            const data = await res.json();
+            if (data.status === 'success' && data.data.length > 0) {
+                const match = data.data.find(d => d.poster_path) || data.data[0];
+                if (match.poster_path) {
+                    const b64 = await toBase64(match.poster_path);
+                    if(b64) {
+                        window.tmdbCache[title] = b64;
+                        imgEl.src = b64;
+                        imgEl.style.objectFit = "cover";
+                        imgEl.style.padding = "0";
+
+                        if (isTop1) {
+                            top1PhysicalBlurredBase64 = await applyPhysicalBlur(b64);
+                            if(isCoverBgEnabled) document.getElementById('poster-bg-img').style.backgroundImage = `url('${top1PhysicalBlurredBase64}')`;
+                        }
+                    }
+                }
+            }
+        } catch(e) {}
+    };
+
+    async function applyPhysicalBlur(base64Url) {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = 400;
+                canvas.height = 800;
+                ctx.filter = 'blur(40px) brightness(0.4)';
+                const scale = Math.max(canvas.width / img.width, canvas.height / img.height);
+                const x = (canvas.width / 2) - (img.width / 2) * scale;
+                const y = (canvas.height / 2) - (img.height / 2) * scale;
+                ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
+                resolve(canvas.toDataURL('image/jpeg', 0.8));
+            };
+            img.onerror = () => resolve(base64Url);
+            img.src = base64Url;
+        });
+    }
+
+    async function toBase64(url) {
+        try {
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const blob = await res.blob();
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.readAsDataURL(blob);
+            });
+        } catch(e) { return null; }
+    }
+
+    function getDateLabel(period) {
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = now.getMonth() + 1;
+        if (period === 'year') return `${y} 年度观影报告`;
+        if (period === 'month') return `${y}年${m}月 观影报告`;
+        if (period === 'week') {
+            const day = now.getDay() || 7;
+            const start = new Date(now); start.setDate(now.getDate() - day + 1);
+            const end = new Date(now); end.setDate(now.getDate() - day + 7);
+            const fmt = d => `${d.getMonth()+1}月${d.getDate()}日`;
+            return `${fmt(start)} - ${fmt(end)} 观影周报`;
+        }
+        return '历史全量 观影报告';
+    }
+
+    function setTheme(bg, text, hl) {
+        const canvas = document.querySelector('.poster-canvas');
+        canvas.style.background = bg;
+        canvas.style.color = text;
+
+        document.documentElement.style.setProperty('--theme-highlight', hl);
+        document.documentElement.style.setProperty('--theme-text', text);
+
+        isCoverBgEnabled = false;
+        document.getElementById('poster-bg-img').style.opacity = '0';
+
+        if(text === '#333') {
+            document.documentElement.style.setProperty('--theme-pill-bg', '#e5e7eb');
+            document.documentElement.style.setProperty('--theme-pill-text', '#1f2937');
+            document.documentElement.style.setProperty('--theme-card', 'rgba(0,0,0,0.03)');
+            document.getElementById('poster-bg-gradient').style.background = 'transparent';
+            document.getElementById('p-footer').style.color = 'rgba(0,0,0,0.3)';
+        } else {
+            document.documentElement.style.setProperty('--theme-pill-bg', 'rgba(255,255,255,0.15)');
+            document.documentElement.style.setProperty('--theme-pill-text', 'white');
+            document.documentElement.style.setProperty('--theme-card', 'rgba(255,255,255,0.08)');
+            document.getElementById('poster-bg-gradient').style.background = 'linear-gradient(to bottom, rgba(0,0,0,0.1), rgba(0,0,0,0.5))';
+            document.getElementById('p-footer').style.color = 'rgba(255,255,255,0.4)';
+        }
+    }
+
+    // 🔥 更新扩展统计显示
+    function updateStats() {
+        const showDays = document.getElementById('stat-days').checked;
+        const showAvg = document.getElementById('stat-avg').checked;
+        const showStreak = document.getElementById('stat-streak').checked;
+
+        const extraRow = document.getElementById('extra-stats-row');
+        const hasAny = showDays || showAvg || showStreak;
+        extraRow.style.display = hasAny ? 'flex' : 'none';
+
+        document.getElementById('stat-days-card').style.display = showDays ? 'block' : 'none';
+        document.getElementById('stat-avg-card').style.display = showAvg ? 'block' : 'none';
+        document.getElementById('stat-streak-card').style.display = showStreak ? 'block' : 'none';
+
+        // 如果有数据,重新计算
+        if (window._currentData) {
+            calcExtraStats(window._currentData);
+        }
+    }
+
+    // 🔥 计算扩展统计
+    function calcExtraStats(data) {
+        if (!data || !data.daily_stats) return;
+
+        const dailyStats = data.daily_stats;
+        const totalDays = dailyStats.length;
+        const totalHours = data.hours;
+        const avgHours = totalDays > 0 ? (totalHours / totalDays).toFixed(1) : 0;
+
+        document.getElementById('p-days').innerText = totalDays;
+        document.getElementById('p-avg').innerText = avgHours;
+
+        // 连续观影天数
+        if (data.streak_days) {
+            document.getElementById('p-streak').innerText = data.streak_days;
+        }
+    }
+
+    function toggleCoverBg() {
+        isCoverBgEnabled = !isCoverBgEnabled;
+        const bgImg = document.getElementById('poster-bg-img');
+
+        if(!isCoverBgEnabled) {
+            bgImg.style.opacity = '0';
+            const currentColor = document.querySelector('.poster-canvas').style.color;
+            if(currentColor === 'rgb(51, 51, 51)' || currentColor === '#333') {
+                document.getElementById('poster-bg-gradient').style.background = 'transparent';
+            } else {
+                document.getElementById('poster-bg-gradient').style.background = 'linear-gradient(to bottom, rgba(0,0,0,0.1), rgba(0,0,0,0.5))';
+            }
+        } else {
+            bgImg.style.opacity = '1';
+            document.documentElement.style.setProperty('--theme-card', 'rgba(255,255,255,0.08)');
+            document.documentElement.style.setProperty('--theme-pill-bg', 'rgba(255,255,255,0.15)');
+            document.documentElement.style.setProperty('--theme-pill-text', 'white');
+            document.documentElement.style.setProperty('--theme-text', 'white');
+            document.querySelector('.poster-canvas').style.color = 'white';
+            document.getElementById('poster-bg-gradient').style.background = 'linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.8) 100%)';
+            document.getElementById('p-footer').style.color = 'rgba(255,255,255,0.5)';
+            if(top1PhysicalBlurredBase64) {
+                document.getElementById('poster-bg-img').style.backgroundImage = `url('${top1PhysicalBlurredBase64}')`;
+            }
+        }
+    }
+
+    function getIconAvatar(name) {
+        const icons = ['fa-robot', 'fa-cat', 'fa-ghost', 'fa-dragon', 'fa-user-astronaut', 'fa-snowman', 'fa-frog', 'fa-hippo', 'fa-dog', 'fa-otter'];
+        const colors = ['#FFC0CB', '#FFB6C1', '#FF69B4', '#E6E6FA', '#D8BFD8', '#B0C4DE', '#ADD8E6', '#87CEFA', '#98FB98', '#90EE90'];
+        let hash = 0;
+        for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+        return { icon: icons[Math.abs(hash % icons.length)], color: colors[Math.abs(hash % colors.length)] };
+    }
+
+    async function loadAvatar() {
+        const avatarEl = document.getElementById('p-avatar');
+        avatarEl.style.backgroundImage = 'none';
+        avatarEl.innerText = '';
+
+        if (currentUserId === 'all') {
+            avatarEl.style.background = 'linear-gradient(135deg, #1a1a1a, #333)';
+            avatarEl.innerHTML = '<i class="fa-solid fa-server"></i>';
+            avatarEl.style.color = 'white';
+            return;
+        }
+
+        const realUrl = `/api/proxy/user_image/${currentUserId}`;
+        const b64 = await toBase64(realUrl);
+
+        if (b64) {
+            avatarEl.style.backgroundImage = `url('${b64}')`;
+            avatarEl.innerHTML = '';
+        } else {
+            const style = getIconAvatar(currentUserName);
+            avatarEl.style.backgroundColor = style.color;
+            avatarEl.innerHTML = `<i class="fa-solid ${style.icon}"></i>`;
+            avatarEl.style.color = 'white';
+        }
+    }
+
+    async function init() {
+        const res = await fetch('/api/users');
+        const json = await res.json();
+        
+        // 填充自定义下拉菜单
+        const menu = document.getElementById('user-select-menu');
+        if (menu) {
+            let html = `<div class="custom-select-option active" data-value="all" onclick="selectUserOption('all', '全服概览 (All Users)')">
+                <i class="fa-solid fa-server custom-select-option-icon"></i>
+                <span>全服概览 (All Users)</span>
+            </div>`;
+            if(json.data) {
+                json.data.forEach(u => {
+                    html += `<div class="custom-select-option" data-value="${u.UserId}" onclick="selectUserOption('${u.UserId}', '${u.UserName}')">
+                        <i class="fa-solid fa-user custom-select-option-icon"></i>
+                        <span>${u.UserName}</span>
+                    </div>`;
+                });
+            }
+            menu.innerHTML = html;
+        }
+        
+        // 设置默认显示
+        const display = document.getElementById('user-select-display');
+        if (display) display.textContent = '全服概览 (All Users)';
+        
+        changeUser('all');
+    }
+    
+    function toggleUserSelect() {
+        const dropdown = document.getElementById('user-select-dropdown');
+        const menu = document.getElementById('user-select-menu');
+        if (!dropdown || !menu) return;
+        
+        // 关闭其他下拉菜单
+        document.querySelectorAll('.custom-select.open').forEach(s => {
+            if (s !== dropdown) {
+                s.classList.remove('open');
+                const m = s.querySelector('.custom-select-menu');
+                if (m) m.style.display = 'none';
+            }
+        });
+        
+        const isOpen = dropdown.classList.toggle('open');
+        menu.style.display = isOpen ? 'block' : 'none';
+    }
+    
+    function selectUserOption(value, label) {
+        const display = document.getElementById('user-select-display');
+        const menu = document.getElementById('user-select-menu');
+        const dropdown = document.getElementById('user-select-dropdown');
+        
+        if (display) display.textContent = label;
+        
+        // 更新选中状态
+        if (menu) {
+            menu.querySelectorAll('.custom-select-option').forEach(opt => {
+                opt.classList.toggle('active', opt.dataset.value === value);
+            });
+        }
+        
+        // 关闭下拉框
+        if (dropdown) dropdown.classList.remove('open');
+        if (menu) menu.style.display = 'none';
+        
+        // 触发 changeUser
+        changeUser(value);
+    }
+
+    function changeUser(uid) {
+        currentUserId = uid;
+        
+        // 从下拉菜单获取用户名
+        const menu = document.getElementById('user-select-menu');
+        if (menu) {
+            const activeOpt = menu.querySelector(`.custom-select-option[data-value="${uid}"]`);
+            if (activeOpt) {
+                const span = activeOpt.querySelector('span');
+                if (span) currentUserName = span.textContent;
+            }
+        }
+        
+        if(uid === 'all') currentUserName = 'Emby Server';
+
+        document.getElementById('p-user').innerText = currentUserName;
+        loadAvatar();
+        loadData();
+    }
+
+    function setPeriod(p, btn) {
+        currentPeriod = p;
+        const group = btn.closest('.btn-group');
+        group.querySelectorAll('.btn').forEach(b => {
+            b.className = "btn px-2 py-2.5 rounded-[12px] border border-transparent bg-transparent text-[12px] font-bold text-gray-600 dark:text-gray-400 hover:bg-white dark:hover:bg-[#3A3A3C] hover:shadow-sm transition-all";
+        });
+        btn.className = "btn active px-2 py-2.5 rounded-[12px] border border-brand-200 dark:border-brand-500/30 bg-white dark:bg-brand-900/30 text-[12px] font-bold text-brand-600 dark:text-brand-400 shadow-sm transition-all";
+        loadData();
+    }
+
+    function renderMoods(moodData) {
+        const area = document.getElementById('mood-area');
+        area.innerHTML = '';
+        let html = '';
+
+        if(moodData.genres && moodData.genres.length > 0) {
+            const iconMap = {'剧情': '🎬', '喜剧': '😂', '动作': '⚔️', '科幻': '🛸', '悬疑': '🕵️‍♂️', '爱情': '❤️', '动画': '🦄', '恐怖': '👻', '纪录': '🌍'};
+            let tagsHtml = '';
+            moodData.genres.forEach(g => {
+                let icon = iconMap[g] || '🏷️';
+                tagsHtml += `<div class="mood-tag-pill"><span>${icon}</span> <span>${g}</span></div>`;
+            });
+
+            html += `
+            <div class="mood-card">
+                <i class="fa-solid fa-dna mood-icon"></i>
+                <div class="mood-title"><i class="fa-solid fa-flask"></i> 观影基因重组</div>
+                <div class="mood-tags-container">
+                    ${tagsHtml}
+                </div>
+                <div class="mood-desc">这是一个独一无二的影视灵魂宇宙。</div>
+            </div>`;
+        }
+
+        if(moodData.binge_day && currentUserId !== 'all') {
+            html += `
+            <div class="mood-card">
+                <i class="fa-solid fa-couch mood-icon"></i>
+                <div class="mood-title"><i class="fa-solid fa-fire"></i> 极度沉迷时刻</div>
+                <div class="mood-data-container">
+                    <div class="mood-data-box">
+                        <div class="mood-data-val">${moodData.binge_day.date}</div>
+                        <div class="mood-data-sub">这一天最疯狂</div>
+                    </div>
+                    <div class="mood-data-box">
+                        <div class="mood-data-val">${moodData.binge_day.hours} H</div>
+                        <div class="mood-data-sub">一口气看了</div>
+                    </div>
+                </div>
+                <div class="mood-desc">是谁陪你一起度过了这漫长的时光?</div>
+            </div>`;
+        }
+
+        if(moodData.late_night && currentUserId !== 'all') {
+            html += `
+            <div class="mood-card">
+                <i class="fa-solid fa-moon mood-icon"></i>
+                <div class="mood-title"><i class="fa-solid fa-owl"></i> 深夜刺客出没</div>
+                <div class="mood-data-container">
+                    <div class="mood-data-box" style="flex:1;">
+                        <div class="mood-data-val">凌晨 ${moodData.late_night.time}</div>
+                        <div class="mood-data-sub">在看: ${moodData.late_night.name}</div>
+                    </div>
+                </div>
+                <div class="mood-desc">整座城市都在沉睡,你却独自在此修仙。注意保护眼睛。</div>
+            </div>`;
+        }
+
+        area.innerHTML = html;
+    }
+
+    async function loadData() {
+        if(!currentUserId) return;
+
+        // 🔥 显示加载状态
+        document.getElementById('p-plays').innerHTML = '<span class="opacity-50">...</span>';
+        document.getElementById('p-hours').innerHTML = '<span class="opacity-50">...</span>';
+        document.getElementById('p-server').innerHTML = '<span class="opacity-50">...</span>';
+        document.getElementById('podium-area').style.opacity = '0.5';
+        document.getElementById('rank-list').innerHTML = '<div class="text-center opacity-50 py-4">加载中...</div>';
+
+        const res = await fetch(`/api/stats/poster_data?user_id=${currentUserId}&period=${currentPeriod}`);
+        const json = await res.json();
+        const data = json.data;
+
+        document.getElementById('p-period').innerText = getDateLabel(currentPeriod);
+        document.getElementById('p-plays').innerText = data.plays;
+        document.getElementById('p-hours').innerText = data.hours;
+        document.getElementById('p-server').innerText = data.server_plays;
+
+        // 🔥 保存数据用于扩展统计
+        window._currentData = data;
+
+        // 🔥 计算扩展统计
+        calcExtraStats(data);
+        updateStats();
+
+        top1PhysicalBlurredBase64 = null;
+
+        // 🔥 恢复透明度
+        document.getElementById('podium-area').style.opacity = '1';
+
+        const hasData = data.plays > 0;
+        document.getElementById('content-area').style.display = hasData ? 'block' : 'none';
+        document.getElementById('empty-area').style.display = hasData ? 'none' : 'flex';
+
+        if(hasData) {
+            const list = data.top_list;
+            const podiumArea = document.getElementById('podium-area');
+
+            ['rank1-box', 'rank2-box', 'rank3-box'].forEach(id => document.getElementById(id).style.visibility = 'hidden');
+
+            if(list.length > 0) {
+                podiumArea.style.display = 'flex';
+
+                const renderRank = async (rank, idx) => {
+                    const el = document.getElementById(`rank${rank}-box`);
+                    if(list[idx]) {
+                        el.style.visibility = 'visible';
+                        document.getElementById(`rank${rank}-title`).innerText = list[idx].ItemName;
+                        const h = Math.round(list[idx].Duration/3600);
+                        document.getElementById(`rank${rank}-meta`).innerText = `${list[idx].Count}次${h > 0 ? ` · ${h}h` : ''}`;
+
+                        // 🔥 传递 name 参数,让后端能进行 TMDB 兜底
+                        const imgUrl = `/api/proxy/smart_image?item_id=${list[idx].ItemId}&name=${encodeURIComponent(list[idx].ItemName)}&type=Primary`;
+                        const realImg = document.getElementById(`rank${rank}-img`);
+                        realImg.removeAttribute('data-fallback-done');
+                        realImg.classList.add('poster-loading');  // 🔥 添加加载动画
+
+                        const b64 = await toBase64(imgUrl);
+                        if(b64) {
+                            realImg.src = b64;
+                            realImg.style.objectFit = "cover";
+                            realImg.style.padding = "0";
+                            realImg.classList.remove('poster-loading');  // 🔥 移除加载动画
+                            if(rank === 1) {
+                                top1PhysicalBlurredBase64 = await applyPhysicalBlur(b64);
+                                if(isCoverBgEnabled) document.getElementById('poster-bg-img').style.backgroundImage = `url('${top1PhysicalBlurredBase64}')`;
+                            }
+                        } else {
+                            realImg.classList.remove('poster-loading');
+                            window.fallbackReportPoster(realImg, list[idx].ItemName, rank === 1);
+                        }
+                    }
+                };
+
+                await Promise.all([renderRank(1, 0), renderRank(2, 1), renderRank(3, 2)]);
+            } else { podiumArea.style.display = 'none'; }
+
+            const listEl = document.getElementById('rank-list');
+            let html = '';
+            const max = Math.min(list.length, 10);
+            for(let i=3; i<max; i++) {
+                const hours = Math.round(list[i].Duration/3600);
+                html += `
+                <div class="rank-row">
+                    <div class="rank-idx">${i+1}</div>
+                    <img class="rank-poster-sm" id="sm-img-${i}">
+                    <div class="rank-info">
+                        <div class="rank-name">${list[i].ItemName}</div>
+                        <div class="rank-meta-row"><span>${list[i].Count}次</span><span>${hours > 0 ? hours+'h' : '<1h'}</span></div>
+                    </div>
+                </div>`;
+            }
+            listEl.innerHTML = html;
+
+            const smPromises = [];
+            for(let i=3; i<max; i++) {
+                smPromises.push((async () => {
+                    // 🔥 传递 name 参数,让后端能进行 TMDB 兜底
+                    const imgUrl = `/api/proxy/smart_image?item_id=${list[i].ItemId}&name=${encodeURIComponent(list[i].ItemName)}&type=Primary`;
+                    const imgEl = document.getElementById(`sm-img-${i}`);
+                    imgEl.classList.add('poster-loading');  // 🔥 添加加载动画
+
+                    const b64 = await toBase64(imgUrl);
+                    if(b64) {
+                        imgEl.src = b64;
+                        imgEl.style.objectFit = "cover";
+                        imgEl.classList.remove('poster-loading');
+                    } else {
+                        imgEl.classList.remove('poster-loading');
+                        window.fallbackReportPoster(imgEl, list[i].ItemName);
+                    }
+                })());
+            }
+            await Promise.all(smPromises);
+
+            if(data.mood_data) renderMoods(data.mood_data);
+        }
+
+        // 数据加载完重新算一下高度
+        setTimeout(fitScale, 300);
+    }
+
+    // 🔥 改进后的截图保存功能,防止高度被卡断
+    async function savePoster() {
+        const btns = document.querySelectorAll('.save-btn-text');
+        btns.forEach(b => b.innerText = '正在合成高清海报...');
+
+        const wrapper = document.getElementById('scale-wrapper');
+        const oldT = wrapper.style.transform;
+        const oldH = wrapper.style.height;
+
+        window.scrollTo(0, 0);
+        // 撤销缩放,保证截到原生高清像素
+        wrapper.style.transform = 'none';
+
+        // 强行把包裹层撑高,防止被外层容器 overflow 截断
+        const targetH = document.getElementById('capture-target').scrollHeight;
+        wrapper.style.height = targetH + 'px';
+
+        await new Promise(r => setTimeout(r, 500));
+
+        try {
+            const canvas = await html2canvas(document.getElementById('capture-target'), {
+                scale: 2,
+                useCORS: true,
+                backgroundColor: null,
+                scrollY: 0,
+                scrollX: 0
+            });
+            const link = document.createElement('a');
+            link.download = `EmbyPulse_${currentUserName}_${currentPeriod}.png`;
+            link.href = canvas.toDataURL();
+            link.click();
+        } catch(e) { 
+            showToast('error', '生成失败', '请重试');
+        } finally {
+            // 恢复原状
+            wrapper.style.transform = oldT;
+            wrapper.style.height = oldH;
+            btns.forEach(b => b.innerText = '保存并下载海报');
+        }
+    }
+
+    // 点击外部关闭下拉菜单
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.custom-select')) {
+            document.querySelectorAll('.custom-select.open').forEach(s => {
+                s.classList.remove('open');
+                const m = s.querySelector('.custom-select-menu');
+                if (m) m.style.display = 'none';
+            });
+        }
+    });
+
+    init();
+</script>
+{% endblock %}

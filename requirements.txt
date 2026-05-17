@@ -1,0 +1,19 @@
+fastapi
+uvicorn
+requests
+jinja2
+python-multipart
+itsdangerous
+aiofiles
+pycryptodome==3.20.0
+psutil
+pypinyin
+Pillow
+numpy
+bcrypt
+openpyxl
+pyotp  # TOTP 两步验证
+qrcode  # 生成验证器二维码
+croniter  # cron 表达式解析
+python-dotenv  # 加载 .env 文件（本地开发）
+PyJWT  # JWT Token 签名（使用 SECRET_KEY）

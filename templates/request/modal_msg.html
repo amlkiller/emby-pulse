@@ -1,0 +1,131 @@
+<!-- 🔥 用户消息中心弹窗 - 对话形式 -->
+<div x-show="msgModalOpen" 
+     x-transition:enter="transition ease-out duration-300"
+     x-transition:enter-start="opacity-0"
+     x-transition:enter-end="opacity-100"
+     x-transition:leave="transition ease-in duration-200"
+     x-transition:leave-start="opacity-100"
+     x-transition:leave-end="opacity-0"
+     class="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" 
+     x-cloak @click.self="closeMsgModal()">
+    
+    <div class="bg-white dark:bg-[#1C1C1E] rounded-3xl shadow-2xl w-full max-w-lg sm:max-w-xl overflow-hidden border border-white/10 dark:border-white/5 flex flex-col max-h-[85vh]">
+        
+        <!-- 🔥 顶部标题栏 -->
+        <div class="bg-gradient-to-r from-brand-500 to-indigo-500 p-4 text-white flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <!-- 管理员头像 -->
+                <div class="w-11 h-11 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center border-2 border-white/30">
+                    <i class="fa-solid fa-user-tie text-lg"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-lg">管理员</h3>
+                    <div class="flex items-center gap-2">
+                        <span class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+                        <span class="text-xs text-white/80">在线客服</span>
+                    </div>
+                </div>
+            </div>
+            <button @click="closeMsgModal()" class="w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-colors">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+        </div>
+        
+        <!-- 🔥 禁言提示 -->
+        <div x-show="userMuteInfo?.is_muted" class="bg-rose-50 dark:bg-rose-500/10 px-4 py-2.5 border-b border-rose-200 dark:border-rose-500/20">
+            <div class="flex items-center gap-2 text-rose-600 dark:text-rose-400 text-xs font-bold">
+                <i class="fa-solid fa-volume-xmark"></i>
+                <span>您已被禁言</span>
+                <span x-show="userMuteInfo?.mute_until" class="text-rose-500/70">至 <span x-text="formatMuteUntil(userMuteInfo?.mute_until)"></span></span>
+            </div>
+            <div x-show="userMuteInfo?.mute_reason" class="text-[11px] text-rose-500/60 mt-1" x-text="'原因：' + userMuteInfo?.mute_reason"></div>
+        </div>
+        
+        <!-- 🔥 对话区域 -->
+        <div class="flex-1 overflow-y-auto p-4 space-y-3 mac-scrollbar bg-slate-50/50 dark:bg-black/20" id="user-message-list">
+            <template x-for="msg in userMessages" :key="msg.id">
+                <!-- 🔥 根据发送者类型切换布局 -->
+                <div class="flex gap-2.5 items-end" :class="msg.sender_type === 'user' ? 'justify-end' : ''">
+                    <!-- 管理员头像（左侧） -->
+                    <template x-if="msg.sender_type !== 'user'">
+                        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-brand-500 to-indigo-500 flex items-center justify-center shrink-0 text-white shadow-sm">
+                            <i class="fa-solid fa-user-tie text-xs"></i>
+                        </div>
+                    </template>
+                    
+                    <!-- 消息气泡 -->
+                    <div class="max-w-[75%]">
+                        <!-- 管理员气泡 -->
+                        <template x-if="msg.sender_type !== 'user'">
+                            <div class="bg-white dark:bg-[#2C2C2E] rounded-2xl rounded-bl-md px-3.5 py-2.5 shadow-sm border border-slate-100 dark:border-white/5">
+                                <div class="text-[10px] font-bold text-brand-500 dark:text-brand-400 mb-1">管理员</div>
+                                <div class="text-sm text-slate-700 dark:text-zinc-200 leading-relaxed whitespace-pre-wrap" x-text="msg.content"></div>
+                            </div>
+                        </template>
+                        
+                        <!-- 用户气泡 -->
+                        <template x-if="msg.sender_type === 'user'">
+                            <div class="bg-gradient-to-r from-brand-500 to-indigo-500 rounded-2xl rounded-br-md px-3.5 py-2.5 shadow-sm">
+                                <div class="text-[10px] font-bold text-white/80 mb-1" x-text="userName || '我'"></div>
+                                <div class="text-sm text-white leading-relaxed whitespace-pre-wrap" x-text="msg.content"></div>
+                            </div>
+                        </template>
+                        
+                        <div class="text-[10px] text-slate-400 dark:text-zinc-500 mt-1" :class="msg.sender_type === 'user' ? 'text-right pr-1' : 'pl-1'" x-text="msg.created_at"></div>
+                    </div>
+                    
+                    <!-- 用户头像（右侧） -->
+                    <template x-if="msg.sender_type === 'user'">
+                        <img :src="`/api/proxy/user_image/${userId}`" 
+                             class="w-8 h-8 rounded-full object-cover shrink-0 shadow-sm bg-slate-200 dark:bg-[#333]"
+                             @error="$el.src='/static/img/avatar.png'">
+                    </template>
+                </div>
+            </template>
+            
+            <!-- 无消息提示 -->
+            <div x-show="userMessages.length === 0" class="text-center py-16">
+                <div class="w-20 h-20 mx-auto mb-4 bg-slate-100 dark:bg-white/5 rounded-full flex items-center justify-center">
+                    <i class="fa-solid fa-comments text-3xl text-slate-300 dark:text-zinc-600"></i>
+                </div>
+                <p class="text-sm font-bold text-slate-400 dark:text-zinc-500">暂无聊天记录</p>
+                <p class="text-xs text-slate-300 dark:text-zinc-600 mt-1">发送消息开始对话吧</p>
+            </div>
+        </div>
+        
+        <!-- 🔥 输入区域 -->
+        <div class="p-3 border-t border-slate-100 dark:border-white/5 bg-white dark:bg-[#1C1C1E]">
+            <div class="flex items-center gap-2 bg-slate-50 dark:bg-white/5 rounded-2xl px-3 py-2">
+                <!-- emoji按钮 -->
+                <button @click="showEmojiPicker = !showEmojiPicker" 
+                        class="w-8 h-8 rounded-lg hover:bg-slate-200 dark:hover:bg-white/10 flex items-center justify-center transition-colors text-slate-400 hover:text-slate-600 dark:hover:text-zinc-300">
+                    <i class="fa-solid fa-face-smile"></i>
+                </button>
+                <input type="text" x-model="userNewMessage" 
+                       :disabled="userMuteInfo?.is_muted"
+                       @keyup.enter="sendUserMessage()"
+                       placeholder="输入消息..." 
+                       autocomplete="off"
+                       class="flex-1 bg-transparent outline-none text-sm text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-zinc-500 disabled:opacity-50 disabled:cursor-not-allowed">
+                <button @click="sendUserMessage()" 
+                        :disabled="!userNewMessage.trim() || userSending || userMuteInfo?.is_muted"
+                        class="w-9 h-9 rounded-xl bg-gradient-to-r from-brand-500 to-indigo-500 hover:from-brand-600 hover:to-indigo-600 text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center shadow-md active:scale-[0.95]">
+                    <span x-show="userSending" class="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full"></span>
+                    <i x-show="!userSending" class="fa-solid fa-paper-plane text-sm"></i>
+                </button>
+            </div>
+            
+            <!-- 🔥 Emoji 选择器 -->
+            <div x-show="showEmojiPicker" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 translate-y-2" x-transition:enter-end="opacity-100 translate-y-0" class="mt-2 p-2 bg-white dark:bg-[#2C2C2E] rounded-xl border border-slate-200 dark:border-white/10 shadow-lg">
+                <div class="grid grid-cols-8 gap-1 max-h-32 overflow-y-auto mac-scrollbar">
+                    <template x-for="emoji in ['😀','😃','😄','😁','😅','😂','🤣','😊','😇','🙂','😉','😌','😍','🥰','😘','😗','😙','😚','😋','😛','😜','🤪','😝','🤑','🤗','🤭','🤫','🤔','🤐','🤨','😐','😑','😶','😏','😒','🙄','😬','🤥','😌','😔','😪','🤤','😴','😷','🤒','🤕','🤢','🤮','🤧','🥵','🥶','🥴','😵','🤯','🤠','🥳','🥸','😎','🤓','🧐','😕','😟','🙁','☹️','😮','😯','😲','😳','🥺','😦','😧','😨','😰','😥','😢','😭','😱','😖','😣','😞','😓','😩','😫','🥱','😤','😡','😠','🤬','👍','👎','👏','🙌','👐','🤲','🙏','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','👇','☝️','✋','🤚','🖐','🖖','👋','🤙','💪','🦾','❤️','🧡','💛','💚','💙','💜','🤎','🖤','🤍','💔','❣️','💕','💞','💓','💗','💖','💘','💝','🎉','🎊','🎁','🎈','✨','🌟','⭐','🔥','💥','💢','💦','💨','💯','🔢','🎵','🎶','🔔','🔕','📢','📣','💬','💭','🗯']" :key="emoji">
+                        <button @click="userNewMessage += emoji; showEmojiPicker = false" 
+                                class="w-8 h-8 rounded hover:bg-slate-100 dark:hover:bg-white/10 flex items-center justify-center text-lg transition-colors">
+                            <span x-text="emoji"></span>
+                        </button>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

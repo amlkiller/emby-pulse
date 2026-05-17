@@ -1,0 +1,22 @@
+{#
+  统一 Widget 卡片宏
+  用法: {{ widget_card('widget-weather', '当地天气', 'fa-solid fa-cloud-sun', 'text-sky-500', '1x1', caller()) }}
+  或用 call 块:
+  {% call(content) widget_card('widget-weather', ...) %}
+    <div>内容</div>
+  {% endcall %}
+#}
+{% macro widget_card(id, title, icon='', icon_color='', default_size='1x1', extra_class='') %}
+<div class="apple-card widget-item stat-card-mobile relative group flex flex-col {{ extra_class }}"
+     data-id="{{ id }}" data-default-size="{{ default_size }}">
+    <div class="widget-drag-handle absolute top-4 right-4 text-gray-300 dark:text-gray-600 hover:text-brand-500 dark:hover:text-brand-400 z-20">
+        <i class="fa-solid fa-grip"></i>
+    </div>
+    {% if title %}
+    <h3 class="text-[15px] font-semibold tracking-wide mb-3 text-gray-800 dark:text-gray-200 shrink-0">
+        {% if icon %}<i class="{{ icon }} {{ icon_color }} mr-1.5"></i>{% endif %}{{ title }}
+    </h3>
+    {% endif %}
+    {{ caller() }}
+</div>
+{% endmacro %}

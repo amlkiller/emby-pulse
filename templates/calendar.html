@@ -1,0 +1,1153 @@
+{% extends "layout.html" %}
+{% block title %}追剧排期 - EmbyPulse{% endblock %}
+
+{% block head %}
+<style>
+    /* === 🔥 Apple 级极简卡片质感 === */
+    .apple-card { 
+        background-color: rgba(255, 255, 255, 0.95); 
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-radius: 24px; 
+        padding: 24px; 
+        box-shadow: 0 4px 24px -8px rgba(0,0,0,0.04);
+        border: 1px solid rgba(0,0,0,0.02);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    html.dark .apple-card {
+        background-color: rgba(28, 28, 30, 0.85); 
+        box-shadow: 0 4px 24px -8px rgba(0, 0, 0, 0.4);
+        border: 1px solid rgba(255,255,255,0.04);
+    }
+
+    @media (min-width: 768px) {
+        .apple-card:hover { transform: translateY(-2px); box-shadow: 0 12px 32px -8px rgba(0,0,0,0.08); }
+        html.dark .apple-card:hover { box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.6); }
+    }
+    
+    /* 禁用 backdrop-filter 避免下拉菜单被遮挡 */
+    .apple-card.no-backdrop {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+    @media (min-width: 768px) {
+        .apple-card.no-backdrop:hover { transform: none; }
+    }
+
+    #detail-modal { transition: opacity 0.3s ease-out; }
+    #modal-container { transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1); }
+    
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    
+    /* 🔥 缓存时间下拉框 */
+    .ttl-dropdown { position: relative; }
+    .ttl-trigger {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        background: #f3f4f6;
+        border: 1px solid transparent;
+        border-radius: 50px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-size: 12px;
+        font-weight: 700;
+        color: #374151;
+    }
+    .dark .ttl-trigger {
+        background: #2C2C2E;
+        color: #d1d5db;
+    }
+    .ttl-trigger:hover {
+        background: #e5e7eb;
+    }
+    .dark .ttl-trigger:hover { background: #3A3A3C; }
+    .ttl-trigger-icon { font-size: 9px; color: #9ca3af; transition: transform 0.2s; }
+    .ttl-dropdown.open .ttl-trigger-icon { transform: rotate(180deg); }
+    
+    .ttl-menu {
+        position: absolute;
+        top: calc(100% + 6px);
+        right: 0;
+        min-width: 120px;
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        box-shadow: 0 12px 32px -8px rgba(0,0,0,0.15);
+        z-index: 9999;
+        padding: 6px;
+        display: none;
+        animation: dropdownFadeIn 0.15s ease-out;
+    }
+    .dark .ttl-menu {
+        background: #1f2937;
+        border-color: #374151;
+        box-shadow: 0 12px 32px -8px rgba(0,0,0,0.5);
+    }
+    .ttl-dropdown.open .ttl-menu { display: block; }
+    
+    .ttl-menu-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 600;
+        color: #374151;
+        transition: all 0.15s;
+    }
+    .dark .ttl-menu-item { color: #d1d5db; }
+    .ttl-menu-item:hover { background: #f3f4f6; }
+    .dark .ttl-menu-item:hover { background: #374151; }
+    .ttl-menu-item.active {
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        color: white;
+    }
+    .ttl-menu-item-icon { font-size: 12px; width: 14px; text-align: center; }
+    
+    /* 🔥 今日更新剧集卡片 */
+    .today-item-card {
+        position: relative;
+        background: linear-gradient(135deg, rgba(219, 234, 254, 0.95) 0%, rgba(191, 219, 254, 0.95) 100%) !important;
+        border: 2px solid rgba(59, 130, 246, 0.5) !important;
+        box-shadow: 0 4px 20px rgba(59, 130, 246, 0.2), 0 0 0 4px rgba(59, 130, 246, 0.08) !important;
+    }
+    .dark .today-item-card {
+        background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(234, 88, 12, 0.1) 100%) !important;
+        border: 2px solid rgba(245, 158, 11, 0.5) !important;
+        box-shadow: 0 4px 20px rgba(245, 158, 11, 0.2), 0 0 0 4px rgba(245, 158, 11, 0.1) !important;
+    }
+    
+    @keyframes dropdownFadeIn {
+        from { opacity: 0; transform: translateY(-4px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="w-full max-w-[1600px] mx-auto py-4 pb-32 px-4 sm:px-6 md:px-8 space-y-4 md:space-y-6">
+    
+    <div class="apple-card no-backdrop flex flex-col md:flex-row md:items-center justify-between gap-6 w-full mb-2 p-5 md:p-6">
+        <div class="flex items-center gap-4 pl-1">
+            <div class="w-12 h-12 rounded-[14px] bg-brand-500 text-white flex items-center justify-center text-xl shadow-md shadow-brand-500/30 shrink-0">
+                <i class="fa-solid fa-calendar-days"></i>
+            </div>
+            <div>
+                <h2 class="text-xl md:text-[22px] font-bold tracking-tight text-gray-900 dark:text-white">追剧排期</h2>
+                <div class="text-[12px] text-gray-500 mt-1 font-medium flex items-center gap-1.5">
+                    <i class="fa-solid fa-satellite-dish opacity-70"></i> <span>智能联动 Emby 媒体库状态</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="flex items-center justify-between md:justify-end gap-3 w-full md:w-auto">
+            <div class="flex items-center bg-gray-100 dark:bg-[#2C2C2E] rounded-full p-1 border border-transparent dark:border-white/5 shadow-sm">
+                <button onclick="changeWeek(-1)" class="w-8 h-8 rounded-full hover:bg-white dark:hover:bg-[#3A3A3C] text-gray-500 dark:text-gray-400 transition-colors flex items-center justify-center active:scale-95">
+                    <i class="fa-solid fa-chevron-left text-[11px]"></i>
+                </button>
+                <div class="px-4 text-[12px] font-bold text-gray-700 dark:text-gray-200 min-w-[110px] text-center tracking-wide" id="date-range-display">
+                    ...
+                </div>
+                <button onclick="changeWeek(1)" class="w-8 h-8 rounded-full hover:bg-white dark:hover:bg-[#3A3A3C] text-gray-500 dark:text-gray-400 transition-colors flex items-center justify-center active:scale-95">
+                    <i class="fa-solid fa-chevron-right text-[11px]"></i>
+                </button>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <!-- 🔥 缓存时间下拉框 -->
+                <div class="ttl-dropdown hidden sm:block" id="ttl-dropdown">
+                    <button onclick="toggleTTLDropdown()" class="ttl-trigger">
+                        <i class="fa-solid fa-clock ttl-menu-item-icon text-indigo-500"></i>
+                        <span id="ttl-display">缓存 1h</span>
+                        <i class="fa-solid fa-chevron-down ttl-trigger-icon"></i>
+                    </button>
+                    <div class="ttl-menu" id="ttl-menu">
+                        <div class="ttl-menu-item active" data-value="3600" onclick="selectTTL(3600, '缓存 1h')">
+                            <i class="fa-solid fa-hourglass-half ttl-menu-item-icon"></i>
+                            <span>缓存 1h</span>
+                        </div>
+                        <div class="ttl-menu-item" data-value="43200" onclick="selectTTL(43200, '缓存 12h')">
+                            <i class="fa-solid fa-hourglass-start ttl-menu-item-icon"></i>
+                            <span>缓存 12h</span>
+                        </div>
+                        <div class="ttl-menu-item" data-value="86400" onclick="selectTTL(86400, '缓存 1d')">
+                            <i class="fa-solid fa-calendar ttl-menu-item-icon"></i>
+                            <span>缓存 1d</span>
+                        </div>
+                    </div>
+                </div>
+                <button onclick="fetchCalendar(true)" id="refresh-btn" class="w-9 h-9 rounded-full bg-brand-50 hover:bg-brand-100 dark:bg-brand-500/10 dark:hover:bg-brand-500/20 text-brand-600 dark:text-brand-400 transition-colors shadow-sm flex items-center justify-center active:scale-90 border border-brand-200 dark:border-brand-500/20">
+                    <i class="fa-solid fa-arrows-rotate text-[13px]"></i>
+                </button>
+                {% if is_pro %}
+                <button onclick="openNotifyModal()" class="w-9 h-9 rounded-full bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 transition-colors shadow-sm flex items-center justify-center active:scale-90 border border-emerald-200 dark:border-emerald-500/20" title="通知设置">
+                    <i class="fa-solid fa-bell text-[13px]"></i>
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div id="mobile-day-nav" class="md:hidden sticky top-[72px] z-30 -mx-4 px-4 py-3 bg-apple-bgLight/80 dark:bg-apple-bgDark/80 backdrop-blur-[24px] saturate-[1.5] border-b border-gray-200/50 dark:border-white/5 flex gap-2 overflow-x-auto no-scrollbar shadow-sm transition-all scroll-smooth">
+    </div>
+
+    <div id="loading" class="flex flex-col items-center justify-center py-40">
+        <i class="fa-solid fa-circle-notch fa-spin text-4xl text-brand-500 mb-4"></i>
+        <p class="mt-2 text-[11px] font-bold text-gray-500 dark:text-gray-400 animate-pulse tracking-widest uppercase">正在同步排期矩阵...</p>
+    </div>
+
+    <div id="error-msg" class="hidden mx-auto max-w-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 rounded-2xl p-6 text-center mt-10 shadow-sm">
+        <p id="error-text" class="text-red-700 dark:text-red-400 text-sm font-bold mb-4"></p>
+        <button onclick="fetchCalendar(true)" class="px-6 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-[13px] font-bold shadow-md transition-all active:scale-95">重新加载</button>
+    </div>
+
+    <div id="calendar-grid" class="hidden grid grid-cols-1 md:grid-cols-7 gap-y-6 md:gap-x-3 lg:gap-x-4 items-start relative pb-10">
+    </div>
+</div>
+
+<div id="detail-modal" class="fixed inset-0 z-[100] hidden flex items-end sm:items-center justify-center p-0 sm:p-4 transition-opacity opacity-0 duration-300">
+    <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeDetails()"></div>
+    
+    <div id="modal-container" class="relative w-full sm:w-[90%] max-w-4xl bg-apple-bgLight dark:bg-[#1C1C1E] shadow-[0_-20px_40px_rgba(0,0,0,0.2)] sm:shadow-2xl rounded-t-[32px] sm:rounded-[28px] overflow-hidden transition-transform duration-400 ease-out transform translate-y-full sm:translate-y-0 sm:scale-95 flex flex-col md:flex-row max-h-[92vh] border border-transparent dark:border-white/5">
+        
+        <button onclick="closeDetails()" class="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-black/30 hover:bg-black/50 text-white transition-all z-50 backdrop-blur-md">
+            <i class="fa-solid fa-xmark text-[13px]"></i>
+        </button>
+        
+        <div class="w-full md:w-[38%] aspect-[4/3] md:aspect-[2/3] relative shrink-0 bg-gray-900 overflow-hidden">
+            <img id="m-poster" src="" class="absolute inset-0 w-full h-full object-cover">
+            <div class="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-apple-bgLight dark:from-[#1C1C1E] to-transparent md:hidden"></div>
+            <div class="hidden md:block absolute inset-y-0 right-0 w-1/4 bg-gradient-to-l from-white dark:from-[#1C1C1E] to-transparent"></div>
+        </div>
+        
+        <div class="flex-1 flex flex-col justify-start p-6 md:p-8 overflow-y-auto mac-scrollbar relative z-20 bg-white dark:bg-transparent">
+            <h3 id="m-title" class="text-2xl md:text-3xl font-black text-gray-900 dark:text-white leading-tight pr-6 md:pr-0 mb-3"></h3>
+            
+            <div class="flex flex-wrap items-center gap-2 mb-5">
+                <span id="m-episode-label" class="text-brand-600 dark:text-brand-400 font-mono font-bold bg-brand-50 dark:bg-brand-500/10 px-2 py-1 rounded-md border border-brand-100 dark:border-brand-500/20 text-[11px] md:text-xs"></span>
+                <span id="m-status-badge" class="px-2 py-1 rounded-md text-[10px] md:text-[11px] font-bold uppercase tracking-widest text-white shadow-sm"></span>
+            </div>
+            
+            <p class="text-[12px] md:text-[13px] text-gray-500 dark:text-gray-400 font-medium flex items-center gap-1.5 border-b border-gray-100 dark:border-white/5 pb-4 mb-4">
+                <i class="fa-regular fa-clock opacity-70"></i> <span id="m-date-val" class="font-mono"></span>
+            </p>
+            
+            <div class="text-[13px] md:text-[14px] text-gray-600 dark:text-gray-300 leading-relaxed flex-1 font-medium">
+                <p id="m-description"></p>
+            </div>
+            
+            <div id="m-actions" class="mt-6 pt-5 border-t border-gray-100 dark:border-white/5 shrink-0"></div>
+        </div>
+    </div>
+</div>
+
+<!-- 🔥 搜索结果弹窗 -->
+<div id="search-result-modal" class="fixed inset-0 z-[110] hidden flex items-end sm:items-center justify-center p-0 sm:p-4 transition-opacity opacity-0 duration-300">
+    <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeSearchResultModal()"></div>
+    
+    <div id="search-modal-container" class="relative w-full sm:w-[90%] max-w-2xl bg-apple-bgLight dark:bg-[#1C1C1E] shadow-[0_-20px_40px_rgba(0,0,0,0.2)] sm:shadow-2xl rounded-t-[32px] sm:rounded-[28px] overflow-hidden transition-transform duration-400 ease-out transform translate-y-full sm:translate-y-0 sm:scale-95 flex flex-col max-h-[85vh] border border-transparent dark:border-white/5">
+        
+        <button onclick="closeSearchResultModal()" class="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-black/30 hover:bg-black/50 text-white transition-all z-50 backdrop-blur-md">
+            <i class="fa-solid fa-xmark text-[13px]"></i>
+        </button>
+        
+        <div class="flex flex-col overflow-hidden">
+            <div class="p-5 border-b border-gray-100 dark:border-white/5">
+                <h3 id="search-result-title" class="text-[15px] font-bold text-gray-900 dark:text-white pr-8"></h3>
+                <div id="search-result-genes" class="flex flex-wrap gap-1 mt-2"></div>
+            </div>
+            <div id="search-result-list" class="flex flex-col gap-2 overflow-y-auto mac-scrollbar p-4 flex-1"></div>
+            <div id="search-result-empty" class="hidden text-center py-12">
+                <i class="fa-solid fa-satellite text-4xl text-gray-200 dark:text-gray-700 mb-3 block"></i>
+                <p class="text-[12px] font-bold text-gray-400 tracking-widest uppercase">未搜索到符合该集的资源</p>
+            </div>
+            <div id="search-result-footer" class="px-5 py-4 border-t border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-black/10 flex gap-3 shrink-0"></div>
+        </div>
+    </div>
+</div>
+
+<!-- 文件夹选择弹窗 -->
+<div id="calendar-folder-modal" class="hidden fixed inset-0 z-[120] flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeCalendarFolderModal()"></div>
+    <div class="relative bg-white dark:bg-[#1C1C1E] rounded-2xl shadow-2xl w-full max-w-sm p-6 z-10">
+        <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-1">选择115转存文件夹</h3>
+        <p class="text-[12px] text-gray-500 dark:text-gray-400 mb-4">点击文件夹即可选择并转存</p>
+        <div id="calendar-folder-list" class="space-y-2 max-h-[60vh] overflow-y-auto"></div>
+        <button onclick="closeCalendarFolderModal()" class="mt-4 w-full py-3 rounded-xl text-gray-500 dark:text-gray-400 font-medium hover:bg-gray-100 dark:hover:bg-white/5 transition-colors">取消</button>
+    </div>
+</div>
+
+<!-- 日历通知设置弹窗 -->
+<div id="notify-modal" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4 transition-opacity opacity-0 duration-300">
+    <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeNotifyModal()"></div>
+    <div id="notify-modal-container" class="relative w-full max-w-md bg-white dark:bg-[#1C1C1E] shadow-2xl rounded-[24px] overflow-hidden transition-transform duration-300 scale-95 border border-transparent dark:border-white/5">
+        <div class="px-6 py-5 border-b border-gray-100 dark:border-white/5 flex justify-between items-center bg-gray-50/50 dark:bg-black/10">
+            <h3 class="font-black text-[17px] text-gray-900 dark:text-white flex items-center gap-2">
+                <i class="fa-solid fa-bell text-emerald-500"></i> 日历通知设置
+            </h3>
+            <button onclick="closeNotifyModal()" class="w-8 h-8 rounded-full bg-gray-100 dark:bg-[#2C2C2E] flex items-center justify-center text-gray-500 hover:text-red-500 transition-colors">
+                <i class="fa-solid fa-xmark text-sm"></i>
+            </button>
+        </div>
+        
+        <div class="p-6 space-y-5">
+            <!-- 开关 -->
+            <div class="flex items-center justify-between">
+                <div>
+                    <div class="text-[13px] font-bold text-gray-900 dark:text-white">启用定时通知</div>
+                    <div class="text-[11px] text-gray-500 dark:text-gray-400">每天定时推送今日剧集更新</div>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="notify-enabled" class="sr-only peer">
+                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-emerald-500"></div>
+                </label>
+            </div>
+            
+            <!-- 通知时间 -->
+            <div>
+                <label class="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider block mb-2">通知时间</label>
+                <input type="time" id="notify-time" value="09:00" class="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-black/20 text-gray-900 dark:text-white text-[13px] font-bold focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 outline-none">
+            </div>
+            
+            <!-- 通知渠道 -->
+            <div>
+                <label class="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider block mb-2">通知渠道</label>
+                <div class="flex flex-wrap gap-2">
+                    <label class="flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-black/20 cursor-pointer hover:border-emerald-300 dark:hover:border-emerald-500/30 transition-colors">
+                        <input type="checkbox" class="notify-channel rounded text-emerald-500 focus:ring-emerald-500/50" value="tg_bot" onchange="toggleNotifyChannel('tg_bot', this.checked)">
+                        <i class="fa-brands fa-telegram text-blue-500"></i>
+                        <span class="text-[12px] font-bold text-gray-700 dark:text-gray-300">TG机器人</span>
+                    </label>
+                    <label class="flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-black/20 cursor-pointer hover:border-emerald-300 dark:hover:border-emerald-500/30 transition-colors">
+                        <input type="checkbox" class="notify-channel rounded text-emerald-500 focus:ring-emerald-500/50" value="wecom" onchange="toggleNotifyChannel('wecom', this.checked)">
+                        <i class="fa-solid fa-building text-green-500"></i>
+                        <span class="text-[12px] font-bold text-gray-700 dark:text-gray-300">企业微信</span>
+                    </label>
+                </div>
+            </div>
+            
+            <!-- TG 聊天ID -->
+            <div>
+                <label class="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider block mb-2">TG 聊天ID（可选）</label>
+                <input type="text" id="notify-tg-chat" placeholder="留空使用管理机器人默认聊天ID" class="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-black/20 text-gray-900 dark:text-white text-[13px] focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 outline-none">
+            </div>
+            
+            <!-- 企业微信接收者 -->
+            <div>
+                <label class="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider block mb-2">企业微信接收者</label>
+                <input type="text" id="notify-wecom-touser" value="@all" placeholder="@all 或用户ID，多个用|分隔" class="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-black/20 text-gray-900 dark:text-white text-[13px] focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 outline-none">
+            </div>
+        </div>
+        
+        <div class="px-6 py-4 border-t border-gray-100 dark:border-white/5 flex gap-2 bg-gray-50/50 dark:bg-black/10">
+            <button onclick="testNotify()" class="flex-1 py-3 rounded-xl text-[13px] font-bold text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 dark:bg-[#2C2C2E] dark:border-white/5 dark:text-gray-300 dark:hover:bg-[#3A3A3C] transition-colors shadow-sm">
+                <i class="fa-solid fa-paper-plane mr-1"></i> 测试
+            </button>
+            <button onclick="sendNotifyNow()" class="flex-1 py-3 rounded-xl text-[13px] font-bold text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 dark:bg-[#2C2C2E] dark:border-white/5 dark:text-gray-300 dark:hover:bg-[#3A3A3C] transition-colors shadow-sm">
+                <i class="fa-solid fa-send mr-1"></i> 发送
+            </button>
+            <button onclick="saveNotifyConfig()" class="flex-1 py-3 rounded-xl text-[13px] font-bold text-white bg-emerald-500 hover:bg-emerald-600 transition-colors shadow-sm">
+                <i class="fa-solid fa-check mr-1"></i> 保存
+            </button>
+        </div>
+    </div>
+</div>
+</div>
+
+<script>
+let currentOffset = 0;
+let currentServerId = ""; 
+let currentEmbyUrl = "";
+let isClickScrolling = false; 
+let clickScrollTimeout = null;
+let lastActiveIndex = -1; 
+let currentTTL = 3600;
+const imgBase = "https://image.tmdb.org/t/p/w500";
+
+document.addEventListener('DOMContentLoaded', () => {
+    fetchCalendar(false);
+    
+    // 点击外部关闭下拉菜单
+    document.addEventListener('click', (e) => {
+        const ttlDropdown = document.getElementById('ttl-dropdown');
+        if (ttlDropdown && !ttlDropdown.contains(e.target)) {
+            ttlDropdown.classList.remove('open');
+        }
+    });
+});
+
+// 🔥 缓存时间下拉框控制
+function toggleTTLDropdown() {
+    const dropdown = document.getElementById('ttl-dropdown');
+    dropdown.classList.toggle('open');
+}
+
+function selectTTL(value, label) {
+    currentTTL = value;
+    document.getElementById('ttl-display').textContent = label;
+    
+    // 更新选中状态
+    document.querySelectorAll('.ttl-menu-item').forEach(item => {
+        if (parseInt(item.dataset.value) === value) {
+            item.classList.add('active');
+        } else {
+            item.classList.remove('active');
+        }
+    });
+    
+    document.getElementById('ttl-dropdown').classList.remove('open');
+    updateTTL(value);
+}
+
+function changeWeek(offset) {
+    currentOffset += offset;
+    fetchCalendar(false);
+}
+
+async function updateTTL(val) {
+    try {
+        await fetch('/api/calendar/config', {
+            method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ ttl: parseInt(val) })
+        });
+        fetchCalendar(true);
+    } catch (e) { console.error(e); }
+}
+
+async function fetchCalendar(forceRefresh = false) {
+    const loadingEl = document.getElementById('loading');
+    const gridEl = document.getElementById('calendar-grid');
+    const errorEl = document.getElementById('error-msg');
+    
+    gridEl.classList.add('hidden');
+    document.getElementById('mobile-day-nav').innerHTML = ''; 
+    loadingEl.classList.remove('hidden');
+    errorEl.classList.add('hidden');
+    lastActiveIndex = -1;
+
+    try {
+        const res = await fetch(`/api/calendar/weekly?refresh=${forceRefresh}&offset=${currentOffset}`);
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+
+        document.getElementById('date-range-display').textContent = 
+            (currentOffset === 1 ? "下周 " : currentOffset === -1 ? "上周 " : "") + data.date_range;
+        
+        // 更新 TTL 显示
+        if (data.current_ttl) {
+            currentTTL = data.current_ttl;
+            const ttlLabels = { 3600: '缓存 1h', 43200: '缓存 12h', 86400: '缓存 1d' };
+            document.getElementById('ttl-display').textContent = ttlLabels[data.current_ttl] || '缓存 1h';
+            document.querySelectorAll('.ttl-menu-item').forEach(item => {
+                if (parseInt(item.dataset.value) === data.current_ttl) {
+                    item.classList.add('active');
+                } else {
+                    item.classList.remove('active');
+                }
+            });
+        }
+
+        currentServerId = data.server_id || ""; 
+        currentEmbyUrl = data.emby_url || "";
+        
+        renderMobileNav(data.days);
+        renderCalendar(data.days);
+        
+        setupScrollSpy(); 
+        
+        loadingEl.classList.add('hidden');
+        gridEl.classList.remove('hidden');
+
+        // 默认定位到今天
+        if (currentOffset === 0 && window.innerWidth < 768) {
+            const todayIndex = data.days.findIndex(d => d.is_today);
+            if (todayIndex !== -1) {
+                setTimeout(() => scrollToDay(todayIndex), 200); 
+            }
+        }
+    } catch (e) {
+        loadingEl.classList.add('hidden');
+        document.getElementById('error-text').textContent = e.message;
+        errorEl.classList.remove('hidden');
+    }
+}
+
+function renderMobileNav(days) {
+    const navContainer = document.getElementById('mobile-day-nav');
+    navContainer.innerHTML = days.map((day, index) => {
+        const isToday = day.is_today && currentOffset === 0;
+        const baseClass = "nav-btn-item relative flex-1 flex flex-col items-center justify-center py-2 px-1 min-w-[60px] rounded-xl transition-all duration-300 shrink-0 cursor-pointer";
+        const stateClass = isToday 
+            ? "bg-brand-500 text-white shadow-md shadow-brand-500/30 scale-105" 
+            : "bg-white/50 dark:bg-black/20 text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-[#2C2C2E]";
+            
+        return `
+        <button id="nav-btn-${index}" onclick="scrollToDay(${index})" class="${baseClass} ${stateClass}">
+            <span class="nav-text text-[11px] font-bold tracking-widest">${isToday ? '今天' : day.weekday_cn}</span>
+            <span class="nav-date text-[10px] font-mono mt-0.5 opacity-90">${day.date.slice(5)}</span>
+        </button>
+        `;
+    }).join('');
+}
+
+function renderCalendar(days) {
+    const container = document.getElementById('calendar-grid');
+    
+    container.innerHTML = days.map((day, index) => {
+        const isToday = day.is_today && currentOffset === 0;
+        const dayNum = day.date.split('-')[2];
+        
+        const itemsHtml = day.items.length === 0 
+            ? `<div class="py-10 text-center bg-gray-50/50 dark:bg-black/10 rounded-[20px] border border-dashed border-gray-200/80 dark:border-white/5">
+                   <p class="text-[11px] text-gray-400 font-bold tracking-widest">无排期</p>
+               </div>`
+            : day.items.map(item => generateCardHtml(item, isToday)).join('');
+
+        return `
+            <div id="day-section-${index}" class="day-section flex flex-col gap-3 md:gap-4 pt-4 relative">
+                
+                <div class="hidden md:flex flex-col items-center justify-center pb-2 pt-3 mb-1 sticky top-[72px] z-30 bg-apple-bgLight/90 dark:bg-apple-bgDark/90 backdrop-blur-md">
+                    <span class="text-[10px] font-bold uppercase tracking-widest mb-1 ${isToday ? 'text-brand-500' : 'text-gray-400 dark:text-gray-500'}">${day.weekday_cn}</span>
+                    <div class="w-8 h-8 rounded-full flex items-center justify-center text-[15px] font-black ${isToday ? 'bg-brand-500 text-white shadow-md shadow-brand-500/30' : 'text-gray-800 dark:text-gray-200'}">
+                        ${dayNum}
+                    </div>
+                </div>
+                
+                <div class="md:hidden flex items-center gap-3 pb-1 relative z-10">
+                    <span class="font-black text-lg ${isToday ? 'text-brand-500' : 'text-gray-800 dark:text-white'}">${isToday ? '今天' : day.weekday_cn}</span>
+                    <span class="text-[11px] font-mono font-bold text-gray-400 mt-1">${day.date.slice(5)}</span>
+                    ${isToday ? '<span class="px-2 py-0.5 bg-brand-500 text-white rounded-md text-[9px] font-bold shadow-sm">今 日 更新</span>' : ''}
+                    <div class="flex-1 h-px bg-gray-200 dark:bg-white/5"></div>
+                </div>
+
+                ${itemsHtml}
+            </div>
+        `;
+    }).join('');
+}
+
+function generateCardHtml(item, isDayToday = false) {
+    const statusMap = {
+        'ready': { color: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-500/20', text: '已入库', dot: 'bg-emerald-500' },
+        'missing': { color: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400 border border-red-200/50 dark:border-red-500/20', text: '待补货', dot: 'bg-red-500 animate-pulse' },
+        'today': { color: 'bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-400 border border-brand-200/50 dark:border-brand-500/20', text: '今日更新', dot: 'bg-brand-500 animate-pulse' },
+        'upcoming': { color: 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400 border border-blue-200/50 dark:border-blue-500/20', text: '待播出', dot: 'bg-blue-500' }
+    };
+    const s = statusMap[item.status] || { color: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400 border-transparent', text: '未知', dot: 'bg-gray-500' };
+    const poster = item.poster_path ? (imgBase + item.poster_path) : 'https://via.placeholder.com/300x450?text=No+Poster';
+    const desc = item.series_overview || item.overview || "暂无剧情简介，静待更新...";
+    const formattedAirDate = item.air_date ? item.air_date.replace(/-/g, '.') : '未知';
+    
+    // 🔥 今日播出的剧集添加特殊样式（不管是否已入库）
+    const isToday = isDayToday;
+    const cardClass = isToday ? 'today-item-card' : '';
+
+    return `
+    <div onclick='showDetails(${JSON.stringify(item).replace(/'/g, "&apos;")})' 
+         class="group flex flex-row md:flex-col bg-white dark:bg-[#1C1C1E] rounded-[20px] overflow-hidden shadow-sm border border-gray-100 dark:border-white/5 cursor-pointer hover:-translate-y-1 transition-all duration-300 hover:shadow-lg h-full ${cardClass}">
+        <div class="relative w-28 sm:w-36 md:w-full shrink-0 aspect-[2/3] bg-gray-100 dark:bg-[#2C2C2E] overflow-hidden border-r md:border-r-0 md:border-b border-gray-100 dark:border-white/5">
+            <img src="${poster}" class="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" loading="lazy">
+        </div>
+
+        <div class="p-3 sm:p-4 flex-1 flex flex-col justify-start min-w-0">
+            <h3 class="text-[13px] md:text-[14px] font-bold text-gray-900 dark:text-white leading-tight line-clamp-2 mb-1.5 transition-colors group-hover:text-brand-500">${item.series_name}</h3>
+            
+            <div class="flex items-center justify-between mb-2">
+                <span class="shrink-0 text-[10px] font-mono font-bold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-black/30 px-1.5 py-[1px] rounded">
+                    S${String(item.season).padStart(2,'0')}E${String(item.episode).padStart(2,'0')}
+                </span>
+                <span class="text-[10px] font-mono font-medium text-gray-400 truncate ml-2">${formattedAirDate}</span>
+            </div>
+            
+            <p class="text-[11px] text-gray-500 dark:text-gray-400 line-clamp-2 md:line-clamp-3 leading-relaxed mb-3 flex-1">
+                ${desc}
+            </p>
+
+            <div class="flex items-center w-max px-2 py-0.5 rounded-md ${s.color} mt-auto shadow-sm">
+                <span class="w-1.5 h-1.5 rounded-full ${s.dot} mr-1.5"></span>
+                <span class="text-[9px] font-bold uppercase tracking-wider">${s.text}</span>
+            </div>
+        </div>
+    </div>
+    `;
+}
+
+/* ===== 🔥 极度丝滑的高精度滚动引擎 ===== */
+
+// 1. 点击跳转：不再依靠模糊的 Anchor，而是绝对像素定位
+function scrollToDay(index) {
+    const targetSection = document.getElementById(`day-section-${index}`);
+    // 物理锁定滚动容器，绝不找错
+    const scrollContainer = document.querySelector('main').parentElement;
+
+    if (targetSection && scrollContainer) {
+        // 上锁，防止跳转时的自然滚动触发 Scroll Spy 导致死循环乱跳
+        isClickScrolling = true; 
+        lastActiveIndex = index;
+        
+        if (window.innerWidth < 768) {
+            highlightNavBtn(index, true); 
+        }
+
+        // 精确计算：获取元素相对于滚动容器内的高度 = 元素顶部 - 容器顶部 + 容器已滚动的距离 - 顶部双层毛玻璃高度(130px)
+        const rect = targetSection.getBoundingClientRect();
+        const containerRect = scrollContainer.getBoundingClientRect();
+        const targetScrollTop = scrollContainer.scrollTop + (rect.top - containerRect.top) - 130;
+        
+        scrollContainer.scrollTo({ top: targetScrollTop, behavior: 'smooth' });
+
+        // 等待平滑滚动完成（一般500ms），解锁
+        clearTimeout(clickScrollTimeout);
+        clickScrollTimeout = setTimeout(() => { isClickScrolling = false; }, 800);
+    }
+}
+
+// 2. 滚动侦听：使用 requestAnimationFrame 保障丝滑性能
+function setupScrollSpy() {
+    if (window.innerWidth >= 768) return; 
+    
+    // 物理锁定滚动容器
+    const scrollContainer = document.querySelector('main').parentElement;
+    if (!scrollContainer) return;
+
+    let isThrottled = false;
+
+    scrollContainer.addEventListener('scroll', () => {
+        if (isClickScrolling) return; // 如果正在执行点击跳转，则闭嘴
+
+        if (!isThrottled) {
+            window.requestAnimationFrame(() => {
+                const sections = document.querySelectorAll('.day-section');
+                let activeIdx = 0;
+                
+                // 触发线：距离屏幕顶部约 150px 的位置（正好在横向导航条下面一点点）
+                const triggerLine = scrollContainer.getBoundingClientRect().top + 160;
+
+                sections.forEach((sec, idx) => {
+                    const rect = sec.getBoundingClientRect();
+                    // 只要日期的头部顶破了触发线，就算进入了这一天
+                    if (rect.top <= triggerLine) {
+                        activeIdx = idx;
+                    }
+                });
+
+                // 只有跨天了才执行 UI 更新
+                if (activeIdx !== lastActiveIndex) {
+                    lastActiveIndex = activeIdx;
+                    highlightNavBtn(activeIdx, true); 
+                }
+                
+                isThrottled = false;
+            });
+            isThrottled = true;
+        }
+    });
+}
+
+// 3. 渲染顶部导航并自动居中
+function highlightNavBtn(activeIndex, autoCenter = false) {
+    document.querySelectorAll('.nav-btn-item').forEach((btn, idx) => {
+        if (idx == activeIndex) {
+            btn.className = "nav-btn-item relative flex-1 flex flex-col items-center justify-center py-2 px-1 min-w-[60px] rounded-xl transition-all duration-300 shrink-0 cursor-pointer bg-brand-500 text-white shadow-md shadow-brand-500/30 scale-105";
+        } else {
+            btn.className = "nav-btn-item relative flex-1 flex flex-col items-center justify-center py-2 px-1 min-w-[60px] rounded-xl transition-all duration-300 shrink-0 cursor-pointer bg-white/50 dark:bg-black/20 text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-[#2C2C2E]";
+        }
+    });
+
+    if (autoCenter) {
+        const navContainer = document.getElementById('mobile-day-nav');
+        const activeBtn = document.getElementById(`nav-btn-${activeIndex}`);
+        if (navContainer && activeBtn) {
+            // 计算让胶囊居中在屏幕正中央的 scrollLeft 偏移量
+            const scrollLeft = activeBtn.offsetLeft - (navContainer.clientWidth / 2) + (activeBtn.clientWidth / 2);
+            navContainer.scrollTo({ left: scrollLeft, behavior: 'smooth' });
+        }
+    }
+}
+
+// 弹窗逻辑
+function showDetails(item) {
+    const modal = document.getElementById('detail-modal');
+    const container = document.getElementById('modal-container');
+    
+    document.getElementById('m-title').textContent = item.series_name;
+    document.getElementById('m-episode-label').textContent = `S${String(item.season).padStart(2,'0')}E${String(item.episode).padStart(2,'0')}`;
+    document.getElementById('m-poster').src = item.poster_path ? (imgBase + item.poster_path) : '';
+    
+    const formattedAirDate = item.air_date ? item.air_date.replace(/-/g, '.') : '未知时间';
+    document.getElementById('m-date-val').textContent = formattedAirDate;
+    document.getElementById('m-description').textContent = item.series_overview || item.overview || "暂无剧情简介，静待更新...";
+
+    const badge = document.getElementById('m-status-badge');
+    const actions = document.getElementById('m-actions');
+    actions.innerHTML = '';
+    
+    const isReady = item.status === 'ready';
+    const isMissing = item.status === 'missing'; // 待补货
+    badge.textContent = isReady ? "已入库" : item.status === 'upcoming' ? "待播出" : "待补货";
+    badge.className = `px-2 py-1 rounded-md text-[10px] md:text-[11px] font-bold uppercase tracking-widest text-white shadow-sm ${isReady ? "bg-emerald-500" : item.status === 'upcoming' ? "bg-blue-500" : "bg-red-500"}`;
+
+    if (isReady) {
+        actions.innerHTML = `
+            <button onclick="playItem('${item.series_id}')" class="w-full py-3 md:py-3.5 bg-brand-500 hover:bg-brand-600 text-white rounded-xl md:rounded-[14px] text-[13px] font-bold shadow-lg shadow-brand-500/30 active:scale-95 transition-all flex items-center justify-center gap-2">
+                <i class="fa-solid fa-play"></i> 立即播放
+            </button>`;
+    } else if (isMissing) {
+        // 🔥 待补货状态：提供搜索按钮
+        actions.innerHTML = `
+            <div class="flex gap-2 w-full">
+                <button onclick="searchMP('${item.series_name}', ${item.season}, [${item.episode}], '${item.series_id || ''}')" class="flex-1 py-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl text-[13px] font-bold active:scale-95 transition-all flex items-center justify-center gap-1.5 shadow-sm">
+                    <i class="fa-solid fa-magnifying-glass"></i> MP 搜索
+                </button>
+                <button onclick="searchHDHive(${item.tmdb_id || 0}, '${item.series_name}', ${item.season}, [${item.episode}])" class="flex-1 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-[13px] font-bold active:scale-95 transition-all flex items-center justify-center gap-1.5 shadow-sm">
+                    <i class="fa-solid fa-cube"></i> 影巢搜索
+                </button>
+            </div>`;
+    } else {
+        const copyTxt = `${item.series_name} S${String(item.season).padStart(2,'0')}E${String(item.episode).padStart(2,'0')}`;
+        actions.innerHTML = `
+            <button onclick="copyToClipboard('${copyTxt}')" class="w-full py-3 md:py-3.5 bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] text-gray-800 dark:text-gray-200 rounded-xl md:rounded-[14px] text-[13px] font-bold active:scale-95 transition-all flex items-center justify-center gap-2 shadow-sm border border-gray-200/50 dark:border-white/5">
+                <i class="fa-solid fa-copy"></i> 复制求片排期
+            </button>`;
+    }
+
+    modal.classList.remove('hidden');
+    container.offsetHeight; 
+    modal.classList.remove('opacity-0');
+    
+    if(window.innerWidth < 640) container.classList.remove('translate-y-full');
+    else container.classList.remove('scale-95');
+}
+
+function closeDetails() {
+    const modal = document.getElementById('detail-modal');
+    const container = document.getElementById('modal-container');
+    
+    modal.classList.add('opacity-0');
+    if(window.innerWidth < 640) container.classList.add('translate-y-full');
+    else container.classList.add('scale-95');
+    
+    setTimeout(() => modal.classList.add('hidden'), 300);
+}
+
+function playItem(id) { window.open(`${currentEmbyUrl}/web/index.html#!/item?id=${id}&serverId=${currentServerId}`, '_blank'); }
+
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        const btn = document.querySelector('#m-actions button'); const ogHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="fa-solid fa-check text-emerald-500"></i> <span class="text-emerald-500">已复制</span>';
+        setTimeout(() => { btn.innerHTML = ogHtml; closeDetails(); }, 1000);
+    });
+}
+
+// 🔥 搜索状态管理
+let searchState = {
+    open: false, source: '', seriesName: '', season: 0, episodes: [],
+    seriesId: '', tmdbId: 0, genes: [], results: [], selectedItems: [],
+    isLoading: false, isSubmitting: false
+};
+
+// 🔥 MP 搜索
+async function searchMP(seriesName, season, episodes, seriesId) {
+    const btn = event.target.closest('button');
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 搜索中...';
+    btn.disabled = true;
+    try {
+        const res = await fetch('/api/gaps/search_mp', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ series_name: seriesName, series_id: seriesId, season, episodes })
+        });
+        const data = await res.json();
+        if (data.status === 'success' && data.data?.results?.length > 0) {
+            searchState = { open: true, source: 'MP', seriesName, season, episodes, seriesId, tmdbId: 0,
+                genes: data.data.genes || [], results: data.data.results, selectedItems: [], isLoading: false, isSubmitting: false };
+            if (data.data.results[0].ui_episode_match_ratio > 0) searchState.selectedItems = [0];
+            renderSearchModal();
+        } else { showToast('error', '搜索失败', data.message || '未找到相关资源'); btn.innerHTML = originalHtml; btn.disabled = false; }
+    } catch(e) { console.error(e); showToast('error', '搜索失败', '请稀后重试'); btn.innerHTML = originalHtml; btn.disabled = false; }
+}
+
+// 🔥 影巢搜索
+async function searchHDHive(tmdbId, seriesName, season, episodes) {
+    const btn = event.target.closest('button');
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 搜索中...';
+    btn.disabled = true;
+    try {
+        const res = await fetch('/api/gaps/search_hdhive', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tmdb_id: tmdbId, series_name: seriesName, season, episodes, type: 'tv' })
+        });
+        const data = await res.json();
+        if (data.status === 'success' && data.data?.length > 0) {
+            const results = data.data.map((r, i) => ({
+                index: i, ui_title: r.title || '未知资源', ui_size: r.share_size || '未知大小',
+                ui_site: '影巢115', ui_seeders: r.unlock_points || 0,
+                match_score: r.is_unlocked ? 100 : (r.unlock_points === 0 || r.unlock_points === null ? 90 : 80),
+                hdhive_info: {
+                    resolution: r.video_resolution || [], source: r.source || [],
+                    subtitle_lang: r.subtitle_language || [], subtitle_type: r.subtitle_type || [],
+                    remark: r.remark || '', is_official: r.is_official, validate_status: r.validate_status,
+                    unlocked_count: r.unlocked_users_count || 0,
+                    uploader: r.user ? (r.user.username || r.user.name || r.user.nickname || '') : '',
+                    is_unlocked: r.is_unlocked, unlock_points: r.unlock_points
+                },
+                ui_labels: [r.is_official ? '官方' : '', r.validate_status === 'valid' ? '有效' : '',
+                    r.is_unlocked ? '✅已解锁' : (r.unlock_points === 0 || r.unlock_points === null ? '🆓免费' : `🔴${r.unlock_points}积分`),
+                    ...(r.video_resolution || []), ...(r.source || [])].filter(Boolean),
+                slug: r.slug, is_pack: false, extracted_tags: ['115'], is_hdhive: true, _raw: r
+            }));
+            searchState = { open: true, source: '影巢', seriesName, season, episodes, seriesId: '', tmdbId,
+                genes: [], results, selectedItems: [0], isLoading: false, isSubmitting: false };
+            renderSearchModal();
+        } else { showToast('error', '搜索失败', data.message || '未找到相关资源'); btn.innerHTML = originalHtml; btn.disabled = false; }
+    } catch(e) { console.error(e); showToast('error', '搜索失败', '请稀后重试'); btn.innerHTML = originalHtml; btn.disabled = false; }
+}
+
+// 🔥 切换选中
+function toggleSearchSelection(index) {
+    const idx = searchState.selectedItems.indexOf(index);
+    if (idx > -1) searchState.selectedItems.splice(idx, 1);
+    else searchState.selectedItems.push(index);
+    renderSearchModal();
+}
+
+// 🔥 MP下载
+async function submitMPDownload() {
+    if (searchState.selectedItems.length === 0) return;
+    const selectedResults = searchState.selectedItems.map(i => searchState.results[i]);
+    searchState.isSubmitting = true; renderSearchModal();
+    let successCount = 0, failCount = 0;
+    for (const torrent of selectedResults) {
+        try {
+            const res = await fetch('/api/gaps/download', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ series_id: searchState.seriesId, series_name: searchState.seriesName,
+                    tmdbid: searchState.tmdbId, season: searchState.season, episodes: searchState.episodes, torrent_info: torrent })
+            });
+            const data = await res.json();
+            if (data.status === 'success') successCount++; else failCount++;
+        } catch(e) { failCount++; }
+    }
+    searchState.isSubmitting = false; closeSearchResultModal();
+    showToast('success', '提交完成', selectedResults.length > 1 ? `成功 ${successCount} 个${failCount > 0 ? `，失败 ${failCount} 个` : ''}` : '已提交到 MoviePilot');
+}
+
+// 🔥 影巢转存
+async function submitHDHiveTransfer() {
+    if (searchState.selectedItems.length === 0) return;
+    const selected = searchState.selectedItems.map(i => searchState.results[i])[0];
+    if (!selected?.slug) { showToast('warning', '提示', '资源信息不完整'); return; }
+    searchState.isSubmitting = true; renderSearchModal();
+    try {
+        const res = await fetch('/api/gaps/download_hdhive', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ slug: selected.slug })
+        });
+        const data = await res.json();
+        if (data.status === 'need_folder') { searchState.isSubmitting = false; showCalendarFolderSelect(data.folders, selected.slug); return; }
+        if (data.status === 'success') { showToast('success', '转存成功', `影巢资源已解锁: ${data.title || ''}`); closeSearchResultModal(); }
+        else { showToast('error', '解锁失败', data.message || '未知错误'); searchState.isSubmitting = false; renderSearchModal(); }
+    } catch(e) { showToast('error', '操作失败', e.message); searchState.isSubmitting = false; renderSearchModal(); }
+}
+
+// 🔥 文件夹选择
+let pendingFolderSelect = null;
+function showCalendarFolderSelect(folders, slug) {
+    pendingFolderSelect = { folders, slug };
+    console.log('[HDHive] showCalendarFolderSelect - folders:', folders, 'slug:', slug);
+    const list = document.getElementById('calendar-folder-list');
+    if (!folders || folders.length === 0) {
+        list.innerHTML = '<p class="text-gray-500 dark:text-gray-400 text-center py-4">没有可用的文件夹</p>';
+    } else {
+        list.innerHTML = folders.map((f, i) => {
+            const cid = f.cid || f.id || f.folder_id || '';
+            const name = f.name || f.folder_name || '未命名';
+            console.log(`[HDHive] Folder ${i}: name=${name}, cid=${cid}, full object:`, f);
+            return `<button type="button" onclick="event.stopPropagation(); doCalendarFolderTransfer('${cid}')" class="w-full py-3 px-4 rounded-xl bg-gray-100 dark:bg-[#2C2C2E] hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-gray-800 dark:text-gray-200 font-bold flex items-center gap-3 transition-colors cursor-pointer"><i class="fa-solid fa-folder text-emerald-500"></i> <span class="flex-1 text-left">${name}</span></button>`;
+        }).join('');
+    }
+    document.getElementById('calendar-folder-modal').classList.remove('hidden');
+}
+async function doCalendarFolderTransfer(cid) {
+    console.log('[HDHive] doCalendarFolderTransfer - cid:', cid, 'type:', typeof cid);
+    if (!pendingFolderSelect) {
+        console.error('[HDHive] No pending folder select');
+        return;
+    }
+    
+    // 立即关闭文件夹选择弹窗
+    const folderModal = document.getElementById('calendar-folder-modal');
+    folderModal.classList.add('hidden');
+    
+    // 设置提交状态
+    searchState.isSubmitting = true;
+    renderSearchModal();
+    
+    try {
+        const payload = { slug: pendingFolderSelect.slug, folder_cid: String(cid) };
+        console.log('[HDHive] Sending payload:', payload);
+        const res = await fetch('/api/gaps/download_hdhive', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        console.log('[HDHive] Response:', data);
+        if (data.status === 'success') {
+            showToast('success', '转存成功', `影巢资源已解锁: ${data.title || ''}`);
+            closeSearchResultModal();
+        } else if (data.status === 'need_folder') {
+            console.error('[HDHive] Unexpected need_folder response after selecting folder');
+            showToast('warning', '提示', '文件夹选择异常，请重试');
+            searchState.isSubmitting = false;
+            renderSearchModal();
+        } else {
+            showToast('error', '转存失败', data.message || '未知错误');
+            searchState.isSubmitting = false;
+            renderSearchModal();
+        }
+    } catch(e) {
+        console.error('[HDHive] Error:', e);
+        showToast('error', '操作失败', e.message);
+        searchState.isSubmitting = false;
+        renderSearchModal();
+    }
+    pendingFolderSelect = null;
+}
+function closeCalendarFolderModal() {
+    document.getElementById('calendar-folder-modal').classList.add('hidden');
+    pendingFolderSelect = null;
+    if (searchState.isSubmitting) {
+        searchState.isSubmitting = false;
+    }
+}
+
+// 🔥 渲染搜索结果弹窗
+function renderSearchModal() {
+    const modal = document.getElementById('search-result-modal');
+    const container = document.getElementById('search-modal-container');
+    const title = document.getElementById('search-result-title');
+    const genesDiv = document.getElementById('search-result-genes');
+    const list = document.getElementById('search-result-list');
+    const empty = document.getElementById('search-result-empty');
+    const footer = document.getElementById('search-result-footer');
+    if (!searchState.open) { modal.classList.add('hidden'); return; }
+    title.innerHTML = `<i class="fa-solid fa-magnifying-glass text-brand-500 mr-2"></i>${searchState.source} 搜索结果 - ${searchState.seriesName} S${String(searchState.season).padStart(2,'0')}E${searchState.episodes.join(',')}`;
+    if (searchState.genes.length > 0) { genesDiv.innerHTML = searchState.genes.map(g => `<span class="text-[9px] px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-500/10 text-indigo-500 font-bold">${g}</span>`).join(''); genesDiv.classList.remove('hidden'); }
+    else genesDiv.classList.add('hidden');
+    if (searchState.results.length === 0) { list.classList.add('hidden'); empty.classList.remove('hidden'); footer.classList.add('hidden'); }
+    else {
+        list.classList.remove('hidden'); empty.classList.add('hidden'); footer.classList.remove('hidden');
+        list.innerHTML = searchState.results.map((r, idx) => {
+            const isSelected = searchState.selectedItems.includes(idx);
+            const t = r.ui_title || r.title || '未知资源';
+            const sz = r.ui_size || r.size || 0;
+            const st = r.ui_site || r.site || '';
+            const sd = r.ui_seeders || r.seeders || 0;
+            const sc = r.match_score || 0;
+            const res = r.ui_resolution || '', reso = r.ui_resource || '';
+            const ca = r.ui_chinese_audio || false, cs = r.ui_chinese_sub || false;
+            const fr = r.ui_free || false, dc = r.ui_discount || '', hn = r.ui_hnr || false;
+            const ds = r.ui_desc || '', lb = r.ui_labels || [];
+            const ih = r.is_hdhive || false, hi = r.hdhive_info || {};
+            const ee = r.ui_extracted_episodes || [], me = r.ui_matched_episodes || [], mr = r.ui_episode_match_ratio || 0;
+            const et = r.extracted_tags || [], pk = r.is_pack || false;
+            return `<label class="flex items-start gap-3 p-3.5 rounded-[14px] border cursor-pointer transition-all ${isSelected ? 'border-indigo-500 bg-indigo-50/30 dark:bg-indigo-900/10 shadow-md ring-1 ring-indigo-500/20' : 'border-gray-200/80 dark:border-white/5 shadow-sm hover:bg-gray-50 dark:hover:bg-[#2C2C2E]/40'}">
+                <input type="checkbox" ${isSelected ? 'checked' : ''} onchange="toggleSearchSelection(${idx})" class="w-5 h-5 mt-0.5 text-indigo-600 focus:ring-indigo-500 border-gray-300 dark:border-gray-600 dark:bg-[#1C1C1E] cursor-pointer rounded">
+                <div class="flex-1 min-w-0">
+                    <div class="font-bold text-[13px] text-gray-900 dark:text-white truncate mb-1">${t}</div>
+                    ${pk ? '<div class="mt-1 mb-1.5 inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md font-black border bg-amber-50 text-amber-600 border-amber-200/50 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20 shadow-sm"><i class="fa-solid fa-box-open"></i> 包含目标集的整季包 (自动截胡)</div>' : ''}
+                    <div class="flex flex-wrap items-center gap-1.5 mb-2">
+                        ${ca ? '<span class="text-[10px] px-2 py-0.5 rounded-md font-bold border bg-orange-50 text-orange-600 border-orange-200/50 dark:bg-orange-500/10 dark:text-orange-400 dark:border-orange-500/20 shadow-sm"><i class="fa-solid fa-volume-high mr-0.5"></i>国语</span>' : ''}
+                        ${cs ? '<span class="text-[10px] px-2 py-0.5 rounded-md font-bold border bg-blue-50 text-blue-600 border-blue-200/50 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20 shadow-sm"><i class="fa-solid fa-closed-captioning mr-0.5"></i>中字</span>' : ''}
+                        ${fr ? '<span class="text-[10px] px-2 py-0.5 rounded-md font-bold border bg-emerald-50 text-emerald-600 border-emerald-200/50 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20 shadow-sm"><i class="fa-solid fa-gift mr-0.5"></i>免费</span>' : ''}
+                        ${dc && !fr ? `<span class="text-[10px] px-2 py-0.5 rounded-md font-bold border bg-rose-50 text-rose-600 border-rose-200/50 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20 shadow-sm"><i class="fa-solid fa-tag mr-0.5"></i>${dc}</span>` : ''}
+                        ${hn ? '<span class="text-[10px] px-2 py-0.5 rounded-md font-bold border bg-red-50 text-red-600 border-red-200/50 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20 shadow-sm"><i class="fa-solid fa-triangle-exclamation mr-0.5"></i>H&R</span>' : ''}
+                        ${reso ? `<span class="text-[10px] px-2 py-0.5 rounded-md font-bold border bg-purple-50 text-purple-600 border-purple-200/50 dark:bg-purple-500/10 dark:text-purple-400 dark:border-purple-500/20 shadow-sm"><i class="fa-solid fa-film mr-0.5"></i>${reso}</span>` : ''}
+                        ${res && !ih ? `<span class="text-[10px] px-2 py-0.5 rounded-md font-bold border bg-cyan-50 text-cyan-600 border-cyan-200/50 dark:bg-cyan-500/10 dark:text-cyan-400 dark:border-cyan-500/20 shadow-sm"><i class="fa-solid fa-display mr-0.5"></i>${res}</span>` : ''}
+                    </div>
+                    ${!ih && ee.length > 0 ? `<div class="text-[11px] text-gray-500 dark:text-gray-400 mb-2 bg-gray-50 dark:bg-[#2C2C2E] px-2 py-1.5 rounded border border-gray-100 dark:border-white/5"><div class="flex items-center gap-1.5 mb-1"><i class="fa-solid fa-list-ol text-indigo-500"></i><span class="font-bold">提取集数:</span><span class="font-mono text-gray-700 dark:text-gray-300">${ee.join(', ')}</span></div>${me.length > 0 ? `<div class="flex items-center gap-1.5"><i class="fa-solid fa-check-circle text-emerald-500"></i><span class="font-bold">匹配目标:</span><span class="font-mono text-emerald-600 dark:text-emerald-400">${me.join(', ')}</span><span class="ml-1 px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">${mr}%</span></div>` : ''}${mr === 0 ? '<div class="flex items-center gap-1.5 text-rose-500"><i class="fa-solid fa-times-circle"></i><span class="font-bold">不匹配目标集数</span></div>' : ''}</div>` : ''}
+                    ${ds || (ih && hi.remark) ? `<div class="text-[11px] text-gray-500 dark:text-gray-400 mb-2 line-clamp-2 bg-gray-50 dark:bg-[#2C2C2E] px-2 py-1.5 rounded border border-gray-100 dark:border-white/5">${ds || hi.remark || ''}</div>` : ''}
+                    ${lb.length > 0 ? `<div class="flex flex-wrap gap-1 mb-2">${lb.map(l => `<span class="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-[#3A3A3C] text-gray-600 dark:text-gray-400 font-medium">${l}</span>`).join('')}</div>` : ''}
+                    <div class="flex flex-wrap items-center gap-2 mt-1.5">
+                        <span class="text-[10px] px-2 py-0.5 rounded-md font-black border shadow-sm ${sc >= 50 ? 'bg-emerald-50 text-emerald-600 border-emerald-200/50 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20' : sc > 0 ? 'bg-indigo-50 text-indigo-600 border-indigo-200/50 dark:bg-indigo-500/10 dark:text-indigo-400 dark:border-indigo-500/20' : 'bg-gray-100 text-gray-500 border-gray-200/50 dark:bg-[#3A3A3C] dark:text-gray-300 dark:border-white/5'}">Score: ${sc}</span>
+                        <span class="text-[10px] font-mono text-gray-500 dark:text-gray-400 font-bold bg-gray-50 dark:bg-[#2C2C2E] px-1.5 py-0.5 rounded border border-gray-200/50 dark:border-white/5 shadow-sm">${ih ? sz : formatBytes(sz)}</span>
+                        ${st ? `<span class="text-[10px] text-teal-600 dark:text-teal-400 font-bold flex items-center gap-1 ml-1"><i class="fa-solid fa-server"></i> ${st}</span>` : ''}
+                        ${sd ? `<span class="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1 ml-1"><i class="fa-solid fa-seedling"></i> ${sd}</span>` : ''}
+                        ${et.map(t => `<span class="text-[10px] text-indigo-500 dark:text-indigo-400 font-bold ml-1 bg-indigo-50 dark:bg-indigo-500/10 px-1.5 rounded">${t}</span>`).join('')}
+                        ${ih && hi.uploader ? `<span class="text-[10px] text-amber-600 dark:text-amber-400 font-bold flex items-center gap-1 ml-1 bg-amber-50 dark:bg-amber-500/10 px-1.5 rounded"><i class="fa-solid fa-user"></i> ${hi.uploader}</span>` : ''}
+                    </div>
+                </div>
+            </label>`;
+        }).join('');
+        const isHdhive = searchState.source === '影巢';
+        const btnText = isHdhive ? '一键解锁并转存' : (searchState.selectedItems.length > 1 ? `批量提交 (${searchState.selectedItems.length})` : '一键补齐');
+        footer.innerHTML = `<button onclick="closeSearchResultModal()" class="px-5 py-3 rounded-xl text-[13px] font-bold text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 dark:bg-[#2C2C2E] dark:border-white/5 dark:text-gray-300 dark:hover:bg-[#3A3A3C] transition-colors shadow-sm flex items-center justify-center gap-2 active:scale-95"><i class="fa-solid fa-xmark"></i> 取消</button>
+            <button onclick="${isHdhive ? 'submitHDHiveTransfer()' : 'submitMPDownload()'}" ${searchState.selectedItems.length === 0 || searchState.isSubmitting ? 'disabled' : ''} class="flex-1 py-3 rounded-xl text-[13px] font-bold text-white transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] ${searchState.selectedItems.length > 0 ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-500/30' : 'bg-gray-400 dark:bg-gray-600 shadow-none border border-transparent'}">
+                ${searchState.isSubmitting ? '<span class="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full"></span>' : `<i class="fa-solid ${isHdhive ? 'fa-cloud-arrow-up' : 'fa-bolt'} mr-1"></i>${btnText}`}
+            </button>`;
+    }
+    modal.classList.remove('hidden'); container.offsetHeight; modal.classList.remove('opacity-0');
+    if(window.innerWidth < 640) container.classList.remove('translate-y-full'); else container.classList.remove('scale-95');
+}
+
+function closeSearchResultModal() {
+    searchState.open = false;
+    searchState.isSubmitting = false; // 重置提交状态
+    const modal = document.getElementById('search-result-modal');
+    const container = document.getElementById('search-modal-container');
+    modal.classList.add('opacity-0');
+    if(window.innerWidth < 640) container.classList.add('translate-y-full'); else container.classList.add('scale-95');
+    setTimeout(() => modal.classList.add('hidden'), 400);
+}
+
+// 格式化字节
+function formatBytes(bytes) {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+// ============ 日历通知设置 ============
+let notifyConfig = { enabled: false, notify_time: '09:00', channels: ['tg_bot'], tg_chat_id: '', wecom_touser: '@all' };
+
+async function openNotifyModal() {
+    const modal = document.getElementById('notify-modal');
+    const container = document.getElementById('notify-modal-container');
+    
+    // 加载配置
+    await loadNotifyConfig();
+    
+    modal.classList.remove('hidden');
+    setTimeout(() => {
+        modal.classList.remove('opacity-0');
+        container.classList.remove('scale-95');
+    }, 10);
+}
+
+function closeNotifyModal() {
+    const modal = document.getElementById('notify-modal');
+    const container = document.getElementById('notify-modal-container');
+    modal.classList.add('opacity-0');
+    container.classList.add('scale-95');
+    setTimeout(() => modal.classList.add('hidden'), 300);
+}
+
+async function loadNotifyConfig() {
+    try {
+        const res = await fetch('/api/calendar/notify/config');
+        const data = await res.json();
+        if (data.status === 'success') {
+            notifyConfig = data.data;
+            renderNotifyForm();
+        }
+    } catch (e) {
+        console.error('加载通知配置失败:', e);
+    }
+}
+
+function renderNotifyForm() {
+    document.getElementById('notify-enabled').checked = notifyConfig.enabled;
+    document.getElementById('notify-time').value = notifyConfig.notify_time;
+    document.getElementById('notify-tg-chat').value = notifyConfig.tg_chat_id || '';
+    document.getElementById('notify-wecom-touser').value = notifyConfig.wecom_touser || '@all';
+    
+    // 更新渠道选择
+    document.querySelectorAll('.notify-channel').forEach(cb => {
+        cb.checked = notifyConfig.channels.includes(cb.value);
+    });
+}
+
+function toggleNotifyChannel(channel, checked) {
+    if (checked) {
+        if (!notifyConfig.channels.includes(channel)) {
+            notifyConfig.channels.push(channel);
+        }
+    } else {
+        notifyConfig.channels = notifyConfig.channels.filter(c => c !== channel);
+    }
+}
+
+async function saveNotifyConfig() {
+    notifyConfig.enabled = document.getElementById('notify-enabled').checked;
+    notifyConfig.notify_time = document.getElementById('notify-time').value;
+    notifyConfig.tg_chat_id = document.getElementById('notify-tg-chat').value;
+    notifyConfig.wecom_touser = document.getElementById('notify-wecom-touser').value;
+    
+    // 收集渠道选择
+    notifyConfig.channels = [];
+    document.querySelectorAll('.notify-channel:checked').forEach(cb => {
+        notifyConfig.channels.push(cb.value);
+    });
+    
+    try {
+        const res = await fetch('/api/calendar/notify/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(notifyConfig)
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+            showToast('success', '保存成功', '通知配置已更新');
+            closeNotifyModal();
+        } else {
+            showToast('error', '保存失败', data.message || '未知错误');
+        }
+    } catch (e) {
+        showToast('error', '保存失败', '网络错误');
+    }
+}
+
+async function testNotify() {
+    const btn = event.target.closest('button');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> 发送中...';
+    btn.disabled = true;
+    
+    try {
+        const res = await fetch('/api/calendar/notify/test', { method: 'POST' });
+        const data = await res.json();
+        if (data.status === 'success') {
+            showToast('success', '测试成功', data.message);
+        } else {
+            showToast('error', '测试失败', data.message);
+        }
+    } catch (e) {
+        showToast('error', '测试失败', '网络错误');
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+}
+
+async function sendNotifyNow() {
+    const btn = event.target.closest('button');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> 发送中...';
+    btn.disabled = true;
+    
+    try {
+        const res = await fetch('/api/calendar/notify/send', { method: 'POST' });
+        const data = await res.json();
+        if (data.status === 'success') {
+            showToast('success', '发送成功', data.message);
+        } else {
+            showToast('error', '发送失败', data.message);
+        }
+    } catch (e) {
+        showToast('error', '发送失败', '网络错误');
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+}
+</script>
+{% endblock %}

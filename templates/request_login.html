@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>登录 - EmbyPulse 求片中心</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: { extend: { colors: { gray: { 850: '#1f2937', 900: '#111827', 950: '#030712' } } } }
+        }
+    </script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        [x-cloak] { display: none !important; }
+        .glass-panel { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+        html.dark .glass-panel { background: rgba(17, 24, 39, 0.8); }
+    </style>
+</head>
+<body class="bg-gray-50 dark:bg-gray-950 text-gray-800 dark:text-gray-200 min-h-screen flex items-center justify-center transition-colors duration-300 relative overflow-hidden" x-data="loginApp()" x-init="init()">
+    
+    <div class="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/20 dark:bg-blue-600/10 rounded-full blur-3xl"></div>
+    <div class="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-500/20 dark:bg-purple-600/10 rounded-full blur-3xl"></div>
+
+    <div class="relative w-full max-w-md p-8 glass-panel rounded-3xl border border-gray-200 dark:border-gray-800 shadow-2xl z-10 mx-4">
+        
+        <div class="text-center mb-8">
+            <div class="w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl mx-auto flex items-center justify-center text-white font-bold text-3xl shadow-lg shadow-blue-500/30 mb-4">P</div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">EmbyPulse 求片中心</h1>
+            <p class="text-sm text-gray-500 dark:text-gray-400">使用您的 Emby 账号进行安全登录</p>
+        </div>
+
+        <div class="space-y-5">
+            <div>
+                <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">用户名</label>
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400">
+                        <i class="fa-solid fa-user"></i>
+                    </div>
+                    <input type="text" x-model="username" @keydown.enter="login()" placeholder="请输入 Emby 账号" 
+                           class="w-full pl-11 pr-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm dark:text-white transition-all">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">密码</label>
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400">
+                        <i class="fa-solid fa-lock"></i>
+                    </div>
+                    <input type="password" x-model="password" @keydown.enter="login()" placeholder="请输入 Emby 密码" 
+                           class="w-full pl-11 pr-4 py-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm dark:text-white transition-all">
+                </div>
+            </div>
+
+            <button @click="login()" :disabled="isLoading || !username || !password" 
+                    class="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-500/30 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                <span x-show="isLoading" class="animate-spin w-5 h-5 border-2 border-white/30 border-t-white rounded-full"></span>
+                <span x-show="!isLoading">授权登录</span>
+            </button>
+        </div>
+    </div>
+
+    <div x-show="toast.show" x-transition x-cloak class="fixed top-10 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-full shadow-2xl border backdrop-blur-xl flex items-center gap-2 font-bold bg-white/90 dark:bg-gray-800/90"
+         :class="toast.type === 'success' ? 'border-green-300 text-green-600 dark:border-green-500/30 dark:text-green-400' : 'border-red-300 text-red-600 dark:border-red-500/30 dark:text-red-400'">
+        <i :class="toast.type === 'success' ? 'fa-solid fa-circle-check' : 'fa-solid fa-circle-xmark'"></i>
+        <span x-text="toast.message"></span>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script>
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('loginApp', () => ({
+                username: '',
+                password: '',
+                isLoading: false,
+                toast: { show: false, message: '', type: 'success' },
+
+                init() {
+                    const savedTheme = localStorage.getItem('theme');
+                    if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                        document.documentElement.classList.add('dark');
+                    }
+                },
+
+                showToast(msg, type = 'success') {
+                    this.toast = { show: true, message: msg, type };
+                    setTimeout(() => this.toast.show = false, 3000);
+                },
+
+                async login() {
+                    if (!this.username || !this.password) return;
+                    this.isLoading = true;
+                    try {
+                        const res = await fetch('/api/requests/auth', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username: this.username, password: this.password })
+                        });
+                        const data = await res.json();
+                        if (data.status === 'success') {
+                            this.showToast('登录成功，正在跳转...', 'success');
+                            setTimeout(() => { window.location.href = '/request'; }, 800);
+                        } else {
+                            this.showToast(data.message || '登录失败', 'error');
+                        }
+                    } catch (e) {
+                        this.showToast('网络错误，请稍后再试', 'error');
+                    } finally {
+                        this.isLoading = false;
+                    }
+                }
+            }));
+        });
+    </script>
+</body>
+</html>

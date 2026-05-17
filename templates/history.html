@@ -1,0 +1,959 @@
+{% extends "layout.html" %}
+{% block title %}播放历史 - EmbyPulse{% endblock %}
+
+{% block head %}
+<style>
+    /* === 🔥 Apple 级极简卡片质感 === */
+    .apple-card {
+        background-color: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-radius: 24px;
+        padding: 24px;
+        box-shadow: 0 4px 24px -8px rgba(0,0,0,0.04);
+        border: 1px solid rgba(0,0,0,0.02);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative;
+        z-index: 1;
+    }
+
+    html.dark .apple-card {
+        background-color: rgba(28, 28, 30, 0.85);
+        box-shadow: 0 4px 24px -8px rgba(0, 0, 0, 0.4);
+        border: 1px solid rgba(255,255,255,0.04);
+    }
+
+    @media (min-width: 768px) {
+        .apple-card:hover { transform: translateY(-2px); box-shadow: 0 12px 32px -8px rgba(0,0,0,0.08); }
+        html.dark .apple-card:hover { box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.6); }
+    }
+
+    /* 自定义下拉菜单 */
+    .custom-select { position: relative; z-index: 100; }
+    .custom-select.open { z-index: 9999; }
+    .custom-select-trigger {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 10px 14px;
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-size: 13px;
+        font-weight: 500;
+        color: #374151;
+        width: 100%;
+    }
+    .dark .custom-select-trigger {
+        background: #2C2C2E;
+        border-color: rgba(255,255,255,0.1);
+        color: #d1d5db;
+    }
+    .custom-select-trigger:hover {
+        border-color: #6366f1;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+    .dark .custom-select-trigger:hover {
+        border-color: #818cf8;
+        box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.15);
+    }
+    .custom-select-trigger-icon { font-size: 10px; color: #9ca3af; transition: transform 0.2s; }
+    .custom-select.open .custom-select-trigger-icon { transform: rotate(180deg); }
+    
+    .custom-select-menu {
+        position: absolute;
+        top: auto;
+        bottom: 100%;
+        left: 0;
+        right: 0;
+        margin-bottom: 6px;
+        max-height: 200px;
+        overflow-y: auto;
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        box-shadow: 0 12px 32px -8px rgba(0,0,0,0.15);
+        z-index: 9999;
+        padding: 6px;
+        display: none;
+        animation: dropdownFadeIn 0.15s ease-out;
+    }
+    .dark .custom-select-menu {
+        background: #1f2937;
+        border-color: #374151;
+        box-shadow: 0 12px 32px -8px rgba(0,0,0,0.5);
+    }
+    .custom-select-menu.open { display: block; }
+    
+    .custom-select-option {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 500;
+        color: #374151;
+        transition: all 0.15s;
+    }
+    .dark .custom-select-option { color: #d1d5db; }
+    .custom-select-option:hover { background: #f3f4f6; }
+    .dark .custom-select-option:hover { background: #374151; }
+    .custom-select-option.active {
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        color: white;
+    }
+
+    /* 统一字体 */
+    .history-table { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+
+    /* 用户头像 */
+    .user-avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 2px solid rgba(255,255,255,0.8);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        flex-shrink: 0;
+    }
+    html.dark .user-avatar { border-color: rgba(255,255,255,0.1); }
+
+    /* 默认头像（显示用户名首字） */
+    .default-avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        font-weight: 700;
+        color: white;
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        border: 2px solid rgba(255,255,255,0.8);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        text-transform: uppercase;
+        flex-shrink: 0;
+    }
+    html.dark .default-avatar { border-color: rgba(255,255,255,0.1); }
+
+    /* 移动端小尺寸默认头像 */
+    .default-avatar-small {
+        width: 20px;
+        height: 20px;
+        font-size: 10px;
+    }
+
+    /* 头像容器 */
+    .avatar-container {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        overflow: hidden;
+        flex-shrink: 0;
+        position: relative;
+    }
+    .avatar-container img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    .avatar-container.small {
+        width: 20px;
+        height: 20px;
+    }
+
+    /* 影视封面 */
+    .poster-thumb {
+        width: 48px;
+        height: 72px;
+        border-radius: 8px;
+        object-fit: cover;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        background: linear-gradient(135deg, #e0e0e0 0%, #f5f5f5 100%);
+    }
+    html.dark .poster-thumb { background: linear-gradient(135deg, #2a2a2a 0%, #3a3a3a 100%); }
+
+    /* IP 标签 */
+    .ip-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 8px;
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: 600;
+        background: rgba(99, 102, 241, 0.1);
+        color: #6366f1;
+        border: 1px solid rgba(99, 102, 241, 0.2);
+    }
+    html.dark .ip-tag {
+        background: rgba(99, 102, 241, 0.15);
+        color: #818cf8;
+        border-color: rgba(99, 102, 241, 0.3);
+    }
+
+    /* 归属地标签 */
+    .location-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 8px;
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: 600;
+        background: rgba(16, 185, 129, 0.1);
+        color: #10b981;
+        border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+    html.dark .location-tag {
+        background: rgba(16, 185, 129, 0.15);
+        color: #34d399;
+        border-color: rgba(16, 185, 129, 0.3);
+    }
+
+    /* 统计卡片 */
+    .stat-card {
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.05) 100%);
+        border: 1px solid rgba(99, 102, 241, 0.15);
+        border-radius: 16px;
+        padding: 16px;
+        transition: all 0.3s ease;
+    }
+    html.dark .stat-card {
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(139, 92, 246, 0.1) 100%);
+        border-color: rgba(99, 102, 241, 0.2);
+    }
+    .stat-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px -8px rgba(99, 102, 241, 0.2);
+    }
+
+    /* 移动端时间线 */
+    .timeline-container {
+        position: relative;
+        padding-left: 24px;
+    }
+    .timeline-line {
+        position: absolute;
+        left: 8px;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: linear-gradient(to bottom, rgba(99, 102, 241, 0.3), rgba(99, 102, 241, 0.1));
+    }
+    .timeline-dot {
+        position: absolute;
+        left: 4px;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #6366f1;
+        border: 2px solid white;
+        box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3);
+    }
+    html.dark .timeline-dot {
+        border-color: #1C1C1E;
+    }
+    .timeline-item {
+        position: relative;
+        padding-bottom: 20px;
+    }
+    .timeline-card {
+        background: rgba(255, 255, 255, 0.8);
+        backdrop-filter: blur(10px);
+        border-radius: 16px;
+        padding: 16px;
+        border: 1px solid rgba(0,0,0,0.05);
+        margin-left: 16px;
+    }
+    html.dark .timeline-card {
+        background: rgba(28, 28, 30, 0.8);
+        border-color: rgba(255,255,255,0.05);
+    }
+
+    /* 移动端卡片优化 */
+    .mobile-history-card {
+        padding: 16px;
+        border-bottom: 1px solid rgba(0,0,0,0.05);
+        transition: background 0.2s;
+    }
+    html.dark .mobile-history-card { border-bottom-color: rgba(255,255,255,0.05); }
+    .mobile-history-card:active { background: rgba(0,0,0,0.02); }
+    html.dark .mobile-history-card:active { background: rgba(255,255,255,0.02); }
+
+    /* 滚动条优化 */
+    .mac-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+    .mac-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .mac-scrollbar::-webkit-scrollbar-thumb {
+        background: rgba(0,0,0,0.15);
+        border-radius: 4px;
+    }
+    html.dark .mac-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); }
+    .mac-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.25); }
+    html.dark .mac-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
+
+    /* 行悬停效果 */
+    .history-row { transition: all 0.2s ease; }
+    .history-row:hover { background: rgba(99, 102, 241, 0.03); }
+    html.dark .history-row:hover { background: rgba(99, 102, 241, 0.05); }
+
+    /* 设备图标 */
+    .device-icon {
+        width: 20px;
+        height: 20px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: #6b7280;
+    }
+    html.dark .device-icon { color: #9ca3af; }
+    
+    /* 自定义用户下拉框 */
+    #user-select-container {
+        position: relative;
+    }
+    
+    #user-dropdown {
+        animation: dropdownSlide 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+        z-index: 9999;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        margin-top: 8px;
+    }
+    @keyframes dropdownSlide {
+        from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    
+    #user-dropdown.hidden {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+    }
+    
+    #user-options-list::-webkit-scrollbar {
+        width: 6px;
+    }
+    #user-options-list::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    #user-options-list::-webkit-scrollbar-thumb {
+        background: rgba(0,0,0,0.1);
+        border-radius: 3px;
+    }
+    html.dark #user-options-list::-webkit-scrollbar-thumb {
+        background: rgba(255,255,255,0.1);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="w-full max-w-[1600px] mx-auto py-4 pb-32 px-4 sm:px-6 md:px-8 space-y-4 md:space-y-6">
+
+    <!-- 统计卡片区域 (Dashboard 风格 - 与页面统一) -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4" id="stats-cards">
+        <!-- 今日播放 -->
+        <div class="apple-card p-4 md:p-5 group hover:scale-[1.02] transition-all duration-300">
+            <div class="flex items-start justify-between">
+                <div class="flex-1">
+                    <div class="flex items-center gap-2 mb-2">
+                        <div class="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center">
+                            <i class="fa-solid fa-play text-[12px] text-indigo-500 dark:text-indigo-400"></i>
+                        </div>
+                        <p class="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">今日播放</p>
+                    </div>
+                    <p class="text-2xl md:text-[28px] font-bold text-gray-900 dark:text-white tracking-tight" id="stat-today">-</p>
+                    <p class="text-[10px] text-gray-400 mt-1">次播放记录</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 今日时长 -->
+        <div class="apple-card p-4 md:p-5 group hover:scale-[1.02] transition-all duration-300">
+            <div class="flex items-start justify-between">
+                <div class="flex-1">
+                    <div class="flex items-center gap-2 mb-2">
+                        <div class="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center">
+                            <i class="fa-solid fa-clock text-[12px] text-emerald-500 dark:text-emerald-400"></i>
+                        </div>
+                        <p class="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">今日时长</p>
+                    </div>
+                    <p class="text-2xl md:text-[28px] font-bold text-gray-900 dark:text-white tracking-tight" id="stat-duration">-</p>
+                    <p class="text-[10px] text-gray-400 mt-1">累计观影时间</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 活跃用户 -->
+        <div class="apple-card p-4 md:p-5 group hover:scale-[1.02] transition-all duration-300">
+            <div class="flex items-start justify-between">
+                <div class="flex-1">
+                    <div class="flex items-center gap-2 mb-2">
+                        <div class="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-500/10 flex items-center justify-center">
+                            <i class="fa-solid fa-users text-[12px] text-amber-500 dark:text-amber-400"></i>
+                        </div>
+                        <p class="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">活跃用户</p>
+                    </div>
+                    <p class="text-2xl md:text-[28px] font-bold text-gray-900 dark:text-white tracking-tight" id="stat-users">-</p>
+                    <p class="text-[10px] text-gray-400 mt-1">今日有播放</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 累计播放 -->
+        <div class="apple-card p-4 md:p-5 group hover:scale-[1.02] transition-all duration-300">
+            <div class="flex items-start justify-between">
+                <div class="flex-1">
+                    <div class="flex items-center gap-2 mb-2">
+                        <div class="w-7 h-7 rounded-lg bg-rose-50 dark:bg-rose-500/10 flex items-center justify-center">
+                            <i class="fa-solid fa-film text-[12px] text-rose-500 dark:text-rose-400"></i>
+                        </div>
+                        <p class="text-[11px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">累计播放</p>
+                    </div>
+                    <p class="text-2xl md:text-[28px] font-bold text-gray-900 dark:text-white tracking-tight" id="stat-total">-</p>
+                    <p class="text-[10px] text-gray-400 mt-1">历史总记录</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="apple-card flex flex-col xl:flex-row xl:items-center justify-between gap-6 w-full p-5 md:p-6" style="z-index: 10;">
+        
+        <div class="flex items-center gap-4 pl-1 shrink-0">
+            <div class="w-12 h-12 rounded-[14px] bg-gradient-to-br from-slate-400 to-slate-600 text-white flex items-center justify-center text-xl shadow-lg shadow-slate-500/30 shrink-0">
+                <i class="fa-solid fa-clock-rotate-left"></i>
+            </div>
+            <div>
+                <h2 class="text-xl md:text-[22px] font-bold tracking-tight text-gray-900 dark:text-white">播放历史</h2>
+                <div class="text-[12px] text-gray-500 mt-1 font-medium flex items-center gap-1.5">
+                    <i class="fa-solid fa-server opacity-70"></i> <span>查看全站用户的详细观影流水</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="flex flex-wrap items-center gap-3 w-full xl:w-auto">
+            
+            <!-- 用户筛选 - 带搜索功能的自定义下拉 -->
+            <div class="relative w-full sm:w-56 shrink-0" id="user-select-container">
+                <div class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400 z-10"><i class="fa-solid fa-users"></i></div>
+                <div onclick="toggleUserDropdown()" id="user-select-trigger" class="w-full bg-gray-100 hover:bg-gray-200 dark:bg-[#2C2C2E] dark:hover:bg-[#3A3A3C] border border-transparent dark:border-white/5 text-gray-800 dark:text-gray-200 py-2.5 pl-10 pr-8 rounded-[12px] focus:outline-none focus:ring-2 focus:ring-slate-500/50 text-[13px] font-bold transition-all cursor-pointer shadow-sm flex items-center justify-between">
+                    <span id="user-select-label">所有用户大盘</span>
+                    <i class="fa-solid fa-chevron-down text-[10px] text-gray-400"></i>
+                </div>
+                <!-- 自定义下拉面板 -->
+                <div id="user-dropdown" class="hidden absolute top-full left-0 right-0 mt-2 bg-white dark:bg-[#2C2C2E] rounded-[12px] shadow-xl border border-gray-100 dark:border-white/10 z-[100] overflow-hidden">
+                    <!-- 搜索框 -->
+                    <div class="p-2 border-b border-gray-100 dark:border-white/5">
+                        <div class="relative">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-[11px]"></i>
+                            <input type="text" id="user-search-input" placeholder="搜索用户名..." 
+                                   oninput="filterUserOptions(this.value)"
+                                   class="w-full bg-gray-50 dark:bg-black/20 pl-8 pr-8 py-2 rounded-lg border border-transparent dark:border-white/5 focus:ring-2 focus:ring-slate-500/50 outline-none text-[12px] font-medium text-gray-700 dark:text-gray-200 placeholder-gray-400">
+                            <!-- 一键清空按钮 -->
+                            <button onclick="clearUserSearch()" class="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full bg-gray-200 dark:bg-gray-700 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
+                                <i class="fa-solid fa-xmark text-[10px]"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <!-- 用户列表 -->
+                    <div id="user-options-list" class="max-h-[240px] overflow-y-auto mac-scrollbar py-1">
+                        <div class="px-3 py-2 hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer text-[13px] font-medium text-gray-700 dark:text-gray-200 transition-colors" onclick="selectUser('all', '所有用户大盘')">
+                            <i class="fa-solid fa-users text-slate-400 mr-2"></i>所有用户大盘
+                        </div>
+                    </div>
+                </div>
+                <input type="hidden" id="filter-user" value="all">
+            </div>
+            
+            <div class="relative w-full sm:w-auto flex-1 min-w-[150px] max-w-[200px]">
+                <div class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400"><i class="fa-solid fa-magnifying-glass text-[13px]"></i></div>
+                <input type="text" id="filter-keyword" placeholder="搜索影视名称..." 
+                       onkeydown="if(event.key==='Enter') loadHistory(1)"
+                       class="w-full bg-gray-100 dark:bg-[#2C2C2E] pl-9 pr-4 py-2.5 rounded-[12px] border border-transparent dark:border-white/5 focus:bg-white dark:focus:bg-black/30 focus:ring-2 focus:ring-slate-500 outline-none text-[13px] font-medium text-gray-700 dark:text-gray-200 transition-all shadow-sm placeholder-gray-400">
+            </div>
+            
+            <button onclick="loadHistory(1)" class="w-full sm:w-auto bg-slate-600 hover:bg-slate-700 text-white px-4 py-2.5 rounded-[12px] font-bold text-[13px] shadow-md transition-all active:scale-95 whitespace-nowrap">
+                <i class="fa-solid fa-magnifying-glass mr-1.5"></i>查询
+            </button>
+        </div>
+    </div>
+
+    <div class="apple-card p-0 overflow-hidden flex flex-col min-h-[500px]">
+
+        <div class="hidden md:block overflow-x-auto mac-scrollbar flex-1 relative bg-gray-50/30 dark:bg-black/10">
+            <table class="w-full text-left text-[13px] text-gray-600 dark:text-gray-300 history-table">
+                <thead class="bg-gray-50/80 dark:bg-black/20 text-gray-500 dark:text-gray-400 font-semibold border-b border-gray-100 dark:border-white/5 uppercase tracking-wider text-[11px] sticky top-0 z-[1] backdrop-blur-md">
+                    <tr>
+                        <th class="px-3 py-2.5 whitespace-nowrap">时间</th>
+                        <th class="px-3 py-2.5 whitespace-nowrap">用户</th>
+                        <th class="px-3 py-2.5 min-w-[120px]">媒体内容</th>
+                        <th class="px-3 py-2.5 whitespace-nowrap">时长</th>
+                        <th class="px-3 py-2.5 min-w-[100px]">网络信息</th>
+                        <th class="px-3 py-2.5 min-w-[80px]">播放设备</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100/50 dark:divide-white/5" id="history-table-body">
+                    </tbody>
+            </table>
+        </div>
+
+        <div class="md:hidden flex-1 p-0 bg-white dark:bg-transparent" id="history-mobile-list">
+            </div>
+
+        <div class="border-t border-gray-100 dark:border-white/5 p-4 md:px-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-gray-50/50 dark:bg-[#1C1C1E] shrink-0 rounded-b-2xl">
+            <div class="flex items-center gap-2 flex-wrap">
+                <div class="text-[12px] text-gray-500 dark:text-gray-400 font-medium whitespace-nowrap">
+                    共 <span id="total-count">0</span> 条，第 <span id="current-page">1</span>/<span id="total-pages">1</span> 页
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <span class="text-[12px] text-gray-500 dark:text-gray-400 hidden sm:inline">每页</span>
+                    <div class="custom-select" id="page-size-select-dropdown" style="min-width: 60px;">
+                        <div class="custom-select-trigger" onclick="toggleCustomSelect('page-size-select')" style="padding: 4px 8px; font-size: 12px;">
+                            <span id="page-size-select-display">20</span>
+                            <i class="fa-solid fa-chevron-down custom-select-trigger-icon"></i>
+                        </div>
+                        <div class="custom-select-menu" id="page-size-select-menu">
+                            <div class="custom-select-option active" data-value="20" onclick="selectCustomOption('page-size-select', '20', '20'); changePageSize('20')"><span>20</span></div>
+                            <div class="custom-select-option" data-value="40" onclick="selectCustomOption('page-size-select', '40', '40'); changePageSize('40')"><span>40</span></div>
+                            <div class="custom-select-option" data-value="60" onclick="selectCustomOption('page-size-select', '60', '60'); changePageSize('60')"><span>60</span></div>
+                            <div class="custom-select-option" data-value="80" onclick="selectCustomOption('page-size-select', '80', '80'); changePageSize('80')"><span>80</span></div>
+                            <div class="custom-select-option" data-value="100" onclick="selectCustomOption('page-size-select', '100', '100'); changePageSize('100')"><span>100</span></div>
+                        </div>
+                    </div>
+                    <input type="hidden" id="page-size-select" value="20">
+                </div>
+            </div>
+            <div class="flex items-center gap-1 w-full sm:w-auto justify-between sm:justify-end">
+                <button onclick="goToPage(1)" id="btn-first" class="w-8 h-8 rounded-lg bg-white dark:bg-[#2C2C2E] border border-gray-200 dark:border-white/10 flex items-center justify-center text-[12px] text-gray-500 hover:bg-gray-100 dark:hover:bg-[#3A3A3C] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"><i class="fa-solid fa-angles-left"></i></button>
+                <button onclick="goToPage(currentPage - 1)" id="btn-prev" class="w-8 h-8 rounded-lg bg-white dark:bg-[#2C2C2E] border border-gray-200 dark:border-white/10 flex items-center justify-center text-[12px] text-gray-500 hover:bg-gray-100 dark:hover:bg-[#3A3A3C] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"><i class="fa-solid fa-angle-left"></i></button>
+                <div id="page-numbers" class="flex items-center gap-1 overflow-x-auto"></div>
+                <button onclick="goToPage(currentPage + 1)" id="btn-next" class="w-8 h-8 rounded-lg bg-white dark:bg-[#2C2C2E] border border-gray-200 dark:border-white/10 flex items-center justify-center text-[12px] text-gray-500 hover:bg-gray-100 dark:hover:bg-[#3A3A3C] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"><i class="fa-solid fa-angle-right"></i></button>
+                <button onclick="goToPage(totalPages)" id="btn-last" class="w-8 h-8 rounded-lg bg-white dark:bg-[#2C2C2E] border border-gray-200 dark:border-white/10 flex items-center justify-center text-[12px] text-gray-500 hover:bg-gray-100 dark:hover:bg-[#3A3A3C] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"><i class="fa-solid fa-angles-right"></i></button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentPage = 1;
+    let totalPages = 1;
+    let pageSize = 20;
+    let totalCount = 0;
+
+    // 已加载成功的头像缓存
+    const loadedAvatars = new Set();
+    // 加载失败的头像（避免重复请求）
+    const failedAvatars = new Set();
+
+    // 生成用户头像 HTML（支持真实头像和默认首字头像）
+    function getUserAvatarHTML(userId, userName, className) {
+        const firstChar = userName ? userName.charAt(0).toUpperCase() : '?';
+        const sizeClass = className.includes('w-5') ? 'small' : '';
+        
+        // 如果头像已确认加载成功，显示真实头像
+        if (loadedAvatars.has(userId)) {
+            return `<div class="avatar-container ${sizeClass}"><img src="/api/proxy/user_image/${userId}" alt="${userName}" class="${className}" onerror="this.onerror=null;this.parentElement.innerHTML=getDefaultAvatarHTML('${firstChar}', '${className}');"></div>`;
+        }
+        
+        // 如果已确认失败，直接显示默认头像
+        if (failedAvatars.has(userId)) {
+            return `<div class="avatar-container ${sizeClass}">${getDefaultAvatarHTML('${firstChar}', '${className}')}</div>`;
+        }
+        
+        // 默认显示首字头像，同时尝试加载真实头像
+        return `<div class="avatar-container ${sizeClass}" data-user-id="${userId}">
+            <div class="default-avatar ${className.includes('w-5') ? 'default-avatar-small' : ''}" style="position:absolute;top:0;left:0;">${firstChar}</div>
+            <img src="/api/proxy/user_image/${userId}" alt="${userName}" class="${className}" style="opacity:0;" onload="onAvatarLoad(this, '${userId}')" onerror="onAvatarError(this, '${userId}')">
+        </div>`;
+    }
+
+    // 获取默认头像 HTML
+    function getDefaultAvatarHTML(char, className) {
+        const isSmall = className.includes('w-5');
+        return `<div class="default-avatar ${isSmall ? 'default-avatar-small' : ''}">${char}</div>`;
+    }
+
+    // 头像加载成功回调
+    function onAvatarLoad(img, userId) {
+        loadedAvatars.add(userId);
+        // 显示真实头像，隐藏默认头像
+        img.style.opacity = '1';
+        const container = img.parentElement;
+        const defaultAvatar = container.querySelector('.default-avatar');
+        if (defaultAvatar) {
+            defaultAvatar.style.display = 'none';
+        }
+    }
+    
+    // 头像加载失败回调
+    function onAvatarError(img, userId) {
+        failedAvatars.add(userId);
+        img.style.display = 'none';
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+
+    async function init() {
+        // 并行加载用户和统计数据，同时开始加载历史记录
+        loadUsers();
+        loadStats();
+        // 延迟加载历史记录，确保页面先渲染
+        setTimeout(() => loadHistory(1), 100);
+    }
+
+    // 用户列表缓存
+    let allUsers = [];
+    
+    async function loadUsers() {
+        try {
+            console.log('Loading users...');
+            const res = await fetch('/api/users');
+            const json = await res.json();
+            console.log('Users API response:', json);
+            if(json.status === 'success') {
+                allUsers = json.data || [];
+                console.log(`Loaded ${allUsers.length} users`);
+                renderUserOptions(allUsers);
+            } else {
+                console.error('Failed to load users:', json.message);
+                renderUserOptions([]);
+            }
+        } catch(e) {
+            console.error('Failed to load users:', e);
+            renderUserOptions([]);
+        }
+    }
+    
+    // 渲染用户选项
+    function renderUserOptions(users) {
+        const list = document.getElementById('user-options-list');
+        if (!list) {
+            console.error('user-options-list element not found');
+            return;
+        }
+        
+        // 保留"所有用户"选项
+        let html = `<div class="px-3 py-2 hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer text-[13px] font-medium text-gray-700 dark:text-gray-200 transition-colors" onclick="selectUser('all', '所有用户大盘')">
+            <i class="fa-solid fa-users text-slate-400 mr-2"></i>所有用户大盘
+        </div>`;
+        
+        if (users.length === 0) {
+            html += `<div class="px-3 py-2 text-[12px] text-gray-400 text-center">暂无用户数据</div>`;
+        } else {
+            users.forEach(u => {
+                const userName = escapeHtml(u.UserName || '未知用户');
+                const firstChar = (u.UserName || '?').charAt(0).toUpperCase();
+                const userId = u.UserId;
+                // 使用真实头像，加载失败时显示默认头像
+                html += `<div class="px-3 py-2 hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer text-[13px] font-medium text-gray-700 dark:text-gray-200 transition-colors flex items-center gap-2" onclick="selectUser('${userId}', '${userName}')">
+                    <div class="w-6 h-6 rounded-full overflow-hidden bg-gradient-to-br from-indigo-400 to-purple-500 flex-shrink-0">
+                        <img src="/api/proxy/user_image/${userId}" alt="${userName}" class="w-full h-full object-cover" onerror="this.style.display='none'; this.parentElement.innerHTML='<span class=\\'w-full h-full flex items-center justify-center text-white text-[10px] font-bold\\'>${firstChar}</span>';">
+                    </div>
+                    ${userName}
+                </div>`;
+            });
+        }
+        
+        list.innerHTML = html;
+        console.log(`Rendered ${users.length} users`);
+    }
+    
+    // 过滤用户选项
+    function filterUserOptions(keyword) {
+        const filtered = allUsers.filter(u => 
+            u.UserName.toLowerCase().includes(keyword.toLowerCase())
+        );
+        renderUserOptions(filtered);
+    }
+    
+    // 清空用户搜索
+    function clearUserSearch() {
+        const input = document.getElementById('user-search-input');
+        input.value = '';
+        input.focus();
+        renderUserOptions(allUsers);
+    }
+    
+    // 切换下拉面板
+    function toggleUserDropdown() {
+        const dropdown = document.getElementById('user-dropdown');
+        if (dropdown.classList.contains('hidden')) {
+            dropdown.classList.remove('hidden');
+            document.getElementById('user-search-input').focus();
+        } else {
+            dropdown.classList.add('hidden');
+        }
+    }
+    
+    // 选择用户
+    function selectUser(userId, userName) {
+        document.getElementById('filter-user').value = userId;
+        document.getElementById('user-select-label').innerText = userName;
+        document.getElementById('user-dropdown').classList.add('hidden');
+        loadHistory(1);
+    }
+    
+    // 点击外部关闭下拉
+    document.addEventListener('click', function(e) {
+        const container = document.getElementById('user-select-container');
+        const dropdown = document.getElementById('user-dropdown');
+        if (container && dropdown && !container.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.classList.add('hidden');
+        }
+    });
+    
+    // HTML转义
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.innerText = text;
+        return div.innerHTML;
+    }
+
+    async function loadStats() {
+        try {
+            const res = await fetch('/api/history/stats');
+            const json = await res.json();
+            if(json.status === 'success') {
+                document.getElementById('stat-today').innerText = json.data.today_count || 0;
+                document.getElementById('stat-duration').innerText = json.data.today_duration || '0h';
+                document.getElementById('stat-users').innerText = json.data.active_users || 0;
+                document.getElementById('stat-total').innerText = json.data.total_count || 0;
+            }
+        } catch(e) {
+            console.error('Failed to load stats:', e);
+        }
+    }
+
+    async function loadHistory(page, useCursor = false) {
+        const userId = document.getElementById('filter-user').value;
+        const keyword = document.getElementById('filter-keyword').value;
+        const tbody = document.getElementById('history-table-body');
+        const mobileList = document.getElementById('history-mobile-list');
+        
+        // 高级骨架屏风格 Loading
+        const loadingHTML = '<tr><td colspan="6" class="text-center py-20"><i class="fa-solid fa-circle-notch fa-spin text-3xl text-slate-400"></i><p class="text-xs font-bold text-slate-400 mt-3 animate-pulse tracking-widest">调取时空数据...</p></td></tr>';
+        const mobileLoading = '<div class="text-center py-20"><i class="fa-solid fa-circle-notch fa-spin text-3xl text-slate-400"></i><p class="text-xs font-bold text-slate-400 mt-3 animate-pulse tracking-widest">调取时空数据...</p></div>';
+        
+        tbody.innerHTML = loadingHTML;
+        mobileList.innerHTML = mobileLoading;
+
+        try {
+            let url = `/api/history/list?page=${page}&limit=${pageSize}&user_id=${userId}&keyword=${encodeURIComponent(keyword)}`;
+            
+            const res = await fetch(url);
+            const json = await res.json();
+            
+            if(json.status === 'success') {
+                const data = json.data;
+                const pagination = json.pagination;
+                
+                currentPage = pagination.page;
+                totalPages = pagination.total_pages;
+                totalCount = pagination.total || 0;
+                
+                updatePagination();
+
+                if(data.length === 0) {
+                    const emptyHTML = '<tr><td colspan="6" class="text-center py-24 text-gray-400 text-[13px] font-bold tracking-widest"><i class="fa-solid fa-ghost mr-2 opacity-50"></i> 当前维度下暂无记录</td></tr>';
+                    tbody.innerHTML = emptyHTML;
+                    mobileList.innerHTML = '<div class="text-center py-24 text-gray-400 text-[13px] font-bold tracking-widest"><i class="fa-solid fa-ghost mr-2 opacity-50"></i> 当前维度下暂无记录</div>';
+                    return;
+                }
+
+                // 渲染表格 (电脑端)
+                tbody.innerHTML = data.map(item => `
+                    <tr class="history-row group cursor-default">
+                        <td class="px-3 py-2.5 whitespace-nowrap">
+                            <div class="text-[12px] text-gray-700 dark:text-gray-300 font-medium">${item.DateStr.split(' ')[0]}</div>
+                            <div class="text-[10px] text-gray-400 font-mono mt-0.5">${item.DateStr.split(' ')[1]}</div>
+                        </td>
+                        <td class="px-3 py-2.5 whitespace-nowrap">
+                            <div class="flex items-center gap-2">
+                                ${getUserAvatarHTML(item.UserId, item.UserName, 'w-6 h-6 rounded-full object-cover border border-gray-200 dark:border-white/10')}
+                                <span class="font-medium text-gray-900 dark:text-white text-[12px]">${item.UserName}</span>
+                            </div>
+                        </td>
+                        <td class="px-3 py-2.5">
+                            <div class="flex items-center gap-2">
+                                <img src="/api/proxy/smart_image?item_id=${item.ItemId}&type=Primary&name=${encodeURIComponent(item.ItemName)}" alt="${item.ItemName}" class="w-8 h-12 rounded object-cover shrink-0 shadow-sm" onerror="this.style.display='none'">
+                                <div class="min-w-0 flex-1">
+                                    <div class="font-medium text-[12px] text-gray-800 dark:text-gray-200 leading-tight truncate" title="${item.ItemName}">${item.ItemName}</div>
+                                    <div class="text-[10px] text-gray-400 mt-0.5">${item.ItemType || ''}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-3 py-2.5 whitespace-nowrap">
+                            <span class="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400">${item.DurationStr}</span>
+                        </td>
+                        <td class="px-3 py-2.5">
+                            <div class="space-y-0.5">
+                                <div class="text-[11px] text-gray-600 dark:text-gray-400 font-mono truncate">${item.IP || '-'}</div>
+                                <div class="text-[10px] text-emerald-600 dark:text-emerald-400 truncate" title="${item.LocationStr}">${item.LocationStr !== '-' ? item.LocationStr : ''}</div>
+                            </div>
+                        </td>
+                        <td class="px-3 py-2.5">
+                            <div class="space-y-0.5">
+                                <div class="text-[11px] text-gray-600 dark:text-gray-400 truncate" title="${item.DeviceName || '未知'}">${item.DeviceName || '未知'}</div>
+                                <div class="text-[10px] text-gray-400 truncate" title="${item.ClientName || ''}">${item.ClientName || ''}</div>
+                            </div>
+                        </td>
+                    </tr>
+                `).join('');
+
+                // 渲染列表 (手机端 - 时间线风格)
+                mobileList.innerHTML = `
+                    <div class="timeline-container p-4">
+                        ${data.map((item, idx) => `
+                            <div class="timeline-item">
+                                <div class="timeline-dot" style="top: 20px;"></div>
+                                <div class="timeline-card ml-2">
+                                    <div class="flex gap-3">
+                                        <img src="/api/proxy/smart_image?item_id=${item.ItemId}&type=Primary&name=${encodeURIComponent(item.ItemName)}" alt="${item.ItemName}" class="w-16 h-24 rounded-lg object-cover shrink-0 shadow-md" onerror="this.style.display='none'">
+                                        <div class="flex-1 min-w-0">
+                                            <div class="font-semibold text-gray-900 dark:text-white text-[14px] leading-snug line-clamp-2 mb-1">${item.ItemName}</div>
+                                            <div class="flex items-center gap-2 mb-2">
+                                                ${getUserAvatarHTML(item.UserId, item.UserName, 'w-5 h-5 rounded-full object-cover border border-gray-200 dark:border-white/10')}
+                                                <span class="text-[12px] text-gray-600 dark:text-gray-400 font-medium">${item.UserName}</span>
+                                            </div>
+                                            <div class="flex flex-wrap items-center gap-1.5">
+                                                <span class="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-500/10 rounded-md text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-500/20">${item.DurationStr}</span>
+                                                ${item.IP ? `<span class="px-2 py-0.5 bg-violet-50 dark:bg-violet-500/10 rounded-md text-[10px] font-semibold text-violet-600 dark:text-violet-400 border border-violet-100 dark:border-violet-500/20">${item.IP}</span>` : ''}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center justify-between mt-3 pt-3 border-t border-gray-100 dark:border-white/5">
+                                        <div class="flex items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400">
+                                            <i class="fa-regular fa-clock"></i>
+                                            <span>${item.DateStr}</span>
+                                        </div>
+                                        <div class="flex flex-col items-end gap-0.5 text-[11px] text-gray-400">
+                                            <div class="flex items-center gap-1" title="${item.ClientName || '未知播放器'}">
+                                                <i class="fa-solid fa-play text-[9px]"></i>
+                                                <span class="truncate max-w-[100px]">${item.ClientName || '未知播放器'}</span>
+                                            </div>
+                                            ${item.DeviceName ? `<div class="flex items-center gap-1 text-[10px] text-gray-400" title="${item.DeviceName}">
+                                                <i class="fa-solid fa-mobile-screen text-[9px]"></i>
+                                                <span class="truncate max-w-[100px]">${item.DeviceName}</span>
+                                            </div>` : ''}
+                                        </div>
+                                    </div>
+                                    ${item.LocationStr !== '-' ? `
+                                    <div class="mt-2 flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400">
+                                        <i class="fa-solid fa-map-pin"></i>
+                                        <span>${item.LocationStr}</span>
+                                    </div>` : ''}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>`;
+            } 
+            else {
+                const errHtml = `<tr><td colspan="6" class="text-center py-20"><div class="inline-flex items-center gap-2 bg-red-50 dark:bg-red-900/20 text-red-500 px-4 py-2 rounded-xl text-xs font-bold border border-red-100 dark:border-red-800/50"><i class="fa-solid fa-circle-exclamation"></i> 核心数据拉取失败: ${json.message}</div></td></tr>`;
+                tbody.innerHTML = errHtml;
+                mobileList.innerHTML = `<div class="p-6 flex justify-center">${errHtml.replace('<tr><td colspan="6" class="text-center py-20">', '').replace('</td></tr>', '')}</div>`;
+            }
+        } catch(e) {
+            console.error(e);
+            const errHtml = `<tr><td colspan="6" class="text-center py-20"><div class="inline-flex items-center gap-2 bg-red-50 dark:bg-red-900/20 text-red-500 px-4 py-2 rounded-xl text-xs font-bold border border-red-100 dark:border-red-800/50"><i class="fa-solid fa-wifi"></i> 服务器连接中断，请检查网络链路</div></td></tr>`;
+            tbody.innerHTML = errHtml;
+            mobileList.innerHTML = `<div class="p-6 flex justify-center">${errHtml.replace('<tr><td colspan="6" class="text-center py-20">', '').replace('</td></tr>', '')}</div>`;
+        }
+    }
+
+    function changePage(delta) {
+        const newPage = currentPage + delta;
+        if(newPage >= 1 && (totalPages === 0 || newPage <= totalPages)) {
+            // 统一使用传统分页，保持页码显示一致
+            currentCursor = null;
+            cursorHistory = [];
+            loadHistory(newPage, false);
+        }
+    }
+
+    function goToPage(page) {
+        if (page < 1 || page > totalPages) return;
+        currentPage = page;
+        currentCursor = null;
+        cursorHistory = [];
+        loadHistory(page, false);
+    }
+
+    function changePageSize(size) {
+        pageSize = parseInt(size);
+        currentPage = 1;
+        loadHistory(1, false);
+    }
+
+    function updatePagination() {
+        document.getElementById('total-count').textContent = totalCount;
+        document.getElementById('current-page').textContent = currentPage;
+        document.getElementById('total-pages').textContent = totalPages;
+        
+        // 更新按钮状态
+        document.getElementById('btn-first').disabled = currentPage <= 1;
+        document.getElementById('btn-prev').disabled = currentPage <= 1;
+        document.getElementById('btn-next').disabled = currentPage >= totalPages;
+        document.getElementById('btn-last').disabled = currentPage >= totalPages;
+        
+        // 更新页码显示
+        renderPageNumbers();
+    }
+
+    function renderPageNumbers() {
+        const container = document.getElementById('page-numbers');
+        if (!container) return;
+        
+        let html = '';
+        const maxVisible = 5;
+        let start = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+        let end = Math.min(totalPages, start + maxVisible - 1);
+        
+        if (end - start + 1 < maxVisible) {
+            start = Math.max(1, end - maxVisible + 1);
+        }
+        
+        for (let i = start; i <= end; i++) {
+            const isActive = i === currentPage;
+            html += `<button onclick="goToPage(${i})" class="w-8 h-8 rounded-lg ${isActive ? 'bg-brand-500 text-white' : 'bg-white dark:bg-[#2C2C2E] border border-gray-200 dark:border-white/10 text-gray-500 hover:bg-gray-100 dark:hover:bg-[#3A3A3C]'} flex items-center justify-center text-[12px] font-bold transition-colors">${i}</button>`;
+        }
+        
+        container.innerHTML = html;
+    }
+
+    // 自定义下拉选择框
+    function toggleCustomSelect(id) {
+        const menu = document.getElementById(id + '-menu');
+        const allMenus = document.querySelectorAll('.custom-select-menu');
+        allMenus.forEach(m => { if (m !== menu) m.classList.remove('open'); });
+        menu.classList.toggle('open');
+    }
+
+    function selectCustomOption(hiddenId, value, display) {
+        document.getElementById(hiddenId).value = value;
+        document.getElementById(hiddenId + '-display').textContent = display;
+        document.getElementById(hiddenId + '-menu').classList.remove('open');
+        
+        // 更新选中状态
+        const options = document.querySelectorAll(`#${hiddenId}-menu .custom-select-option`);
+        options.forEach(opt => {
+            opt.classList.toggle('active', opt.dataset.value === value);
+        });
+    }
+
+    // 点击外部关闭下拉菜单
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.custom-select')) {
+            document.querySelectorAll('.custom-select-menu').forEach(m => m.classList.remove('open'));
+        }
+    });
+</script>
+{% endblock %}

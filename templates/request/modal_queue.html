@@ -1,0 +1,136 @@
+<div x-show="queueModal.open" 
+     class="fixed inset-0 z-[100] flex items-end md:items-center justify-center p-0 md:p-4" 
+     x-cloak>
+    
+    <div x-show="queueModal.open" 
+         x-transition.opacity 
+         @click="closeQueueModal()" 
+         class="absolute inset-0 bg-slate-900/60 dark:bg-black/90 backdrop-blur-sm"></div>
+    
+    <div x-show="queueModal.open" 
+         x-transition:enter="transition ease-out duration-300" 
+         x-transition:enter-start="opacity-0 translate-y-full md:translate-y-10 scale-95" 
+         x-transition:enter-end="opacity-100 translate-y-0 scale-100" 
+         class="relative w-full md:w-[700px] h-[85vh] md:h-[800px] bg-white dark:bg-[#0a0a0a] border border-slate-200 dark:border-white/5 rounded-t-3xl md:rounded-3xl shadow-2xl flex flex-col overflow-hidden">
+        
+        <div class="p-4 sm:p-6 border-b border-slate-200 dark:border-white/5 flex justify-between items-center glass-header z-10 shrink-0">
+            <div class="flex bg-slate-100 dark:bg-white/5 p-1 rounded-xl">
+                <button @click="queueModal.activeTab = 'request'; loadQueue()" 
+                        class="px-4 py-1.5 rounded-lg text-sm font-bold transition-all duration-300" 
+                        :class="queueModal.activeTab === 'request' ? 'bg-white dark:bg-[#1a1a1a] text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-500 hover:text-slate-800 dark:text-zinc-400'">
+                    我的求片
+                </button>
+                <button @click="queueModal.activeTab = 'feedback'; loadMyFeedback()" 
+                        class="px-4 py-1.5 rounded-lg text-sm font-bold transition-all duration-300" 
+                        :class="queueModal.activeTab === 'feedback' ? 'bg-white dark:bg-[#1a1a1a] text-rose-600 dark:text-rose-400 shadow-sm' : 'text-slate-500 hover:text-slate-800 dark:text-zinc-400'">
+                    我的报错
+                </button>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <button @click="queueModal.activeTab === 'request' ? loadQueue() : loadMyFeedback(); isSpinning = true; setTimeout(() => isSpinning = false, 800); showToast('数据已更新')" 
+                        x-data="{ isSpinning: false }" 
+                        class="w-8 h-8 rounded-full bg-slate-100 dark:bg-white/5 text-slate-500 hover:text-brand-500 flex items-center justify-center transition active:scale-90">
+                    <svg :class="{'animate-spin': isSpinning}" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                </button>
+                <button @click="closeQueueModal()" 
+                        class="w-8 h-8 rounded-full bg-slate-100 dark:bg-white/5 text-slate-500 hover:text-rose-500 flex items-center justify-center transition">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-4 sm:p-6 hide-scrollbar bg-slate-50/50 dark:bg-transparent">
+            
+            <div x-show="queueModal.activeTab === 'request'" x-transition>
+                <div x-show="myQueue.length === 0" class="text-center py-20 text-slate-400 dark:text-zinc-600">
+                    <i class="fa-solid fa-box-open text-5xl mb-4 opacity-20"></i>
+                    <p class="font-bold text-sm">暂无求片心愿记录</p>
+                </div>
+                
+                <div class="flex flex-col gap-3">
+                    <template x-for="item in myQueue" :key="item.tmdb_id + '_' + item.season">
+                        <div class="bg-white dark:bg-[#111] p-3 rounded-2xl flex gap-4 items-center relative border border-slate-200 dark:border-white/5 shadow-sm hover:shadow-md transition duration-300 group">
+                            <img :src="item.poster_path" 
+                                 class="w-16 sm:w-20 rounded-xl shadow-sm aspect-[2/3] object-cover bg-slate-200 dark:bg-[#1a1a1a]">
+                            
+                            <div class="flex-1 min-w-0">
+                                <h4 class="font-bold text-base sm:text-lg truncate text-slate-900 dark:text-white group-hover:text-brand-500 transition-colors" x-text="item.title"></h4>
+                                <div class="text-xs font-medium text-slate-500 dark:text-zinc-400 mt-1 mb-2.5" 
+                                     x-text="item.media_type === 'tv' ? `${item.year} · 第 ${item.season} 季` : item.year"></div>
+                                
+                                <div class="flex items-center gap-2">
+                                    <span x-show="item.status === 0" class="px-2 py-1 bg-slate-100 dark:bg-[#1a1a1a] text-slate-600 dark:text-zinc-300 rounded border border-slate-200 dark:border-white/10 text-[10px] font-black uppercase tracking-wider">审核中</span>
+                                    
+                                    <span x-show="item.status === 1 || item.status === 4" 
+                                          class="px-2 py-1 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded border border-blue-200 dark:border-blue-500/20 text-[10px] font-black inline-flex items-center gap-1.5">
+                                        <span class="animate-pulse w-1.5 h-1.5 bg-blue-500 rounded-full"></span> 正在搜寻资源
+                                    </span>
+                                    
+                                    <!-- 🔥 入库完成时显示已入库集数 -->
+                                    <span x-show="item.status === 2" 
+                                          class="px-2 py-1 bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400 rounded border border-green-200 dark:border-green-500/20 text-[10px] font-black inline-flex items-center gap-1">
+                                        <i class="fa-solid fa-check-circle"></i> 
+                                        <span x-text="item.request_type === 'update' && item.episodes ? `已入库 ${item.episodes.split(',').length} 集` : '已入库'"></span>
+                                    </span>
+                                    
+                                    <!-- 🔥 待入库状态 -->
+                                    <span x-show="item.status === 7" 
+                                          class="px-2 py-1 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 rounded border border-emerald-200 dark:border-emerald-500/20 text-[10px] font-black inline-flex items-center gap-1.5">
+                                        <span class="animate-pulse w-1.5 h-1.5 bg-emerald-500 rounded-full"></span> 待入库确认
+                                    </span>
+                                    
+                                    <div x-show="item.status === 3" class="flex flex-col">
+                                        <span class="px-2 py-1 bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 rounded border border-rose-200 dark:border-rose-500/20 text-[10px] font-black self-start">暂时无法收录</span>
+                                        <div class="text-[10px] text-rose-500/80 mt-1 pl-1 font-bold" x-show="item.reject_reason">
+                                            原因: <span x-text="item.reject_reason"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <div x-show="queueModal.activeTab === 'feedback'" x-transition x-cloak>
+                <div x-show="myFeedbacks.length === 0" class="text-center py-20 text-slate-400 dark:text-zinc-600">
+                    <i class="fa-solid fa-check-double text-5xl mb-4 opacity-20"></i>
+                    <p class="font-bold text-sm">干净整洁，没有任何报错</p>
+                </div>
+                
+                <div class="flex flex-col gap-3">
+                    <template x-for="feed in myFeedbacks" :key="feed.id">
+                        <div class="bg-white dark:bg-[#111] p-4 rounded-2xl flex flex-col gap-2 border-l-4 shadow-sm border border-slate-200 dark:border-white/5 transition hover:shadow-md" 
+                             :class="feed.status === 0 ? 'border-l-red-400' : (feed.status === 1 ? 'border-l-blue-400' : (feed.status === 2 ? 'border-l-green-400' : 'border-l-gray-500'))">
+                            
+                            <div class="flex justify-between items-start">
+                                <h4 class="font-bold text-sm sm:text-base text-slate-900 dark:text-white line-clamp-1 pr-2" x-text="feed.item_name"></h4>
+                                
+                                <span x-show="feed.status === 0" class="text-[10px] bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 px-2 py-1 rounded font-black shrink-0">待核实</span>
+                                <span x-show="feed.status === 1" class="text-[10px] bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 px-2 py-1 rounded font-black shrink-0">修复中</span>
+                                <span x-show="feed.status === 2" class="text-[10px] bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400 px-2 py-1 rounded font-black shrink-0">已修正</span>
+                                <span x-show="feed.status === 3" class="text-[10px] bg-gray-100 dark:bg-white/5 text-gray-500 dark:text-gray-400 px-2 py-1 rounded font-black shrink-0">已忽略</span>
+                            </div>
+                            
+                            <div class="text-[10px] text-slate-500 dark:text-zinc-400 font-bold flex items-center gap-2">
+                                <span class="bg-slate-100 dark:bg-white/5 px-1.5 py-0.5 rounded border border-slate-200 dark:border-white/5" x-text="feed.issue_type"></span>
+                                <span class="font-mono text-[9px] opacity-60" x-text="feed.created_at"></span>
+                            </div>
+
+                            <p class="text-xs text-slate-500 dark:text-zinc-400 bg-slate-50 dark:bg-white/5 p-2 rounded-lg mt-1 border border-slate-100 dark:border-white/5" 
+                               x-show="feed.description" 
+                               x-text="feed.description"></p>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+        
+        <div class="px-6 py-4 bg-white dark:bg-[#0a0a0a] border-t border-slate-100 dark:border-white/5 text-center shrink-0">
+             <p class="text-[9px] font-black text-slate-300 dark:text-zinc-700 uppercase tracking-[0.2em]">Service Request Tracking System</p>
+        </div>
+    </div>
+</div>

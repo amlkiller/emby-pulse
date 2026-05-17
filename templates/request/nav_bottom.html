@@ -1,0 +1,54 @@
+<!-- 🔥 手机端底部导航栏 -->
+<div x-show="isLoggedIn" class="fixed bottom-5 w-[88%] left-[6%] z-50 sm:hidden transition-transform duration-500 ease-in-out" 
+     :class="isScrollingDown ? 'translate-y-32' : 'translate-y-0'">
+    <div class="bg-white/70 dark:bg-[#2C2C2E]/70 apple-blur border border-white/40 dark:border-white/10 rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.1)] px-2 py-2 flex justify-between items-center">
+        <button @click="switchTab('explore')" class="flex flex-col items-center justify-center flex-1 py-1.5 transition-colors" :class="currentTab === 'explore' ? 'text-brand-500' : 'text-gray-500 dark:text-gray-400'">
+            <i class="fa-solid fa-home text-[18px] mb-0.5"></i>
+            <span class="text-[10px] font-bold">首页</span>
+        </button>
+        <button @click="switchTab('request')" class="flex flex-col items-center justify-center flex-1 py-1.5 transition-colors" :class="currentTab === 'request' ? 'text-brand-500' : 'text-gray-500 dark:text-gray-400'">
+            <i class="fa-solid fa-heart text-[18px] mb-0.5"></i>
+            <span class="text-[10px] font-bold">心愿</span>
+        </button>
+        <!-- 🔥 消息中心 -->
+        <button @click="openMsgModal()" class="flex flex-col items-center justify-center flex-1 py-1.5 transition-colors" :class="msgModalOpen ? 'text-brand-500' : 'text-gray-500 dark:text-gray-400'">
+            <div class="relative">
+                <i class="fa-solid fa-bell text-[18px] mb-0.5"></i>
+                <!-- 未读消息小红点 -->
+                <span x-show="userUnreadCount > 0" class="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-white text-[8px] font-bold flex items-center justify-center" x-text="userUnreadCount > 99 ? '99+' : userUnreadCount"></span>
+            </div>
+            <span class="text-[10px] font-bold">消息</span>
+        </button>
+        <button @click="switchTab('profile')" class="flex flex-col items-center justify-center flex-1 py-1.5 transition-colors" :class="currentTab === 'profile' ? 'text-brand-500' : 'text-gray-500 dark:text-gray-400'">
+            <i class="fa-solid fa-user text-[18px] mb-0.5"></i>
+            <span class="text-[10px] font-bold">我的</span>
+        </button>
+    </div>
+</div>
+
+<!-- 🔥 桌面端底部导航栏（图标+文字并排） -->
+<div x-show="isLoggedIn" class="hidden sm:flex fixed bottom-8 left-1/2 -translate-x-1/2 z-50 transition-all duration-300 hover:-translate-y-1 group">
+    <div class="bg-white/70 dark:bg-[#2C2C2E]/70 apple-blur border border-white/40 dark:border-white/10 rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.1)] px-6 py-3 flex gap-6">
+        <button @click="switchTab('explore')" class="flex items-center gap-2 px-3 py-1.5 rounded-full transition-colors" :class="currentTab === 'explore' ? 'text-brand-500 bg-brand-500/10' : 'text-gray-500 dark:text-gray-400 group-hover:text-gray-700 dark:group-hover:text-gray-300'">
+            <i class="fa-solid fa-home text-lg"></i>
+            <span class="text-sm font-bold">首页</span>
+        </button>
+        <button @click="switchTab('request')" class="flex items-center gap-2 px-3 py-1.5 rounded-full transition-colors" :class="currentTab === 'request' ? 'text-brand-500 bg-brand-500/10' : 'text-gray-500 dark:text-gray-400 group-hover:text-gray-700 dark:group-hover:text-gray-300'">
+            <i class="fa-solid fa-heart text-lg"></i>
+            <span class="text-sm font-bold">心愿</span>
+        </button>
+        <!-- 🔥 消息中心 -->
+        <button @click="openMsgModal()" class="flex items-center gap-2 px-3 py-1.5 rounded-full transition-colors" :class="msgModalOpen ? 'text-brand-500 bg-brand-500/10' : 'text-gray-500 dark:text-gray-400 group-hover:text-gray-700 dark:group-hover:text-gray-300'">
+            <div class="relative">
+                <i class="fa-solid fa-bell text-lg"></i>
+                <!-- 未读消息小红点 -->
+                <span x-show="userUnreadCount > 0" class="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-white text-[8px] font-bold flex items-center justify-center shadow-lg" x-text="userUnreadCount > 99 ? '99+' : userUnreadCount"></span>
+            </div>
+            <span class="text-sm font-bold">消息</span>
+        </button>
+        <button @click="switchTab('profile')" class="flex items-center gap-2 px-3 py-1.5 rounded-full transition-colors" :class="currentTab === 'profile' ? 'text-brand-500 bg-brand-500/10' : 'text-gray-500 dark:text-gray-400 group-hover:text-gray-700 dark:group-hover:text-gray-300'">
+            <i class="fa-solid fa-user text-lg"></i>
+            <span class="text-sm font-bold">我的</span>
+        </button>
+    </div>
+</div>

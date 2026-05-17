@@ -1,0 +1,147 @@
+<div x-show="posterStudio.open" 
+     class="fixed inset-0 z-[200] flex flex-col bg-slate-900 dark:bg-black" 
+     x-cloak>
+    
+    <div class="h-14 flex items-center justify-between px-4 border-b border-white/10 shrink-0 bg-black/50 backdrop-blur-md">
+        <div class="flex items-center gap-2">
+            <div class="w-2 h-2 rounded-full bg-brand-500 animate-pulse"></div>
+            <h3 class="text-white font-bold text-sm">专属观影成就工坊</h3>
+        </div>
+        <button @click="closeMyPosterStudio()" class="w-8 h-8 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-rose-500 transition-colors">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+    </div>
+    
+    <div class="flex-1 overflow-y-auto bg-slate-800 dark:bg-[#0a0a0a] flex justify-center items-start pt-6 pb-20 relative" id="my-poster-preview-area">
+        <div x-show="posterStudio.isLoading" class="absolute inset-0 flex flex-col items-center justify-center z-50 bg-slate-900/80 backdrop-blur-sm">
+            <i class="fa-solid fa-circle-notch fa-spin text-4xl text-brand-500 mb-4"></i>
+            <div class="text-white font-bold tracking-widest text-sm">正在提炼影视灵魂...</div>
+        </div>
+        
+        <div id="my-scale-wrapper" class="transition-transform duration-300 origin-top">
+            <div id="my-capture-target" class="my-poster-canvas shadow-2xl">
+                <div class="my-poster-bg-img" id="my-poster-bg-img"></div>
+                <div class="my-poster-gradient" id="my-poster-bg-gradient"></div>
+                
+                <div class="my-p-content">
+                    <div class="my-p-header">
+                        <div class="flex items-center gap-3">
+                            <div class="my-avatar" id="my-p-avatar"></div>
+                            <div class="my-user-info">
+                                <h1 x-text="userName">User</h1>
+                                <p x-text="posterStudio.periodLabel" class="font-bold opacity-80 uppercase tracking-tighter text-[10px]"></p>
+                            </div>
+                        </div>
+                        <div class="my-server-pill"><span>专属</span>玩家足迹</div>
+                    </div>
+
+                    <div class="my-stats-row">
+                        <div class="my-stat-card">
+                            <div class="my-stat-val" x-text="posterStudio.data?.hours || 0">0</div>
+                            <div class="my-stat-label">专注时长 (H)</div>
+                        </div>
+                        <div class="my-stat-card">
+                            <div class="my-stat-val" x-text="posterStudio.data?.plays || 0">0</div>
+                            <div class="my-stat-label">播放次数</div>
+                        </div>
+                    </div>
+                    
+                    <div x-show="posterStudio.data?.plays > 0">
+                        <div class="my-podium-container" x-show="posterStudio.data?.top_list?.length > 0">
+                            <div class="my-podium-item rank-2" :style="posterStudio.data?.top_list?.length > 1 ? '' : 'visibility:hidden'">
+                                <div class="my-medal rank-2">2</div>
+                                <img class="my-podium-cover" id="my-rank2-img" src="">
+                                <div class="my-podium-title" x-text="posterStudio.data?.top_list?.[1]?.ItemName || '-'"></div>
+                                <div class="my-podium-meta" x-text="(posterStudio.data?.top_list?.[1]?.Count || 0) + '次'"></div>
+                            </div>
+                            <div class="my-podium-item rank-1" :style="posterStudio.data?.top_list?.length > 0 ? '' : 'visibility:hidden'">
+                                <div class="my-medal rank-1"><i class="fa-solid fa-crown"></i></div>
+                                <img class="my-podium-cover" id="my-rank1-img" src="">
+                                <div class="my-podium-title" x-text="posterStudio.data?.top_list?.[0]?.ItemName || '-'"></div>
+                                <div class="my-podium-meta" x-text="(posterStudio.data?.top_list?.[0]?.Count || 0) + '次'"></div>
+                            </div>
+                            <div class="my-podium-item rank-3" :style="posterStudio.data?.top_list?.length > 2 ? '' : 'visibility:hidden'">
+                                <div class="my-medal rank-3">3</div>
+                                <img class="my-podium-cover" id="my-rank3-img" src="">
+                                <div class="my-podium-title" x-text="posterStudio.data?.top_list?.[2]?.ItemName || '-'"></div>
+                                <div class="my-podium-meta" x-text="(posterStudio.data?.top_list?.[2]?.Count || 0) + '次'"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="flex flex-col gap-2 mb-8">
+                            <template x-for="(item, i) in (posterStudio.data?.top_list || []).slice(3, 10)" :key="i">
+                                <div class="my-rank-row">
+                                    <div class="w-8 text-center font-black text-xs opacity-30" x-text="i + 4"></div>
+                                    <img class="my-rank-poster-sm" :id="'my-sm-img-'+i" src="">
+                                    <div class="flex-1 min-w-0 ml-1">
+                                        <div class="font-bold text-xs truncate pb-1" x-text="item.ItemName"></div>
+                                        <div class="text-[9px] opacity-60 font-bold" x-text="item.Count + ' 次播放 · ' + Math.round(item.Duration/3600) + 'h'"></div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                        
+                        <div class="flex flex-col gap-4 mt-6" id="my-mood-area">
+                            </div>
+                    </div>
+                    
+                    <div x-show="posterStudio.data?.plays === 0" class="py-20 text-center opacity-40 text-white flex flex-col items-center">
+                        <i class="fa-solid fa-ghost text-4xl mb-3"></i>
+                        <div class="font-bold text-sm">该时段暂无记录</div>
+                    </div>
+                    
+                    <div class="mt-10 text-center opacity-40 font-bold text-[9px] tracking-[3px] text-white" id="my-p-footer">
+                        GENERATED BY EMBY PULSE
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="glass-panel border-t border-white/10 shrink-0 px-4 py-4 pb-[env(safe-area-inset-bottom)] z-10 bg-white/95 dark:bg-slate-900/95">
+        <div class="flex items-center justify-between mb-4">
+            <div class="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+                <button @click="setMyPosterPeriod('all')" class="px-4 py-1.5 rounded-lg text-[10px] font-black transition-all" :class="posterStudio.period === 'all' ? 'bg-white dark:bg-white text-black shadow-sm' : 'text-slate-400'">全量</button>
+                <button @click="setMyPosterPeriod('year')" class="px-4 py-1.5 rounded-lg text-[10px] font-black transition-all" :class="posterStudio.period === 'year' ? 'bg-white dark:bg-white text-black shadow-sm' : 'text-slate-400'">年度</button>
+                <button @click="setMyPosterPeriod('month')" class="px-4 py-1.5 rounded-lg text-[10px] font-black transition-all" :class="posterStudio.period === 'month' ? 'bg-white dark:bg-white text-black shadow-sm' : 'text-slate-400'">本月</button>
+                <button @click="setMyPosterPeriod('week')" class="px-4 py-1.5 rounded-lg text-[10px] font-black transition-all" :class="posterStudio.period === 'week' ? 'bg-white dark:bg-white text-black shadow-sm' : 'text-slate-400'">本周</button>
+            </div>
+            
+            <button @click="toggleMyCoverBg()" 
+                    class="px-4 py-1.5 rounded-xl border transition-all text-[10px] font-black flex items-center gap-1.5 shadow-sm" 
+                    :class="posterStudio.useCoverBg ? 'bg-brand-500 text-white border-brand-400 ring-2 ring-brand-500/20' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-300'">
+                <i class="fa-solid fa-image"></i> 模糊背景
+            </button>
+        </div>
+        
+        <div class="flex gap-2 overflow-x-auto hide-scrollbar mb-5 pb-1">
+            <!-- 经典纯色 -->
+            <div @click="setMyPosterTheme('#1a1a1a', 'white', '#eab308')" class="shrink-0 w-11 h-11 rounded-full cursor-pointer border-4 border-white dark:border-slate-800 shadow-md" style="background: #1a1a1a;"></div>
+            <div @click="setMyPosterTheme('#2e1065', 'white', '#c084fc')" class="shrink-0 w-11 h-11 rounded-full cursor-pointer border-4 border-white dark:border-slate-800 shadow-md" style="background: #2e1065;"></div>
+            <div @click="setMyPosterTheme('#0f172a', 'white', '#38bdf8')" class="shrink-0 w-11 h-11 rounded-full cursor-pointer border-4 border-white dark:border-slate-800 shadow-md" style="background: #0f172a;"></div>
+            <div @click="setMyPosterTheme('#064e3b', 'white', '#34d399')" class="shrink-0 w-11 h-11 rounded-full cursor-pointer border-4 border-white dark:border-slate-800 shadow-md" style="background: #064e3b;"></div>
+            <div @click="setMyPosterTheme('#7f1d1d', 'white', '#f87171')" class="shrink-0 w-11 h-11 rounded-full cursor-pointer border-4 border-white dark:border-slate-800 shadow-md" style="background: #7f1d1d;"></div>
+            <div @click="setMyPosterTheme('#525252', 'white', '#e5e7eb')" class="shrink-0 w-11 h-11 rounded-full cursor-pointer border-4 border-white dark:border-slate-800 shadow-md" style="background: #525252;"></div>
+            <div @click="setMyPosterTheme('#1e3a5f', 'white', '#60a5fa')" class="shrink-0 w-11 h-11 rounded-full cursor-pointer border-4 border-white dark:border-slate-800 shadow-md" style="background: #1e3a5f;"></div>
+            <div @click="setMyPosterTheme('#3d1f5c', 'white', '#a78bfa')" class="shrink-0 w-11 h-11 rounded-full cursor-pointer border-4 border-white dark:border-slate-800 shadow-md" style="background: #3d1f5c;"></div>
+            <!-- 渐变主题 -->
+            <div @click="setMyPosterTheme('linear-gradient(135deg, #c2410c, #7c2d12)', 'white', '#fdba74')" class="shrink-0 w-11 h-11 rounded-full cursor-pointer border-4 border-white dark:border-slate-800 shadow-md" style="background: linear-gradient(135deg, #c2410c, #7c2d12);"></div>
+            <div @click="setMyPosterTheme('linear-gradient(135deg, #0f766e, #134e4a)', 'white', '#5eead4')" class="shrink-0 w-11 h-11 rounded-full cursor-pointer border-4 border-white dark:border-slate-800 shadow-md" style="background: linear-gradient(135deg, #0f766e, #134e4a);"></div>
+            <div @click="setMyPosterTheme('linear-gradient(135deg, #7c3aed, #4c1d95)', 'white', '#c4b5fd')" class="shrink-0 w-11 h-11 rounded-full cursor-pointer border-4 border-white dark:border-slate-800 shadow-md" style="background: linear-gradient(135deg, #7c3aed, #4c1d95);"></div>
+            <div @click="setMyPosterTheme('linear-gradient(135deg, #db2777, #9f1239)', 'white', '#f9a8d4')" class="shrink-0 w-11 h-11 rounded-full cursor-pointer border-4 border-white dark:border-slate-800 shadow-md" style="background: linear-gradient(135deg, #db2777, #9f1239);"></div>
+            <div @click="setMyPosterTheme('linear-gradient(135deg, #0ea5e9, #0369a1)', 'white', '#7dd3fc')" class="shrink-0 w-11 h-11 rounded-full cursor-pointer border-4 border-white dark:border-slate-800 shadow-md" style="background: linear-gradient(135deg, #0ea5e9, #0369a1);"></div>
+            <div @click="setMyPosterTheme('linear-gradient(135deg, #65a30d, #365314)', 'white', '#bef264')" class="shrink-0 w-11 h-11 rounded-full cursor-pointer border-4 border-white dark:border-slate-800 shadow-md" style="background: linear-gradient(135deg, #65a30d, #365314);"></div>
+            <div @click="setMyPosterTheme('linear-gradient(135deg, #f59e0b, #b45309)', 'white', '#fcd34d')" class="shrink-0 w-11 h-11 rounded-full cursor-pointer border-4 border-white dark:border-slate-800 shadow-md" style="background: linear-gradient(135deg, #f59e0b, #b45309);"></div>
+            <div @click="setMyPosterTheme('#ffffff', '#333', '#3b82f6')" class="shrink-0 w-11 h-11 rounded-full cursor-pointer border-4 border-slate-200 shadow-md flex items-center justify-center text-[10px] font-black text-slate-400 bg-white">纯白</div>
+        </div>
+        
+        <button @click="saveMyPoster()" 
+                :disabled="posterStudio.isSaving || posterStudio.isLoading" 
+                class="w-full py-4 rounded-2xl font-black text-white bg-slate-900 dark:bg-brand-600 hover:opacity-90 shadow-xl transition-all active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100 flex items-center justify-center gap-3">
+            <span x-show="posterStudio.isSaving" class="animate-spin w-5 h-5 border-2 border-white/30 border-t-white rounded-full"></span>
+            <span x-show="!posterStudio.isSaving" class="flex items-center gap-2">
+                <i class="fa-solid fa-download"></i> 保存至系统相册
+            </span>
+        </button>
+    </div>
+</div>

@@ -1,0 +1,59 @@
+<div x-show="showcaseModal.open" class="fixed inset-0 z-[100] flex items-end md:items-center justify-center p-0 md:p-4" x-cloak>
+    <div x-show="showcaseModal.open" x-transition.opacity @click="closeShowcaseModal()" class="absolute inset-0 bg-slate-900/60 dark:bg-black/90 backdrop-blur-sm"></div>
+    <div x-show="showcaseModal.open" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-full md:translate-y-10 scale-95" x-transition:enter-end="opacity-100 translate-y-0 scale-100" class="relative w-full md:w-[500px] max-h-[85vh] bg-white dark:bg-[#0a0a0a] border border-slate-200 dark:border-white/5 rounded-t-3xl md:rounded-3xl overflow-hidden shadow-2xl flex flex-col">
+        <div class="relative h-48 md:h-56 shrink-0 bg-slate-200 dark:bg-[#111] overflow-hidden">
+            <img :src="`/api/proxy/smart_image?item_id=${showcaseModal.data?.Id || showcaseModal.data?.ItemId}&type=Backdrop`" @error="window.fallbackBackdrop($el, showcaseModal.data?.Name || showcaseModal.data?.ItemName)" class="w-full h-full object-cover opacity-80 dark:opacity-40 transition-opacity duration-700" id="showcase-backdrop-img">
+            <div class="absolute inset-0 bg-gradient-to-t from-white via-white/40 dark:from-[#0a0a0a] dark:via-[#0a0a0a]/40 to-transparent"></div>
+            <div class="absolute top-0 inset-x-0 p-4 flex justify-between items-center z-20">
+                <div class="px-2 py-1 bg-black/20 backdrop-blur-md rounded-lg border border-white/10"><span class="text-[10px] font-black text-white/80 uppercase tracking-tighter">Preview Mode</span></div>
+                <button @click="closeShowcaseModal()" class="bg-black/30 hover:bg-black/50 text-white rounded-full w-8 h-8 flex items-center justify-center backdrop-blur-md transition shadow-md"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+        </div>
+        <div class="relative px-6 pb-6 pt-0 flex-1 overflow-y-auto hide-scrollbar -mt-16">
+            <div class="flex gap-4 items-end mb-5">
+                <div class="w-24 md:w-32 shrink-0">
+                    <img :src="`/api/proxy/smart_image?item_id=${showcaseModal.data?.Id || showcaseModal.data?.ItemId}&type=Primary`" @error="window.fallbackPoster($el, showcaseModal.data?.Name || showcaseModal.data?.ItemName)" class="w-full h-auto rounded-xl shadow-2xl ring-4 ring-white dark:ring-[#0a0a0a] relative z-10 object-cover bg-slate-200 dark:bg-[#111]" style="aspect-ratio: 2/3;">
+                </div>
+                <div class="pb-1 w-full min-w-0">
+                    <h2 class="text-xl md:text-2xl font-extrabold leading-tight text-slate-900 dark:text-white truncate drop-shadow-sm" x-text="showcaseModal.data?.Name || showcaseModal.data?.ItemName"></h2>
+                    <div class="flex flex-wrap items-center gap-2 mt-2 text-[10px] sm:text-xs font-bold text-slate-600 dark:text-zinc-300">
+                        <span class="px-2 py-0.5 bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-400 rounded" x-show="showcaseModal.data?.Type" x-text="showcaseModal.data?.Type === 'Movie' ? '电影' : '剧集'"></span>
+                        <span class="px-2 py-0.5 bg-slate-100 dark:bg-white/10 rounded" x-show="showcaseModal.data?.ProductionYear" x-text="showcaseModal.data?.ProductionYear"></span>
+                        <span class="flex items-center gap-1 text-yellow-500 bg-yellow-50 dark:bg-yellow-500/10 px-2 py-0.5 rounded" x-show="showcaseModal.data?.CommunityRating"><i class="fa-solid fa-star"></i> <span x-text="showcaseModal.data?.CommunityRating"></span></span>
+                    </div>
+                </div>
+            </div>
+            <div x-show="showcaseModal.isLoading" class="space-y-3 mb-6"><div class="h-4 bg-slate-100 dark:bg-white/5 rounded animate-pulse w-full"></div><div class="h-4 bg-slate-100 dark:bg-white/5 rounded animate-pulse w-5/6"></div><div class="h-4 bg-slate-100 dark:bg-white/5 rounded animate-pulse w-4/6"></div></div>
+            <div x-show="!showcaseModal.isLoading" x-transition.opacity>
+                <div class="flex flex-wrap gap-1.5 mb-4" x-show="showcaseModal.data?.Genres && showcaseModal.data?.Genres.length > 0">
+                    <template x-for="g in showcaseModal.data?.Genres" :key="g"><span class="px-2.5 py-1 border border-slate-200 dark:border-white/10 rounded-full text-[10px] font-bold text-slate-500 dark:text-zinc-400 bg-slate-50/50 dark:bg-transparent" x-text="g"></span></template>
+                </div>
+                <div class="mb-6">
+                    <h4 class="text-[10px] font-black text-slate-400 dark:text-zinc-500 uppercase tracking-widest mb-2 flex items-center gap-1.5"><i class="fa-solid fa-align-left text-brand-500"></i> 剧情简介</h4>
+                    <p class="text-slate-600 dark:text-zinc-400 text-sm leading-relaxed" x-text="showcaseModal.data?.Overview || '暂无详细剧情简介...'"></p>
+                </div>
+            </div>
+            <div class="bg-gradient-to-r from-brand-500/10 to-blue-500/10 border border-brand-500/20 rounded-2xl p-4 flex items-center justify-between gap-4 mt-2 shadow-sm">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full bg-brand-500/20 flex items-center justify-center shrink-0"><i class="fa-solid fa-popcorn text-brand-500 text-lg"></i></div>
+                    <div>
+                        <div class="text-xs font-black text-brand-700 dark:text-brand-400 uppercase tracking-wider">媒体库资源</div>
+                        <div class="text-[11px] font-bold text-slate-500 dark:text-zinc-500">本片已收录，快去观看吧</div>
+                    </div>
+                </div>
+                <i class="fa-solid fa-circle-check text-brand-500 text-xl"></i>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    window.fallbackBackdrop = async function(imgEl, title) {
+        if (!title || imgEl.getAttribute('data-fallback-done')) return;
+        imgEl.setAttribute('data-fallback-done', 'true');
+        if (window.tmdbCache[title + '_backdrop']) { imgEl.src = window.tmdbCache[title + '_backdrop']; return; }
+        try {
+            const res = await fetch(`/api/requests/search?query=${encodeURIComponent(title)}`); const data = await res.json();
+            if (data.status === 'success' && data.data.length > 0) { const match = data.data.find(d => d.backdrop_path) || data.data[0]; if (match.backdrop_path) { window.tmdbCache[title + '_backdrop'] = match.backdrop_path; imgEl.src = match.backdrop_path; } }
+        } catch (e) { imgEl.style.opacity = '0'; }
+    };
+</script>

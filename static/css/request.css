@@ -1,0 +1,455 @@
+/* ============================================================
+   EmbyPulse 玩家社区 - 全局核心样式表
+   包含：玻璃态特效、海报排版、移动端适配、截图偏移修正
+   ============================================================ */
+
+/* 🔥 Alpine.js x-cloak 防止闪烁 */
+[x-cloak] { display: none !important; }
+
+/* 🔥 登录页面 shimmer 流光动画 */
+@keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+
+/* 🔥 Apple 模糊效果 */
+.apple-blur {
+    backdrop-filter: blur(24px) saturate(150%);
+    -webkit-backdrop-filter: blur(24px) saturate(150%);
+}
+
+/* 🔥 下拉刷新指示器样式 */
+.pull-indicator {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(to bottom, rgba(255,255,255,0.95), rgba(255,255,255,0));
+    z-index: 9999;
+    transform: translateY(-100%);
+    transition: transform 0.2s ease-out;
+}
+.pull-indicator.visible {
+    transform: translateY(0);
+}
+.pull-indicator.refreshing {
+    transform: translateY(0);
+    background: linear-gradient(to bottom, rgba(255,255,255,0.98), rgba(255,255,255,0.5));
+}
+html.dark .pull-indicator {
+    background: linear-gradient(to bottom, rgba(0,0,0,0.95), rgba(0,0,0,0));
+}
+html.dark .pull-indicator.refreshing {
+    background: linear-gradient(to bottom, rgba(0,0,0,0.98), rgba(0,0,0,0.5));
+}
+
+/* 1. 基础重置与响应式变量 */
+html.dark { background-color: #000000; }
+html, body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", sans-serif;
+}
+input, textarea { -webkit-user-select: auto; user-select: auto; }
+
+/* 2. 极致亚克力玻璃态面板 */
+.glass-panel { 
+    background: rgba(255, 255, 255, 0.75); 
+    backdrop-filter: blur(24px); 
+    -webkit-backdrop-filter: blur(24px); 
+    border: 1px solid rgba(255, 255, 255, 0.6); 
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); 
+}
+.dark .glass-panel { 
+    background: rgba(15, 15, 15, 0.75); 
+    border: 1px solid rgba(255, 255, 255, 0.05); 
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6); 
+}
+
+/* 3. 滚动条美化（隐藏） */
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+.hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* 4. 影视海报卡片交互 */
+.poster-card { 
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s; 
+}
+.poster-card:hover { 
+    transform: scale(1.05); 
+    box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); 
+    z-index: 10; 
+}
+.dark .poster-card:hover { 
+    box-shadow: 0 20px 25px -5px rgba(0,0,0,0.8); 
+}
+
+/* 5. 公告滚动样式 */
+.announcement-scroll-wrapper {
+    position: relative;
+}
+.announcement-item {
+    height: 24px;
+    line-height: 24px;
+    font-size: 13px;
+    flex-shrink: 0;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.4s ease;
+}
+/* 🔥 移除 :first-child 依赖，改用 JS 控制 opacity */
+/* .announcement-item:first-child {
+    opacity: 1;
+    pointer-events: auto;
+} */
+
+/* 内容跑马灯动画 - 始终滚动 */
+.announcement-content-inner {
+    animation: marquee-scroll 20s linear infinite;
+    display: inline-flex;
+}
+.announcement-item:hover .announcement-content-inner {
+    animation-play-state: paused;
+}
+
+@keyframes marquee-scroll {
+    0% {
+        transform: translateX(0);
+    }
+    100% {
+        transform: translateX(-50%);
+    }
+}
+
+/* 6. 专属海报工作室 - 物理渲染引擎 (关键：杜绝 html2canvas 截图偏移) */
+.my-poster-canvas { 
+    width: 400px; 
+    height: fit-content; 
+    min-height: auto; 
+    padding-bottom: 20px; 
+    background: var(--p-theme-bg, #1a1a1a); 
+    color: var(--p-theme-text, white); 
+    position: relative; 
+    overflow: hidden; 
+    display: flex; 
+    flex-direction: column; 
+    box-shadow: 0 30px 60px rgba(0,0,0,0.5); 
+    line-height: 1.6; 
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* 背景与渐变层 */
+.my-poster-bg-img { 
+    position: absolute; 
+    inset: 0; 
+    z-index: 0; 
+    background-size: cover; 
+    background-position: center; 
+    transform: scale(1.2); 
+    opacity: 0; 
+    transition: opacity 0.5s; 
+    height: 100%; 
+}
+.my-poster-gradient { 
+    position: absolute; 
+    inset: 0; 
+    z-index: 1; 
+    background: linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.5) 100%); 
+    height: 100%; 
+    transition: background 0.3s; 
+}
+
+/* 皇冠与奖牌定位修正 */
+.my-medal { 
+    position: absolute; 
+    top: -10px; 
+    left: calc(50% - 12px); 
+    width: 24px; 
+    height: 24px; 
+    border-radius: 50%; 
+    text-align: center; 
+    font-size: 12px; 
+    font-weight: bold; 
+    color: white; 
+    z-index: 10; 
+    box-shadow: 0 4px 6px rgba(0,0,0,0.3); 
+    line-height: 24px; 
+    box-sizing: border-box;
+}
+.my-medal.rank-1 { 
+    background: linear-gradient(135deg, #fcd34d, #b45309); 
+    width: 32px; 
+    height: 32px; 
+    top: -16px; 
+    left: calc(50% - 16px); 
+    font-size: 14px; 
+    line-height: 32px;
+}
+.my-medal i { display: block; margin-top: 1px; }
+
+/* 结构化看板色块 (杜绝内联偏移) */
+.my-mood-card { 
+    background: linear-gradient(135deg, var(--p-theme-card, rgba(255,255,255,0.08)), rgba(255,255,255,0.02)); 
+    border: 1px solid rgba(255,255,255,0.1); 
+    border-radius: 12px; 
+    padding: 16px; 
+    position: relative; 
+    overflow: hidden; 
+    color: var(--p-theme-text, white); 
+    margin-bottom: 15px; 
+    transition: color 0.3s, background 0.3s;
+}
+.my-mood-data-box { 
+    background: var(--p-theme-pill-bg, rgba(255,255,255,0.15)); 
+    border-radius: 8px; 
+    padding: 10px 12px; 
+    display: flex; 
+    flex-direction: column; 
+    justify-content: center; 
+    border: 1px solid rgba(255,255,255,0.05); 
+    min-width: 80px; 
+    transition: background 0.3s; 
+}
+.my-mood-tag-pill { 
+    background: var(--p-theme-pill-bg, rgba(255,255,255,0.15)); 
+    color: var(--p-theme-pill-text, white); 
+    font-size: 12px; 
+    font-weight: bold; 
+    padding: 6px 12px; 
+    border-radius: 20px; 
+    border: 1px solid rgba(255,255,255,0.05); 
+    display: flex; 
+    align-items: center; 
+    gap: 6px; 
+    transition: background 0.3s, color 0.3s; 
+}
+
+/* 6. 特效类 */
+.bg-gradient-radial { background: radial-gradient(circle at center, var(--tw-gradient-stops)); }
+
+.btn-glow { position: relative; overflow: hidden; }
+.btn-glow::after { 
+    content: ''; 
+    position: absolute; 
+    top: -50%; 
+    left: -50%; 
+    width: 200%; 
+    height: 200%; 
+    background: linear-gradient(to right, transparent, rgba(255,255,255,0.3), transparent); 
+    transform: rotate(30deg); 
+    animation: glow-sweep 3s infinite linear; 
+}
+@keyframes glow-sweep { 
+    0% { transform: translateX(-100%) rotate(30deg); } 
+    100% { transform: translateX(100%) rotate(30deg); } 
+}
+
+/* ============================================================
+   海报工作室 - 内部精密排版引擎 (修复版)
+   ============================================================ */
+
+/* 1. 顶部用户信息区 */
+.my-p-header { display: flex; justify-content: space-between; align-items: center; padding: 25px 25px 20px; position: relative; z-index: 5; }
+.my-avatar { width: 42px; height: 42px; border-radius: 50%; background-size: cover; border: 2px solid rgba(255,255,255,0.8); flex-shrink: 0; display: flex; items-center; justify-content: center; font-size: 20px; }
+.my-user-info h1 { font-size: 18px; font-weight: 900; margin: 0; line-height: 1.2; letter-spacing: -0.5px; }
+.my-server-pill { background: rgba(255,255,255,0.1); padding: 4px 10px; border-radius: 6px; font-size: 10px; font-weight: 900; border: 1px solid rgba(255,255,255,0.1); }
+
+/* 2. 核心指标数字区 */
+.my-stats-row { display: flex; gap: 15px; padding: 0 25px 25px; position: relative; z-index: 5; }
+.my-stat-card { flex: 1; background: var(--p-theme-card, rgba(255,255,255,0.08)); border-radius: 12px; padding: 12px; border: 1px solid rgba(255,255,255,0.05); }
+.my-stat-val { font-size: 24px; font-weight: 900; font-family: 'Monaco', monospace; line-height: 1; margin-bottom: 4px; }
+.my-stat-label { font-size: 9px; font-weight: bold; opacity: 0.6; text-transform: uppercase; letter-spacing: 1px; }
+
+/* 3. 领奖台排版 (重点修复：高度与对齐) */
+.my-podium-container { 
+    display: flex; justify-content: center; align-items: flex-end; 
+    gap: 8px; padding: 30px 20px 40px; position: relative; z-index: 5; 
+    height: 260px; /* 原来是 240px，拉高一点腾出空间 */
+    margin-top: 25px; /* 增加顶部间距，强行往下推，远离上方卡片 */
+}.my-podium-item { flex: 1 0 0%; display: flex; flex-direction: column; align-items: center; position: relative; min-width: 0; }
+.my-podium-item.rank-1 { flex: 1.15 0 0%; z-index: 2; }
+.my-podium-item.rank-2 { flex: 0.95 0 0%; padding-top: 20px; }
+.my-podium-item.rank-3 { flex: 0.85 0 0%; padding-top: 35px; }
+.my-podium-cover {
+    width: 100%; border-radius: 10px; aspect-ratio: 2/3; object-fit: cover;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.3); border: 2px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.05);
+}
+.rank-1 .my-podium-cover { border-color: rgba(252, 211, 77, 0.5); }
+.poster-fallback { object-fit: contain; padding: 15px; opacity: 0.3; }
+.my-podium-cover.poster-fallback { padding: 10px; }
+.my-podium-title { font-size: 10px; font-weight: 900; margin-top: 12px; text-align: center; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.9; }
+.rank-1 .my-podium-title { font-size: 12px; margin-top: 18px; }
+.my-podium-meta { font-size: 9px; font-weight: bold; opacity: 0.5; margin-top: 2px; }
+
+/* 4. Top 4-10 列表行排版 */
+.my-rank-row {
+    display: flex; align-items: center; gap: 12px; padding: 8px 25px;
+    position: relative; z-index: 5; transition: background 0.3s;
+}
+.my-rank-poster-sm { width: 34px; height: 50px; border-radius: 6px; object-fit: cover; flex-shrink: 0; background: rgba(255,255,255,0.05); }
+
+/* 5. 情绪看板区域控制 */
+#my-mood-area { padding: 0 25px; position: relative; z-index: 5; }
+.my-mood-tags-container { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.my-mood-data-container { display: flex; gap: 10px; margin-top: 10px; }
+.my-mood-data-sub { font-size: 9px; font-weight: bold; opacity: 0.5; margin-top: 4px; }
+.my-mood-desc { font-size: 10px; font-weight: bold; opacity: 0.4; margin-top: 12px; font-style: italic; }
+.my-mood-title { font-size: 11px; font-weight: 900; color: var(--p-theme-highlight); letter-spacing: 1px; text-transform: uppercase; }
+
+/* 6. 内容层容器 */
+.my-p-content { position: relative; z-index: 10; display: flex; flex-direction: column; width: 100%; height: 100%; }
+
+/* ============================================================
+   Apple TV+ 风格动态跑马灯海报墙
+   ============================================================ */
+.marquee-wrapper {
+    position: relative;
+    width: 100vw;
+    left: 50%;
+    transform: translateX(-50%);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 10px 0;
+    /* 边缘渐变消隐遮罩，大厂高级感的来源 */
+    mask-image: linear-gradient(to right, transparent 0%, black 10%, black 90%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, black 10%, black 90%, transparent 100%);
+}
+
+.marquee-track {
+    display: flex;
+    gap: 16px;
+    width: max-content; /* 让轨道被海报自然撑开 */
+}
+
+/* 无限滚动动画 */
+.marquee-track.scroll-left { animation: marquee-left 70s linear infinite; }
+.marquee-track.scroll-right { animation: marquee-right 70s linear infinite; }
+
+/* 鼠标悬浮时暂停滚动，方便用户点击 */
+.marquee-track:hover { animation-play-state: paused; }
+
+@keyframes marquee-left {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); } /* 位移刚好一半，实现无缝衔接 */
+}
+
+@keyframes marquee-right {
+    0% { transform: translateX(-50%); }
+    100% { transform: translateX(0); }
+}
+
+.marquee-poster {
+    width: 110px;
+    border-radius: 12px;
+    aspect-ratio: 2/3;
+    object-fit: cover;
+    box-shadow: 0 10px 20px -5px rgba(0,0,0,0.3);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.marquee-poster:hover {
+    transform: scale(1.1);
+    box-shadow: 0 20px 30px -10px rgba(0,0,0,0.6);
+    z-index: 10;
+}
+
+@media (min-width: 768px) {
+    .marquee-poster { width: 150px; border-radius: 16px; }
+    .marquee-wrapper { gap: 24px; }
+    .marquee-track { gap: 24px; }
+}
+
+/* ============================================================
+   公告内容样式（支持 Markdown 渲染）
+   ============================================================ */
+.announcement-content a {
+    color: #3b82f6;
+    text-decoration: underline;
+    transition: color 0.2s;
+}
+.announcement-content a:hover {
+    color: #2563eb;
+}
+.announcement-content a:visited {
+    color: #7c3aed;
+}
+
+.announcement-content h1,
+.announcement-content h2,
+.announcement-content h3 {
+    font-weight: bold;
+    margin: 0.8rem 0 0.5rem 0;
+}
+
+.announcement-content h1:first-child,
+.announcement-content h2:first-child,
+.announcement-content h3:first-child {
+    margin-top: 0;
+}
+
+.announcement-content h1 { font-size: 1.15rem; }
+.announcement-content h2 { font-size: 1.05rem; }
+.announcement-content h3 { font-size: 0.95rem; }
+
+.announcement-content p {
+    margin: 0.5rem 0;
+}
+
+.announcement-content ul {
+    list-style: disc;
+    margin: 0.5rem 0 0.5rem 1.5rem;
+    padding-left: 0.5rem;
+}
+
+.announcement-content ol {
+    list-style: decimal;
+    margin: 0.5rem 0 0.5rem 1.5rem;
+    padding-left: 0.5rem;
+}
+
+.announcement-content li {
+    margin: 0.25rem 0;
+    line-height: 1.6;
+}
+
+.announcement-content code {
+    background: rgba(0,0,0,0.1);
+    padding: 0.1rem 0.3rem;
+    border-radius: 0.25rem;
+    font-size: 0.9em;
+    font-family: monospace;
+}
+
+html.dark .announcement-content code {
+    background: rgba(255,255,255,0.1);
+}
+
+.announcement-content strong,
+.announcement-content b {
+    font-weight: bold;
+}
+
+.announcement-content em,
+.announcement-content i {
+    font-style: italic;
+}
+
+.announcement-content s {
+    text-decoration: line-through;
+}

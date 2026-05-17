@@ -1,0 +1,1209 @@
+{% extends "layout.html" %}
+{% block title %}客户端管控 - EmbyPulse{% endblock %}
+
+{% block head %}
+<style>
+    /* === 🔥 Apple 级极简卡片质感 === */
+    .apple-card { 
+        background-color: rgba(255, 255, 255, 0.95); 
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-radius: 24px; 
+        padding: 24px; 
+        box-shadow: 0 4px 24px -8px rgba(0,0,0,0.04);
+        border: 1px solid rgba(0,0,0,0.02);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    html.dark .apple-card {
+        background-color: rgba(28, 28, 30, 0.85); 
+        box-shadow: 0 4px 24px -8px rgba(0, 0, 0, 0.4);
+        border: 1px solid rgba(255,255,255,0.04);
+    }
+
+    @media (min-width: 768px) {
+        .apple-card:hover { transform: translateY(-2px); box-shadow: 0 12px 32px -8px rgba(0,0,0,0.08); }
+        html.dark .apple-card:hover { box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.6); }
+    }
+    
+    @keyframes pulse-once { 0% { transform: scale(0.95); opacity: 0.5; } 50% { transform: scale(1.05); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+    .animate-pulse-once { animation: pulse-once 0.3s ease-out forwards; }
+    
+    /* 🔥 筛选下拉框 */
+    .filter-dropdown { position: relative; }
+    .filter-trigger {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        min-width: 100px;
+        font-size: 12px;
+        font-weight: 500;
+        color: #374151;
+    }
+    .dark .filter-trigger {
+        background: #2C2C2E;
+        border-color: #3A3A3C;
+        color: #d1d5db;
+    }
+    .filter-trigger:hover {
+        border-color: #6366f1;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+    .dark .filter-trigger:hover { border-color: #818cf8; box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.15); }
+    .filter-trigger-icon { font-size: 9px; color: #9ca3af; transition: transform 0.2s; }
+    .filter-dropdown.open .filter-trigger-icon { transform: rotate(180deg); }
+    
+    .filter-menu {
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 0;
+        min-width: 160px;
+        max-height: 240px;
+        overflow-y: auto;
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        box-shadow: 0 12px 32px -8px rgba(0,0,0,0.15);
+        z-index: 1000;
+        padding: 6px;
+        display: none;
+        animation: dropdownFadeIn 0.15s ease-out;
+    }
+    .dark .filter-menu {
+        background: #1f2937;
+        border-color: #374151;
+        box-shadow: 0 12px 32px -8px rgba(0,0,0,0.5);
+    }
+    
+    .filter-menu-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 500;
+        color: #374151;
+        transition: all 0.15s;
+    }
+    .dark .filter-menu-item { color: #d1d5db; }
+    .filter-menu-item:hover { background: #f3f4f6; }
+    .dark .filter-menu-item:hover { background: #374151; }
+    .filter-menu-item.active {
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        color: white;
+    }
+    .filter-menu-item-icon { font-size: 12px; width: 14px; text-align: center; }
+    
+    @keyframes dropdownFadeIn {
+        from { opacity: 0; transform: translateY(-4px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    /* 分页自定义下拉框 */
+    .custom-select { position: relative; }
+    .custom-select-trigger {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    .dark .custom-select-trigger {
+        background: #2C2C2E;
+        border-color: #3A3A3C;
+    }
+    .custom-select-trigger:hover {
+        border-color: #6366f1;
+    }
+    .dark .custom-select-trigger:hover { border-color: #818cf8; }
+    .custom-select-trigger-icon { font-size: 9px; color: #9ca3af; transition: transform 0.2s; }
+    .custom-select-menu.open .custom-select-trigger-icon { transform: rotate(180deg); }
+    
+    .custom-select-menu {
+        position: absolute;
+        bottom: calc(100% + 4px);
+        left: 0;
+        min-width: 60px;
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        box-shadow: 0 8px 24px -4px rgba(0,0,0,0.15);
+        z-index: 1000;
+        padding: 4px;
+        display: none;
+        animation: dropdownFadeIn 0.15s ease-out;
+    }
+    .dark .custom-select-menu {
+        background: #1f2937;
+        border-color: #374151;
+        box-shadow: 0 8px 24px -4px rgba(0,0,0,0.5);
+    }
+    .custom-select-menu.open { display: block; }
+    
+    .custom-select-option {
+        padding: 6px 10px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 500;
+        color: #374151;
+        transition: all 0.15s;
+    }
+    .dark .custom-select-option { color: #d1d5db; }
+    .custom-select-option:hover { background: #f3f4f6; }
+    .dark .custom-select-option:hover { background: #374151; }
+    .custom-select-option.active {
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        color: white;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="w-full max-w-[1600px] mx-auto py-4 pb-32 px-4 sm:px-6 md:px-8 space-y-4 md:space-y-6">
+    
+    <div class="apple-card flex flex-col md:flex-row md:items-center justify-between gap-6 w-full mb-2 p-5 md:p-6">
+        <div class="flex items-center gap-4 pl-1 shrink-0">
+            <div class="w-12 h-12 rounded-[14px] bg-gradient-to-br from-blue-500 to-cyan-500 text-white flex items-center justify-center text-xl shadow-lg shadow-cyan-500/30 shrink-0">
+                <i class="fa-solid fa-desktop"></i>
+            </div>
+            <div>
+                <h2 class="text-xl md:text-[22px] font-bold tracking-tight text-gray-900 dark:text-white">终端态势与管控</h2>
+                <div class="text-[12px] text-gray-500 mt-1 font-medium flex items-center gap-1.5">
+                    <i class="fa-solid fa-shield-halved opacity-70"></i> <span>分析全服设备，一键阻断异常客户端</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <button onclick="toggleWhitelistModal()" class="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 bg-green-50 text-green-600 hover:bg-green-100 dark:bg-green-500/10 dark:text-green-400 dark:hover:bg-green-500/20 rounded-[14px] font-bold text-[13px] transition-all shadow-sm border border-green-100 dark:border-green-800/30 active:scale-95 shrink-0">
+                <i class="fa-solid fa-shield-check"></i> 白名单用户
+            </button>
+            <button onclick="toggleBlacklistModal()" class="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-400 dark:hover:bg-red-500/20 rounded-[14px] font-bold text-[13px] transition-all shadow-sm border border-red-100 dark:border-red-800/30 active:scale-95 shrink-0">
+                <i class="fa-solid fa-ban"></i> 软件黑名单
+            </button>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4" id="stats-cards-container">
+        </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+        <div class="apple-card flex flex-col lg:col-span-1 p-5 md:p-6">
+            <h3 class="text-[15px] font-bold text-gray-800 dark:text-gray-200 mb-4 flex items-center justify-between">
+                <span class="flex items-center gap-2">
+                    <div class="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-500/10 text-blue-500 flex items-center justify-center shadow-sm"><i class="fa-solid fa-chart-pie text-xs"></i></div> 生态分布
+                </span>
+                <span class="text-[10px] text-gray-400 font-medium">点击图块筛选</span>
+            </h3>
+            <div class="relative h-[240px] md:h-[260px] w-full flex items-center justify-center">
+                <canvas id="clientPieChart" class="cursor-pointer"></canvas>
+            </div>
+        </div>
+
+        <div class="apple-card flex flex-col lg:col-span-2 p-5 md:p-6">
+            <h3 class="text-[15px] font-bold text-gray-800 dark:text-gray-200 mb-4 flex items-center justify-between">
+                <span class="flex items-center gap-2">
+                    <div class="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-500/10 text-amber-500 flex items-center justify-center shadow-sm"><i class="fa-solid fa-ranking-star text-xs"></i></div> 历史高频设备 TOP 10
+                </span>
+                <span class="text-[10px] text-gray-400 font-medium">点击图表筛选</span>
+            </h3>
+            <div class="relative h-[240px] md:h-[260px] w-full">
+                <canvas id="deviceBarChart" class="cursor-pointer"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div id="devices-table-container" class="apple-card p-0 flex flex-col mt-2 scroll-mt-24">
+        
+        <div class="px-6 py-5 border-b border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-black/10 flex flex-col gap-3">
+            <div class="flex items-center justify-between">
+                <h3 class="font-bold text-gray-800 dark:text-gray-200 text-[15px] flex items-center">
+                    <i class="fa-solid fa-list-ul text-gray-400 mr-2 text-lg"></i> 全服接入设备列表
+                </h3>
+                <div id="filter-tag-container"></div>
+            </div>
+            
+            <!-- 筛选器区域：手机端换行，桌面端单行 -->
+            <div class="flex flex-wrap items-center gap-2">
+                <!-- 用户筛选 -->
+                <div class="filter-dropdown" id="filter-user-dropdown">
+                    <button onclick="toggleFilterDropdown('user')" class="filter-trigger">
+                        <i class="fa-solid fa-user filter-menu-item-icon text-gray-400"></i>
+                        <span class="flex-1 text-left" id="filter-user-display">全部用户</span>
+                        <i class="fa-solid fa-chevron-down filter-trigger-icon"></i>
+                    </button>
+                    <div class="filter-menu" id="filter-user-menu">
+                        <div class="filter-menu-item active" data-value="" onclick="selectFilter('user', '', '全部用户')">
+                            <i class="fa-solid fa-users filter-menu-item-icon text-indigo-500"></i>
+                            <span>全部用户</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- 软件筛选 -->
+                <div class="filter-dropdown" id="filter-app-dropdown">
+                    <button onclick="toggleFilterDropdown('app')" class="filter-trigger">
+                        <i class="fa-solid fa-desktop filter-menu-item-icon text-gray-400"></i>
+                        <span class="flex-1 text-left" id="filter-app-display">全部软件</span>
+                        <i class="fa-solid fa-chevron-down filter-trigger-icon"></i>
+                    </button>
+                    <div class="filter-menu" id="filter-app-menu">
+                        <div class="filter-menu-item active" data-value="" onclick="selectFilter('app', '', '全部软件')">
+                            <i class="fa-solid fa-layer-group filter-menu-item-icon text-indigo-500"></i>
+                            <span>全部软件</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- 搜索框 -->
+                <input type="text" id="search-device" placeholder="搜索设备/用户..." oninput="filterDevices()" class="text-[12px] bg-white dark:bg-[#2C2C2E] border border-gray-200/80 dark:border-white/5 px-3 py-1.5 rounded-lg text-gray-600 dark:text-gray-300 flex-1 min-w-0 sm:w-40 sm:flex-none outline-none">
+                <!-- 刷新按钮 -->
+                <button onclick="fetchClientsData()" class="text-[12px] bg-white dark:bg-[#2C2C2E] border border-gray-200/80 dark:border-white/5 px-3 py-1.5 rounded-lg text-gray-600 dark:text-gray-300 hover:text-indigo-500 font-bold flex items-center gap-1.5 transition-colors shadow-sm active:scale-95 shrink-0">
+                    <i class="fa-solid fa-rotate"></i> <span class="hidden sm:inline">刷新</span>
+                </button>
+            </div>
+        </div>
+        
+        <div class="overflow-x-auto mac-scrollbar flex-1 relative bg-white dark:bg-transparent">
+            <table class="w-full min-w-[800px] text-left text-[13px] text-gray-600 dark:text-gray-300">
+                <thead class="text-[11px] text-gray-500 dark:text-gray-400 uppercase bg-gray-50 dark:bg-[#1C1C1E] tracking-wider border-b border-gray-100 dark:border-white/5 sticky top-0 z-10 backdrop-blur-md">
+                    <tr>
+                        <th class="px-6 py-4">最后活动用户</th>
+                        <th class="px-6 py-4">设备名称 / ID</th>
+                        <th class="px-6 py-4">使用软件 (AppName)</th>
+                        <th class="px-6 py-4">最后活动时间</th>
+                        <th class="px-6 py-4 text-right">授权状态</th>
+                    </tr>
+                </thead>
+                <tbody id="devices-tbody" class="divide-y divide-gray-50 dark:divide-white/5">
+                    <tr>
+                        <td colspan="5" class="px-6 py-16 text-center text-gray-400">
+                            <i class="fa-solid fa-circle-notch fa-spin text-2xl text-indigo-500 mb-3 block"></i>
+                            <span class="text-xs font-bold tracking-widest animate-pulse">正在提取终端指纹信息...</span>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- 分页控件 -->
+        <div class="px-6 py-4 border-t border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-black/10 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div class="flex items-center gap-2 flex-wrap">
+                <div class="text-[12px] text-gray-500 dark:text-gray-400 font-medium whitespace-nowrap">
+                    共 <span id="total-count">0</span> 条设备，第 <span id="current-page">1</span>/<span id="total-pages">1</span> 页
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <span class="text-[12px] text-gray-500 dark:text-gray-400 hidden sm:inline">每页</span>
+                    <div class="custom-select" id="page-size-select-dropdown" style="min-width: 60px;">
+                        <div class="custom-select-trigger" onclick="toggleCustomSelect('page-size-select')" style="padding: 4px 8px; font-size: 12px;">
+                            <span id="page-size-select-display">20</span>
+                            <i class="fa-solid fa-chevron-down custom-select-trigger-icon"></i>
+                        </div>
+                        <div class="custom-select-menu" id="page-size-select-menu">
+                            <div class="custom-select-option active" data-value="20" onclick="selectCustomOption('page-size-select', '20', '20'); changePageSize('20')"><span>20</span></div>
+                            <div class="custom-select-option" data-value="40" onclick="selectCustomOption('page-size-select', '40', '40'); changePageSize('40')"><span>40</span></div>
+                            <div class="custom-select-option" data-value="60" onclick="selectCustomOption('page-size-select', '60', '60'); changePageSize('60')"><span>60</span></div>
+                            <div class="custom-select-option" data-value="80" onclick="selectCustomOption('page-size-select', '80', '80'); changePageSize('80')"><span>80</span></div>
+                            <div class="custom-select-option" data-value="100" onclick="selectCustomOption('page-size-select', '100', '100'); changePageSize('100')"><span>100</span></div>
+                        </div>
+                    </div>
+                    <input type="hidden" id="page-size-select" value="20">
+                </div>
+            </div>
+            <div class="flex items-center gap-1 w-full sm:w-auto justify-between sm:justify-end">
+                <button onclick="goToPage(1)" id="btn-first" class="w-8 h-8 rounded-lg bg-white dark:bg-[#2C2C2E] border border-gray-200 dark:border-white/10 flex items-center justify-center text-[12px] text-gray-500 hover:bg-gray-100 dark:hover:bg-[#3A3A3C] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"><i class="fa-solid fa-angles-left"></i></button>
+                <button onclick="goToPage(currentPage - 1)" id="btn-prev" class="w-8 h-8 rounded-lg bg-white dark:bg-[#2C2C2E] border border-gray-200 dark:border-white/10 flex items-center justify-center text-[12px] text-gray-500 hover:bg-gray-100 dark:hover:bg-[#3A3A3C] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"><i class="fa-solid fa-angle-left"></i></button>
+                <div id="page-numbers" class="flex items-center gap-1 overflow-x-auto"></div>
+                <button onclick="goToPage(currentPage + 1)" id="btn-next" class="w-8 h-8 rounded-lg bg-white dark:bg-[#2C2C2E] border border-gray-200 dark:border-white/10 flex items-center justify-center text-[12px] text-gray-500 hover:bg-gray-100 dark:hover:bg-[#3A3A3C] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"><i class="fa-solid fa-angle-right"></i></button>
+                <button onclick="goToPage(totalPages)" id="btn-last" class="w-8 h-8 rounded-lg bg-white dark:bg-[#2C2C2E] border border-gray-200 dark:border-white/10 flex items-center justify-center text-[12px] text-gray-500 hover:bg-gray-100 dark:hover:bg-[#3A3A3C] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"><i class="fa-solid fa-angles-right"></i></button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="blacklist-modal" class="fixed inset-0 z-[100] hidden flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="toggleBlacklistModal()"></div>
+    <div class="relative w-full max-w-lg bg-white dark:bg-[#1C1C1E] shadow-2xl rounded-[24px] overflow-hidden transition-all duration-300 scale-95 opacity-0 border border-transparent dark:border-white/5" id="blacklist-container">
+        
+        <div class="px-6 py-5 border-b border-gray-100 dark:border-white/5 flex justify-between items-center bg-gray-50/50 dark:bg-black/10">
+            <h3 class="font-black text-[17px] text-gray-900 dark:text-white flex items-center gap-2">
+                <i class="fa-solid fa-ban text-red-500"></i> 软件黑名单配置
+            </h3>
+            <button onclick="toggleBlacklistModal()" class="w-8 h-8 rounded-full bg-gray-100 dark:bg-[#2C2C2E] flex items-center justify-center text-gray-500 hover:text-red-500 transition-colors">
+                <i class="fa-solid fa-xmark text-sm"></i>
+            </button>
+        </div>
+        
+        <div class="p-6">
+            <div class="flex flex-col sm:flex-row gap-2.5 mb-6">
+                <div class="relative flex-1">
+                    <i class="fa-solid fa-shield-virus absolute left-3.5 top-3.5 text-gray-400"></i>
+                    <input type="text" id="new-block-app" placeholder="输入需封杀的软件名 (如 Fileball)" class="w-full px-4 pl-10 py-3 rounded-xl border border-gray-200/80 dark:border-white/10 bg-gray-50 dark:bg-black/20 text-[13px] outline-none focus:ring-2 focus:ring-red-500 dark:focus:ring-red-500 transition-all font-medium">
+                </div>
+                <button onclick="addBlacklist()" class="px-5 py-3 bg-gray-900 dark:bg-gray-200 hover:bg-black dark:hover:bg-white text-white dark:text-black rounded-xl text-[13px] font-bold shadow-sm transition-all whitespace-nowrap active:scale-95">
+                    <i class="fa-solid fa-crown text-amber-400 mr-1"></i> 添加拦截
+                </button>
+            </div>
+            
+            <div class="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3 pl-1">当前已封杀名单</div>
+            <ul class="space-y-2 max-h-48 overflow-y-auto mac-scrollbar pr-1" id="blacklist-ul">
+                <li class="text-center text-xs text-gray-400 py-6">读取中...</li>
+            </ul>
+        </div>
+        
+        <div class="p-6 bg-red-50/50 dark:bg-[#2C2C2E]/50 border-t border-gray-100 dark:border-white/5">
+            <div class="mb-5 bg-white dark:bg-[#1C1C1E] border border-red-100 dark:border-red-900/30 rounded-xl p-4 shadow-sm relative overflow-hidden">
+                <div class="absolute left-0 top-0 bottom-0 w-1 bg-red-500"></div>
+                <div class="flex items-start pl-2">
+                    <div class="shrink-0 mt-0.5"><i class="fa-solid fa-triangle-exclamation text-red-500 text-lg"></i></div>
+                    <div class="ml-3">
+                        <h3 class="text-[13px] font-black text-red-800 dark:text-red-400 uppercase tracking-widest">高危操作警告</h3>
+                        <p class="mt-1 text-[11px] text-gray-600 dark:text-gray-400 leading-relaxed font-medium">
+                            执行阻断将<strong class="font-black text-red-600 dark:text-red-500">物理注销</strong>名单内所有客户端在服务端的登录凭证。<br>
+                            将来即使移出黑名单，对方仍需重新登录方可恢复！
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <button id="execute-btn" onclick="executeBlock()" class="w-full py-3.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-[14px] font-black shadow-lg shadow-red-500/30 active:scale-95 transition-all flex justify-center items-center gap-2 border border-red-600/50">
+                <i class="fa-solid fa-crown text-amber-300"></i> 全服强制扫荡并阻断
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- 🔥 白名单用户弹窗 -->
+<div id="whitelist-modal" class="fixed inset-0 z-[100] hidden flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="toggleWhitelistModal()"></div>
+    <div class="relative w-full max-w-lg bg-white dark:bg-[#1C1C1E] shadow-2xl rounded-[24px] overflow-hidden transition-all duration-300 scale-95 opacity-0 border border-transparent dark:border-white/5" id="whitelist-container">
+        
+        <div class="px-6 py-5 border-b border-gray-100 dark:border-white/5 flex justify-between items-center bg-gray-50/50 dark:bg-black/10">
+            <h3 class="font-black text-[17px] text-gray-900 dark:text-white flex items-center gap-2">
+                <i class="fa-solid fa-shield-halved text-green-500"></i> 白名单用户管理
+            </h3>
+            <button onclick="toggleWhitelistModal()" class="w-8 h-8 rounded-full bg-gray-100 dark:bg-[#2C2C2E] flex items-center justify-center text-gray-500 hover:text-red-500 transition-colors">
+                <i class="fa-solid fa-xmark text-sm"></i>
+            </button>
+        </div>
+        
+        <div class="p-6">
+            <!-- 添加白名单用户 -->
+            <div class="mb-4">
+                <label class="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2 block pl-1">从已有用户中选择添加</label>
+                <div class="flex gap-2.5">
+                    <!-- 用户选择下拉框 -->
+                    <div class="relative flex-1">
+                        <div class="filter-dropdown w-full" id="add-whitelist-dropdown">
+                            <button type="button" onclick="toggleUserSelect()" class="filter-trigger w-full justify-between">
+                                <span id="whitelist-user-display" class="flex items-center gap-2">
+                                    <i class="fa-solid fa-user-plus text-gray-400"></i>
+                                    <span>选择用户...</span>
+                                </span>
+                                <i class="fa-solid fa-chevron-down filter-trigger-icon"></i>
+                            </button>
+                            <div class="filter-menu w-full" id="whitelist-user-menu" style="max-height: 200px;">
+                                <div class="p-2 border-b border-gray-100 dark:border-white/5 mb-1">
+                                    <input type="text" id="whitelist-user-search" placeholder="搜索用户..." class="w-full text-[12px] bg-gray-50 dark:bg-black/20 border border-gray-200/80 dark:border-white/10 px-3 py-1.5 rounded-lg outline-none" oninput="filterUserOptions()">
+                                </div>
+                                <div id="whitelist-user-list"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <button onclick="addWhitelistUser()" class="px-4 py-3 bg-green-500 hover:bg-green-600 text-white rounded-xl text-[13px] font-bold shadow-sm transition-all whitespace-nowrap active:scale-95">
+                        <i class="fa-solid fa-plus"></i> 添加
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 批量操作 -->
+            <div class="flex gap-2 mb-4">
+                <button onclick="selectAllWhitelist()" class="flex-1 py-2 bg-gray-100 dark:bg-[#2C2C2E] text-gray-600 dark:text-gray-300 rounded-lg text-[12px] font-bold hover:bg-gray-200 dark:hover:bg-[#3A3A3C] transition-all">
+                    <i class="fa-solid fa-check-double mr-1"></i> 全选
+                </button>
+                <button onclick="deselectAllWhitelist()" class="flex-1 py-2 bg-gray-100 dark:bg-[#2C2C2E] text-gray-600 dark:text-gray-300 rounded-lg text-[12px] font-bold hover:bg-gray-200 dark:hover:bg-[#3A3A3C] transition-all">
+                    <i class="fa-solid fa-xmark mr-1"></i> 取消
+                </button>
+                <button onclick="batchRemoveWhitelist()" class="flex-1 py-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg text-[12px] font-bold hover:bg-red-100 dark:hover:bg-red-900/30 transition-all">
+                    <i class="fa-solid fa-trash mr-1"></i> 批量移除
+                </button>
+            </div>
+            
+            <!-- 白名单列表 -->
+            <div class="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3 pl-1">当前白名单用户 (<span id="whitelist-count">0</span>)</div>
+            <ul class="space-y-2 max-h-48 overflow-y-auto mac-scrollbar pr-1" id="whitelist-ul">
+                <li class="text-center text-xs text-gray-400 py-6">读取中...</li>
+            </ul>
+        </div>
+        
+        <div class="p-5 bg-green-50/50 dark:bg-[#2C2C2E]/50 border-t border-gray-100 dark:border-white/5">
+            <div class="bg-white dark:bg-[#1C1C1E] border border-green-100 dark:border-green-900/30 rounded-xl p-4 shadow-sm relative overflow-hidden">
+                <div class="absolute left-0 top-0 bottom-0 w-1 bg-green-500"></div>
+                <div class="flex items-start pl-2">
+                    <div class="shrink-0 mt-0.5"><i class="fa-solid fa-circle-info text-green-500 text-lg"></i></div>
+                    <div class="ml-3">
+                        <h3 class="text-[13px] font-black text-green-800 dark:text-green-400 uppercase tracking-widest">白名单特权</h3>
+                        <p class="mt-1 text-[11px] text-gray-600 dark:text-gray-400 leading-relaxed font-medium">
+                            白名单用户可以<strong class="font-black text-green-600 dark:text-green-500">无视软件黑名单</strong>，使用任何客户端连接服务器。<br>
+                            此功能适用于信任的高级用户或测试用途。
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% include 'modal_pro.html' %}
+
+<script>
+let pieChartInstance = null;
+let barChartInstance = null;
+let allDevicesData = []; 
+let filteredDevicesData = []; // 筛选后的数据
+let currentFilters = { user: '', app: '' };
+
+// 分页变量
+let currentPage = 1;
+let totalPages = 1;
+let pageSize = 20;
+let totalCount = 0;
+
+document.addEventListener('DOMContentLoaded', () => {
+    fetchClientsData();
+    fetchBlacklist();
+    fetchWhitelist();  // 🔥 页面加载时获取白名单数据
+    
+    // 点击外部关闭下拉菜单
+    document.addEventListener('click', (e) => {
+        const userDropdown = document.getElementById('filter-user-dropdown');
+        const appDropdown = document.getElementById('filter-app-dropdown');
+        const userMenu = document.getElementById('filter-user-menu');
+        const appMenu = document.getElementById('filter-app-menu');
+        if (userDropdown && !userDropdown.contains(e.target)) {
+            userDropdown.classList.remove('open');
+            userMenu.style.display = 'none';
+        }
+        if (appDropdown && !appDropdown.contains(e.target)) {
+            appDropdown.classList.remove('open');
+            appMenu.style.display = 'none';
+        }
+        // 关闭分页下拉菜单
+        document.querySelectorAll('.custom-select-menu').forEach(m => {
+            if (!e.target.closest('.custom-select')) {
+                m.classList.remove('open');
+            }
+        });
+    });
+});
+
+// 🔥 下拉框控制
+function toggleFilterDropdown(type) {
+    const dropdown = document.getElementById(`filter-${type}-dropdown`);
+    const menu = document.getElementById(`filter-${type}-menu`);
+    const otherType = type === 'user' ? 'app' : 'user';
+    const otherMenu = document.getElementById(`filter-${otherType}-menu`);
+    
+    // 关闭另一个下拉菜单
+    document.getElementById(`filter-${otherType}-dropdown`).classList.remove('open');
+    otherMenu.style.display = 'none';
+    
+    const isOpen = dropdown.classList.toggle('open');
+    menu.style.display = isOpen ? 'block' : 'none';
+}
+
+function selectFilter(type, value, label) {
+    currentFilters[type] = value;
+    document.getElementById(`filter-${type}-display`).textContent = label;
+    
+    // 更新选中状态
+    document.querySelectorAll(`#filter-${type}-menu .filter-menu-item`).forEach(item => {
+        if (item.dataset.value === value) {
+            item.classList.add('active');
+        } else {
+            item.classList.remove('active');
+        }
+    });
+    
+    document.getElementById(`filter-${type}-dropdown`).classList.remove('open');
+    filterDevices();
+}
+
+async function fetchClientsData() {
+    try {
+        const res = await fetch('/api/clients/data');
+        const data = await res.json();
+        if (data.status !== 'success') throw new Error(data.message);
+        
+        allDevicesData = data.devices;
+        
+        // 🔥 更新筛选下拉框选项
+        updateFilterOptions(allDevicesData);
+        
+        // 初始化筛选后的数据
+        filteredDevicesData = allDevicesData;
+        
+        renderStatsCards(allDevicesData);
+        renderCharts(data.charts);
+        renderTablePaginated();
+        updatePagination();
+        clearFilterTag(); 
+    } catch (e) {
+        document.getElementById('devices-tbody').innerHTML = `<tr><td colspan="5" class="px-6 py-12 text-center text-red-500 text-[13px] font-bold"><i class="fa-solid fa-circle-exclamation mr-2"></i>数据读取失败: ${e.message}</td></tr>`;
+    }
+}
+
+// 🔥 更新筛选下拉框选项
+function updateFilterOptions(devices) {
+    // 获取所有用户（去重并排序）
+    const users = [...new Set(devices.map(d => d.last_user))].filter(u => u && u !== '未知用户').sort();
+    const userMenu = document.getElementById('filter-user-menu');
+    userMenu.innerHTML = `
+        <div class="filter-menu-item ${currentFilters.user === '' ? 'active' : ''}" data-value="" onclick="selectFilter('user', '', '全部用户')">
+            <i class="fa-solid fa-users filter-menu-item-icon text-indigo-500"></i>
+            <span>全部用户</span>
+        </div>
+        ${users.map(u => `
+            <div class="filter-menu-item ${currentFilters.user === u ? 'active' : ''}" data-value="${u}" onclick="selectFilter('user', '${u}', '${u}')">
+                <i class="fa-solid fa-user filter-menu-item-icon text-gray-400"></i>
+                <span>${u}</span>
+            </div>
+        `).join('')}
+    `;
+    
+    // 获取所有软件（去重并排序）
+    const apps = [...new Set(devices.map(d => d.app_name))].filter(a => a && a !== '未知客户端').sort();
+    const appMenu = document.getElementById('filter-app-menu');
+    appMenu.innerHTML = `
+        <div class="filter-menu-item ${currentFilters.app === '' ? 'active' : ''}" data-value="" onclick="selectFilter('app', '', '全部软件')">
+            <i class="fa-solid fa-layer-group filter-menu-item-icon text-indigo-500"></i>
+            <span>全部软件</span>
+        </div>
+        ${apps.map(a => `
+            <div class="filter-menu-item ${currentFilters.app === a ? 'active' : ''}" data-value="${a}" onclick="selectFilter('app', '${a}', '${a}')">
+                <i class="fa-solid fa-desktop filter-menu-item-icon text-gray-400"></i>
+                <span>${a}</span>
+            </div>
+        `).join('')}
+    `;
+}
+
+// 🔥 筛选设备
+function filterDevices() {
+    const userFilter = currentFilters.user;
+    const appFilter = currentFilters.app;
+    const searchText = document.getElementById('search-device').value.toLowerCase().trim();
+    
+    let filtered = allDevicesData;
+    
+    // 按用户筛选
+    if (userFilter) {
+        filtered = filtered.filter(d => d.last_user === userFilter);
+    }
+    
+    // 按软件筛选
+    if (appFilter) {
+        filtered = filtered.filter(d => d.app_name === appFilter);
+    }
+    
+    // 按搜索文本筛选
+    if (searchText) {
+        filtered = filtered.filter(d => 
+            (d.name && d.name.toLowerCase().includes(searchText)) ||
+            (d.last_user && d.last_user.toLowerCase().includes(searchText)) ||
+            (d.app_name && d.app_name.toLowerCase().includes(searchText))
+        );
+    }
+    
+    filteredDevicesData = filtered;
+    currentPage = 1; // 筛选后回到第一页
+    renderTablePaginated();
+    updatePagination();
+    
+    // 更新统计卡片显示筛选后的数量
+    renderStatsCards(filtered);
+}
+
+function renderStatsCards(devices) {
+    const total = devices.length;
+    const online = devices.filter(d => d.is_active).length;
+    // 白名单用户数从全局变量获取
+    const whitelistCount = whitelistUsers ? whitelistUsers.length : 0;
+
+    const html = `
+        <div class="apple-card p-5 !rounded-2xl flex items-center justify-between">
+            <div>
+                <p class="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1.5">历史设备总数</p>
+                <h3 class="text-2xl md:text-3xl font-black text-gray-900 dark:text-white font-mono tracking-tight">${total}</h3>
+            </div>
+            <div class="w-11 h-11 rounded-[12px] bg-slate-50 dark:bg-[#2C2C2E] flex items-center justify-center text-slate-500 text-lg shadow-inner border border-gray-100 dark:border-white/5"><i class="fa-solid fa-server"></i></div>
+        </div>
+        <div class="apple-card p-5 !rounded-2xl flex items-center justify-between">
+            <div>
+                <p class="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1.5">当前在线设备</p>
+                <h3 class="text-2xl md:text-3xl font-black text-green-600 dark:text-green-400 font-mono tracking-tight">${online}</h3>
+            </div>
+            <div class="w-11 h-11 rounded-[12px] bg-green-50 dark:bg-green-900/20 flex items-center justify-center text-green-500 text-lg shadow-inner border border-green-100 dark:border-green-800/30"><i class="fa-solid fa-signal"></i></div>
+        </div>
+        <div class="apple-card p-5 !rounded-2xl flex items-center justify-between">
+            <div>
+                <p class="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-1.5">白名单用户</p>
+                <h3 class="text-2xl md:text-3xl font-black text-emerald-600 dark:text-emerald-400 font-mono tracking-tight">${whitelistCount}</h3>
+            </div>
+            <div class="w-11 h-11 rounded-[12px] bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center text-emerald-500 text-lg shadow-inner border border-emerald-100 dark:border-emerald-800/30"><i class="fa-solid fa-shield-halved"></i></div>
+        </div>
+    `;
+    document.getElementById('stats-cards-container').innerHTML = html;
+}
+
+function renderCharts(charts) {
+    const pieCtx = document.getElementById('clientPieChart').getContext('2d');
+    const barCtx = document.getElementById('deviceBarChart').getContext('2d');
+    
+    if(pieChartInstance) pieChartInstance.destroy();
+    if(barChartInstance) barChartInstance.destroy();
+
+    const isDark = document.documentElement.classList.contains('dark');
+    const textColor = isDark ? '#9ca3af' : '#6b7280';
+    const gridColor = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+    const tooltipBg = isDark ? 'rgba(28,28,30,0.95)' : 'rgba(255,255,255,0.95)';
+    const tooltipText = isDark ? '#F5F5F7' : '#1C1C1E';
+
+    pieChartInstance = new Chart(pieCtx, {
+        type: 'doughnut',
+        data: {
+            labels: charts.pie.labels,
+            datasets: [{
+                data: charts.pie.data,
+                backgroundColor: ['#3b82f6', '#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'],
+                borderWidth: isDark ? 2 : 3,
+                borderColor: isDark ? '#1C1C1E' : '#ffffff',
+                hoverOffset: 6
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { 
+                legend: { position: 'bottom', labels: { boxWidth: 10, padding: 15, font: { size: 11, weight: 'bold' }, color: textColor, usePointStyle: true } },
+                tooltip: { backgroundColor: tooltipBg, titleColor: tooltipText, bodyColor: tooltipText, padding: 10, cornerRadius: 10, borderColor: gridColor, borderWidth: 1, displayColors: false }
+            },
+            cutout: '68%',
+            onClick: (e, elements, chart) => {
+                if (elements.length > 0) filterTableData('app_name', chart.data.labels[elements[0].index]);
+            }
+        }
+    });
+
+    barChartInstance = new Chart(barCtx, {
+        type: 'bar',
+        data: {
+            labels: charts.bar.labels,
+            datasets: [{
+                label: '历史播放次数',
+                data: charts.bar.data,
+                backgroundColor: isDark ? '#f59e0b' : '#f59e0b',
+                borderRadius: 6,
+                hoverBackgroundColor: '#d97706',
+                barPercentage: 0.6
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { 
+                legend: { display: false }, 
+                tooltip: { backgroundColor: tooltipBg, titleColor: tooltipText, bodyColor: tooltipText, padding: 10, cornerRadius: 10, borderColor: gridColor, borderWidth: 1, displayColors: false } 
+            },
+            scales: {
+                y: { beginAtZero: true, grid: { color: gridColor }, border:{display:false}, ticks: { color: textColor, font:{size:10} } },
+                x: { grid: { display: false }, ticks: { font: { size: 10, family: 'monospace' }, maxRotation: 30, minRotation: 0, color: textColor } }
+            },
+            onClick: (e, elements, chart) => {
+                if (elements.length > 0) filterTableData('name', chart.data.labels[elements[0].index]);
+            }
+        }
+    });
+}
+
+function filterTableData(filterKey, filterValue) {
+    const filtered = allDevicesData.filter(d => d[filterKey] === filterValue);
+    renderTable(filtered);
+    const tagContainer = document.getElementById('filter-tag-container');
+    const labelName = filterKey === 'app_name' ? '过滤软件' : '过滤设备';
+    tagContainer.innerHTML = `
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 text-[11px] font-bold border border-indigo-100 dark:border-indigo-800/50 animate-pulse-once shadow-sm">
+            <i class="fa-solid fa-filter"></i> ${labelName}: ${filterValue}
+            <button onclick="clearFilter()" class="ml-1 text-indigo-400 hover:text-indigo-600 dark:hover:text-white transition-colors"><i class="fa-solid fa-xmark"></i></button>
+        </span>
+    `;
+    document.getElementById('devices-table-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function clearFilter() {
+    filteredDevicesData = allDevicesData;
+    currentPage = 1;
+    renderTablePaginated();
+    updatePagination();
+    clearFilterTag();
+}
+
+function clearFilterTag() { document.getElementById('filter-tag-container').innerHTML = ''; }
+
+// 分页渲染
+function renderTablePaginated() {
+    const start = (currentPage - 1) * pageSize;
+    const end = start + pageSize;
+    const pageData = filteredDevicesData.slice(start, end);
+    renderTable(pageData);
+}
+
+// 分页控制函数
+function goToPage(page) {
+    if (page < 1 || page > totalPages) return;
+    currentPage = page;
+    renderTablePaginated();
+    updatePagination();
+}
+
+function changePageSize(size) {
+    pageSize = parseInt(size);
+    currentPage = 1;
+    renderTablePaginated();
+    updatePagination();
+}
+
+function updatePagination() {
+    totalCount = filteredDevicesData.length;
+    totalPages = Math.ceil(totalCount / pageSize) || 1;
+    
+    document.getElementById('total-count').textContent = totalCount;
+    document.getElementById('current-page').textContent = currentPage;
+    document.getElementById('total-pages').textContent = totalPages;
+    
+    // 更新按钮状态
+    document.getElementById('btn-first').disabled = currentPage <= 1;
+    document.getElementById('btn-prev').disabled = currentPage <= 1;
+    document.getElementById('btn-next').disabled = currentPage >= totalPages;
+    document.getElementById('btn-last').disabled = currentPage >= totalPages;
+    
+    // 更新页码显示
+    renderPageNumbers();
+}
+
+function renderPageNumbers() {
+    const container = document.getElementById('page-numbers');
+    if (!container) return;
+    
+    let html = '';
+    const maxVisible = 5;
+    let start = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+    let end = Math.min(totalPages, start + maxVisible - 1);
+    
+    if (end - start + 1 < maxVisible) {
+        start = Math.max(1, end - maxVisible + 1);
+    }
+    
+    for (let i = start; i <= end; i++) {
+        const isActive = i === currentPage;
+        html += `<button onclick="goToPage(${i})" class="w-8 h-8 rounded-lg ${isActive ? 'bg-brand-500 text-white' : 'bg-white dark:bg-[#2C2C2E] border border-gray-200 dark:border-white/10 text-gray-500 hover:bg-gray-100 dark:hover:bg-[#3A3A3C]'} flex items-center justify-center text-[12px] font-bold transition-colors">${i}</button>`;
+    }
+    
+    container.innerHTML = html;
+}
+
+// 自定义下拉框控制
+function toggleCustomSelect(id) {
+    const menu = document.getElementById(id + '-menu');
+    const allMenus = document.querySelectorAll('.custom-select-menu');
+    allMenus.forEach(m => { if (m !== menu) m.classList.remove('open'); });
+    menu.classList.toggle('open');
+}
+
+function selectCustomOption(hiddenId, value, display) {
+    document.getElementById(hiddenId).value = value;
+    document.getElementById(hiddenId + '-display').textContent = display;
+    document.getElementById(hiddenId + '-menu').classList.remove('open');
+    
+    // 更新选中状态
+    const options = document.querySelectorAll(`#${hiddenId}-menu .custom-select-option`);
+    options.forEach(opt => {
+        opt.classList.toggle('active', opt.dataset.value === value);
+    });
+}
+
+function renderTable(devices) {
+    const tbody = document.getElementById('devices-tbody');
+    if (devices.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-12 text-center text-gray-400 text-[13px] font-bold"><i class="fa-solid fa-ghost mr-2 opacity-50"></i>未找到匹配的设备记录</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = devices.map(d => `
+        <tr class="bg-transparent hover:bg-gray-50/80 dark:hover:bg-[#2C2C2E]/40 transition-colors group cursor-default border-b border-gray-50 dark:border-white/5">
+            <td class="px-6 py-3.5 whitespace-nowrap">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-6 h-6 rounded-[6px] bg-slate-100 dark:bg-[#3A3A3C] text-slate-500 dark:text-slate-300 flex items-center justify-center text-[10px] font-bold shadow-sm shrink-0 border border-gray-200/50 dark:border-white/5"><i class="fa-solid fa-user text-[9px]"></i></div>
+                    <span class="font-bold text-gray-900 dark:text-white text-[13px]">${d.last_user}</span>
+                </div>
+            </td>
+            <td class="px-6 py-3.5">
+                <div class="flex items-center gap-2">
+                    <div class="w-1.5 h-1.5 shrink-0 rounded-full ${d.is_active ? 'bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.6)] animate-pulse' : 'bg-gray-300 dark:bg-gray-600'}"></div>
+                    <span class="font-bold text-[13px] text-gray-800 dark:text-gray-200 truncate max-w-[200px]" title="${d.name}">${d.name}</span>
+                </div>
+            </td>
+            <td class="px-6 py-3.5">
+                <span class="px-2.5 py-1 rounded-md bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-mono text-[11px] font-bold border border-blue-100/50 dark:border-blue-800/30 whitespace-nowrap shadow-sm">${d.app_name}</span>
+            </td>
+            <td class="px-6 py-3.5 text-[11px] font-mono text-gray-500 dark:text-gray-400 whitespace-nowrap tracking-tight">${d.last_active}</td>
+            <td class="px-6 py-3.5 text-right whitespace-nowrap">
+                ${d.is_blocked 
+                    ? '<span class="inline-flex items-center gap-1 text-red-500 font-bold text-[11px] bg-red-50 dark:bg-red-900/20 px-2 py-0.5 rounded border border-red-100 dark:border-red-800/30 shadow-sm"><i class="fa-solid fa-ban text-[10px]"></i> 违规拦截</span>' 
+                    : '<span class="inline-flex items-center gap-1 text-green-500 dark:text-green-400 font-bold text-[11px]"><i class="fa-solid fa-check text-[10px]"></i> 正常授权</span>'}
+            </td>
+        </tr>
+    `).join('');
+}
+
+async function fetchBlacklist() {
+    const res = await fetch('/api/clients/blacklist');
+    const data = await res.json();
+    const ul = document.getElementById('blacklist-ul');
+    if (data.data.length === 0) {
+        ul.innerHTML = '<li class="text-center text-[13px] text-gray-400 py-6 font-medium"><i class="fa-solid fa-face-smile text-lg mb-2 block opacity-50"></i>暂无拦截软件</li>';
+        return;
+    }
+    ul.innerHTML = data.data.map(item => `
+        <li class="flex justify-between items-center px-4 py-2.5 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-800/30 rounded-xl group transition-all hover:bg-red-100 dark:hover:bg-red-900/30">
+            <span class="font-mono font-bold text-red-700 dark:text-red-400 text-[13px] flex items-center"><i class="fa-solid fa-shield-virus mr-2 text-red-500 opacity-80"></i> ${item.app_name}</span>
+            <button onclick="removeBlacklist('${item.app_name}')" class="text-red-400 hover:text-red-600 dark:text-red-500 dark:hover:text-red-300 transition-colors w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white dark:hover:bg-[#2C2C2E] shadow-sm"><i class="fa-solid fa-trash text-xs"></i></button>
+        </li>
+    `).join('');
+}
+
+async function addBlacklist() {
+    const input = document.getElementById('new-block-app');
+    const val = input.value.trim();
+    if(!val) return;
+    
+    // 🔥 核心拦截代码：拦截添加黑名单操作的 402 Pro权限错误
+    const res = await fetch('/api/clients/blacklist', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({app_name: val}) });
+    if (res.status === 402) {
+        window.dispatchEvent(new Event('show-pro-modal'));
+        return;
+    }
+    
+    const data = await res.json();
+    if(data.status === 'success') { input.value = ''; fetchBlacklist(); fetchClientsData(); } else { showToast('error', '操作失败', data.message); }
+}
+
+async function removeBlacklist(appName) {
+    // 🔥 核心拦截代码：拦截移除黑名单操作的 402 Pro权限错误
+    const res = await fetch(`/api/clients/blacklist/${appName}`, { method: 'DELETE' });
+    if (res.status === 402) {
+        window.dispatchEvent(new Event('show-pro-modal'));
+        return;
+    }
+    
+    fetchBlacklist(); fetchClientsData();
+}
+
+async function executeBlock() {
+    const btn = document.getElementById('execute-btn');
+    const ogHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-spinner animate-spin"></i> 雷达扫荡中...';
+    btn.disabled = true;
+    try {
+        const res = await fetch('/api/clients/execute_block', { method: 'POST' });
+        
+        // 🔥 核心拦截代码：拦截全网扫荡的 402 Pro权限错误
+        if (res.status === 402) {
+            btn.innerHTML = ogHtml; 
+            btn.disabled = false;
+            window.dispatchEvent(new Event('show-pro-modal'));
+            return;
+        }
+        
+        const data = await res.json(); showToast('success', '操作成功', data.message); fetchClientsData(); 
+    } catch(e) { showToast('error', '网络异常', '请稍后重试'); }
+    btn.innerHTML = ogHtml; btn.disabled = false;
+}
+
+function toggleBlacklistModal() {
+    const modal = document.getElementById('blacklist-modal');
+    const container = document.getElementById('blacklist-container');
+    if (modal.classList.contains('hidden')) {
+        modal.classList.remove('hidden');
+        setTimeout(() => { container.classList.remove('scale-95', 'opacity-0'); container.classList.add('scale-100', 'opacity-100'); }, 10);
+    } else {
+        container.classList.remove('scale-100', 'opacity-100'); container.classList.add('scale-95', 'opacity-0');
+        setTimeout(() => modal.classList.add('hidden'), 300);
+    }
+}
+
+// ==================== 🔥 白名单管理 ====================
+let allEmbyUsers = [];  // 存储所有 Emby 用户
+let selectedWhitelistUser = null;  // 当前选中的用户
+let whitelistUsers = [];  // 白名单用户列表
+
+// 头像缓存
+const loadedAvatars = new Set();
+const failedAvatars = new Set();
+
+// 获取用户头像 HTML
+function getWhitelistAvatarHTML(userId, userName, sizeClass = 'w-7 h-7') {
+    const firstChar = (userName || '?').charAt(0).toUpperCase();
+    const isSmall = sizeClass.includes('w-5');
+    const fontSize = isSmall ? '10px' : '11px';
+    
+    // 如果已确认加载成功
+    if (loadedAvatars.has(userId)) {
+        return `<img src="/api/proxy/user_image/${userId}" class="${sizeClass} rounded-lg object-cover" onerror="this.onerror=null;failedAvatars.add('${userId}');this.style.display='none';this.nextElementSibling.style.display='flex';"><span class="${sizeClass} rounded-lg flex items-center justify-center text-green-600 dark:text-green-400 font-bold uppercase" style="font-size:${fontSize};display:none;">${firstChar}</span>`;
+    }
+    
+    // 如果已确认失败
+    if (failedAvatars.has(userId)) {
+        return `<span class="${sizeClass} rounded-lg flex items-center justify-center text-green-600 dark:text-green-400 font-bold uppercase bg-green-100 dark:bg-green-800/30" style="font-size:${fontSize};">${firstChar}</span>`;
+    }
+    
+    // 默认显示首字母，同时尝试加载真实头像
+    return `<div class="${sizeClass} rounded-lg overflow-hidden relative bg-green-100 dark:bg-green-800/30 flex items-center justify-center">
+        <span class="text-green-600 dark:text-green-400 font-bold uppercase" style="font-size:${fontSize};">${firstChar}</span>
+        <img src="/api/proxy/user_image/${userId}" class="absolute inset-0 ${sizeClass} rounded-lg object-cover" style="opacity:0;" onload="this.style.opacity='1';loadedAvatars.add('${userId}');" onerror="failedAvatars.add('${userId}');this.style.display='none';">
+    </div>`;
+}
+
+async function fetchWhitelist() {
+    const res = await fetch('/api/clients/whitelist');
+    const data = await res.json();
+    whitelistUsers = data.data || [];
+    renderWhitelist();
+    // 🔥 更新统计卡片中的白名单数量
+    if (allDevicesData.length > 0) {
+        renderStatsCards(allDevicesData);
+    }
+}
+
+function renderWhitelist() {
+    const ul = document.getElementById('whitelist-ul');
+    document.getElementById('whitelist-count').textContent = whitelistUsers.length;
+    
+    if (whitelistUsers.length === 0) {
+        ul.innerHTML = '<li class="text-center text-[13px] text-gray-400 py-6 font-medium"><i class="fa-solid fa-user-slash text-lg mb-2 block opacity-50"></i>暂无白名单用户</li>';
+        return;
+    }
+    
+    ul.innerHTML = whitelistUsers.map(item => {
+        const avatarHtml = getWhitelistAvatarHTML(item.user_id, item.user_name, 'w-7 h-7');
+        
+        return `<li class="flex items-center gap-3 px-4 py-2.5 bg-green-50 dark:bg-green-900/10 border border-green-100 dark:border-green-800/30 rounded-xl group transition-all hover:bg-green-100 dark:hover:bg-green-900/30">
+            <input type="checkbox" class="whitelist-checkbox" data-user-id="${item.user_id}" onclick="event.stopPropagation()">
+            <div class="shrink-0">${avatarHtml}</div>
+            <span class="font-bold text-green-700 dark:text-green-400 text-[13px] flex-1 truncate">${item.user_name}</span>
+            <button onclick="removeWhitelistUser('${item.user_id}')" class="text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white dark:hover:bg-[#2C2C2E] shadow-sm opacity-0 group-hover:opacity-100">
+                <i class="fa-solid fa-trash text-xs"></i>
+            </button>
+        </li>`;
+    }).join('');
+}
+
+async function fetchEmbyUsers() {
+    try {
+        const res = await fetch('/api/users');
+        const data = await res.json();
+        if (data.status === 'success') {
+            // 适配 /api/users 返回的数据结构 (UserId, UserName, PrimaryImageTag)
+            allEmbyUsers = (data.data || []).map(u => ({
+                Id: u.UserId || u.Id,
+                Name: u.UserName || u.Name,
+                PrimaryImageTag: u.PrimaryImageTag
+            }));
+            renderUserOptions();
+            // 如果白名单弹窗已打开，重新渲染白名单列表
+            if (!document.getElementById('whitelist-modal').classList.contains('hidden')) {
+                renderWhitelist();
+            }
+        }
+    } catch (e) {
+        console.error('获取用户列表失败:', e);
+    }
+}
+
+function renderUserOptions() {
+    const list = document.getElementById('whitelist-user-list');
+    const searchText = document.getElementById('whitelist-user-search').value.toLowerCase();
+    
+    // 过滤已在白名单中的用户
+    const whitelistIds = new Set(whitelistUsers.map(u => u.user_id));
+    let filtered = allEmbyUsers.filter(u => !whitelistIds.has(u.Id));
+    
+    if (searchText) {
+        filtered = filtered.filter(u => u.Name.toLowerCase().includes(searchText));
+    }
+    
+    if (filtered.length === 0) {
+        list.innerHTML = '<div class="text-center text-[11px] text-gray-400 py-3">暂无可选用户</div>';
+        return;
+    }
+    
+    list.innerHTML = filtered.map(u => {
+        const avatarHtml = getWhitelistAvatarHTML(u.Id, u.Name, 'w-5 h-5');
+        
+        return `<div class="filter-menu-item" data-user-id="${u.Id}" data-user-name="${u.Name}" onclick="selectWhitelistUser('${u.Id}', '${u.Name}')">
+            ${avatarHtml}
+            <span>${u.Name}</span>
+        </div>`;
+    }).join('');
+}
+
+function filterUserOptions() {
+    renderUserOptions();
+}
+
+function toggleUserSelect() {
+    const dropdown = document.getElementById('add-whitelist-dropdown');
+    const menu = document.getElementById('whitelist-user-menu');
+    const isOpen = dropdown.classList.toggle('open');
+    menu.style.display = isOpen ? 'block' : 'none';
+    
+    if (isOpen) {
+        fetchEmbyUsers();
+    }
+}
+
+function selectWhitelistUser(userId, userName) {
+    selectedWhitelistUser = { user_id: userId, user_name: userName };
+    
+    const avatarHtml = getWhitelistAvatarHTML(userId, userName, 'w-5 h-5');
+    
+    document.getElementById('whitelist-user-display').innerHTML = `
+        ${avatarHtml}
+        <span class="font-bold text-green-600 dark:text-green-400">${userName}</span>
+    `;
+    
+    const dropdown = document.getElementById('add-whitelist-dropdown');
+    const menu = document.getElementById('whitelist-user-menu');
+    dropdown.classList.remove('open');
+    menu.style.display = 'none';
+}
+
+async function addWhitelistUser() {
+    if (!selectedWhitelistUser) {
+        showToast('warning', '提示', '请先选择用户');
+        return;
+    }
+    
+    const res = await fetch('/api/clients/whitelist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(selectedWhitelistUser)
+    });
+    
+    if (res.status === 402) {
+        window.dispatchEvent(new Event('show-pro-modal'));
+        return;
+    }
+    
+    const data = await res.json();
+    if (data.status === 'success') {
+        selectedWhitelistUser = null;
+        document.getElementById('whitelist-user-display').innerHTML = `
+            <i class="fa-solid fa-user-plus text-gray-400"></i>
+            <span>选择用户...</span>
+        `;
+        fetchWhitelist();
+        fetchClientsData();
+    } else {
+        showToast('error', '操作失败', data.message);
+    }
+}
+
+async function removeWhitelistUser(userId) {
+    const res = await fetch(`/api/clients/whitelist/${userId}`, { method: 'DELETE' });
+    
+    if (res.status === 402) {
+        window.dispatchEvent(new Event('show-pro-modal'));
+        return;
+    }
+    
+    fetchWhitelist();
+    fetchClientsData();
+}
+
+function selectAllWhitelist() {
+    document.querySelectorAll('.whitelist-checkbox').forEach(cb => cb.checked = true);
+}
+
+function deselectAllWhitelist() {
+    document.querySelectorAll('.whitelist-checkbox').forEach(cb => cb.checked = false);
+}
+
+async function batchRemoveWhitelist() {
+    const checkedIds = [];
+    document.querySelectorAll('.whitelist-checkbox:checked').forEach(cb => {
+        checkedIds.push(cb.dataset.userId);
+    });
+    
+    if (checkedIds.length === 0) {
+        showToast('warning', '提示', '请先选择要移除的用户');
+        return;
+    }
+    
+    const res = await fetch('/api/clients/whitelist/batch-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_ids: checkedIds })
+    });
+    
+    if (res.status === 402) {
+        window.dispatchEvent(new Event('show-pro-modal'));
+        return;
+    }
+    
+    fetchWhitelist();
+    fetchClientsData();
+}
+
+function toggleWhitelistModal() {
+    const modal = document.getElementById('whitelist-modal');
+    const container = document.getElementById('whitelist-container');
+    if (modal.classList.contains('hidden')) {
+        modal.classList.remove('hidden');
+        setTimeout(() => { 
+            container.classList.remove('scale-95', 'opacity-0'); 
+            container.classList.add('scale-100', 'opacity-100'); 
+        }, 10);
+        // 先加载 Emby 用户数据，再加载白名单
+        fetchEmbyUsers().then(() => {
+            fetchWhitelist();
+        });
+    } else {
+        container.classList.remove('scale-100', 'opacity-100'); 
+        container.classList.add('scale-95', 'opacity-0');
+        setTimeout(() => modal.classList.add('hidden'), 300);
+    }
+}
+
+// 点击外部关闭白名单用户下拉菜单
+document.addEventListener('click', (e) => {
+    const dropdown = document.getElementById('add-whitelist-dropdown');
+    const menu = document.getElementById('whitelist-user-menu');
+    if (dropdown && !dropdown.contains(e.target)) {
+        dropdown.classList.remove('open');
+        if (menu) menu.style.display = 'none';
+    }
+});
+
+document.getElementById('new-block-app').addEventListener('keypress', function (e) { if (e.key === 'Enter') addBlacklist(); });
+</script>
+{% endblock %}
