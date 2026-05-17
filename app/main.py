@@ -149,19 +149,41 @@ async def user_portal_app(scope, receive, send):
             scope["path"] = "/request"
             scope["raw_path"] = b"/request"
             
-        # 铁血隔离白名单：放行求片页面、邀请注册、静态资源、以及所有受密码保护的底层 API
+        # 铁血隔离白名单：放行求片相关页面、静态资源、公开 API
         allowed = (
             "/request",
             "/request_login",
             "/static",
             "/favicon.ico",
+            "/manifest.json",
+            "/sw.js",
+            "/apple-touch-icon.png",
             "/api/auth/login",
             "/api/auth/register",
+            "/api/auth/settings",
+            "/api/auth/avatar",
             "/api/media-requests",
             "/api/messages",
+            "/api/wallpaper",
+            "/api/user/image",
+            "/api/pro/status",
+            "/api/notifications",
             "/invite",
         )
-        if not scope["path"].startswith(allowed):
+        # 明确禁止的敏感路径（即使前缀匹配也拦截）
+        blocked = (
+            "/api/system",
+            "/api/settings",
+            "/api/users",
+            "/api/manage",
+            "/api/tokens",
+            "/api/bot",
+            "/api/risk",
+            "/api/audit",
+            "/api/tasks",
+            "/api/db",
+        )
+        if not scope["path"].startswith(allowed) or scope["path"].startswith(blocked):
             async def send_404():
                 await send({"type": "http.response.start", "status": 404, "headers": [(b"content-type", b"text/html; charset=utf-8")]})
                 await send({"type": "http.response.body", "body": "<h1>404 Not Found</h1><p>非法越界，后台管理界面已被物理阻断。</p>".encode("utf-8")})
@@ -325,7 +347,7 @@ if _cors_env:
 else:
     allowed_origins = []
     print("🔒 [安全] CORS 未配置跨域来源，已拒绝所有跨域请求（如需开放请设置 CORS_ORIGINS 环境变量）")
-app.add_middleware(CORSMiddleware, allow_origins=allowed_origins, allow_credentials=False, allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"], allow_headers=["Content-Type", "Authorization", "X-Requested-With", "X-Telegram-Bot-Api-Secret-Token"])
+app.add_middleware(CORSMiddleware, allow_origins=allowed_origins, allow_credentials=True, allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"], allow_headers=["Content-Type", "Authorization", "X-Requested-With", "X-Telegram-Bot-Api-Secret-Token"])
 
 from app.core.csrf_middleware import CSRFMiddleware
 app.add_middleware(CSRFMiddleware)

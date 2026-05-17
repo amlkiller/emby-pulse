@@ -65,6 +65,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             f"frame-ancestors 'self';"
         )
 
-        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        # 仅 HTTPS 环境启用 HSTS
+        if request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https":
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
 
         return response

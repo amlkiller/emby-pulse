@@ -542,10 +542,8 @@ async def create_local_user(request: Request, data: LocalUserCreate):
         )
         return {"status": "success", "message": "用户创建成功"}
     except Exception as e:
-        return {"status": "error", "message": safe_error_message(e, "创建用户失败")}
-    except Exception as e:
         logger.error(f"[创建用户失败] {str(e)}")
-        return {"status": "error", "message": "创建用户失败"}
+        return {"status": "error", "message": safe_error_message(e, "创建用户失败")}
 
 
 @router.put("/api/auth/local-users/{user_id}")
