@@ -16,6 +16,7 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from app.core.config import cfg
 from app.core.database import DB_PATH, SYSTEM_DB_PATH, query_db
+from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
 from app.core.media_adapter import media_api
 
 logger = logging.getLogger("uvicorn")
@@ -240,8 +241,7 @@ _ensure_user_bot_tables()
 
 
 def _get_proxies():
-    proxy = cfg.get("proxy_url")
-    return {"http": proxy, "https": proxy} if proxy else None
+    return get_safe_proxies()
 
 
 def _tg_api(method, data=None, token=None):
@@ -3743,8 +3743,7 @@ def cmd_request(chat_id, tg_user_id, args):
         _send(chat_id, "❌ 服务器未配置 TMDB，求片功能不可用")
         return
     try:
-        proxy = cfg.get("proxy_url")
-        proxies = {"http": proxy, "https": proxy} if proxy else None
+        proxies = get_safe_proxies()
         res = requests.get(f"https://api.themoviedb.org/3/search/multi?api_key={tmdb_key}&query={args}&language=zh-CN&page=1", proxies=proxies, timeout=10)
         results = [r for r in res.json().get("results", []) if r.get("media_type") in ["movie", "tv"]][:5]
         if not results:
@@ -3774,8 +3773,7 @@ def cmd_request_callback(chat_id, tg_user_id, media_type, tmdb_id, cq_id):
     if media_type == "tv":
         try:
             tmdb_key = cfg.get("tmdb_api_key")
-            proxy = cfg.get("proxy_url")
-            proxies = {"http": proxy, "https": proxy} if proxy else None
+            proxies = get_safe_proxies()
             detail = requests.get(f"https://api.themoviedb.org/3/tv/{tmdb_id}?api_key={tmdb_key}&language=zh-CN", proxies=proxies, timeout=10).json()
             title = detail.get("name", "未知")
             seasons = detail.get("seasons", [])
@@ -3821,8 +3819,7 @@ def _submit_request(chat_id, tg_user_id, media_type, tmdb_id, season):
     uname = binding['emby_username']
     try:
         tmdb_key = cfg.get("tmdb_api_key")
-        proxy = cfg.get("proxy_url")
-        proxies = {"http": proxy, "https": proxy} if proxy else None
+        proxies = get_safe_proxies()
         mtype = "movie" if media_type == "movie" else "tv"
         detail = requests.get(f"https://api.themoviedb.org/3/{mtype}/{tmdb_id}?api_key={tmdb_key}&language=zh-CN", proxies=proxies, timeout=10).json()
         title = detail.get("title") or detail.get("name", "未知")

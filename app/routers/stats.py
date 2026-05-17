@@ -2,6 +2,7 @@ from fastapi import APIRouter, Request
 from typing import Optional
 from app.core.config import cfg
 from app.core.database import query_db, get_base_filter, get_playback_column_name
+from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
 # 🔥 引入核心适配器
 from app.core.media_adapter import media_api
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
@@ -278,8 +279,7 @@ def api_latest_media(request: Request = None, limit: int = 60):
         items_raw = res.json().get("Items", [])
         data = []; seen_series = {}
         tmdb_key = cfg.get("tmdb_api_key")
-        proxy = cfg.get("proxy_url")
-        proxies = {"http": proxy, "https": proxy} if proxy else None
+        proxies = get_safe_proxies()
         
         # 🔥 批量获取 TMDB 封面（并发）
         tmdb_requests = []

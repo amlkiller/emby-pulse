@@ -257,8 +257,8 @@ def send_calendar_notify(test: bool = False):
             if tg_chat_id and tg_token:
                 try:
                     import requests
-                    proxy = cfg.get("proxy_url")
-                    proxies = {"http": proxy, "https": proxy} if proxy else None
+                    from app.utils.proxy_helper import get_safe_proxies
+                    proxies = get_safe_proxies()
                     
                     res = requests.post(
                         f"https://api.telegram.org/bot{tg_token}/sendMessage",
@@ -285,7 +285,8 @@ def send_calendar_notify(test: bool = False):
                 try:
                     import requests
                     # 获取 access_token
-                    proxy_url = cfg.get("wecom_proxy_url") or "https://qyapi.weixin.qq.com"
+                    from app.utils.proxy_helper import get_safe_wecom_base
+                    proxy_url = get_safe_wecom_base()
                     token_res = requests.get(
                         f"{proxy_url}/cgi-bin/gettoken",
                         params={"corpid": corpid, "corpsecret": corpsecret},

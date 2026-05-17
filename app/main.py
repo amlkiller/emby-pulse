@@ -254,6 +254,13 @@ async def lifespan(app: FastAPI):
         cfg.set("webhook_token", new_token)
         print(f"⚠️ [安全] Webhook Token 已自动生成，请更新 Emby Webhook 配置: {new_token}")
 
+    # 🔒 SSRF 防护：启动自检 proxy_url / wecom_proxy_url，发现内网/非法值时告警
+    try:
+        from app.utils.proxy_helper import audit_existing_proxy_config
+        audit_existing_proxy_config()
+    except Exception as _e:
+        print(f"⚠️ proxy_helper 启动自检失败（忽略）: {_e}")
+
     bot.start()
     # 🧩 Pro 专属：用户 TG 机器人（自动启动，无需手动保存配置）
     try:

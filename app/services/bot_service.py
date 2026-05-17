@@ -13,6 +13,7 @@ import urllib3
 from collections import defaultdict
 from app.core.config import cfg, REPORT_COVER_URL, FALLBACK_IMAGE_URL
 from app.core.database import query_db, get_base_filter, add_sys_notification, DB_PATH, SYSTEM_DB_PATH
+from app.utils.proxy_helper import get_safe_proxies, get_safe_wecom_base  # 🔒 SSRF 安全代理读取
 from app.services.report_service import report_gen, HAS_PIL
 from app.core.event_bus import bus
 # 🔥 引入共享 IP 归属地工具
@@ -1154,9 +1155,8 @@ class NotificationBot:
         token = cfg.get("tg_bot_token")
         if not token:
             return
-        
-        proxy = cfg.get("proxy_url")
-        proxies = {"http": proxy, "https": proxy} if proxy else None
+
+        proxies = get_safe_proxies()
         
         # 重置图片位置
         if photo_io:
@@ -1559,8 +1559,7 @@ class NotificationBot:
         else: self._cmd_stats(chat_id, 'yesterday', platform="all")
 
     def _get_proxies(self):
-        proxy = cfg.get("proxy_url")
-        return {"http": proxy, "https": proxy} if proxy else None
+        return get_safe_proxies()
 
     def _check_admin_permission(self, chat_id, user_id):
         """检查用户是否有管理员权限
@@ -1686,7 +1685,7 @@ class NotificationBot:
     def _get_wecom_token(self):
         corpid = cfg.get("wecom_corpid")
         corpsecret = cfg.get("wecom_corpsecret")
-        proxy_url = cfg.get("wecom_proxy_url", "https://qyapi.weixin.qq.com").rstrip('/')
+        proxy_url = get_safe_wecom_base()
         if not corpid or not corpsecret:
             return None
         if self.wecom_token and time.time() < self.wecom_token_expires:
@@ -1716,7 +1715,7 @@ class NotificationBot:
 
     def _set_wecom_menu(self):
         token = self._get_wecom_token(); agentid = cfg.get("wecom_agentid")
-        proxy_url = cfg.get("wecom_proxy_url", "https://qyapi.weixin.qq.com").rstrip('/')
+        proxy_url = get_safe_wecom_base()
         if not token or not agentid: return
         
         menu_data = {
@@ -1761,7 +1760,7 @@ class NotificationBot:
     def _send_wecom_message(self, text, inline_keyboard=None, touser="@all"):
         token = self._get_wecom_token()
         agentid = cfg.get("wecom_agentid")
-        proxy_url = cfg.get("wecom_proxy_url", "https://qyapi.weixin.qq.com").rstrip('/')
+        proxy_url = get_safe_wecom_base()
 
         if not token:
             logger.warning("[企业微信] 获取 access_token 失败，请检查 wecom_corpid 和 wecom_corpsecret 配置")
@@ -1799,7 +1798,7 @@ class NotificationBot:
 
     def _send_wecom_photo(self, photo_bytes, html_text, inline_keyboard=None, touser="@all"):
         token = self._get_wecom_token(); agentid = cfg.get("wecom_agentid")
-        proxy_url = cfg.get("wecom_proxy_url", "https://qyapi.weixin.qq.com").rstrip('/')
+        proxy_url = get_safe_wecom_base()
         if not token or not agentid: return
         
         pic_url = REPORT_COVER_URL  # 默认封面

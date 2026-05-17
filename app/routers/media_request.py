@@ -12,6 +12,7 @@ import threading
 
 from app.core.config import cfg, REPORT_COVER_URL
 from app.core.database import DB_PATH, SYSTEM_DB_PATH, query_db, add_sys_notification
+from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
 # 🔥 补回丢失的这一行：引入基础数据模型
 from app.schemas.models import MediaRequestSubmitModel as BaseSubmitModel
 from app.services.bot_service import bot
@@ -86,9 +87,7 @@ def get_tmdb_season_info(tmdb_id: int, season: int) -> tuple:
         tmdb_key = cfg.get("tmdb_api_key")
         if not tmdb_key:
             return 0, []
-        proxy = cfg.get("proxy_url")
-        proxies = {"https": proxy} if proxy else None
-        
+        proxies = get_safe_proxies()
         season_data = requests.get(
             f"https://api.themoviedb.org/3/tv/{tmdb_id}/season/{season}?api_key={tmdb_key}&language=zh-CN",
             proxies=proxies, timeout=8
@@ -518,7 +517,7 @@ def search_tmdb(query: str, request: Request):
         request.session.pop("req_user", None)
         return {"status": "error", "message": "账号已被删除", "account_deleted": True}
     
-    tmdb_key = cfg.get("tmdb_api_key"); proxy = cfg.get("proxy_url"); proxies = {"https": proxy} if proxy else None
+    tmdb_key = cfg.get("tmdb_api_key"); proxies = get_safe_proxies()
     try:
         res = requests.get(f"https://api.themoviedb.org/3/search/multi?api_key={tmdb_key}&language=zh-CN&query={query}", proxies=proxies, timeout=10).json()
         results = []
@@ -540,7 +539,7 @@ def get_tmdb_trending(request: Request):
         return {"status": "error", "message": "账号已被删除", "account_deleted": True}
     
     tmdb_key = cfg.get("tmdb_api_key")
-    proxy = cfg.get("proxy_url"); proxies = {"https": proxy} if proxy else None
+    proxies = get_safe_proxies()
     try:
         results = []
         for page in [1, 2]:
@@ -564,7 +563,7 @@ def get_tmdb_trending(request: Request):
 @router.get("/api/requests/tv/{tmdb_id}")
 def get_tv_details(tmdb_id: int):
     tmdb_key = cfg.get("tmdb_api_key")
-    proxy = cfg.get("proxy_url"); proxies = {"https": proxy} if proxy else None
+    proxies = get_safe_proxies()
     try:
         emby_host = cfg.get("emby_host"); emby_key = cfg.get("emby_api_key")
         local_seasons_map = {} 
@@ -861,9 +860,7 @@ def get_all_requests(request: Request):
     if tmdb_ids_to_fetch:
         from concurrent.futures import ThreadPoolExecutor, as_completed
         tmdb_key = cfg.get("tmdb_api_key")
-        proxy = cfg.get("proxy_url")
-        proxies = {"https": proxy} if proxy else None
-        
+        proxies = get_safe_proxies()
         def fetch_tmdb_poster(tid):
             try:
                 tmdb_info = requests.get(
@@ -1595,8 +1592,7 @@ def _get_local_episodes(series_id: str, season: int) -> set:
 def _get_tmdb_season_episodes(tmdb_id: int, season: int) -> dict:
     """获取 TMDB 某季的集数信息"""
     tmdb_key = cfg.get("tmdb_api_key")
-    proxy = cfg.get("proxy_url")
-    proxies = {"https": proxy} if proxy else None
+    proxies = get_safe_proxies()
     
     try:
         res = requests.get(
@@ -1632,8 +1628,7 @@ def get_user_series(request: Request):
     host = cfg.get("emby_host")
     key = cfg.get("emby_api_key")
     tmdb_key = cfg.get("tmdb_api_key")
-    proxy = cfg.get("proxy_url")
-    proxies = {"https": proxy} if proxy else None
+    proxies = get_safe_proxies()
     
     try:
         # 🚀 优化：从缺集管理缓存读取数据，大幅提速
@@ -2064,8 +2059,7 @@ async def submit_update_request(request: Request):
             if not actual_year or actual_year == "":
                 try:
                     tmdb_key = cfg.get("tmdb_api_key")
-                    proxy = cfg.get("proxy_url")
-                    proxies = {"https": proxy} if proxy else None
+                    proxies = get_safe_proxies()
                     tmdb_info = requests.get(
                         f"https://api.themoviedb.org/3/tv/{tmdb_id}?api_key={tmdb_key}",
                         proxies=proxies, timeout=5
@@ -2094,8 +2088,7 @@ async def submit_update_request(request: Request):
                 # 本地 API 路径，从 TMDB 获取封面
                 try:
                     tmdb_key = cfg.get("tmdb_api_key")
-                    proxy = cfg.get("proxy_url")
-                    proxies = {"https": proxy} if proxy else None
+                    proxies = get_safe_proxies()
                     tmdb_info = requests.get(
                         f"https://api.themoviedb.org/3/tv/{tmdb_id}?api_key={tmdb_key}",
                         proxies=proxies, timeout=5
@@ -2272,8 +2265,7 @@ async def submit_update_request_batch(request: Request):
             poster_url = REPORT_COVER_URL
             try:
                 tmdb_key = cfg.get("tmdb_api_key")
-                proxy = cfg.get("proxy_url")
-                proxies = {"https": proxy} if proxy else None
+                proxies = get_safe_proxies()
                 tmdb_info = requests.get(
                     f"https://api.themoviedb.org/3/tv/{tmdb_id}?api_key={tmdb_key}",
                     proxies=proxies, timeout=5

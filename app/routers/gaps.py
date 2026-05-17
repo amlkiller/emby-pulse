@@ -61,8 +61,8 @@ def update_progress(item_name=None):
         if item_name: scan_state["current_item"] = f"分析剧集: {item_name[:20]}"
 
 def _get_proxies():
-    proxy = cfg.get("proxy_url")
-    return {"http": proxy, "https": proxy} if proxy else None
+    from app.utils.proxy_helper import get_safe_proxies
+    return get_safe_proxies()
 
 def get_admin_user_id():
     try:

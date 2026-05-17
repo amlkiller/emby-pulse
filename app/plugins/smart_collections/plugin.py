@@ -620,8 +620,8 @@ class SmartCollectionsPlugin(PluginBase):
             return []
         
         tmdb_key = cfg.get("tmdb_api_key")
-        proxy = cfg.get("proxy_url")
-        proxies = {"http": proxy, "https": proxy} if proxy else None
+        from app.utils.proxy_helper import get_safe_proxies
+        proxies = get_safe_proxies()
         
         # 构建 TMDB ID → Emby Item ID 映射
         emby_tmdb_map = self._build_emby_tmdb_map(admin_id)

@@ -4,6 +4,7 @@ URL 安全验证工具
 """
 from urllib.parse import urlparse
 import re
+import ipaddress
 
 
 def validate_url(url: str, allow_internal: bool = False) -> dict:
@@ -171,21 +172,129 @@ ALLOWED_PROXY_DOMAINS = [
 def is_allowed_proxy_domain(domain: str) -> bool:
     """
     检查是否是允许的代理域名
-    
+
     Args:
         domain: 域名
-    
+
     Returns:
         bool
     """
     domain = domain.lower()
-    
+
     # 允许 Telegram API 相关域名
     if domain.endswith('.telegram.org') or domain == 'telegram.org':
         return True
-    
+
     # 允许企业微信域名
     if domain.endswith('.weixin.qq.com') or domain == 'weixin.qq.com':
         return True
-    
+
     return False
+
+
+# 允许的代理 scheme
+_ALLOWED_PROXY_SCHEMES = {"http", "https", "socks5", "socks5h", "socks4", "socks4a"}
+
+
+def _hostname_is_internal(hostname: str) -> bool:
+    """
+    增强版内网判断：先用 ipaddress 模块（最准确），再回退到 is_internal_domain。
+    """
+    if not hostname:
+        return True
+    h = hostname.strip().strip('[]')
+    # 先用 ipaddress 模块判断（覆盖所有 IPv4/IPv6 私网/回环/链路本地）
+    try:
+        ip = ipaddress.ip_address(h)
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified:
+            return True
+        return False
+    except ValueError:
+        # 不是 IP，按域名判断
+        return is_internal_domain(h)
+
+
+def validate_proxy_url(url: str) -> dict:
+    """
+    校验代理 URL（用于 proxy_url 配置项）。
+
+    - 空字符串视为合法（表示不使用代理）
+    - scheme 必须在 {http, https, socks5, socks5h, socks4, socks4a}
+    - hostname 必须为公网（IPv4/IPv6 私网、回环、链路本地一律拒绝）
+    - 支持 user:pass@host:port userinfo 形式，仅校验 hostname 部分
+
+    Returns:
+        {"valid": bool, "error": str}
+    """
+    if url is None or url == "":
+        return {"valid": True, "error": ""}
+
+    if not isinstance(url, str):
+        return {"valid": False, "error": "代理地址必须为字符串"}
+
+    url = url.strip()
+    if not url:
+        return {"valid": True, "error": ""}
+
+    try:
+        parsed = urlparse(url)
+    except Exception as e:
+        return {"valid": False, "error": f"代理地址格式无效: {e}"}
+
+    scheme = (parsed.scheme or "").lower()
+    if scheme not in _ALLOWED_PROXY_SCHEMES:
+        return {"valid": False, "error": f"不支持的代理协议: {scheme or '(空)'}，仅允许 http/https/socks5/socks5h/socks4/socks4a"}
+
+    hostname = parsed.hostname  # urllib 自动剥离 userinfo 和端口
+    if not hostname:
+        return {"valid": False, "error": "代理地址缺少主机名"}
+
+    if _hostname_is_internal(hostname):
+        return {"valid": False, "error": f"不允许使用内网代理地址: {hostname}"}
+
+    return {"valid": True, "error": ""}
+
+
+# 企微默认基址，必须始终通过校验
+WECOM_DEFAULT_BASE = "https://qyapi.weixin.qq.com"
+
+
+def validate_wecom_proxy_base(url: str) -> dict:
+    """
+    校验企微代理基址（用于 wecom_proxy_url 配置项）。
+
+    - 空字符串视为合法（运行时会回退默认值）
+    - scheme 必须为 https（企微强制 TLS）
+    - hostname 必须为公网
+    - 默认值 https://qyapi.weixin.qq.com 必须通过
+
+    Returns:
+        {"valid": bool, "error": str}
+    """
+    if url is None or url == "":
+        return {"valid": True, "error": ""}
+
+    if not isinstance(url, str):
+        return {"valid": False, "error": "企微代理地址必须为字符串"}
+
+    url = url.strip()
+    if not url:
+        return {"valid": True, "error": ""}
+
+    try:
+        parsed = urlparse(url)
+    except Exception as e:
+        return {"valid": False, "error": f"企微代理地址格式无效: {e}"}
+
+    scheme = (parsed.scheme or "").lower()
+    if scheme != "https":
+        return {"valid": False, "error": "企微代理地址必须使用 https"}
+
+    hostname = parsed.hostname
+    if not hostname:
+        return {"valid": False, "error": "企微代理地址缺少主机名"}
+
+    if _hostname_is_internal(hostname):
+        return {"valid": False, "error": f"不允许使用内网企微代理地址: {hostname}"}
+
+    return {"valid": True, "error": ""}

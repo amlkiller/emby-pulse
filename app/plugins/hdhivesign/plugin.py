@@ -139,8 +139,8 @@ class HDHiveSignPlugin(PluginBase):
     
     def _proxies(self):
         """获取代理配置"""
-        proxy = cfg.get("proxy_url")
-        return {"http": proxy, "https": proxy} if proxy else None
+        from app.utils.proxy_helper import get_safe_proxies
+        return get_safe_proxies()
     
     def _setup_routes(self):
         """注册 API 路由"""

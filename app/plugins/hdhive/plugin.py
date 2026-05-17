@@ -70,8 +70,8 @@ class HDHivePlugin(PluginBase):
         return {"X-API-Key": config.get("api_key", ""), "Content-Type": "application/json"}
 
     def _proxies(self):
-        proxy = cfg.get("proxy_url")
-        return {"http": proxy, "https": proxy} if proxy else None
+        from app.utils.proxy_helper import get_safe_proxies
+        return get_safe_proxies()
 
     def _log(self, msg, level="info"):
         """记录日志（兼容旧代码）- 同时写入数据库和控制台"""
@@ -706,8 +706,8 @@ class HDHivePlugin(PluginBase):
             return
 
         # 获取代理配置
-        proxy = cfg.get("proxy_url")
-        proxies = {"http": proxy, "https": proxy} if proxy else None
+        from app.utils.proxy_helper import get_safe_proxies
+        proxies = get_safe_proxies()
 
         try:
             # 并行搜索电影和剧集（带分页）
@@ -918,8 +918,8 @@ class HDHivePlugin(PluginBase):
         self._log(f"用户选择: {selected['title']}，正在查询影巢资源...")
 
         h = self._headers()
-        proxy = cfg.get("proxy_url")
-        proxies = {"http": proxy, "https": proxy} if proxy else None
+        from app.utils.proxy_helper import get_safe_proxies
+        proxies = get_safe_proxies()
 
         # 用 TMDB ID 查询影巢资源
         api_res_type = "movie" if res_type == "movie" else "tv"

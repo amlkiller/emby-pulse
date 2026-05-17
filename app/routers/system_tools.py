@@ -15,6 +15,7 @@ from collections import deque
 from fastapi import APIRouter, Request
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 from app.core.config import cfg, DB_PATH, SYSTEM_DB_PATH
+from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
 from app.core.database import query_db
 from app.core.db_schemas import SYSTEM_TABLES
 
@@ -74,8 +75,7 @@ def _fetch_weather_from_api(city: str) -> dict:
                 print(f"[天气缓存] 高德天气获取失败: {e}")
 
     # 兜底：wttr.in
-    proxy = cfg.get("proxy_url")
-    proxies = {"http": proxy, "https": proxy} if proxy and proxy.strip() else None
+    proxies = get_safe_proxies()
     try:
         res = requests.get(f"https://wttr.in/{encoded_city}?format=j1&lang=zh", headers=headers, timeout=6)
         if res.status_code == 200:
@@ -281,8 +281,7 @@ async def network_check(request: Request):
     if not is_admin_user(request):
         return {"error": "需要管理员权限"}
     
-    proxy_url = cfg.get("proxy_url")
-    proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
+    proxies = get_safe_proxies()
 
     tg_ok, tg_ping = ping_url("https://api.telegram.org", proxies)
 

@@ -1033,9 +1033,9 @@ class TempAccountPlugin(PluginBase):
                 message = f"🎉 临时账号创建成功\n\n用户名: {username}\n密码: {password}\n\n创建时间: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
             else:
                 message = f"🔐 临时账号密码更新\n\n用户名: {username}\n新密码: {password}\n\n更新时间: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-            
-            proxy = cfg.get("proxy_url")
-            proxies = {"http": proxy, "https": proxy} if proxy else None
+
+            from app.utils.proxy_helper import get_safe_proxies
+            proxies = get_safe_proxies()
             
             res = requests.post(
                 f"https://api.telegram.org/bot{bot_token}/sendMessage",
@@ -1061,11 +1061,11 @@ class TempAccountPlugin(PluginBase):
                 return False
             
             # 获取 access_token
-            proxy_url = cfg.get("wecom_proxy_url", "https://qyapi.weixin.qq.com").rstrip('/')
+            from app.utils.proxy_helper import get_safe_wecom_base, get_safe_proxies
+            proxy_url = get_safe_wecom_base()
             token_url = f"{proxy_url}/cgi-bin/gettoken?corpid={corpid}&corpsecret={corpsecret}"
-            
-            proxy = cfg.get("proxy_url")
-            proxies = {"http": proxy, "https": proxy} if proxy else None
+
+            proxies = get_safe_proxies()
             
             token_res = requests.get(token_url, proxies=proxies, timeout=10)
             if token_res.status_code != 200:

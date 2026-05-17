@@ -782,7 +782,9 @@ async def get_wallpaper():
         {"url": "https://images.unsplash.com/photo-1536440136628-849c177e76a1?q=80&w=1925&auto=format&fit=crop", "title": "电影之夜 - Unsplash"},
         {"url": "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?q=80&w=2070&auto=format&fit=crop", "title": "家庭影院 - Unsplash"}
     ]
-    tmdb_key = cfg.get("tmdb_api_key"); proxy = cfg.get("proxy_url"); proxies = {"https": proxy, "http": proxy} if proxy else None
+    tmdb_key = cfg.get("tmdb_api_key")
+    from app.utils.proxy_helper import get_safe_proxies as _get_safe_proxies
+    proxies = _get_safe_proxies()
     if tmdb_key:
         try:
             res = requests.get(f"https://api.themoviedb.org/3/trending/all/day?api_key={tmdb_key}&language=zh-CN", proxies=proxies, timeout=3)

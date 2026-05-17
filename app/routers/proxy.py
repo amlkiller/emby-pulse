@@ -3,6 +3,7 @@ from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 from app.core.security import require_login  # 🔒 统一登录依赖
 from app.core.config import cfg
 from app.core.media_adapter import media_api  # 🔥 引入核心适配器
+from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
 import requests
 import urllib.parse
 import logging
@@ -261,8 +262,7 @@ def proxy_smart_image(request: Request, item_id: str, name: str = "", year: str 
     cached_result = smart_image_cache.get(item_id)
     if cached_result and str(cached_result).startswith('http'):
         try:
-            proxy = cfg.get("proxy_url")
-            proxies = {"https": proxy, "http": proxy} if proxy else None
+            proxies = get_safe_proxies()
             resp = ext_session.get(cached_result, proxies=proxies, timeout=10, stream=True)
             if resp.status_code == 200:
                 return Response(content=resp.content, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=86400"})
@@ -310,9 +310,8 @@ def proxy_smart_image(request: Request, item_id: str, name: str = "", year: str 
 
     if clean_name and tmdb_key:
         try:
-            proxy = cfg.get("proxy_url")
-            proxies = {"https": proxy, "http": proxy} if proxy else None
-            
+            proxies = get_safe_proxies()
+
             tmdb_url = f"https://api.themoviedb.org/3/search/multi?api_key={tmdb_key}&language=zh-CN&query={urllib.parse.quote(clean_name)}"
             t_resp = ext_session.get(tmdb_url, proxies=proxies, timeout=5)
             

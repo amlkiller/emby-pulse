@@ -150,7 +150,18 @@ def api_save_bot_settings(data: BotSettingsModel, request: Request):
     cfg.set("wecom_corpid", (data.wecom_corpid or "").strip())
     cfg.set("wecom_agentid", (data.wecom_agentid or "").strip())
     cfg.set("wecom_touser", data.wecom_touser or "@all")
-    cfg.set("wecom_proxy_url", (data.wecom_proxy_url or "https://qyapi.weixin.qq.com").strip())
+    # 🔒 SSRF 防护：校验企微代理基址
+    _wecom_base = (data.wecom_proxy_url or "https://qyapi.weixin.qq.com").strip()
+    from app.utils.url_validator import validate_wecom_proxy_base
+    _wecom_check = validate_wecom_proxy_base(_wecom_base)
+    if not _wecom_check.get("valid"):
+        return {"status": "error", "message": f"企微代理地址不合法: {_wecom_check.get('error', '')}"}
+    cfg.set("wecom_proxy_url", _wecom_base)
+    try:
+        from app.utils.proxy_helper import invalidate_cache as _proxy_cache_invalidate
+        _proxy_cache_invalidate()
+    except Exception:
+        pass
 
     # 🤖 Pro: 用户机器人配置
     cfg.set("user_bot_open_reg", data.user_bot_open_reg)
@@ -308,7 +319,8 @@ def api_send_open_reg_notify(request: Request, data: dict):
 @router.post("/api/bot/test")
 def api_test_bot(request: Request):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    token = cfg.get("tg_bot_token"); chat_id = cfg.get("tg_chat_id"); proxy = cfg.get("proxy_url")
+    token = cfg.get("tg_bot_token"); chat_id = cfg.get("tg_chat_id")
+    from app.utils.proxy_helper import get_safe_proxies, get_safe_wecom_base
     
     if not token: return {"status": "error", "message": "请先保存配置"}
     
@@ -317,7 +329,7 @@ def api_test_bot(request: Request):
         return {"status": "error", "message": "Token 无效（包含脱敏标记），请重新输入完整的 Token"}
     
     try:
-        proxies = {"http": proxy, "https": proxy} if proxy else None
+        proxies = get_safe_proxies()
         res = requests.post(f"https://api.telegram.org/bot{token}/sendMessage", json={"chat_id": chat_id, "text": "🎉 测试消息"}, proxies=proxies, timeout=10)
         return {"status": "success"} if res.status_code == 200 else {"status": "error", "message": f"API Error: {res.text}"}
     except Exception as e: return {"status": "error", "message": str(e)}
@@ -326,7 +338,8 @@ def api_test_bot(request: Request):
 def api_test_wecom(request: Request):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     corpid = cfg.get("wecom_corpid"); corpsecret = cfg.get("wecom_corpsecret"); agentid = cfg.get("wecom_agentid")
-    proxy_url = cfg.get("wecom_proxy_url", "https://qyapi.weixin.qq.com").rstrip('/')
+    from app.utils.proxy_helper import get_safe_wecom_base
+    proxy_url = get_safe_wecom_base()
     touser = cfg.get("wecom_touser", "@all")
     
     if not corpid or not corpsecret or not agentid:
@@ -361,9 +374,9 @@ async def api_test_channel(request: Request):
         return {"status": "error", "message": "参数错误"}
     
     if not chat_id: return {"status": "error", "message": "请输入频道 ID"}
-    
-    proxy = cfg.get("proxy_url")
-    proxies = {"http": proxy, "https": proxy} if proxy else None
+
+    from app.utils.proxy_helper import get_safe_proxies
+    proxies = get_safe_proxies()
     
     try:
         res = requests.post(
@@ -436,8 +449,9 @@ def search_emby(keyword):
     return []
 
 def send_tg_msg(chat_id, text):
-    token = cfg.get("tg_bot_token"); proxy = cfg.get("proxy_url")
-    proxies = {"http": proxy, "https": proxy} if proxy else None
+    token = cfg.get("tg_bot_token")
+    from app.utils.proxy_helper import get_safe_proxies
+    proxies = get_safe_proxies()
     try: requests.post(f"https://api.telegram.org/bot{token}/sendMessage", json={"chat_id": chat_id,"text": text,"parse_mode": "HTML"}, proxies=proxies, timeout=10)
     except Exception: pass
 
@@ -752,10 +766,8 @@ def api_sync_tg_usernames(request: Request):
             # 调用 Telegram API 获取用户信息
             try:
                 # 使用代理
-                proxies = None
-                proxy_url = cfg.get("proxy_url")
-                if proxy_url:
-                    proxies = {"http": proxy_url, "https": proxy_url}
+                from app.utils.proxy_helper import get_safe_proxies
+                proxies = get_safe_proxies()
                 
                 res = requests.get(
                     f"https://api.telegram.org/bot{bot_token}/getChat",

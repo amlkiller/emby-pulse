@@ -763,8 +763,8 @@ class KeepAlivePlugin(PluginBase):
                    f"请增加使用频率，避免账号被回收。")
 
             # 直接使用 Telegram API 发送消息
-            proxy = cfg.get("proxy_url")
-            proxies = {"http": proxy, "https": proxy} if proxy else None
+            from app.utils.proxy_helper import get_safe_proxies
+            proxies = get_safe_proxies()
             data = {"chat_id": chat_id, "text": msg, "parse_mode": "HTML"}
 
             res = requests.post(

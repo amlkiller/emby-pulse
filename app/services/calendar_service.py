@@ -52,10 +52,8 @@ class CalendarService:
 
     def _get_proxies(self):
         """获取全局代理配置，用于 TMDB 请求"""
-        proxy = cfg.get("proxy_url")
-        if proxy:
-            return {"http": proxy, "https": proxy}
-        return None
+        from app.utils.proxy_helper import get_safe_proxies
+        return get_safe_proxies()
 
     def mark_episode_ready(self, series_id, season, episode):
         """

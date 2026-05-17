@@ -202,12 +202,12 @@ def get_tmdb_backdrop(tmdb_id: str, media_type: str = "movie", rng: random.Rando
     try:
         import requests
         from app.core.config import cfg
-        
-        proxy_url = cfg.get("proxy_url", "")
-        if not proxy_url:
+        from app.utils.proxy_helper import get_safe_proxies
+
+        proxies = get_safe_proxies()
+        if not proxies:
             return None
-        
-        proxies = {"http": proxy_url, "https": proxy_url}
+
         api_key = cfg.get("tmdb_api_key") or "b0754d4e5c3d4e5a8f9c1e2d3f4a5b6c"
         
         url = f"https://api.themoviedb.org/3/{media_type}/{tmdb_id}/images?api_key={api_key}"

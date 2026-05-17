@@ -381,7 +381,18 @@ def api_update_settings(data: SettingsModel, request: Request):
         cfg["weather_amap_key"] = (data.weather_amap_key or "").strip()
     
     # 非敏感字段直接保存
+    # 🔒 SSRF 防护：校验代理地址，禁止内网/回环
+    from app.utils.url_validator import validate_proxy_url
+    _proxy_check = validate_proxy_url(data.proxy_url or "")
+    if not _proxy_check.get("valid"):
+        return {"status": "error", "message": f"代理地址不合法: {_proxy_check.get('error', '')}"}
     cfg["proxy_url"] = data.proxy_url
+    # 配置变更后失效 proxy_helper 缓存
+    try:
+        from app.utils.proxy_helper import invalidate_cache as _proxy_cache_invalidate
+        _proxy_cache_invalidate()
+    except Exception:
+        pass
     cfg["hidden_users"] = data.hidden_users
     cfg["emby_public_url"] = data.emby_public_url
     cfg["welcome_message"] = data.welcome_message
@@ -495,8 +506,8 @@ async def test_tmdb(request: Request):
     if not api_key: return {"status": "error", "message": "请填写 TMDB API Key"}
     
     # 获取代理设置
-    proxy_url = cfg.get("proxy_url")
-    proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
+    from app.utils.proxy_helper import get_safe_proxies
+    proxies = get_safe_proxies()
     
     try:
         # 使用 TMDB 配置接口测试
@@ -533,26 +544,11 @@ async def test_proxy(request: Request):
     proxy_url = data.get("proxy_url", "").strip()
     if not proxy_url: return {"status": "error", "message": "请填写代理地址"}
 
-    # 验证代理格式
-    if not proxy_url.startswith(('http://', 'https://', 'socks5://')):
-        return {"status": "error", "message": "❌ 代理格式错误，需以 http:// 或 socks5:// 开头"}
-
-    # 🔒 SSRF 防护：检查代理地址是否指向内网
-    import ipaddress as _ipaddress
-    from urllib.parse import urlparse as _urlparse
-    try:
-        parsed = _urlparse(proxy_url)
-        host = parsed.hostname
-        if host:
-            try:
-                ip = _ipaddress.ip_address(host)
-                if ip.is_private or ip.is_loopback or ip.is_link_local:
-                    return {"status": "error", "message": "不允许使用内网代理地址"}
-            except ValueError:
-                if host.lower() in ('localhost', '127.0.0.1', '::1'):
-                    return {"status": "error", "message": "不允许使用内网代理地址"}
-    except Exception:
-        pass
+    # 🔒 SSRF 防护：统一校验（scheme + 内网拦截）
+    from app.utils.url_validator import validate_proxy_url
+    _check = validate_proxy_url(proxy_url)
+    if not _check.get("valid"):
+        return {"status": "error", "message": f"❌ {_check.get('error', '代理地址不合法')}"}
     
     try:
         # 测试连接 Google（需要代理才能访问）
