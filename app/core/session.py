@@ -178,9 +178,10 @@ class SessionManager:
         return SessionDict(new_session_id, {}, self)
 
     def save_modified(self):
-        for session_id, data in self._modified_sessions.items():
-            update_session(session_id, data)
+        items = list(self._modified_sessions.items())
         self._modified_sessions.clear()
+        for session_id, data in items:
+            update_session(session_id, data)
 
     def delete_session(self, session_id: str):
         delete_session(session_id)
