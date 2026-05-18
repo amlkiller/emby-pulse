@@ -60,7 +60,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # 现代浏览器优先使用细化指令，nonce 对 <script> 标签生效，inline handler 通过 -attr 单独允许。
         cdn_sources = (
             "https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com "
-            "https://cdn.quilljs.com https://cdn.bootcdn.net https://html2canvas.hertzen.com"
+            "https://cdn.quilljs.com https://html2canvas.hertzen.com"
         )
         # Alpine.js / Tailwind CDN 需要 unsafe-eval 才能求值模板表达式
         response.headers["Content-Security-Policy"] = (
@@ -70,7 +70,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             f"script-src-attr 'unsafe-inline'; "
             f"style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com https://cdn.quilljs.com; "
             f"img-src 'self' data: blob: https:; "
-            f"font-src 'self' data: https://fonts.gstatic.com; "
+            f"font-src 'self' data: https://fonts.gstatic.com {cdn_sources}; "
             f"connect-src 'self'; "
             f"frame-ancestors 'self';"
         )
