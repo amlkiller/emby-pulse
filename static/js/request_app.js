@@ -2460,6 +2460,7 @@ document.addEventListener('alpine:init', () => {
         
         // 🔥 简易 Markdown 解析器
         parseMarkdown(text) {
+            if (!text) return '';
             // 🔥 检测是否为富文本 HTML（来自 Quill 编辑器）
             // Quill 生成的 HTML 包含特定标签如 <p>, <span>, <strong>, <em>, <u>, <s>, <a>, <h1-h3>
             const isRichHtml = text.includes('<p') || 
