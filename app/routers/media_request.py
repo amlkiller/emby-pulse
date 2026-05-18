@@ -421,9 +421,9 @@ def request_system_logout(request: Request):
 
 @router.get("/api/requests/item_info")
 def get_item_info(item_id: str, request: Request):
-    # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
-        return {"status": "error", "message": "需要管理员权限"}
+    # 🔒 安全检查：管理员或已绑定 Emby 的报片用户
+    if not (is_admin_user(request) or request.session.get("req_user")):
+        return {"status": "error", "message": "请先登录"}
     key = cfg.get("emby_api_key")
     host = (cfg.get("emby_host") or "").rstrip('/') 
     try:
@@ -566,9 +566,9 @@ def get_tmdb_trending(request: Request):
 
 @router.get("/api/requests/tv/{tmdb_id}")
 def get_tv_details(tmdb_id: int, request: Request):
-    # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
-        return {"status": "error", "message": "需要管理员权限"}
+    # 🔒 安全检查：管理员或已绑定 Emby 的报片用户
+    if not (is_admin_user(request) or request.session.get("req_user")):
+        return {"status": "error", "message": "请先登录"}
     tmdb_key = cfg.get("tmdb_api_key")
     proxies = get_safe_proxies()
     try:
@@ -604,9 +604,9 @@ def get_tv_details(tmdb_id: int, request: Request):
 
 @router.get("/api/requests/check/{media_type}/{tmdb_id}")
 def check_local_status(media_type: str, tmdb_id: int, request: Request):
-    # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
-        return {"status": "error", "message": "需要管理员权限"}
+    # 🔒 安全检查：管理员或已绑定 Emby 的报片用户
+    if not (is_admin_user(request) or request.session.get("req_user")):
+        return {"status": "error", "message": "请先登录"}
     exists = check_emby_exists(tmdb_id, media_type)
     return {"status": "success", "exists": exists}
 
