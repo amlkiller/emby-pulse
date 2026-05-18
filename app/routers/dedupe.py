@@ -12,6 +12,7 @@ from typing import Optional, List, Dict, Any
 from app.core.config import cfg
 from app.core.database import query_db, DB_PATH, SYSTEM_DB_PATH
 from app.routers.auth import is_admin_user
+from app.core.security_utils import safe_error_message
 
 logger = logging.getLogger("uvicorn")
 router = APIRouter(prefix="/api/dedupe", tags=["去重管理"])
@@ -431,7 +432,7 @@ def run_dedupe_scan(strategy: str = "quality", custom_weights: dict = None, excl
         
     except Exception as e:
         logger.error(f"[去重引擎] 扫描异常: {e}")
-        scan_state["message"] = f"❌ 扫描失败: {str(e)}"
+        scan_state["message"] = safe_error_message(e, "❌ 扫描失败")
     finally:
         time.sleep(2) 
         scan_state["is_scanning"] = False
@@ -518,7 +519,7 @@ async def get_dedupe_libraries(request: Request):
         return {"success": True, "data": result}
     except Exception as e:
         logger.error(f"[去重管理] 获取媒体库失败: {e}")
-        return {"success": False, "msg": str(e)}
+        return {"success": False, "msg": safe_error_message(e)}
 
 @router.get("/status")
 async def get_scan_status(request: Request):
@@ -570,7 +571,7 @@ async def ignore_groups(request: Request, req: IgnoreReq):
             c.execute("DELETE FROM dedupe_results WHERE group_key = ?", (item.group_key,))
         conn.commit(); conn.close()
         return {"success": True, "msg": "已加入永久白名单"}
-    except Exception as e: return {"success": False, "msg": str(e)}
+    except Exception as e: return {"success": False, "msg": safe_error_message(e)}
 
 @router.get("/whitelist")
 async def get_whitelist(request: Request):
@@ -590,7 +591,7 @@ async def remove_whitelist(request: Request, req: RemoveWhitelistReq):
         for gk in req.group_keys: c.execute("DELETE FROM dedupe_whitelist WHERE group_key = ?", (gk,))
         conn.commit(); conn.close()
         return {"success": True, "msg": "已移出白名单"}
-    except Exception as e: return {"success": False, "msg": str(e)}
+    except Exception as e: return {"success": False, "msg": safe_error_message(e)}
 
 @router.post("/delete")
 async def delete_items(request: Request, req: DeleteReq):
@@ -647,7 +648,7 @@ async def get_dedupe_config(request: Request):
                     config[r["key"]] = r["value"]
         return {"success": True, "data": config}
     except Exception as e:
-        return {"success": False, "msg": str(e)}
+        return {"success": False, "msg": safe_error_message(e)}
 
 class ConfigItem(BaseModel):
     key: str
@@ -673,4 +674,4 @@ async def save_dedupe_config(request: Request, req: SaveConfigReq):
         conn.close()
         return {"success": True, "msg": "配置已保存"}
     except Exception as e:
-        return {"success": False, "msg": str(e)}
+        return {"success": False, "msg": safe_error_message(e)}

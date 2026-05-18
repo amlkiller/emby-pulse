@@ -10,6 +10,7 @@ from app.core.database import DB_PATH, SYSTEM_DB_PATH, query_db, get_playback_co
 from app.core.media_adapter import media_api
 
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.core.security_utils import safe_error_message
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -307,7 +308,7 @@ async def get_clients_data(request: Request):
                 valid_user_ids.add(u.get("Id"))
                 valid_user_names.add(u.get("Name"))
     except Exception as e:
-        return {"status": "error", "message": f"连接媒体服务器失败: {str(e)}"}
+        return {"status": "error", "message": safe_error_message(e, "连接媒体服务器失败")}
 
     app_counts = {}
     top_devices = {}

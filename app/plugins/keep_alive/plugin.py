@@ -10,6 +10,7 @@ import requests
 import sqlite3
 from fastapi import Request
 from app.plugins.base import PluginBase
+from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
 from app.core.config import cfg
 from app.core.database import query_db, DB_PATH, SYSTEM_DB_PATH
 
@@ -75,6 +76,8 @@ class KeepAlivePlugin(PluginBase):
             """立即执行检测"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             try:
                 data = await request.json() if request.headers.get("content-type") == "application/json" else {}
                 check_range = data.get("check_range", "last_month")
@@ -92,6 +95,8 @@ class KeepAlivePlugin(PluginBase):
             """获取历史违规记录"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             try:
                 return self._get_violations(year_month, page, limit)
             except Exception as e:
@@ -103,6 +108,8 @@ class KeepAlivePlugin(PluginBase):
             """解禁用户"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             try:
                 data = await request.json()
                 user_id = data.get("user_id")
@@ -119,6 +126,8 @@ class KeepAlivePlugin(PluginBase):
             """获取统计信息"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             try:
                 return self._get_stats()
             except Exception as e:

@@ -17,6 +17,32 @@ _config_cache = {}
 _config_cache_lock = threading.Lock()
 
 
+def require_user(request: Request):
+    """FastAPI 依赖：任意已登录用户可用。
+
+    未登录返回 401。返回 session 中的 user 字典，便于端点直接使用。
+    """
+    user = request.session.get("user")
+    if not user:
+        raise HTTPException(status_code=401, detail="未登录")
+    return user
+
+
+def require_admin(request: Request):
+    """FastAPI 依赖：仅管理员可用。
+
+    未登录 401，已登录非管理员 403。复用 is_admin_user 的判定语义。
+    """
+    user = request.session.get("user")
+    if not user:
+        raise HTTPException(status_code=401, detail="未登录")
+    # 延迟导入避免循环依赖
+    from app.routers.auth import is_admin_user
+    if not is_admin_user(request):
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+    return user
+
+
 class PluginBase:
     # 插件元信息 (子类必须覆盖)
     id: str = ""              # 唯一标识，如 "cloud115"

@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from typing import Optional
 from app.core.database import query_db, DB_PATH, SYSTEM_DB_PATH
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.core.security_utils import safe_error_message
 
 logger = logging.getLogger("uvicorn")
 
@@ -72,7 +73,7 @@ async def get_notifications(request: Request, limit: int = 10, history: bool = F
         return {"success": True, "unread_count": unread_count, "items": notifications}
     except Exception as e:
         print(f"❌ [通知中心] 发生异常: {e}")
-        return {"success": False, "msg": str(e)}
+        return {"success": False, "msg": safe_error_message(e)}
 
 @router.post("/read")
 async def mark_as_read(req: MarkReadReq, request: Request):
@@ -91,7 +92,7 @@ async def mark_as_read(req: MarkReadReq, request: Request):
         conn.close()
         return {"success": True}
     except Exception as e:
-        return {"success": False, "msg": str(e)}
+        return {"success": False, "msg": safe_error_message(e)}
 
 @router.delete("/clear")
 async def clear_notifications(request: Request):
@@ -106,7 +107,7 @@ async def clear_notifications(request: Request):
         conn.close()
         return {"success": True}
     except Exception as e:
-        return {"success": False, "msg": str(e)}
+        return {"success": False, "msg": safe_error_message(e)}
 
 
 @router.delete("/{nid}")
@@ -123,7 +124,7 @@ async def delete_single_notification(nid: int, request: Request):
         conn.close()
         return {"success": True}
     except Exception as e:
-        return {"success": False, "msg": str(e)}
+        return {"success": False, "msg": safe_error_message(e)}
 
 @router.get("/test_push")
 async def test_push_notification(request: Request):
@@ -142,4 +143,4 @@ async def test_push_notification(request: Request):
         )
         return {"success": True, "msg": "测试通知已注入！"}
     except Exception as e:
-        return {"success": False, "msg": f"注入失败: {str(e)}"}
+        return {"success": False, "msg": safe_error_message(e, "注入失败")}

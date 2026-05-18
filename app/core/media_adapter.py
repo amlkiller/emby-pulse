@@ -3,6 +3,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from app.core.config import cfg
 import logging
+import time
 
 logger = logging.getLogger("uvicorn")
 
@@ -13,6 +14,9 @@ class MediaServerAdapter:
         retries = Retry(total=3, backoff_factor=0.3, status_forcelist=[500, 502, 503, 504])
         self.session.mount('http://', HTTPAdapter(max_retries=retries, pool_connections=100, pool_maxsize=100))
         self.session.mount('https://', HTTPAdapter(max_retries=retries, pool_connections=100, pool_maxsize=100))
+        # 健康检查结果缓存：(timestamp, healthy)
+        self._health_cache = (0.0, False)
+        self._health_cache_ttl = 5.0
 
     @property
     def host(self):
@@ -86,6 +90,32 @@ class MediaServerAdapter:
     def get(self, path: str, **kwargs): return self.request('GET', path, **kwargs)
     def post(self, path: str, **kwargs): return self.request('POST', path, **kwargs)
     def delete(self, path: str, **kwargs): return self.request('DELETE', path, **kwargs)
+
+    def health_check(self, timeout: float = 3.0) -> bool:
+        """探活 Emby/Jellyfin。结果带 5 秒 TTL 缓存，避免批量场景放大请求。
+
+        独立的 Session（不使用全局重试 Session），避免重试机制把"快速失败"拖到 12 秒+。
+        """
+        now = time.time()
+        ts, healthy = self._health_cache
+        if now - ts < self._health_cache_ttl:
+            return healthy
+        ok = False
+        try:
+            if not self.host or not self.api_key:
+                ok = False
+            else:
+                url = self._build_url('/System/Info')
+                headers = self._get_headers()
+                params = {'api_key': self.api_key}
+                # 单次请求，不复用全局重试 Session
+                resp = requests.get(url, headers=headers, params=params, timeout=timeout)
+                ok = (resp.status_code == 200)
+        except Exception as e:
+            logger.warning(f"[media_adapter] health_check 失败: {e!r}")
+            ok = False
+        self._health_cache = (now, ok)
+        return ok
 
 # 实例化单例，全局复用
 media_api = MediaServerAdapter()

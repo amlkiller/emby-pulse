@@ -9,6 +9,7 @@ import datetime
 import requests
 from fastapi import Request
 from app.plugins.base import PluginBase
+from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
 from app.core.config import cfg
 from app.core.database import SYSTEM_DB_PATH
 
@@ -301,6 +302,8 @@ async def get_status(request: Request):
     # 🔒 鉴权检查
     if not request.session.get("user"):
         return {"success": False, "message": "未登录"}
+    if not is_admin_user(request):
+        return {"success": False, "message": "需要管理员权限"}
     return {"success": True, "data": plugin.get_status()}
 
 
@@ -310,6 +313,8 @@ async def manual_restart(request: Request):
     # 🔒 鉴权检查
     if not request.session.get("user"):
         return {"success": False, "message": "未登录"}
+    if not is_admin_user(request):
+        return {"success": False, "message": "需要管理员权限"}
     
     try:
         data = await request.json() if request.headers.get("content-type") == "application/json" else {}
@@ -329,6 +334,8 @@ async def restart_single_server(request: Request):
     # 🔒 鉴权检查
     if not request.session.get("user"):
         return {"success": False, "message": "未登录"}
+    if not is_admin_user(request):
+        return {"success": False, "message": "需要管理员权限"}
     
     try:
         data = await request.json()
@@ -379,6 +386,8 @@ async def get_history(request: Request):
     # 🔒 鉴权检查
     if not request.session.get("user"):
         return {"success": False, "message": "未登录"}
+    if not is_admin_user(request):
+        return {"success": False, "message": "需要管理员权限"}
     return {"success": True, "data": plugin.restart_history[-20:]}
 
 
@@ -388,6 +397,8 @@ async def get_config(request: Request):
     # 🔒 鉴权检查
     if not request.session.get("user"):
         return {"status": "error", "message": "未登录"}
+    if not is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限"}
     
     from app.plugins import get_plugin_config
     return {
@@ -405,6 +416,8 @@ async def update_config(request: Request):
     # 🔒 鉴权检查
     if not request.session.get("user"):
         return {"status": "error", "message": "未登录"}
+    if not is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限"}
     
     from app.plugins import save_plugin_config
     
@@ -434,6 +447,8 @@ async def explain_cron(request: Request, expr: str = ""):
     # 🔒 鉴权检查
     if not request.session.get("user"):
         return {"success": False, "message": "未登录"}
+    if not is_admin_user(request):
+        return {"success": False, "message": "需要管理员权限"}
     
     if not expr:
         return {"success": False, "message": "请提供 cron 表达式"}

@@ -11,6 +11,7 @@ import sqlite3
 import os
 import ipaddress
 import time
+from app.core.security_utils import safe_error_message
 
 router = APIRouter()
 
@@ -305,7 +306,7 @@ def api_get_history(
             }
         }
     except Exception as e:
-        return {"status": "error", "message": str(e), "data": []}
+        return {"status": "error", "message": safe_error_message(e), "data": []}
 
 
 @router.get("/api/history/stats")
@@ -408,4 +409,4 @@ def api_get_history_stats(request: Request):
         _history_stats_cache["expires"] = time.time() + HISTORY_STATS_CACHE_TTL
         return result
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}

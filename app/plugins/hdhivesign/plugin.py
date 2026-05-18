@@ -20,6 +20,7 @@ import requests
 from typing import Optional, Dict, Tuple, Any, List
 from fastapi import Request
 from app.plugins.base import PluginBase
+from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
 from app.core.config import cfg
 from app.core.event_bus import bus
 
@@ -150,6 +151,8 @@ class HDHiveSignPlugin(PluginBase):
             """获取签到状态"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             return self.get_checkin_status()
         
         @self.router.post("/checkin")
@@ -157,6 +160,8 @@ class HDHiveSignPlugin(PluginBase):
             """手动签到"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             try:
                 data = await request.json()
                 is_gambler = data.get("is_gambler", False)
@@ -171,6 +176,8 @@ class HDHiveSignPlugin(PluginBase):
             """获取签到历史"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             limit = int(request.query_params.get("limit", 30))
             return self.get_checkin_history(limit)
         
@@ -179,6 +186,8 @@ class HDHiveSignPlugin(PluginBase):
             """获取用户信息"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             return self.get_user_info()
         
         @self.router.post("/login")
@@ -186,6 +195,8 @@ class HDHiveSignPlugin(PluginBase):
             """手动登录获取 Cookie"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             try:
                 data = await request.json()
                 username = data.get("username", "").strip()

@@ -10,6 +10,7 @@ import requests
 import sqlite3
 from fastapi import Request
 from app.plugins.base import PluginBase
+from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
 from app.core.config import cfg
 from app.core.database import query_db, DB_PATH, SYSTEM_DB_PATH
 
@@ -40,6 +41,8 @@ class AutoExpirePlugin(PluginBase):
             """获取插件配置"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             from app.plugins import get_plugin_config
             return {
                 "status": "success",
@@ -54,6 +57,8 @@ class AutoExpirePlugin(PluginBase):
             """更新插件配置"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             from app.plugins import save_plugin_config
             try:
                 data = await request.json()
@@ -67,6 +72,8 @@ class AutoExpirePlugin(PluginBase):
             """立即执行检测"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             try:
                 result = self._do_check(manual=True)
                 if isinstance(result, dict) and result.get("error"):
@@ -81,6 +88,8 @@ class AutoExpirePlugin(PluginBase):
             """获取即将到期的用户列表"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             try:
                 users = self._get_expiring_users(days)
                 return {"status": "success", "data": users}
@@ -93,6 +102,8 @@ class AutoExpirePlugin(PluginBase):
             """清理已删除用户的到期记录"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             try:
                 host = cfg.get("emby_host")
                 key = cfg.get("emby_api_key")

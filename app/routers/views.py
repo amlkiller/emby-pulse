@@ -23,6 +23,7 @@ templates = Jinja2Templates(directory="templates", autoescape=True)
 router = APIRouter()
 
 from app.main import APP_VERSION
+from app.core.security_utils import safe_error_message
 
 def check_login(request: Request):
     user = request.session.get("user")
@@ -516,7 +517,7 @@ async def api_register(data: RegisterModel, request: Request):
             if any(u['Name'].lower() == safe_name.lower() for u in users):
                 return {"status": "error", "message": f"用户名 {safe_name} 已被占用，请换一个"}
         except Exception as e:
-            return {"status": "error", "message": f"检查用户名失败: {str(e)}"}
+            return {"status": "error", "message": safe_error_message(e, "检查用户名失败")}
         
         # 5. 创建 Emby 用户
         try:
@@ -637,11 +638,11 @@ async def api_register(data: RegisterModel, request: Request):
             
         except Exception as e:
             logger.error(f"[注册] 创建用户失败: {e}")
-            return {"status": "error", "message": f"注册失败: {str(e)}"}
+            return {"status": "error", "message": safe_error_message(e, "注册失败")}
             
     except Exception as e:
         logger.error(f"[注册] 系统错误: {e}")
-        return {"status": "error", "message": f"系统错误: {str(e)}"}
+        return {"status": "error", "message": safe_error_message(e, "系统错误")}
 
 
 @router.get("/content", response_class=HTMLResponse)

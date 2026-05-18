@@ -10,6 +10,7 @@ import requests
 import datetime
 from fastapi import Request
 from app.plugins.base import PluginBase
+from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
 from app.core.config import cfg
 from app.core.event_bus import bus
 
@@ -88,6 +89,8 @@ class HDHivePlugin(PluginBase):
         def get_account(request: Request):
             if not request.session.get("user"):
                 return {"status": "error"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             return self.get_account_info()
 
         @self.router.post("/checkin")
@@ -95,6 +98,8 @@ class HDHivePlugin(PluginBase):
             """API: 每日签到"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             try:
                 data = await request.json()
                 is_gambler = data.get("is_gambler", False)
@@ -107,6 +112,8 @@ class HDHivePlugin(PluginBase):
             """API: 搜索影巢资源（仅115网盘）"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             return await self.api_search_resources_async(request)
 
         @self.router.post("/unlock")
@@ -114,6 +121,8 @@ class HDHivePlugin(PluginBase):
             """API: 解锁并转存资源"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             return await self.api_unlock_and_transfer_async(request)
         
         @self.router.post("/transfer")
@@ -121,6 +130,8 @@ class HDHivePlugin(PluginBase):
             """API: 解锁资源并转存到指定文件夹"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             return await self.api_transfer_to_folder_async(request)
 
         @self.router.get("/usage")
@@ -128,6 +139,8 @@ class HDHivePlugin(PluginBase):
             """API: 获取用量统计"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             return self.get_usage_stats()
 
         @self.router.get("/usage/today")
@@ -135,6 +148,8 @@ class HDHivePlugin(PluginBase):
             """API: 获取今日用量"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             return self.get_usage_today()
 
         @self.router.get("/vip/quota")
@@ -142,6 +157,8 @@ class HDHivePlugin(PluginBase):
             """API: 获取永V每周免费额度"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             return self.get_vip_weekly_quota()
 
     # ==========================================

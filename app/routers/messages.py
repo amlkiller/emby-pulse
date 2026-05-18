@@ -10,6 +10,7 @@ import sqlite3
 import datetime
 import sys
 import os
+from app.core.security_utils import safe_error_message
 
 router = APIRouter()
 
@@ -1618,7 +1619,7 @@ def delete_conversation(user_id: str, request: Request):
         conn.close()
         import traceback
         traceback.print_exc()
-        return {"status": "error", "message": f"删除失败: {str(e)}"}
+        return {"status": "error", "message": safe_error_message(e, "删除失败")}
 
 
 @router.delete("/api/messages/conversations/all")

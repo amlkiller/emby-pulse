@@ -15,6 +15,7 @@ from fastapi import Request
 from PIL import Image
 
 from app.plugins.base import PluginBase
+from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
 from app.core.config import cfg
 from app.core.media_adapter import media_api
 
@@ -67,6 +68,8 @@ class CoverGeneratorPlugin(PluginBase):
             """获取媒体库列表"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             
             libraries = get_libraries()
             
@@ -85,6 +88,8 @@ class CoverGeneratorPlugin(PluginBase):
             """预览媒体库封面"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             
             # 支持 GET 和 POST
             bg_mode = "auto"
@@ -215,6 +220,8 @@ class CoverGeneratorPlugin(PluginBase):
             """生成并应用封面到媒体库"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             
             try:
                 data = await request.json()
@@ -352,6 +359,8 @@ class CoverGeneratorPlugin(PluginBase):
             """批量生成多个媒体库封面"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             
             data = await request.json()
             library_ids = data.get("library_ids", [])
@@ -455,6 +464,8 @@ class CoverGeneratorPlugin(PluginBase):
             """获取生成历史"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             
             try:
                 files = []

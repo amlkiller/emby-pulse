@@ -13,6 +13,7 @@ import re
 import os
 import hashlib
 import time
+from app.core.security_utils import safe_error_message
 
 # 初始化日志
 logger = logging.getLogger("uvicorn")
@@ -428,4 +429,4 @@ def clear_image_cache(request: Request, item_ids: list = None):
         return {"status": "success", "deleted_count": deleted_count}
     except Exception as e:
         logger.error(f"清除图片缓存失败: {e}")
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}

@@ -13,6 +13,7 @@ import logging
 import datetime
 import sqlite3
 from app.core.database import SYSTEM_DB_PATH
+from app.core.security_utils import safe_error_message
 
 logger = logging.getLogger("uvicorn")
 
@@ -332,7 +333,7 @@ def api_test_bot(request: Request):
         proxies = get_safe_proxies()
         res = requests.post(f"https://api.telegram.org/bot{token}/sendMessage", json={"chat_id": chat_id, "text": "🎉 测试消息"}, proxies=proxies, timeout=10)
         return {"status": "success"} if res.status_code == 200 else {"status": "error", "message": f"API Error: {res.text}"}
-    except Exception as e: return {"status": "error", "message": str(e)}
+    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
 @router.post("/api/bot/test_wecom")
 def api_test_wecom(request: Request):
@@ -357,7 +358,7 @@ def api_test_wecom(request: Request):
         if msg_res.get("errcode") == 0: return {"status": "success"}
         else: return {"status": "error", "message": f"发送失败: {msg_res.get('errmsg')}"}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 @router.post("/api/bot/test_channel")
 async def api_test_channel(request: Request):
@@ -395,7 +396,7 @@ async def api_test_channel(request: Request):
             err = res.json().get("description", res.text)
             return {"status": "error", "message": f"发送失败: {err}"}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 def get_playback_url(item_id):
     base_url = cfg.get("emby_public_url") or cfg.get("emby_host")
@@ -686,7 +687,7 @@ async def api_clear_reg_logs(request: Request):
         conn.close()
         return {"status": "success"}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 
 @router.post("/api/bot/reg_batch_reset")
@@ -828,7 +829,7 @@ def api_sync_tg_usernames(request: Request):
         
     except Exception as e:
         logger.error(f"同步 TG 用户名失败: {e}")
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 @router.get("/api/bot/tg_bindings")
 def api_get_tg_bindings(request: Request):
@@ -863,7 +864,7 @@ def api_get_tg_bindings(request: Request):
         return {"status": "success", "data": bindings}
         
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 @router.post("/api/bot/lottery_draw")
 def api_lottery_draw(request: Request):
@@ -893,7 +894,7 @@ def api_lottery_draw(request: Request):
             
     except Exception as e:
         logger.error(f"手动开奖失败: {e}")
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 @router.post("/api/bot/lottery_reset")
 def api_lottery_reset(request: Request):
@@ -957,7 +958,7 @@ def api_lottery_reset(request: Request):
         
     except Exception as e:
         logger.error(f"清除开奖记录失败: {e}")
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 @router.post("/api/bot/lottery_fix_pool")
 def api_lottery_fix_pool(request: Request):
@@ -1018,7 +1019,7 @@ def api_lottery_fix_pool(request: Request):
         
     except Exception as e:
         logger.error(f"修复奖池失败: {e}")
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 @router.post("/api/bot/scratch_clear")
 def api_scratch_clear(request: Request):
@@ -1058,7 +1059,7 @@ def api_scratch_clear(request: Request):
         
     except Exception as e:
         logger.error(f"清除刮刮卡失败: {e}")
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 @router.get("/api/bot/lottery_pool")
 def api_lottery_pool(request: Request):
@@ -1115,7 +1116,7 @@ def api_lottery_pool(request: Request):
         
     except Exception as e:
         logger.error(f"获取奖池信息失败: {e}")
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 @router.post("/api/bot/lottery_init_pool")
 def api_lottery_init_pool(request: Request, data: dict):
@@ -1152,4 +1153,4 @@ def api_lottery_init_pool(request: Request, data: dict):
         
     except Exception as e:
         logger.error(f"设置初始奖池失败: {e}")
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}

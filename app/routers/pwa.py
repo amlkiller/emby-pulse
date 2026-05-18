@@ -11,6 +11,7 @@ from fastapi import APIRouter, Request, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
 from typing import Optional, List
 import glob
+from app.core.security_utils import safe_error_message
 
 router = APIRouter()
 
@@ -265,7 +266,7 @@ async def upload_custom_icon(request: Request, file: UploadFile = File(...)):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"上传失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=safe_error_message(e, "上传失败"))
 
 @router.post("/api/pwa/set_default_icon")
 async def set_default_icon(request: Request):

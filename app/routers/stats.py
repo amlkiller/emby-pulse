@@ -17,6 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 import psutil
 import time  # 🔥 用于预热缓存时间戳
 import logging
+from app.core.security_utils import safe_error_message
 
 logger = logging.getLogger("uvicorn")
 
@@ -218,7 +219,7 @@ def api_get_libraries(request: Request):
         
         return {"status": "success", "data": libraries}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 @router.get("/api/stats/recent")
 def api_recent_activity(request: Request, user_id: Optional[str] = None):
@@ -1437,7 +1438,7 @@ def api_system_monitor(request: Request):
             }
         }
     except Exception as e:
-        return {"status": "error", "message": f"探针读取失败: {str(e)}"}
+        return {"status": "error", "message": safe_error_message(e, "探针读取失败")}
 
 
 # ==================== 🔥 仪表盘布局同步 ====================
@@ -1473,7 +1474,7 @@ def api_get_dashboard_layout(request: Request):
             return {"status": "success", "data": json.loads(row[0])}
         return {"status": "success", "data": None}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 
 @router.post("/api/dashboard/layout")
@@ -1514,7 +1515,7 @@ async def api_save_dashboard_layout(request: Request):
         
         return {"status": "success", "message": "布局已保存"}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 
 # ==================== 🔥 内容风云榜详情 API ====================
@@ -1700,4 +1701,4 @@ def api_item_detail(request: Request, item_id: str, item_name: Optional[str] = N
         }
     except Exception as e:
         logger.error(f"[api_item_detail] 异常: {e}")
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}

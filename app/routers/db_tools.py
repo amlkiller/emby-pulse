@@ -15,6 +15,7 @@ from app.core.db_manager import (
 from app.core.config import DB_PATH, SYSTEM_DB_PATH
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 import os
+from app.core.security_utils import safe_error_message
 
 router = APIRouter(prefix="/api/db", tags=["数据库管理"])
 
@@ -115,7 +116,7 @@ async def api_db_deep_check(request: Request):
         results["system_db"]["scan_log"][1]["message"] = f"已连接，发现 {len(existing_tables)} 张表"
     except Exception as e:
         results["system_db"]["scan_log"][1]["status"] = "error"
-        results["system_db"]["scan_log"][1]["message"] = f"连接失败: {str(e)}"
+        results["system_db"]["scan_log"][1]["message"] = safe_error_message(e, "连接失败")
         results["is_healthy"] = False
         return results
     
@@ -151,7 +152,7 @@ async def api_db_deep_check(request: Request):
                     "rows": 0,
                     "columns": [],
                     "status": "error",
-                    "error": str(e)
+                    "error": safe_error_message(e, "查询失败")
                 }
         else:
             missing_tables.append(table_name)

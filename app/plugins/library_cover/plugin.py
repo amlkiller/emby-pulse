@@ -54,7 +54,9 @@ class LibraryCoverPlugin(PluginBase):
             """获取媒体库列表及当前封面"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
+
             try:
                 res = media_api.get("/Library/VirtualFolders", timeout=10)
                 if res.status_code != 200:
@@ -109,7 +111,7 @@ class LibraryCoverPlugin(PluginBase):
                 return {"status": "error", "message": "未登录"}
             if not is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
-            
+
             try:
                 # 读取文件内容
                 content = await file.read()
@@ -159,7 +161,7 @@ class LibraryCoverPlugin(PluginBase):
                 return {"status": "error", "message": "未登录"}
             if not is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
-            
+
             results = []
             for file in files:
                 try:
@@ -213,7 +215,9 @@ class LibraryCoverPlugin(PluginBase):
             """获取已上传的封面列表"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
+
             try:
                 files = []
                 if os.path.exists(COVER_DIR):
@@ -264,7 +268,9 @@ class LibraryCoverPlugin(PluginBase):
             """删除封面文件"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
+
             # 安全检查
             if ".." in filename or "/" in filename or "\\" in filename:
                 return {"status": "error", "message": "无效文件名"}
@@ -280,7 +286,9 @@ class LibraryCoverPlugin(PluginBase):
             """清空所有已上传的封面"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
+
             try:
                 if os.path.exists(COVER_DIR):
                     for f in os.listdir(COVER_DIR):
@@ -295,7 +303,9 @@ class LibraryCoverPlugin(PluginBase):
             """恢复媒体库默认封面（删除自定义封面）"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
+
             try:
                 data = await request.json()
                 library_id = data.get("library_id")
@@ -331,7 +341,9 @@ class LibraryCoverPlugin(PluginBase):
             """应用封面到媒体库"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
+
             try:
                 data = await request.json()
                 library_id = data.get("library_id")
@@ -438,7 +450,9 @@ class LibraryCoverPlugin(PluginBase):
             """批量应用封面到多个媒体库"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
+
             try:
                 data = await request.json()
                 mappings = data.get("mappings", [])  # [{library_id, library_name, cover_filename}, ...]
@@ -551,7 +565,9 @@ class LibraryCoverPlugin(PluginBase):
             """根据文件名智能匹配封面到媒体库"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
+
             try:
                 # 获取媒体库列表
                 res = media_api.get("/Library/VirtualFolders", timeout=10)
@@ -657,7 +673,9 @@ class LibraryCoverPlugin(PluginBase):
             """获取已保存的映射关系"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
+
             try:
                 mapping_file = os.path.join(COVER_DIR, "mappings.json")
                 if os.path.exists(mapping_file):
@@ -675,7 +693,9 @@ class LibraryCoverPlugin(PluginBase):
             """保存映射关系"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
+
             try:
                 data = await request.json()
                 mappings = data.get("mappings", {})
@@ -694,7 +714,9 @@ class LibraryCoverPlugin(PluginBase):
             """清空映射关系"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
+
             try:
                 mapping_file = os.path.join(COVER_DIR, "mappings.json")
                 with open(mapping_file, "w", encoding="utf-8") as f:

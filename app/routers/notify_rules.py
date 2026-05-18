@@ -5,6 +5,7 @@ import sqlite3
 from app.core.database import DB_PATH, SYSTEM_DB_PATH
 import requests
 from app.routers.auth import is_admin_user
+from app.core.security_utils import safe_error_message
 
 router = APIRouter(prefix="/api/notify_rules", tags=["Notification Rules"])
 
@@ -57,7 +58,7 @@ async def get_mutes(request: Request):
                     mutes[r['event_type']].append(r['user_id'])
         return {"success": True, "data": mutes}
     except Exception as e:
-        return {"success": False, "msg": str(e)}
+        return {"success": False, "msg": safe_error_message(e)}
 
 @router.post("/mutes")
 async def save_mutes(req: Request):
@@ -83,4 +84,4 @@ async def save_mutes(req: Request):
         conn.close()
         return {"success": True, "msg": "降噪规则保存成功！新规即刻生效。"}
     except Exception as e:
-        return {"success": False, "msg": str(e)}
+        return {"success": False, "msg": safe_error_message(e)}

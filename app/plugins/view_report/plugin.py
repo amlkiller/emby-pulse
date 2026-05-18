@@ -11,6 +11,7 @@ import requests
 from fastapi import Request
 from fastapi.responses import Response
 from app.plugins.base import PluginBase
+from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
 from app.core.database import query_db
 from app.core.config import cfg
 
@@ -911,6 +912,8 @@ async def get_config(request: Request):
     # 🔒 鉴权检查
     if not request.session.get("user"):
         return {"status": "error", "message": "未登录"}
+    if not is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限"}
     
     from app.plugins import get_plugin_config
     return {
@@ -928,6 +931,8 @@ async def get_report_config(request: Request, report_type: str):
     # 🔒 鉴权检查
     if not request.session.get("user"):
         return {"status": "error", "message": "未登录"}
+    if not is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限"}
     
     if report_type not in ['daily', 'weekly', 'monthly']:
         return {"status": "error", "message": "无效的报告类型"}
@@ -961,6 +966,8 @@ async def update_report_config(report_type: str, request: Request):
     # 🔒 鉴权检查
     if not request.session.get("user"):
         return {"status": "error", "message": "未登录"}
+    if not is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限"}
     
     if report_type not in ['daily', 'weekly', 'monthly']:
         return {"status": "error", "message": "无效的报告类型"}
@@ -995,6 +1002,8 @@ async def update_config(request: Request):
     # 🔒 鉴权检查
     if not request.session.get("user"):
         return {"status": "error", "message": "未登录"}
+    if not is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限"}
     
     from app.plugins import save_plugin_config
     
@@ -1048,6 +1057,8 @@ async def preview_report(request: Request, report_type: str):
     # 🔒 鉴权检查
     if not request.session.get("user"):
         return {"success": False, "message": "未登录"}
+    if not is_admin_user(request):
+        return {"success": False, "message": "需要管理员权限"}
     
     if report_type not in ['daily', 'weekly', 'monthly']:
         return {"success": False, "message": "无效的报告类型"}
@@ -1064,6 +1075,8 @@ async def preview_poster(request: Request, report_type: str, theme: str = 'cinem
     # 🔒 鉴权检查
     if not request.session.get("user"):
         return {"success": False, "message": "未登录"}
+    if not is_admin_user(request):
+        return {"success": False, "message": "需要管理员权限"}
     
     if report_type not in ['daily', 'weekly', 'monthly']:
         return {"success": False, "message": "无效的报告类型"}
@@ -1111,6 +1124,8 @@ async def send_report(request: Request, report_type: str):
     # 🔒 鉴权检查
     if not request.session.get("user"):
         return {"success": False, "message": "未登录"}
+    if not is_admin_user(request):
+        return {"success": False, "message": "需要管理员权限"}
     
     if report_type not in ['daily', 'weekly', 'monthly']:
         return {"success": False, "message": "无效的报告类型"}
@@ -1135,6 +1150,8 @@ async def get_status(request: Request):
     # 🔒 鉴权检查
     if not request.session.get("user"):
         return {"success": False, "message": "未登录"}
+    if not is_admin_user(request):
+        return {"success": False, "message": "需要管理员权限"}
     
     try:
         return {"success": True, "data": plugin.api_get_schedule_status()}
@@ -1148,6 +1165,8 @@ async def get_logs(request: Request, limit: int = 50):
     # 🔒 鉴权检查
     if not request.session.get("user"):
         return {"status": "error", "message": "未登录"}
+    if not is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限"}
     
     try:
         logs = plugin.get_logs(limit)
@@ -1162,6 +1181,8 @@ async def clear_logs(request: Request):
     # 🔒 鉴权检查
     if not request.session.get("user"):
         return {"status": "error", "message": "未登录"}
+    if not is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限"}
     
     try:
         plugin.clear_logs()

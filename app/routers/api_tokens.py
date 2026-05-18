@@ -11,6 +11,7 @@ from app.core.database import SYSTEM_DB_PATH
 from app.routers.auth import is_admin_user
 from app.core.jwt_token import create_api_token, verify_api_token
 from app.core.config import cfg
+from app.core.security_utils import safe_error_message
 
 router = APIRouter()
 
@@ -89,7 +90,7 @@ async def create_token(request: Request, data: CreateTokenRequest):
             "created_at": created_at.isoformat()
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"创建失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=safe_error_message(e, "创建失败"))
 
 
 @router.get("/api/tokens/list")
@@ -129,7 +130,7 @@ async def list_tokens(request: Request):
             "tokens": tokens
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"查询失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=safe_error_message(e, "查询失败"))
 
 
 @router.delete("/api/tokens/{token_id}")
@@ -154,7 +155,7 @@ async def delete_token(request: Request, token_id: int):
         
         return {"status": "success", "message": "Token 已删除"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"删除失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=safe_error_message(e, "删除失败"))
 
 
 @router.get("/api/tokens/verify")

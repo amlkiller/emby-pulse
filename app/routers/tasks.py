@@ -9,6 +9,7 @@ from app.core.config import cfg
 from app.core.database import DB_PATH, SYSTEM_DB_PATH, query_db, add_sys_notification
 from app.core.media_adapter import media_api
 from app.services.bot_service import bot
+from app.core.security_utils import safe_error_message
 
 router = APIRouter()
 
@@ -227,7 +228,7 @@ async def translate_task(data: TranslationModel, request: Request):
             query_db("DELETE FROM task_translations WHERE original_name = ?", (orig,))
         return {"status": "success"}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 # ==========================================
 # 3. 核心 API：获取并应用混合翻译
@@ -268,7 +269,7 @@ async def get_tasks(request: Request):
             
         return {"status": "success", "data": result}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 @router.post("/api/tasks/{task_id}/start")
 async def start_task(task_id: str, request: Request):
@@ -277,7 +278,7 @@ async def start_task(task_id: str, request: Request):
         media_api.post(f"/ScheduledTasks/Running/{task_id}", timeout=5)
         return {"status": "success"}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 @router.post("/api/tasks/{task_id}/stop")
 async def stop_task(task_id: str, request: Request):
@@ -286,4 +287,4 @@ async def stop_task(task_id: str, request: Request):
         media_api.delete(f"/ScheduledTasks/Running/{task_id}", timeout=5)
         return {"status": "success"}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}

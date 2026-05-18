@@ -9,6 +9,7 @@ import logging
 import time
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from app.core.security_utils import safe_error_message
 
 logger = logging.getLogger("uvicorn")
 router = APIRouter()
@@ -52,7 +53,7 @@ def ignore_item(data: IgnoreModel, request: Request):
         conn.commit()
         conn.close()
         return {"status": "success"}
-    except Exception as e: return {"status": "error", "message": str(e)}
+    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
 # --- 🔥 新增：批量原子忽略 (彻底解决并发锁死问题) ---
 @router.post("/api/insight/ignore_batch")
@@ -67,7 +68,7 @@ def ignore_items_batch(data: BatchIgnoreModel, request: Request):
         conn.commit()
         conn.close()
         return {"status": "success"}
-    except Exception as e: return {"status": "error", "message": str(e)}
+    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
 # --- 批量恢复 ---
 @router.post("/api/insight/unignore_batch")

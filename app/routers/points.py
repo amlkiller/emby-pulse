@@ -20,6 +20,7 @@ from app.routers.views import get_common_vars
 
 router = APIRouter()
 from app.main import APP_VERSION
+from app.core.security_utils import safe_error_message
 
 def get_point_config():
     """获取积分配置"""
@@ -256,6 +257,8 @@ async def save_points_config(request: Request):
 @router.get("/api/points/users")
 def get_users_points(request: Request, page: int = 1, page_size: int = 20):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not media_api.health_check():
+        return {"status": "error", "message": "Emby 服务不可用，请稍后重试"}
     try:
         emby_users = media_api.get("/Users", timeout=5).json()
         meta_rows = query_db("SELECT user_id, points FROM users_meta")
@@ -285,12 +288,15 @@ def get_users_points(request: Request, page: int = 1, page_size: int = 20):
         paged_results = results[start:end]
         
         return {"status": "success", "data": paged_results, "total": total, "page": page, "page_size": page_size, "total_pages": total_pages}
-    except Exception as e: return {"status": "error", "message": str(e)}
+    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
 # 👇 批量发钱功能依然严格锁死！
 @router.post("/api/points/batch_update")
 def batch_update_points(data: BatchPointsModel, request: Request):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    # 🔒 Emby 不可用时拒绝批量改积分（用户名映射依赖 Emby）
+    if not media_api.health_check():
+        return {"status": "error", "message": "Emby 服务不可用，请稍后重试"}
     try:
         conn = sqlite3.connect(SYSTEM_DB_PATH); c = conn.cursor()
         users = media_api.get("/Users", timeout=5).json()
@@ -306,7 +312,7 @@ def batch_update_points(data: BatchPointsModel, request: Request):
             count += 1
         conn.commit(); conn.close()
         return {"status": "success", "message": f"成功修改了 {count} 名用户的资产"}
-    except Exception as e: return {"status": "error", "message": str(e)}
+    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
 @router.get("/api/points/logs")
 def get_point_logs(request: Request, user_id: str = None, page: int = 1, page_size: int = 50, action_type: str = None):
@@ -368,7 +374,7 @@ def get_point_logs(request: Request, user_id: str = None, page: int = 1, page_si
             "page_size": page_size,
             "total_pages": (total + page_size - 1) // page_size
         }
-    except Exception as e: return {"status": "error", "message": str(e)}
+    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
 # ==========================================
 # C端 API
@@ -390,7 +396,7 @@ def get_user_points_info(request: Request):
         config['store_items'] = store_items
         conn.close()
         return {"status": "success", "data": {"points": points, "has_checked_in": has_checked_in, "config": config, "req_free": req_free, "req_free_count": req_free_count}}
-    except Exception as e: return {"status": "error", "message": str(e)}
+    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
 @router.get("/api/user/points/logs")
 def get_my_point_logs(request: Request, page: int = 1, page_size: int = 20):
@@ -494,7 +500,7 @@ def user_checkin(request: Request):
             "streak_bonus": streak_bonus
         }
         return result
-    except Exception as e: return {"status": "error", "message": str(e)}
+    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
 class RedeemModel(BaseModel): item_id: str
 
@@ -693,7 +699,7 @@ def user_redeem(data: RedeemModel, request: Request):
         
         return {"status": "success", "message": f"兑换成功！{target_item.get('name')}已生效。"}
 
-    except Exception as e: return {"status": "error", "message": str(e)}
+    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
 
 # ==========================================
@@ -778,7 +784,7 @@ def user_use_renew_code(data: RenewCodeModel, request: Request):
                 print(f"[续费码] 解除禁用失败: {e}")
 
         return {"status": "success", "message": f"续期成功！账号有效期已延长 {days_display}，至 {new_exp}"}
-    except Exception as e: return {"status": "error", "message": str(e)}
+    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
 
 # ==========================================
@@ -875,7 +881,7 @@ def user_transfer_points(data: TransferModel, request: Request):
             "fee": fee,
             "balance": new_from_points
         }
-    except Exception as e: return {"status": "error", "message": str(e)}
+    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
 
 # ==========================================
@@ -946,7 +952,7 @@ def create_red_packet(data: RedPacketModel, request: Request):
             "packet_id": packet_id,
             "balance": new_points
         }
-    except Exception as e: return {"status": "error", "message": str(e)}
+    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
 
 class GrabRedPacketModel(BaseModel):
@@ -1052,7 +1058,7 @@ def grab_red_packet(data: GrabRedPacketModel, request: Request):
             "balance": new_points,
             "creator_name": creator_name
         }
-    except Exception as e: return {"status": "error", "message": str(e)}
+    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
 
 @router.get("/api/points/red_packet/logs")
@@ -1067,7 +1073,7 @@ def get_red_packet_logs(request: Request, packet_id: int):
         logs = [dict(zip(cols, row)) for row in c.fetchall()]
         conn.close()
         return {"status": "success", "data": logs}
-    except Exception as e: return {"status": "error", "message": str(e)}
+    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
 
 # ==========================================
@@ -1101,7 +1107,7 @@ def get_points_rank(request: Request, limit: int = 10):
         
         conn.close()
         return {"status": "success", "data": rank_list}
-    except Exception as e: return {"status": "error", "message": str(e)}
+    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
 
 # ==========================================
@@ -1261,7 +1267,7 @@ def user_rob(data: RobModel, request: Request):
                 "balance": new_from_points
             }
             
-    except Exception as e: return {"status": "error", "message": str(e)}
+    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
 
 # ==========================================
@@ -1381,7 +1387,7 @@ def pk_invite(data: PKInviteModel, request: Request):
         }
         
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 
 @router.post("/api/user/points/pk/accept")
@@ -1531,7 +1537,7 @@ def pk_accept(data: PKAcceptModel, request: Request):
         }
         
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 
 @router.post("/api/user/points/pk/reject")
@@ -1571,7 +1577,7 @@ def pk_reject(data: PKRejectModel, request: Request):
         }
         
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 
 @router.get("/api/user/points/pk/pending")
@@ -1610,7 +1616,7 @@ def pk_pending(request: Request):
         return {"status": "success", "data": result}
         
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 
 @router.post("/api/points/pk/clear")
@@ -1634,7 +1640,7 @@ def clear_pk_invitations(request: Request):
         return {"status": "success", "count": count, "message": f"已清除 {count} 条PK邀请"}
         
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 
 # ===================== 🎰 老虎机 API =====================
@@ -1660,7 +1666,7 @@ def get_slot_usage(request: Request):
         return {"status": "success", "used_today": row[0] if row else 0}
         
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 
 @router.post("/api/slot/spin")
@@ -1873,7 +1879,7 @@ def slot_spin(request: Request):
         }
         
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 
 # ===================== 🎫 刮刮乐 API =====================
@@ -1989,7 +1995,7 @@ def buy_scratch_card(request: Request):
         }
         
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 
 @router.post("/api/scratch/reveal")
@@ -2053,7 +2059,7 @@ async def reveal_scratch_cell(request: Request):
             }
         
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 # 🎡 幸运转盘
 wheel_usage = {}  # 用户使用次数缓存
@@ -2191,7 +2197,7 @@ async def spin_wheel(request: Request):
         }
         
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 # 🎲 猜数字
 guess_games = {}  # 用户游戏状态缓存
@@ -2268,7 +2274,7 @@ async def start_guess_game(request: Request):
         }
         
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 @router.post("/api/guess/submit")
 async def submit_guess(request: Request):
@@ -2368,7 +2374,7 @@ async def submit_guess(request: Request):
             }
         
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 # 🎟️ 彩票
 @router.get("/api/lottery/my_tickets")
@@ -2395,7 +2401,7 @@ async def get_my_lottery_tickets(request: Request):
             "tickets": [t[0] for t in tickets]
         }
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 @router.post("/api/lottery/buy")
 async def buy_lottery(request: Request):
@@ -2484,7 +2490,7 @@ async def buy_lottery(request: Request):
         }
         
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 @router.get("/api/lottery/pool")
 async def api_user_lottery_pool(request: Request):
@@ -2572,7 +2578,7 @@ async def api_user_lottery_pool(request: Request):
             }
         }
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 @router.get("/api/lottery/results")
 async def get_lottery_results(request: Request):
     """获取开奖结果"""
@@ -2669,4 +2675,4 @@ async def get_lottery_results(request: Request):
             "results": formatted_results
         }
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}

@@ -18,6 +18,7 @@ from app.core.config import cfg, DB_PATH, SYSTEM_DB_PATH
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
 from app.core.database import query_db
 from app.core.db_schemas import SYSTEM_TABLES
+from app.core.security_utils import safe_error_message
 
 router = APIRouter(prefix="/api/system", tags=["System Tools"])
 
@@ -331,7 +332,7 @@ async def network_check(request: Request):
             else:
                 db_integrity = {"ok": False, "msg": f"缺 {len(missing_tables)} 表: {', '.join(missing_tables[:3])}{'...' if len(missing_tables) > 3 else ''}"}
     except Exception as e:
-        db_integrity = {"ok": False, "msg": str(e)[:50]}
+        db_integrity = {"ok": False, "msg": safe_error_message(e)[:50]}
 
     # 2. 数据库读写权限检查
     try:
@@ -360,7 +361,7 @@ async def network_check(request: Request):
         else:
             db_readwrite = {"ok": False, "msg": "数据验证失败"}
     except Exception as e:
-        db_readwrite = {"ok": False, "msg": str(e)[:50]}
+        db_readwrite = {"ok": False, "msg": safe_error_message(e)[:50]}
 
     return {
         "success": True,
@@ -391,7 +392,7 @@ async def get_logs(request: Request, lines: int = 150):
         logs_list = list(sys._emby_pulse_log_queue)[-lines:]
         return {"success": True, "data": "\n".join(logs_list)}
     except Exception as e:
-        return {"success": False, "msg": str(e)}
+        return {"success": False, "msg": safe_error_message(e)}
 
 @router.post("/debug")
 async def toggle_debug(req: Request):

@@ -12,6 +12,7 @@ import sqlite3
 from typing import Optional, List, Dict, Any
 from fastapi import Request
 from app.plugins.base import PluginBase
+from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
 from app.core.config import cfg
 from app.core.media_adapter import media_api
 from app.core.database import SYSTEM_DB_PATH
@@ -131,6 +132,8 @@ class SmartCollectionsPlugin(PluginBase):
             """获取所有合集"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             return self.get_all_collections()
         
         @self.router.get("/collection/{collection_id}")
@@ -138,6 +141,8 @@ class SmartCollectionsPlugin(PluginBase):
             """获取单个合集详情"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             return self.get_collection_by_id(collection_id)
         
         @self.router.post("/collection")
@@ -145,6 +150,8 @@ class SmartCollectionsPlugin(PluginBase):
             """创建合集"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             data = await request.json()
             return self.create_collection_item(data)
         
@@ -153,6 +160,8 @@ class SmartCollectionsPlugin(PluginBase):
             """更新合集"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             data = await request.json()
             return self.update_collection_item(collection_id, data)
         
@@ -161,6 +170,8 @@ class SmartCollectionsPlugin(PluginBase):
             """删除合集"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             return self.delete_collection_item(collection_id)
         
         @self.router.post("/collection/{collection_id}/sync")
@@ -168,6 +179,8 @@ class SmartCollectionsPlugin(PluginBase):
             """手动同步合集"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             return self.sync_single_collection(collection_id)
         
         @self.router.post("/sync_all")
@@ -175,6 +188,8 @@ class SmartCollectionsPlugin(PluginBase):
             """同步所有合集"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             return self.sync_all_collections()
         
         @self.router.get("/logs")
@@ -182,6 +197,8 @@ class SmartCollectionsPlugin(PluginBase):
             """获取同步日志"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             return self.get_sync_logs(limit)
         
         @self.router.get("/source_types")
@@ -209,6 +226,8 @@ class SmartCollectionsPlugin(PluginBase):
             """搜索 Emby 媒体库项目"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             return self.search_items(q, limit)
     
     # ==========================================

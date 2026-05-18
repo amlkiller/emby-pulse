@@ -14,6 +14,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from fastapi import Request
 from app.plugins.base import PluginBase
+from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
 from app.core.config import cfg
 from app.core.database import SYSTEM_DB_PATH
 from app.core.event_bus import bus
@@ -74,6 +75,8 @@ class SeasonPosterUpdaterPlugin(PluginBase):
             """获取插件状态"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             
             config = self._get_config()
             return {
@@ -92,6 +95,8 @@ class SeasonPosterUpdaterPlugin(PluginBase):
             """获取媒体库列表"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             
             try:
                 res = media_api.get("/Library/VirtualFolders", timeout=10)
@@ -143,6 +148,8 @@ class SeasonPosterUpdaterPlugin(PluginBase):
             """更新插件配置"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             
             try:
                 from app.plugins import save_plugin_config
@@ -160,6 +167,8 @@ class SeasonPosterUpdaterPlugin(PluginBase):
             """手动扫描所有剧集"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             
             try:
                 result = await self._scan_all_series(force=False)
@@ -173,6 +182,8 @@ class SeasonPosterUpdaterPlugin(PluginBase):
             """强制扫描所有剧集（忽略缓存）"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             
             try:
                 result = await self._scan_all_series(force=True)
@@ -186,6 +197,8 @@ class SeasonPosterUpdaterPlugin(PluginBase):
             """获取更新日志"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             
             try:
                 conn = sqlite3.connect(SYSTEM_DB_PATH)
@@ -216,6 +229,8 @@ class SeasonPosterUpdaterPlugin(PluginBase):
             """清空日志"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             
             try:
                 conn = sqlite3.connect(SYSTEM_DB_PATH)

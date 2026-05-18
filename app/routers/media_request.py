@@ -5,6 +5,7 @@ import time
 import re
 from datetime import datetime, date
 from fastapi import APIRouter, Request, Depends, BackgroundTasks
+from fastapi.responses import JSONResponse
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 from app.core.security import validate_password_strength  # 🔒 统一密码强度校验
 from pydantic import BaseModel
@@ -20,6 +21,7 @@ from app.services.bot_service import bot
 # 🔥 引入媒体适配器用于创建用户
 from app.core.media_adapter import media_api
 import logging
+from app.core.security_utils import safe_error_message
 
 logger = logging.getLogger("uvicorn")
 
@@ -199,7 +201,7 @@ def execute_sql(query, params=()):
         return True, ""
     except Exception as e:
         conn.rollback()
-        return False, str(e)
+        return False, safe_error_message(e)
     finally: conn.close()
 
 def get_emby_admin(host, key):
@@ -529,7 +531,7 @@ def search_tmdb(query: str, request: Request):
             if i.get("media_type") in ["movie", "tv"]:
                 results.append({"tmdb_id": i['id'], "media_type": i['media_type'], "title": i.get('title') or i.get('name'), "year": (i.get('release_date') or i.get('first_air_date') or "")[:4], "poster_path": f"https://image.tmdb.org/t/p/w500{i['poster_path']}" if i.get('poster_path') else "", "overview": i.get('overview', ''), "vote_average": round(i.get('vote_average', 0), 1), "local_status": -1})
         return {"status": "success", "data": results}
-    except Exception as e: return {"status": "error", "message": str(e)}
+    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
 @router.get("/api/requests/trending")
 def get_tmdb_trending(request: Request):
@@ -562,7 +564,7 @@ def get_tmdb_trending(request: Request):
                     })
         return {"status": "success", "data": results}
     except Exception as e: 
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 @router.get("/api/requests/tv/{tmdb_id}")
 def get_tv_details(tmdb_id: int, request: Request):
@@ -600,7 +602,7 @@ def get_tv_details(tmdb_id: int, request: Request):
                 })
         return {"status": "success", "seasons": seasons}
     except Exception as e: 
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 @router.get("/api/requests/check/{media_type}/{tmdb_id}")
 def check_local_status(media_type: str, tmdb_id: int, request: Request):
@@ -803,7 +805,7 @@ async def submit_media_request(request: Request):
         return {"status": "success", "message": "心愿已提交！系统将尽快处理您的请求。"}
         
     except Exception as e:
-        return {"status": "error", "message": f"提交失败: {str(e)}"}
+        return {"status": "error", "message": safe_error_message(e, "提交失败")}
 
 @router.get("/api/requests/my")
 def get_my_requests(request: Request):
@@ -1154,7 +1156,7 @@ def get_pending_notify(request: Request):
             
         items.sort(key=lambda x: x['time'], reverse=True)
         return {"status": "success", "count": req_count + feed_count, "items": items[:5]}
-    except Exception as e: return {"status": "error", "message": str(e)}
+    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
 @router.post("/api/requests/feedback/submit")
 def submit_feedback(data: FeedbackSubmitModel, request: Request):
@@ -1315,7 +1317,7 @@ def get_safe_top_media(category: str, request: Request):
                 logger.warning(f"[热播榜] api_top_movies 返回空数据，未缓存")
         except Exception as e:
             logger.error(f"[热播榜] 数据获取失败: {e}")
-            return {"status": "error", "data": [], "error": str(e)}
+            return {"status": "error", "data": [], "error": safe_error_message(e)}
     
     if not global_items:
         logger.warning(f"[热播榜] 最终数据为空")
@@ -1360,7 +1362,7 @@ def get_safe_top_media(category: str, request: Request):
         return {"status": "success", "data": safe_top_10, "from_cache": True}
     except Exception as e:
         logger.error(f"[热播榜] 权限过滤失败: {e}")
-        return {"status": "error", "data": [], "error": str(e)}
+        return {"status": "error", "data": [], "error": safe_error_message(e)}
 
 @router.get("/api/requests/safe_latest")
 def get_safe_latest(limit: int = 15, request: Request = None):
@@ -1537,11 +1539,11 @@ def _refresh_community_cache():
 @router.post("/api/requests/refresh_cache")
 def refresh_community_cache_api(request: Request):
     """手动刷新用户社区首页缓存（管理员接口）"""
-    # 简单验证：检查是否登录
-    admin = request.session.get("admin")
-    if not admin:
-        return {"status": "error", "message": "无权限"}
-    
+    if not request.session.get("user"):
+        return JSONResponse(status_code=401, content={"status": "error", "message": "未登录"})
+    if not is_admin_user(request):
+        return JSONResponse(status_code=403, content={"status": "error", "message": "需要管理员权限"})
+
     # 后台执行刷新
     _refresh_community_cache()
     return {"status": "success", "message": "缓存已刷新"}
@@ -1550,10 +1552,11 @@ def refresh_community_cache_api(request: Request):
 @router.post("/api/requests/clear_cache")
 def clear_community_cache_api(request: Request):
     """清除用户社区首页缓存（管理员接口）"""
-    admin = request.session.get("admin")
-    if not admin:
-        return {"status": "error", "message": "无权限"}
-    
+    if not request.session.get("user"):
+        return JSONResponse(status_code=401, content={"status": "error", "message": "未登录"})
+    if not is_admin_user(request):
+        return JSONResponse(status_code=403, content={"status": "error", "message": "需要管理员权限"})
+
     _invalidate_cache()
     return {"status": "success", "message": "缓存已清除"}
 
@@ -1823,7 +1826,7 @@ def get_user_series(request: Request):
         }
     
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 
 @router.post("/api/user/my_series/refresh")
@@ -1846,7 +1849,7 @@ def refresh_my_series_cache(request: Request, bg_tasks: BackgroundTasks):
         bg_tasks.add_task(run_scan_task)
         return {"status": "success", "message": "已触发后台扫描，请稍后刷新查看"}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 
 # 🔥 辅助函数：获取请求状态文本（同步版本）
@@ -2122,7 +2125,7 @@ async def submit_update_request(request: Request):
         return {"status": "success", "message": f"追新请求已提交！等待管理员处理 S{season}E{episodes_str}"}
     
     except Exception as e:
-        return {"status": "error", "message": f"提交失败: {str(e)}"}
+        return {"status": "error", "message": safe_error_message(e, "提交失败")}
 
 
 @router.post("/api/user/request_update_batch")
@@ -2306,7 +2309,7 @@ async def submit_update_request_batch(request: Request):
     
     except Exception as e:
         print(f"[追新批量] 错误: {e}")
-        return {"status": "error", "message": f"提交失败: {str(e)}"}
+        return {"status": "error", "message": safe_error_message(e, "提交失败")}
 
 
 @router.post("/api/manage/requests/search_episodes")
@@ -2371,7 +2374,7 @@ def search_episodes_for_update(payload: dict, request: Request):
             return {"status": "success", "results": processed_results}
         return result
     except Exception as e:
-        return {"status": "error", "message": f"搜索失败: {str(e)}"}
+        return {"status": "error", "message": safe_error_message(e, "搜索失败")}
 
 
 @router.post("/api/manage/requests/download_episodes")
@@ -2412,7 +2415,7 @@ def download_episodes_for_update(payload: dict, request: Request):
         
         return result
     except Exception as e:
-        return {"status": "error", "message": f"下载失败: {str(e)}"}
+        return {"status": "error", "message": safe_error_message(e, "下载失败")}
 
 
 # ==================== 用户社区注册 API ====================
@@ -2486,7 +2489,7 @@ async def user_community_register(data: UserRegisterModel, request: Request):
             if any(u['Name'].lower() == safe_name.lower() for u in users):
                 return {"status": "error", "message": f"用户名 {safe_name} 已被占用，请换一个"}
         except Exception as e:
-            return {"status": "error", "message": f"检查用户名失败: {str(e)}"}
+            return {"status": "error", "message": safe_error_message(e, "检查用户名失败")}
         
         # 5. 创建 Emby 用户
         try:
@@ -2623,8 +2626,8 @@ async def user_community_register(data: UserRegisterModel, request: Request):
             
         except Exception as e:
             logger.error(f"[用户社区注册] 创建用户失败: {e}")
-            return {"status": "error", "message": f"注册失败: {str(e)}"}
+            return {"status": "error", "message": safe_error_message(e, "注册失败")}
             
     except Exception as e:
         logger.error(f"[用户社区注册] 系统错误: {e}")
-        return {"status": "error", "message": f"系统错误: {str(e)}"}
+        return {"status": "error", "message": safe_error_message(e, "系统错误")}

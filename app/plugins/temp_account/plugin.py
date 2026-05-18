@@ -13,6 +13,7 @@ import string
 import json
 from fastapi import Request
 from app.plugins.base import PluginBase
+from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
 from app.core.config import cfg
 from app.core.database import query_db, DB_PATH, SYSTEM_DB_PATH
 
@@ -118,6 +119,9 @@ class TempAccountPlugin(PluginBase):
             if not request.session.get("user"):
                 from fastapi.responses import RedirectResponse
                 return RedirectResponse("/login", status_code=303)
+            if not is_admin_user(request):
+                from fastapi.responses import RedirectResponse
+                return RedirectResponse("/login", status_code=303)
             
             from fastapi.templating import Jinja2Templates
             templates = Jinja2Templates(directory="templates")
@@ -129,6 +133,8 @@ class TempAccountPlugin(PluginBase):
             """获取临时账号列表"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             try:
                 conn = sqlite3.connect(SYSTEM_DB_PATH)
                 conn.row_factory = sqlite3.Row
@@ -184,6 +190,8 @@ class TempAccountPlugin(PluginBase):
             """创建临时账号"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             try:
                 data = await request.json()
                 usernames = data.get("usernames", [])
@@ -270,6 +278,8 @@ class TempAccountPlugin(PluginBase):
             """删除临时账号"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             try:
                 # 获取账号信息
                 conn = sqlite3.connect(SYSTEM_DB_PATH)
@@ -306,6 +316,8 @@ class TempAccountPlugin(PluginBase):
             """手动刷新密码"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             try:
                 result = self._refresh_account_password(account_id, manual=True)
                 if result.get("success"):
@@ -320,6 +332,8 @@ class TempAccountPlugin(PluginBase):
             """启用/禁用账号"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             try:
                 data = await request.json()
                 enabled = data.get("enabled", 1)
@@ -361,6 +375,8 @@ class TempAccountPlugin(PluginBase):
             """更新账号配置"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             try:
                 data = await request.json()
                 
@@ -439,6 +455,8 @@ class TempAccountPlugin(PluginBase):
             """获取密码更新历史"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             try:
                 conn = sqlite3.connect(SYSTEM_DB_PATH)
                 conn.row_factory = sqlite3.Row
@@ -461,6 +479,8 @@ class TempAccountPlugin(PluginBase):
             """获取可用的模板用户列表"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             try:
                 emby_host = cfg.get("emby_host", "")
                 emby_key = cfg.get("emby_api_key", "")
@@ -492,6 +512,8 @@ class TempAccountPlugin(PluginBase):
             """获取可用线路列表"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             try:
                 # 使用系统配置的线路列表
                 all_routes = cfg.get_all_routes()

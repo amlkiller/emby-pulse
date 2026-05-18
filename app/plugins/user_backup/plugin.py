@@ -21,6 +21,7 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 
 from app.plugins.base import PluginBase
+from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
 from app.core.config import cfg
 from app.core.database import query_db, SYSTEM_DB_PATH
 from app.core.media_adapter import media_api
@@ -376,6 +377,8 @@ class UserBackupPlugin(PluginBase):
             """创建备份"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             
             if not self._is_pro():
                 return {"status": "error", "message": "此功能需要 Pro 授权", "need_pro": True}
@@ -423,6 +426,8 @@ class UserBackupPlugin(PluginBase):
             """获取备份列表"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             
             try:
                 backups = []
@@ -455,6 +460,8 @@ class UserBackupPlugin(PluginBase):
             """下载备份文件"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             
             # 安全检查
             if ".." in filename or "/" in filename or "\\" in filename:
@@ -476,6 +483,8 @@ class UserBackupPlugin(PluginBase):
             """删除备份"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             
             if not self._is_pro():
                 return {"status": "error", "message": "此功能需要 Pro 授权", "need_pro": True}
@@ -496,6 +505,8 @@ class UserBackupPlugin(PluginBase):
             """上传备份文件用于恢复"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             
             if not self._is_pro():
                 return {"status": "error", "message": "此功能需要 Pro 授权", "need_pro": True}
@@ -562,6 +573,8 @@ class UserBackupPlugin(PluginBase):
             """预览恢复差异"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             
             if not self._is_pro():
                 return {"status": "error", "message": "此功能需要 Pro 授权", "need_pro": True}
@@ -722,6 +735,8 @@ class UserBackupPlugin(PluginBase):
             """执行恢复"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             
             if not self._is_pro():
                 return {"status": "error", "message": "此功能需要 Pro 授权", "need_pro": True}
@@ -1011,6 +1026,8 @@ class UserBackupPlugin(PluginBase):
             """获取 WebDAV 上的备份列表"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             
             if not self._is_pro():
                 return {"status": "error", "message": "此功能需要 Pro 授权", "need_pro": True}
@@ -1085,6 +1102,8 @@ class UserBackupPlugin(PluginBase):
             """从 WebDAV 下载备份文件"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             
             if not self._is_pro():
                 return {"status": "error", "message": "此功能需要 Pro 授权", "need_pro": True}
@@ -1143,6 +1162,8 @@ class UserBackupPlugin(PluginBase):
             """测试 WebDAV 连接"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             
             try:
                 data = await request.json()

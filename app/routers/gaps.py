@@ -153,6 +153,7 @@ def _start_background_gap_sync():
 
 # 🔥 启动后台定时任务（延迟启动，等待 run_scan_task 定义完成）
 import atexit
+from app.core.security_utils import safe_error_message
 def _delayed_start_background_sync():
     # 使用定时器延迟启动，确保所有函数已定义
     def start_after_delay():
@@ -273,7 +274,7 @@ def run_scan_task():
         except Exception: pass
     except Exception as e:
         logger.error(f"[缺集扫描] 扫描异常: {e}")
-        with state_lock: scan_state["error"] = str(e)
+        with state_lock: scan_state["error"] = safe_error_message(e)
     finally:
         with state_lock: scan_state["is_scanning"] = False; scan_state["current_item"] = "扫描完成"
         logger.info("[缺集扫描] 任务结束")
@@ -455,7 +456,7 @@ def delete_ignore_item(request: Request, payload: dict):
             query_db("DELETE FROM gap_records WHERE id = ?", (item_id,))
 
         return {"status": "success"}
-    except Exception as e: return {"status": "error", "message": str(e)}
+    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
 @router.get("/config")
 def get_gap_config(request: Request):
@@ -517,7 +518,7 @@ def get_libraries(request: Request):
         return {"status": "success", "data": result}
     except Exception as e:
         logger.error(f"[缺集管理] 获取媒体库失败: {e}")
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 @router.post("/config")
 def save_gap_config(request: Request, payload: dict):
@@ -620,12 +621,12 @@ def search_hdhive_for_gap(request: Request = None, payload: dict = None):
             
         except Exception as e:
             logger.error(f"[Gaps影巢搜索] TMDB搜索失败: {e}")
-            return {"status": "error", "message": f"搜索失败: {str(e)}"}
+            return {"status": "error", "message": safe_error_message(e, "搜索失败")}
 
     except Exception as e:
         import logging
         logging.getLogger("uvicorn").error(f"[Gaps影巢搜索] 失败: {e}")
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 
 @router.post("/download_hdhive")
@@ -708,14 +709,14 @@ def download_hdhive_for_gap(request: Request = None, payload: dict = None):
                 else:
                     return {"status": "error", "message": result.get("message", "转存失败")}
             except Exception as e:
-                return {"status": "error", "message": f"转存异常: {str(e)}"}
+                return {"status": "error", "message": safe_error_message(e, "转存异常")}
 
         return {"status": "success", "message": "解锁成功", "url": url, "access_code": access_code, "title": title}
 
     except Exception as e:
         import logging
         logging.getLogger("uvicorn").error(f"[Gaps影巢解锁] 失败: {e}")
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 
 @router.get("/115/folders")
@@ -737,7 +738,7 @@ def get_115_folders(request: Request):
     except Exception as e:
         import logging
         logging.getLogger("uvicorn").error(f"[Gaps获取115文件夹] 失败: {e}")
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 
 # ==================== MP搜索 ====================
@@ -992,7 +993,7 @@ def search_mp_for_gap(request: Request = None, payload: dict = None):
         return {"status": "success", "data": {"genes": genes, "results": processed[:10]}}
     except Exception as e: 
         logger.error(f"[缺集搜索] MP搜索异常: {e}")
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 def extract_episodes_from_filename(filename: str) -> set:
     """从文件名中提取集数，支持多种命名格式"""
@@ -1190,7 +1191,7 @@ def hook_qbittorrent(host, user, password, expected_size, target_episodes, torre
             
         except Exception as e:
             logger.error(f"[QB截胡] 设置文件优先级失败: {e}")
-            return False, f"设置文件优先级失败: {str(e)}"
+            return False, safe_error_message(e, "设置文件优先级失败")
             
     except requests.exceptions.Timeout:
         logger.error("[QB截胡] 连接超时")
@@ -1200,7 +1201,7 @@ def hook_qbittorrent(host, user, password, expected_size, target_episodes, torre
         return False, "qBittorrent 连接失败，请检查地址是否正确"
     except Exception as e:
         logger.error(f"[QB截胡] 异常: {e}", exc_info=True)
-        return False, f"qB 交互异常: {str(e)}"
+        return False, safe_error_message(e, "qB 交互异常")
 
 def hook_transmission(host, user, password, expected_size, target_episodes):
     try:
@@ -1238,7 +1239,7 @@ def hook_transmission(host, user, password, expected_size, target_episodes):
                 s.post(rpc_url, json=set_payload, auth=auth, timeout=10)
                 return True, f"🔪 TR 截胡成功！保留 {len(wanted)} 集，剔除 {len(unwanted)} 个文件"
         return False, "轮询 60 秒超时：未锁定种子"
-    except Exception as e: return False, f"TR 交互异常: {str(e)}"
+    except Exception as e: return False, safe_error_message(e, "TR 交互异常")
 
 @router.post("/download")
 def download_gap_item(request: Request = None, payload: dict = None):

@@ -259,6 +259,7 @@ class LocalUserUpdate(BaseModel):
 
 class PasswordChange(BaseModel):
     new_password: str
+    old_password: str = ""  # 用户修改自己密码时必填；管理员重置他人密码时可空
 
 class PermissionsUpdate(BaseModel):
     permissions: list = []
@@ -604,6 +605,21 @@ async def change_local_user_password(request: Request, user_id: int, data: Passw
     if not is_admin_user(request):
         if current_user_id != user_id:
             return {"status": "error", "message": "子账号只能修改自己的密码"}
+
+    # 🔒 旧密码验证：当用户修改自己的密码时强制校验
+    # 管理员为他人重置密码时跳过（合理的平台能力），但仍写入审计日志
+    is_self_change = (current_user_id == user_id)
+    if is_self_change:
+        if not data.old_password:
+            return {"status": "error", "message": "请提供原密码"}
+        existing = query_db(
+            "SELECT password_hash FROM local_users WHERE id = ?",
+            (user_id,), one=True
+        )
+        if not existing:
+            return {"status": "error", "message": "用户不存在"}
+        if not verify_password(data.old_password, existing['password_hash']):
+            return {"status": "error", "message": "原密码不正确"}
 
     # 验证密码强度
     pw_valid, pw_error = validate_password_strength(data.new_password)

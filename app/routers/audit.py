@@ -22,7 +22,11 @@ async def audit_page(request: Request):
     if not user:
         from fastapi.responses import RedirectResponse
         return RedirectResponse("/login")
-    
+    # 🔒 仅管理员可访问审计页面
+    if not is_admin_user(request):
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse("/login")
+
     return templates.TemplateResponse(
         "audit.html",
         {"request": request, "version": APP_VERSION}

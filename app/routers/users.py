@@ -15,6 +15,7 @@ import base64
 import logging
 import sqlite3
 import time
+from app.core.security_utils import safe_error_message
 
 router = APIRouter()
 
@@ -213,7 +214,7 @@ def api_get_audit_logs(request: Request, page: int = 1, limit: int = 20,
         }
     except Exception as e:
         logging.error(f"[审计日志] 查询失败: {e}")
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 @router.get("/api/manage/audit_logs/stats")
 def api_get_audit_stats(request: Request, days: int = 7):
@@ -258,7 +259,7 @@ def api_get_audit_stats(request: Request, days: int = 7):
             }
         }
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 @router.delete("/api/manage/audit_logs/{log_id}")
 def api_delete_audit_log(log_id: int, request: Request):
@@ -273,7 +274,7 @@ def api_delete_audit_log(log_id: int, request: Request):
         conn.close()
         return {"status": "success", "message": "删除成功"}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 @router.post("/api/manage/audit_logs/clear")
 def api_clear_audit_logs(request: Request, days: int = 30):
@@ -292,7 +293,7 @@ def api_clear_audit_logs(request: Request, days: int = 30):
         conn.close()
         return {"status": "success", "message": f"已清理 {deleted_count} 条日志"}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 @router.post("/api/manage/user/verify_password")
 def api_verify_delete_password(data: PasswordVerifyModel, request: Request):
@@ -521,7 +522,7 @@ def api_get_libraries(request: Request):
             libs = [{"Id": item["Guid"], "Name": item["Name"]} for item in res.json() if "Guid" in item]
             return {"status": "success", "data": libs}
         return {"status": "error", "message": "媒体服务器 API 返回异常"}
-    except Exception as e: return {"status": "error", "message": str(e)}
+    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
 # ==================== 🔥 用户列表缓存 ====================
 _emby_users_cache = {"data": None, "expires": 0}
@@ -616,7 +617,7 @@ def api_manage_users(request: Request, refresh: bool = False):
                 "tags": meta.get('tags', '')
             })
         return {"status": "success", "data": final_list, "emby_url": public_host}
-    except Exception as e: return {"status": "error", "message": str(e)}
+    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
 @router.get("/api/manage/user/{user_id}")
 def api_get_single_user(user_id: str, request: Request):
@@ -692,6 +693,11 @@ async def api_update_user_image(request: Request, user_id: str = Form(...), url:
             img_data = await file.read()
             c_type = file.content_type or "image/jpeg"
         if not img_data: return {"status": "error", "message": "无图片数据"}
+        # 🔒 尺寸 + magic bytes 校验，防止伪装 Content-Type 上传非图像
+        if len(img_data) > 10 * 1024 * 1024:
+            return {"status": "error", "message": "图片不能超过 10MB"}
+        if not check_magic_bytes(img_data):
+            return {"status": "error", "message": "文件头校验失败，请上传有效的图片文件"}
         b64 = base64.b64encode(img_data)
         media_api.delete(f"/Users/{user_id}/Images/Primary")
         media_api.post(f"/Users/{user_id}/Images/Primary", data=b64, headers={"Content-Type": c_type})
@@ -709,7 +715,7 @@ async def api_update_user_image(request: Request, user_id: str = Form(...), url:
         )
 
         return {"status": "success"}
-    except Exception as e: return {"status": "error", "message": str(e)}
+    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
 # ==========================================
 # C 端用户自助 API(修改头像 / 修改密码)
@@ -737,7 +743,7 @@ async def api_user_self_avatar(request: Request, file: UploadFile = File(...)):
         media_api.post(f"/Users/{user_id}/Images/Primary", data=b64, headers={"Content-Type": c_type})
         return {"status": "success", "message": "头像已更新"}
     except Exception as e:
-        return {"status": "error", "message": f"上传失败: {str(e)}"}
+        return {"status": "error", "message": safe_error_message(e, "上传失败")}
 
 @router.post("/api/user/password")
 def api_user_self_password(data: UserPasswordChangeModel, request: Request):
@@ -763,7 +769,7 @@ def api_user_self_password(data: UserPasswordChangeModel, request: Request):
         media_api.post(f"/Users/{user_id}/Password", json={"Id": user_id, "CurrentPw": data.old_password, "NewPw": data.new_password})
         return {"status": "success", "message": "密码已修改"}
     except Exception as e:
-        return {"status": "error", "message": f"修改失败: {str(e)}"}
+        return {"status": "error", "message": safe_error_message(e, "修改失败")}
 
 
 # ==================== 🔥 用户媒体库设置 ====================
@@ -863,7 +869,7 @@ def api_get_user_libraries(request: Request):
         
         return {"status": "success", "data": result}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 
 class HiddenLibrariesModel(BaseModel):
@@ -945,7 +951,7 @@ def api_update_hidden_libraries(data: HiddenLibrariesModel, request: Request):
         
         return {"status": "success", "message": "设置已保存"}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 
 @router.post("/api/manage/invite/gen")
@@ -986,7 +992,7 @@ def api_gen_invite(data: InviteGenModelLocal, request: Request):
         portal_url = cfg.get("user_portal_url", "").rstrip('/')
         links = [f"{portal_url}/invite/{code}" for code in codes] if portal_url and code_type == "register" else []
         return {"status": "success", "codes": codes, "type": code_type, "links": links, "portal_url": portal_url}
-    except Exception as e: return {"status": "error", "message": str(e)}
+    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
 @router.get("/api/manage/invites")
 def api_get_invites(request: Request, code_type: str = "all"):
@@ -1021,7 +1027,7 @@ def api_get_invites(request: Request, code_type: str = "all"):
                     stats[t]['unused'] += 1
 
         return {"status": "success", "data": data, "stats": stats}
-    except Exception as e: return {"status": "error", "message": str(e)}
+    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
 @router.get("/api/manage/invites/export")
 def api_export_invites(request: Request, code_type: str = "all"):
@@ -1048,7 +1054,7 @@ def api_export_invites(request: Request, code_type: str = "all"):
             lines.append(f"{d['code']},{type_str},{d['days']},{d['used_count']},{d['max_uses']},{d.get('used_by','')},{status_str},{d.get('created_at','')},{d.get('used_at','')},{req_free_text},{req_free_count},{link}")
         from fastapi.responses import PlainTextResponse
         return PlainTextResponse("\n".join(lines), media_type="text/csv", headers={"Content-Disposition": f"attachment; filename=codes_{code_type}.csv"})
-    except Exception as e: return {"status": "error", "message": str(e)}
+    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
 @router.post("/api/manage/invites/batch")
 def api_manage_invites_batch(data: InviteBatchModelLocal, request: Request):
@@ -1071,13 +1077,16 @@ def api_manage_invites_batch(data: InviteBatchModelLocal, request: Request):
                 ip_address=ip_address
             )
         return {"status": "success", "message": "删除成功"}
-    except Exception as e: return {"status": "error", "message": str(e)}
+    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
 @router.post("/api/manage/user/library")
 def api_manage_user_library(data: UserUpdateModelEx, request: Request):
     """单独保存媒体库权限"""
     # 🔒 安全检查：必须管理员
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    # 🔒 Emby 不可用时拒绝，避免本地/远端权限错位
+    if not media_api.health_check():
+        return {"status": "error", "message": "Emby 服务不可用，请稍后重试"}
     invalidate_emby_users_cache()
     try:
         # 获取用户当前 Policy
@@ -1143,12 +1152,15 @@ def api_manage_user_library(data: UserUpdateModelEx, request: Request):
         
         return {"status": "success", "message": "媒体库权限已保存"}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 @router.post("/api/manage/user/update")
 def api_manage_user_update(data: UserUpdateModelEx, request: Request):
     # 🔒 安全检查：必须管理员
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    # 🔒 Emby 不可用时拒绝
+    if not media_api.health_check():
+        return {"status": "error", "message": "Emby 服务不可用，请稍后重试"}
     # 🔥 清除用户缓存
     invalidate_emby_users_cache()
     try:
@@ -1443,12 +1455,15 @@ def api_manage_user_update(data: UserUpdateModelEx, request: Request):
         )
 
         return {"status": "success", "message": "用户信息已更新"}
-    except Exception as e: return {"status": "error", "message": str(e)}
+    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
 @router.post("/api/manage/user/new")
 def api_manage_user_new(data: NewUserModelEx, request: Request):
     # 🔒 安全检查：必须管理员
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    # 🔒 Emby 不可用时拒绝创建
+    if not media_api.health_check():
+        return {"status": "error", "message": "Emby 服务不可用，请稍后重试"}
     # 🔥 清除用户缓存
     invalidate_emby_users_cache()
     try:
@@ -1496,7 +1511,7 @@ def api_manage_user_new(data: NewUserModelEx, request: Request):
         )
 
         return {"status": "success", "message": "用户创建成功"}
-    except Exception as e: return {"status": "error", "message": str(e)}
+    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
 class DeleteWithPasswordModel(BaseModel):
     password: Optional[str] = None  # 批量删除必须传密码
@@ -1508,6 +1523,9 @@ def api_manage_user_delete(user_id: str, request: Request):
         return {"status": "error", "message": "未登录"}
     if not is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
+    # 🔒 Emby 不可用时拒绝删除，避免本地标记与远端失步
+    if not media_api.health_check():
+        return {"status": "error", "message": "Emby 服务不可用，请稍后重试"}
 
     # 🔥 清除用户缓存
     invalidate_emby_users_cache()
@@ -1595,7 +1613,7 @@ def api_manage_user_delete(user_id: str, request: Request):
             return {"status": "success", "message": f"用户 {user_name} 已删除"}
         return {"status": "error", "message": "Emby 删除失败"}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 @router.post("/api/manage/users/batch")
 def api_manage_users_batch(data: BatchActionModelLocal, request: Request):
@@ -1603,6 +1621,9 @@ def api_manage_users_batch(data: BatchActionModelLocal, request: Request):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     if len(data.user_ids) > 100:
         return {"status": "error", "message": "单次批量操作最多 100 个用户"}
+    # 🔒 Emby 不可用时拒绝批量操作（一次校验，避免循环中放大请求）
+    if not media_api.health_check():
+        return {"status": "error", "message": "Emby 服务不可用，请稍后重试"}
 
     # 获取当前管理员账号
     admin_user = request.session.get("user", {})
@@ -1839,7 +1860,7 @@ def api_manage_users_batch(data: BatchActionModelLocal, request: Request):
             )
 
         return {"status": "success", "message": f"成功操作了 {len(data.user_ids)} 个用户"}
-    except Exception as e: return {"status": "error", "message": str(e)}
+    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
 @router.post("/api/manage/template/default")
 def api_set_default_template(data: dict, request: Request):
@@ -1856,7 +1877,7 @@ def api_set_default_template(data: dict, request: Request):
         cfg.set("default_user_template_id", template_id)
         return {"status": "success", "message": "默认模板已更新"}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 @router.get("/api/manage/template/default")
 def api_get_default_template(request: Request):
@@ -1867,7 +1888,7 @@ def api_get_default_template(request: Request):
         template_id = cfg.get("default_user_template_id") or ""
         return {"status": "success", "data": {"template_user_id": template_id}}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 # ==================== 置顶用户功能 ====================
 
@@ -1928,7 +1949,7 @@ def api_pin_user(data: PinUserModel, request: Request):
 
         return {"status": "success", "message": f"已{'置顶' if data.pinned else '取消置顶'}用户"}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 @router.get("/api/users")
 def api_get_users(request: Request):
@@ -1990,7 +2011,7 @@ def api_update_user_req_permission(data: UserReqPermissionModel, request: Reques
 
         return {"status": "success", "message": "求片权限已更新"}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 @router.get("/api/manage/user/req_permission")
 def api_get_user_req_permission(user_id: str, request: Request):
@@ -2011,7 +2032,7 @@ def api_get_user_req_permission(user_id: str, request: Request):
         else:
             return {"status": "success", "data": {"req_free": 0, "req_free_count": -1}}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 # ==========================================
 # 🔥 用户标签 API
@@ -2046,7 +2067,7 @@ def api_get_tags(request: Request):
         tags = [{"id": r['id'], "name": r['name'], "color": r['color'] or 'blue'} for r in rows]
         return {"status": "success", "data": tags}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 class TagCreateModel(BaseModel):
     name: str
@@ -2071,7 +2092,7 @@ def api_create_tag(data: TagCreateModel, request: Request):
     except sqlite3.IntegrityError:
         return {"status": "error", "message": "标签已存在"}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 @router.delete("/api/manage/tags/{tag_id}")
 def api_delete_tag(tag_id: int, request: Request):
@@ -2089,7 +2110,7 @@ def api_delete_tag(tag_id: int, request: Request):
         
         return {"status": "success"}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 
 @router.delete("/api/manage/tags/name/{tag_name}")
@@ -2128,7 +2149,7 @@ def api_delete_tag_by_name(tag_name: str, request: Request):
         
         return {"status": "success", "message": f"标签 '{tag_name}' 已删除"}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 class UserTagsUpdateModel(BaseModel):
     user_id: str
@@ -2160,7 +2181,7 @@ def api_update_user_tags(data: UserTagsUpdateModel, request: Request):
 
         return {"status": "success"}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 @router.get("/api/manage/user/tags")
 def api_get_user_tags(user_id: str, request: Request):
@@ -2179,4 +2200,4 @@ def api_get_user_tags(user_id: str, request: Request):
         tags = row[0] if row and row[0] else ""
         return {"status": "success", "data": tags}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}

@@ -7,6 +7,7 @@ import json
 from app.core.config import cfg, DB_PATH, save_config
 from app.core.database import SYSTEM_DB_PATH
 from app.services.risk_service import ban_user, unban_user, log_risk_action, get_user_concurrent_limit
+from app.core.security_utils import safe_error_message
 
 router = APIRouter(prefix="/api/risk", tags=["RiskControl"])
 
@@ -108,7 +109,7 @@ def get_online_status(request: Request):
         
         return {"data": result_list, "max_devices": max_devices}
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": safe_error_message(e)}
 
 @router.post("/kick")
 def api_kick_session(req: ActionRequest, request: Request):
@@ -183,7 +184,7 @@ def get_user_status(user_id: str, request: Request):
             return {"user_id": user_id, "is_banned": is_disabled, "username": user_data.get("Name", "未知")}
         return {"error": "无法获取用户信息"}
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": safe_error_message(e)}
 
 @router.get("/logs")
 def get_risk_logs(request: Request):
@@ -274,4 +275,4 @@ def get_risk_summary(request: Request):
             "global_limit": cfg.get("default_max_concurrent", 2)
         }
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": safe_error_message(e)}

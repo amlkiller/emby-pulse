@@ -231,11 +231,11 @@ def fix_unclosed_html_tags(text: str) -> str:
 def safe_error_message(error: Exception, default_msg: str = "操作失败") -> str:
     """
     Generate safe error message that doesn't expose internal details
-    
+
     Args:
         error: Exception object
         default_msg: Default message to return
-    
+
     Returns:
         Safe error message for user display
     """
@@ -243,6 +243,25 @@ def safe_error_message(error: Exception, default_msg: str = "操作失败") -> s
     import logging
     logger = logging.getLogger("uvicorn")
     logger.error(f"[Security] Internal error: {str(error)}")
-    
+
     # Return generic message to user
     return default_msg
+
+
+def safe_http_exception(status_code: int, default_msg: str, error: Exception = None):
+    """构造 HTTPException，记录原始异常但只返回通用文案。
+
+    Args:
+        status_code: HTTP 状态码
+        default_msg: 面向客户端的通用消息
+        error: 内部异常对象（可选），仅写入服务端日志
+
+    Returns:
+        fastapi.HTTPException 实例（调用方 raise 即可）
+    """
+    from fastapi import HTTPException
+    import logging
+    logger = logging.getLogger("uvicorn")
+    if error is not None:
+        logger.exception(f"[Security] HTTP {status_code}: {default_msg} - {error!r}")
+    return HTTPException(status_code=status_code, detail=default_msg)

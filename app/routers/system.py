@@ -6,6 +6,7 @@ import requests
 import os
 import sqlite3
 import logging
+from app.core.security_utils import safe_error_message
 
 logger = logging.getLogger("uvicorn")
 
@@ -171,7 +172,7 @@ def api_diag_db(request: Request):
         conn.close()
 
     except Exception as e:
-        result["issues"].append(f"数据库读取错误: {str(e)}")
+        result["issues"].append(safe_error_message(e, "数据库读取错误"))
 
     return result
 
@@ -535,7 +536,7 @@ async def test_tmdb(request: Request):
     except requests.exceptions.ProxyError:
         return {"status": "error", "message": "❌ 代理连接失败，请检查代理地址"}
     except Exception as e:
-        return {"status": "error", "message": f"❌ 测试失败: {str(e)}"}
+        return {"status": "error", "message": safe_error_message(e, "❌ 测试失败")}
 
 
 @router.post("/api/settings/test_proxy")
@@ -570,7 +571,7 @@ async def test_proxy(request: Request):
     except requests.exceptions.SSLError:
         return {"status": "error", "message": "❌ SSL 证书错误"}
     except Exception as e:
-        return {"status": "error", "message": f"❌ 测试失败: {str(e)}"}
+        return {"status": "error", "message": safe_error_message(e, "❌ 测试失败")}
 
 
 @router.post("/api/settings/fix_db")
@@ -670,7 +671,7 @@ async def api_save_dashboard_layout(request: Request):
         conn.commit(); conn.close()
         return {"status": "success", "message": "布局已保存"}
     except Exception as e:
-        return {"status": "error", "message": f"保存失败: {str(e)}"}
+        return {"status": "error", "message": safe_error_message(e, "保存失败")}
 
 
 # ==========================================

@@ -8,6 +8,7 @@ import json # 🔥 新增 json 模块用于解析
 from app.core.config import cfg
 # 🔥 引入核心适配器
 from app.core.media_adapter import media_api
+from app.core.security_utils import safe_error_message
 
 # 🔥 拼音首字母搜索支持
 try:
@@ -275,4 +276,4 @@ def global_library_search(query: str, request: Request):
 
         return {"status": "success", "data": results}
     except Exception as e:
-        return {"status": "error", "message": f"全局搜索请求失败: {str(e)}"}
+        return {"status": "error", "message": safe_error_message(e, "全局搜索请求失败")}

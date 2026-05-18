@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 from app.core.database import SYSTEM_DB_PATH
 from app.core.config import cfg
+from app.core.security_utils import safe_error_message
 
 logger = logging.getLogger("uvicorn")
 router = APIRouter(prefix="/api/calendar/notify", tags=["日历通知"])
@@ -82,7 +83,7 @@ def get_notify_config(request: Request):
             }
         return {"status": "success", "data": {"enabled": False, "notify_time": "09:00", "channels": ["tg_bot"], "tg_chat_id": "", "wecom_touser": "@all"}}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 @router.post("/config")
 def save_notify_config(request: Request, config: CalendarNotifyConfig):
@@ -107,7 +108,7 @@ def save_notify_config(request: Request, config: CalendarNotifyConfig):
         
         return {"status": "success", "message": "配置已保存"}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 @router.post("/test")
 def test_notify(request: Request):
@@ -123,7 +124,7 @@ def test_notify(request: Request):
         else:
             return {"status": "error", "message": result.get("message", "发送失败")}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 @router.post("/send")
 def manual_send(request: Request):
@@ -139,7 +140,7 @@ def manual_send(request: Request):
         else:
             return {"status": "error", "message": result.get("message", "发送失败")}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": safe_error_message(e)}
 
 # ============ 通知发送逻辑 ============
 def get_today_updates():
@@ -327,7 +328,7 @@ def send_calendar_notify(test: bool = False):
         
     except Exception as e:
         logger.error(f"[日历通知] 发送失败: {e}")
-        return {"success": False, "message": str(e)}
+        return {"success": False, "message": safe_error_message(e)}
 
 # ============ 定时任务服务 ============
 class CalendarNotifyService:
