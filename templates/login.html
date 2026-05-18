@@ -183,9 +183,10 @@
     </div>
 
     <script nonce="{{ request.state.csp_nonce }}">
+        // PWA 已移除：清理历史遗留的 Service Worker，避免其拦截 CDN 资源（CSP connect-src 不放行）
         if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js');
+            navigator.serviceWorker.getRegistrations().then(regs => {
+                regs.forEach(reg => reg.unregister());
             });
         }
     </script>

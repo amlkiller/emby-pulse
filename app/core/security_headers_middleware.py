@@ -71,7 +71,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             f"style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com https://cdn.quilljs.com; "
             f"img-src 'self' data: blob: https:; "
             f"font-src 'self' data: https://fonts.gstatic.com {cdn_sources}; "
-            f"connect-src 'self'; "
+            f"connect-src 'self' {cdn_sources} https://fonts.googleapis.com https://fonts.gstatic.com https://static.cloudflareinsights.com; "
             f"frame-ancestors 'self';"
         )
 

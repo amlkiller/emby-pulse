@@ -386,17 +386,18 @@ async def get_request_manifest():
 
 @router.get("/sw.js")
 async def get_service_worker():
-    # 🔥 强制清除所有旧缓存
-    sw_content = """
-const CACHE_NAME='pulse-user-v3';
-self.addEventListener('install',(e)=>{self.skipWaiting();});
-self.addEventListener('activate',(e)=>{
-  e.waitUntil(
-    caches.keys().then(keys=>Promise.all(keys.map(key=>caches.delete(key)))).then(()=>clients.claim())
-  );
-});
-self.addEventListener('fetch',(e)=>{e.respondWith(fetch(e.request));});
-""".replace('\n','')
+    # PWA 已移除：返回一个自卸载 SW，让任何残留注册的客户端立即清理缓存并注销自己。
+    # 必须返回合法 JS 而不是 404，否则浏览器会保留旧 SW 继续拦截请求。
+    sw_content = (
+        "self.addEventListener('install',e=>self.skipWaiting());"
+        "self.addEventListener('activate',e=>{"
+        "e.waitUntil("
+        "caches.keys().then(ks=>Promise.all(ks.map(k=>caches.delete(k))))"
+        ".then(()=>self.registration.unregister())"
+        ".then(()=>self.clients.matchAll()).then(cs=>cs.forEach(c=>c.navigate(c.url)))"
+        ");"
+        "});"
+    )
     return PlainTextResponse(content=sw_content, media_type="application/javascript")
 
 @router.get("/", response_class=HTMLResponse)
