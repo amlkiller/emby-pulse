@@ -11,7 +11,7 @@ import os
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates", autoescape=True)
-APP_VERSION = os.environ.get("APP_VERSION", "1.3.0.Dev")
+from app.main import APP_VERSION
 
 def ensure_notify_rules_table():
     """确保 notify_rules 表存在"""

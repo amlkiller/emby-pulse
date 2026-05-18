@@ -22,7 +22,7 @@ logger = logging.getLogger("uvicorn")
 templates = Jinja2Templates(directory="templates", autoescape=True)
 router = APIRouter()
 
-APP_VERSION = os.environ.get("APP_VERSION", "1.3.0.Dev")
+from app.main import APP_VERSION
 
 def check_login(request: Request):
     user = request.session.get("user")

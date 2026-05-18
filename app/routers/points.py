@@ -19,7 +19,7 @@ from app.routers.auth import check_permission
 from app.routers.views import get_common_vars
 
 router = APIRouter()
-APP_VERSION = os.environ.get("APP_VERSION", "1.3.0.Dev")
+from app.main import APP_VERSION
 
 def get_point_config():
     """获取积分配置"""

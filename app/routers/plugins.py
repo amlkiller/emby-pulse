@@ -10,7 +10,7 @@ import os
 import sqlite3
 
 router = APIRouter()
-APP_VERSION = os.environ.get("APP_VERSION", "1.3.0.Dev")
+from app.main import APP_VERSION
 
 
 def is_pro_user() -> bool:
