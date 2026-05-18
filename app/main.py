@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 # 应用版本号（单一来源，修改版本只改这里）
-APP_VERSION = "1.4.0-OssSecurity"
+APP_VERSION = "1.4.1"
 
 # 🔥 安全：日志脱敏过滤器
 from app.utils.sensitive_filter import SensitiveLogFilter
@@ -146,12 +146,12 @@ async def user_portal_app(scope, receive, send):
 
     elif scope["type"] == "http":
         path = scope.get("path", "")
-        
+
         # 强制送去求片中心
         if path == "/":
             scope["path"] = "/request"
             scope["raw_path"] = b"/request"
-            
+
         # 铁血隔离白名单：放行求片相关页面、静态资源、公开 API
         allowed = (
             "/request",
@@ -231,7 +231,7 @@ async def user_portal_app(scope, receive, send):
                 await send({"type": "http.response.start", "status": 404, "headers": [(b"content-type", b"text/html; charset=utf-8")]})
                 await send({"type": "http.response.body", "body": "<h1>404 Not Found</h1><p>非法越界，后台管理界面已被物理阻断。</p>".encode("utf-8")})
             return await send_404()
-            
+
         await app(scope, receive, send)
     else:
         await app(scope, receive, send)
@@ -253,10 +253,10 @@ def start_10308_server():
     import uvicorn
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    
+
     # 错误日志才会打印，保证前台安静
     config = uvicorn.Config(app=user_portal_app, log_level="error")
-    
+
     server = uvicorn.Server(config)
     server.install_signal_handlers = lambda: None
     try:
@@ -296,12 +296,12 @@ async def lifespan(app: FastAPI):
     threading.Thread(target=start_10308_server, daemon=True).start()
     # 🔥 唤醒风控天眼
     start_risk_monitor()
-    
+
     # 🔥 启动仪表盘缓存预热（后台异步执行，不阻塞启动）
     from app.routers.stats import preload_dashboard_cache, start_dashboard_cache_refresh_loop
     asyncio.create_task(preload_dashboard_cache())
     asyncio.create_task(start_dashboard_cache_refresh_loop())
-    
+
     # 🔥 启动用户社区首页缓存刷新（后台定时刷新）
     def _start_community_cache_refresh():
         import time
@@ -312,7 +312,7 @@ async def lifespan(app: FastAPI):
             time.sleep(300)  # 每 5 分钟刷新一次
             _refresh_community_cache()
     threading.Thread(target=_start_community_cache_refresh, daemon=True).start()
-    
+
     # 🔒 安全：启动时清理过期会话，并启动定时清理（每小时）
     from app.core.session import cleanup_expired_sessions
     try:
@@ -347,9 +347,9 @@ async def lifespan(app: FastAPI):
     print("✅ [系统状态] 物理隔离架构已启动，安全防护中！")
     if user_bot.running: print("🤖 [Pro专属] 用户 TG 机器人已上线！")
     print("="*55 + "\n")
-    
+
     yield
-    
+
     print("\n" + "="*55)
     print("🛑 [系统关闭] 正在停止 EmbyPulse 服务...")
     bot.stop()
