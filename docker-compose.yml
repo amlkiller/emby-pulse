@@ -3,7 +3,7 @@ version: '3.8'
 services:
   emby-pulse:
     # 镜像通过 GitHub Actions 自动构建并发布到 GHCR
-    # 锁定版本可改为 ghcr.io/amlkiller/emby-pulse:1.4.0-OssSecurity
+    # 锁定版本可改为 ghcr.io/amlkiller/emby-pulse:1.4.1
     image: ghcr.io/amlkiller/emby-pulse:latest
     container_name: emby-pulse
     restart: unless-stopped
