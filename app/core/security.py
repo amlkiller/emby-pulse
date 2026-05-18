@@ -30,6 +30,17 @@ def require_login(request: Request) -> dict:
     return user
 
 
+def require_any_login(request: Request) -> dict:
+    """放宽版登录依赖：管理端 session["user"] 或用户端 session["req_user"] 任一登录即可。
+
+    用于双端共享的端点（如图片代理）。返回当前活动的会话用户对象。
+    """
+    user = request.session.get("user") or request.session.get("req_user")
+    if not user:
+        raise HTTPException(status_code=401, detail="未登录")
+    return user
+
+
 def require_admin(request: Request) -> dict:
     """统一管理员依赖：未登录 401，非管理员 403
 

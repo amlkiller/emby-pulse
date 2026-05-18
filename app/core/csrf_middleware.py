@@ -34,6 +34,55 @@ def _same_origin(url1: str, url2: str) -> bool:
         return False
 
 
+def _expected_origins(request: Request) -> list:
+    """计算允许的同源 URL 列表
+
+    反向代理场景下 base_url 返回的是内部 scheme+host，与浏览器看到的
+    公网 URL 不一致。因此在 base_url 之外，再纳入 X-Forwarded-Proto/Host
+    （以及 X-Forwarded-Port）所组合的对外 URL 作为合法源。
+
+    X-Forwarded-* 由反向代理设置；攻击者无法通过浏览器伪造受害者请求里
+    的 Origin/Referer，所以即使这些头存在，CSRF 防护仍然有效。
+    """
+    origins = []
+
+    # 1) 直连场景：用 base_url（scheme + netloc）
+    try:
+        base = str(request.base_url).rstrip("/")
+        if base:
+            origins.append(base)
+    except Exception:
+        pass
+
+    # 2) 反代场景：组合 X-Forwarded-* 头
+    fwd_host = request.headers.get("x-forwarded-host") or request.headers.get("x-original-host")
+    fwd_proto = request.headers.get("x-forwarded-proto")
+    fwd_port = request.headers.get("x-forwarded-port")
+    if fwd_host:
+        # 多个值时取第一个
+        host = fwd_host.split(",")[0].strip()
+        proto = (fwd_proto.split(",")[0].strip() if fwd_proto else "https")
+        # 若 host 已含端口则忽略 X-Forwarded-Port，否则在非默认端口时拼接
+        if ":" not in host and fwd_port:
+            port = fwd_port.split(",")[0].strip()
+            if (proto == "http" and port != "80") or (proto == "https" and port != "443"):
+                host = f"{host}:{port}"
+        origins.append(f"{proto}://{host}")
+
+    # 3) 兜底：直接拿 Host 头（保持原 scheme 假设为 http/https 两种都接受）
+    host_header = request.headers.get("host")
+    if host_header:
+        # base_url 已经覆盖了原始 scheme + host，这里仅作为最后兜底
+        origins.append(f"https://{host_header}")
+        origins.append(f"http://{host_header}")
+
+    return origins
+
+
+def _origin_allowed(origin: str, expected: list) -> bool:
+    return any(_same_origin(origin, e) for e in expected if e)
+
+
 class CSRFMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # 安全方法不校验
@@ -57,17 +106,18 @@ class CSRFMiddleware(BaseHTTPMiddleware):
                 return await call_next(request)
 
         # 已登录用户的 session 请求 — 验证 Origin/Referer 防 CSRF
+        # 同时识别管理端 (session["user"]) 与用户端 (session["req_user"])
         session = request.scope.get("session", {})
-        if session.get("user"):
+        if session.get("user") or session.get("req_user"):
             if request.method in ("POST", "PUT", "DELETE", "PATCH"):
                 origin = request.headers.get("origin", "")
                 referer = request.headers.get("referer", "")
-                host = str(request.base_url).rstrip("/")
+                expected = _expected_origins(request)
                 if origin:
-                    if not _same_origin(origin, host):
+                    if not _origin_allowed(origin, expected):
                         return JSONResponse(status_code=403, content={"detail": "CSRF 验证失败：Origin 不匹配"})
                 elif referer:
-                    if not _same_origin(referer, host):
+                    if not _origin_allowed(referer, expected):
                         return JSONResponse(status_code=403, content={"detail": "CSRF 验证失败：Referer 不匹配"})
                 else:
                     # 同源 POST 浏览器默认带 Origin；都缺失视为可疑

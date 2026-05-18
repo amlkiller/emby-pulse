@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Response, Request, Depends, HTTPException
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
-from app.core.security import require_login  # 🔒 统一登录依赖
+from app.core.security import require_login, require_any_login  # 🔒 统一登录依赖
 from app.core.config import cfg
 from app.core.media_adapter import media_api  # 🔥 引入核心适配器
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
@@ -177,7 +177,7 @@ def get_real_image_id_robust(item_id: str):
 ALLOWED_IMG_TYPES = {"Primary", "Backdrop", "Thumb", "Banner", "Logo", "Art", "Disc", "Box", "Menu"}
 
 @router.get("/api/proxy/image/{item_id}/{img_type}")
-def proxy_image(item_id: str, img_type: str, request: Request, v: str = None, nocache: bool = False, _user: dict = Depends(require_login)):
+def proxy_image(item_id: str, img_type: str, request: Request, v: str = None, nocache: bool = False, _user: dict = Depends(require_any_login)):
     """
     图片代理接口
     - v: 版本参数，当图片更新时改变此参数可强制刷新缓存
@@ -255,7 +255,7 @@ def proxy_image(item_id: str, img_type: str, request: Request, v: str = None, no
     return Response(status_code=404)
 
 @router.get("/api/proxy/smart_image")
-def proxy_smart_image(request: Request, item_id: str, name: str = "", year: str = "", type: str = "Primary", _user: dict = Depends(require_login)):
+def proxy_smart_image(request: Request, item_id: str, name: str = "", year: str = "", type: str = "Primary", _user: dict = Depends(require_any_login)):
     # 参数验证
     if not item_id or item_id == "undefined" or item_id == "null":
         return Response(status_code=404)
@@ -352,7 +352,7 @@ def proxy_smart_image(request: Request, item_id: str, name: str = "", year: str 
     return Response(status_code=404)
 
 @router.get("/api/proxy/user_image/{user_id}")
-def proxy_user_image(request: Request, user_id: str, tag: str = None, _user: dict = Depends(require_login)):
+def proxy_user_image(request: Request, user_id: str, tag: str = None, _user: dict = Depends(require_any_login)):
     """
     用户头像代理接口
     - tag: 图片版本标签，用于缓存控制
