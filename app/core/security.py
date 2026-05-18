@@ -39,3 +39,42 @@ def require_admin(request: Request) -> dict:
     if user.get("auth_type") != "emby" and user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="需要管理员权限")
     return user
+
+
+def is_admin_session(user: dict) -> bool:
+    """判定一个 session.user 对象是否具备管理员身份（不抛异常版本）。
+
+    抽取自 ``require_admin`` 的判定逻辑，便于在需要"返回兼容响应 shape"
+    的存量端点中复用（例如 ``return {"status": "error", "message": "..."}``）。
+    """
+    if not user:
+        return False
+    return user.get("auth_type") == "emby" or user.get("role") == "admin"
+
+
+def require_self_or_admin(target_user_id_param: str = "user_id"):
+    """工厂函数：返回一个依赖，校验当前会话用户为指定 user_id 本人或管理员。
+
+    用法::
+
+        @router.get("/api/devices/{user_id}")
+        def list_devices(
+            user_id: int,
+            _: dict = Depends(require_self_or_admin("user_id")),
+        ): ...
+
+    路径参数从 ``request.path_params`` 取，避免与端点签名耦合。
+    """
+
+    def _dep(request: Request) -> dict:
+        user = require_login(request)
+        if is_admin_session(user):
+            return user
+        target = request.path_params.get(target_user_id_param)
+        # session 中可能是 int 或 str，统一字符串化对比
+        current_id = user.get("Id") or user.get("id") or user.get("user_id")
+        if target is None or str(target) != str(current_id):
+            raise HTTPException(status_code=403, detail="只能访问自己的资源")
+        return user
+
+    return _dep

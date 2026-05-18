@@ -59,6 +59,9 @@ async def get_blacklist(request: Request):
 # 👇 🔥 PRO 功能：添加设备到黑名单
 @router.post("/api/clients/blacklist")
 async def add_blacklist(data: BlacklistModel, request: Request):
+    # 🔒 安全检查：写操作必须管理员
+    if not is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限"}
     app_name = data.app_name.strip()
     if not app_name: 
         return {"status": "error", "message": "软件名不能为空"}
@@ -85,6 +88,9 @@ async def add_blacklist(data: BlacklistModel, request: Request):
 # 👇 🔥 PRO 功能：从黑名单移除设备
 @router.delete("/api/clients/blacklist/{app_name}")
 async def delete_blacklist(app_name: str, request: Request):
+    # 🔒 安全检查：写操作必须管理员
+    if not is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限"}
     query_db("DELETE FROM client_blacklist WHERE app_name = ?", (app_name,))
     
     # 记录审计日志
@@ -117,6 +123,9 @@ async def get_whitelist(request: Request):
 # 👇 🔥 PRO 功能：添加用户到白名单
 @router.post("/api/clients/whitelist")
 async def add_whitelist(data: WhitelistModel, request: Request):
+    # 🔒 安全检查：写操作必须管理员
+    if not is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限"}
     user_id = data.user_id.strip()
     user_name = data.user_name.strip()
     if not user_id or not user_name:
@@ -145,6 +154,9 @@ async def add_whitelist(data: WhitelistModel, request: Request):
 # 👇 🔥 PRO 功能：从白名单移除用户
 @router.delete("/api/clients/whitelist/{user_id}")
 async def delete_whitelist(user_id: str, request: Request):
+    # 🔒 安全检查：写操作必须管理员
+    if not is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限"}
     query_db("DELETE FROM client_whitelist WHERE user_id = ?", (user_id,))
     
     # 记录审计日志
@@ -165,6 +177,9 @@ async def delete_whitelist(user_id: str, request: Request):
 # 👇 🔥 PRO 功能：批量添加用户到白名单
 @router.post("/api/clients/whitelist/batch")
 async def batch_add_whitelist(request: Request):
+    # 🔒 安全检查：写操作必须管理员
+    if not is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限"}
     data = await request.json()
     users = data.get("users", [])
     if not users:
@@ -203,6 +218,9 @@ async def batch_add_whitelist(request: Request):
 # 👇 🔥 PRO 功能：批量移除白名单用户
 @router.post("/api/clients/whitelist/batch-delete")
 async def batch_delete_whitelist(request: Request):
+    # 🔒 安全检查：写操作必须管理员
+    if not is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限"}
     data = await request.json()
     user_ids = data.get("user_ids", [])
     if not user_ids:
@@ -410,6 +428,9 @@ async def get_clients_data(request: Request):
 @router.post("/api/clients/execute_block")
 async def execute_block(request: Request):
     """执行一次阻断扫描"""
+    # 🔒 安全检查：写操作必须管理员
+    if not is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限"}
     result = _do_block_devices()  # 不是异步函数，不需要 await
     
     # 记录审计日志
