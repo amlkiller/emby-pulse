@@ -171,6 +171,7 @@ async def user_portal_app(scope, receive, send):
             "/api/user/my_series",
             "/api/user/request_update",
             "/api/user/points",
+            "/api/user/mute_status",
             "/api/user/avatar",
             "/api/user/password",
             "/api/user/libraries",
@@ -183,7 +184,25 @@ async def user_portal_app(scope, receive, send):
             "/api/pro/activate",
             "/api/notifications",
             "/api/pwa/",
+            "/api/ping",
             "/api/live",
+            "/api/stats/dashboard",
+            "/api/stats/badges",
+            "/api/stats/trend",
+            "/api/stats/user_details",
+            "/api/stats/chart",
+            "/api/stats/recent",
+            "/api/stats/latest",
+            "/api/stats/libraries",
+            "/api/stats/top_movies",
+            "/api/stats/top_users_list",
+            "/api/stats/monthly_stats",
+            "/api/stats/recent_added",
+            "/api/stats/item_detail",
+            "/api/stats/poster_data",
+            "/api/stats/live",
+            "/api/points/config",
+            "/api/points/rank",
             "/api/slot/",
             "/api/scratch/",
             "/api/wheel/",
@@ -369,7 +388,6 @@ async def _global_exception_handler(request: _Request, exc: Exception):
 
 # 中间件
 app.add_middleware(SecurityHeadersMiddleware)
-app.add_middleware(DatabaseSessionMiddleware)
 app.add_middleware(RateLimitMiddleware)  # 🔒 速率限制
 # 🔒 安全：CORS 默认拒绝所有跨域，需显式设置 CORS_ORIGINS 环境变量
 _cors_env = os.getenv("CORS_ORIGINS", "").strip()
@@ -389,6 +407,7 @@ else:
     print("🔒 [安全] CORS 未配置跨域来源，已拒绝所有跨域请求（如需开放请设置 CORS_ORIGINS 环境变量）")
 from app.core.csrf_middleware import CSRFMiddleware
 app.add_middleware(CSRFMiddleware)
+app.add_middleware(DatabaseSessionMiddleware)  # Session 必须在 CSRF 之后添加（外层先执行），否则 CSRF 拿不到 session
 
 app.add_middleware(CORSMiddleware, allow_origins=allowed_origins, allow_credentials=True, allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"], allow_headers=["Content-Type", "Authorization", "X-Requested-With", "X-Telegram-Bot-Api-Secret-Token"])
 
