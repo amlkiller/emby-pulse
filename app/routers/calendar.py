@@ -59,11 +59,8 @@ def get_weekly_calendar(request: Request, refresh: bool = False, offset: int = 0
 
 @router.post("/api/calendar/config")
 async def update_calendar_config(request: Request, config: CalendarConfigReq):
-    # 🔒 安全检查（支持管理端和用户端登录）
-    if not (request.session.get("user") or request.session.get("req_user")):
-        return {"status": "error", "message": "请先登录"}
-    """
-    API: 更新日历配置
-    """
+    """API: 更新日历配置"""
+    if not is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限"}
     cfg.set("calendar_cache_ttl", config.ttl)
     return {"status": "success"}

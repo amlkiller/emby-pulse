@@ -768,6 +768,8 @@ async def update_avatar(request: Request, data: AvatarUpdate):
 @router.get("/api/auth/permissions")
 async def get_permissions_list(request: Request):
     """获取所有可用权限列表"""
+    if not is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限"}
     return {
         "status": "success",
         "data": {
