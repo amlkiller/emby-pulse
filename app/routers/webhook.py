@@ -217,4 +217,4 @@ async def emby_webhook(request: Request):
         return {"status": "success"}
     except Exception as e:
         logger.error(f"Webhook 异常: {e}")
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": "Webhook 处理失败"}

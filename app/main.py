@@ -247,12 +247,13 @@ def start_10308_server():
 # ==============================================================================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 🔒 安全：Webhook Token 默认值自动生成
-    if cfg.get("webhook_token") == "embypulse":
+    # 🔒 安全：Webhook Token 默认值自动生成（与 security_check.py 弱 token 列表保持一致）
+    _weak_tokens = {"embypulse", "emby", "test", "123456", "password", ""}
+    if cfg.get("webhook_token") in _weak_tokens:
         import secrets as _secrets
         new_token = _secrets.token_urlsafe(32)
         cfg.set("webhook_token", new_token)
-        print(f"⚠️ [安全] Webhook Token 已自动生成，请更新 Emby Webhook 配置: {new_token}")
+        logging.getLogger("uvicorn").warning("[安全] Webhook Token 已自动生成（原为弱 token），请更新 Emby Webhook 配置")
 
     # 🔒 SSRF 防护：启动自检 proxy_url / wecom_proxy_url，发现内网/非法值时告警
     try:

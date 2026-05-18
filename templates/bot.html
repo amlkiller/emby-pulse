@@ -662,7 +662,7 @@
 
 {% block scripts %}
 <script nonce="{{ request.state.csp_nonce }}">
-    let globalToken = 'embypulse';
+    let globalToken = '';
 
     async function init() {
         try {
@@ -805,7 +805,7 @@
                     sel.value = d.user_bot_template_user || '';
                 } catch(e) {}
 
-                globalToken = d.webhook_token || 'embypulse';
+                globalToken = d.webhook_token || '';
 
                 // Webhook URLs
                 const host = window.location.protocol + "//" + window.location.host;
@@ -822,7 +822,7 @@
         if (el.checked) {
             infoBox.classList.remove('hidden');
             const host = window.location.protocol + "//" + window.location.host;
-            urlInput.value = `${host}/api/v1/webhook?token=${globalToken}`;
+            urlInput.value = `${host}/api/v1/webhook`;
         } else {
             infoBox.classList.add('hidden');
         }

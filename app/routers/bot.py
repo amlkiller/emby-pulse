@@ -404,14 +404,24 @@ def get_playback_url(item_id):
 
 @router.post("/api/bot/webhook")
 async def telegram_webhook(request: Request):
+    import secrets as _secrets
     # 🔒 安全：Token 从 Header 或 POST body 获取，避免 URL 泄露
     header_token = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
     body_data = await request.json()
     body_token = body_data.get("secret_token") if isinstance(body_data, dict) else None
     expected_token = cfg.get("tg_bot_token")
-    
-    # 验证 Token（支持两种方式）
-    if header_token != expected_token and body_token != expected_token:
+
+    # 🔒 安全：expected_token 未配置时拒绝所有请求
+    if not expected_token:
+        logger.warning("[TG Webhook] tg_bot_token 未配置，拒绝请求")
+        return {"status": "error", "message": "Unauthorized"}
+
+    # 🔒 安全：常量时间比对，防止时序攻击
+    token_valid = (
+        (header_token is not None and _secrets.compare_digest(str(header_token), str(expected_token))) or
+        (body_token is not None and _secrets.compare_digest(str(body_token), str(expected_token)))
+    )
+    if not token_valid:
         logger.warning("[TG Webhook] Token 验证失败")
         return {"status": "error", "message": "Unauthorized"}
     
@@ -492,9 +502,9 @@ async def wecom_webhook_get(msg_signature: str = "", timestamp: str = "", nonce:
         logger.info(f"WeCom Webhook: 验证成功，准备向企微放行")
         return Response(content=msg, media_type="text/plain")
         
-    except Exception as e: 
+    except Exception as e:
         logger.error(f"WeCom Webhook 解析崩溃: {str(e)}")
-        return str(e)
+        return "Internal Error"
 
 @router.post("/api/bot/wecom_webhook")
 async def wecom_webhook_post(request: Request, msg_signature: str = "", timestamp: str = "", nonce: str = ""):

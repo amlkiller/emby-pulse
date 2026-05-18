@@ -191,7 +191,10 @@ def api_save_notify_rules(request: Request, data: dict):
     user = request.session.get("user")
     if not user:
         return {"status": "error", "message": "请先登录"}
-    
+    # 🔒 安全检查：必须管理员
+    if not is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限"}
+
     rules = data.get("rules", {})
     
     try:
@@ -215,7 +218,7 @@ def api_save_notify_rules(request: Request, data: dict):
         conn.close()
         return {"status": "success", "message": "保存成功"}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": "保存规则失败"}
 
 
 @router.get("/api/notify/channels_config")
@@ -225,7 +228,10 @@ def api_get_channels_config(request: Request):
     user = request.session.get("user")
     if not user:
         return {"status": "error", "message": "请先登录"}
-    
+    # 🔒 安全检查：必须管理员
+    if not is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限"}
+
     # 🔒 安全：脱敏敏感字段
     def mask_token(value):
         if not value or not isinstance(value, str):
@@ -256,7 +262,10 @@ def api_save_channels_config(request: Request, data: dict):
     user = request.session.get("user")
     if not user:
         return {"status": "error", "message": "请先登录"}
-    
+    # 🔒 安全检查：必须管理员（该接口可修改 TG Token / Webhook，必须严格校验）
+    if not is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限"}
+
     # 🔒 安全：如果值包含脱敏标记 ****，则不更新（保留原值）
     def should_update(value):
         if not value or not isinstance(value, str):
@@ -284,4 +293,4 @@ def api_save_channels_config(request: Request, data: dict):
         cfg.save()
         return {"status": "success", "message": "保存成功"}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": "保存配置失败"}

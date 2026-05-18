@@ -182,6 +182,9 @@ def api_dashboard(request: Request, user_id: Optional[str] = None):
 @router.get("/api/stats/libraries")
 def api_get_libraries(request: Request):
     """获取媒体库列表（管理员显示所有媒体库）"""
+    # 🔒 安全检查：必须管理员
+    if not is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限"}
     try:
         # 🔥 管理员登录后显示所有媒体库（使用 /Library/VirtualFolders）
         lib_res = media_api.get("/Library/VirtualFolders", timeout=10)

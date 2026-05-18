@@ -5,6 +5,9 @@ from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 import requests
 import os
 import sqlite3
+import logging
+
+logger = logging.getLogger("uvicorn")
 
 router = APIRouter()
 
@@ -695,7 +698,7 @@ async def api_ping(request: Request):
         ping_url = url.rstrip("/") + "/"
 
         start = time.time()
-        res = requests.get(ping_url, timeout=5, allow_redirects=True)
+        res = requests.get(ping_url, timeout=5, allow_redirects=False)
         latency = int((time.time() - start) * 1000)
 
         # 只要有响应（2xx/3xx/4xx/5xx）都算通
@@ -703,4 +706,5 @@ async def api_ping(request: Request):
     except requests.exceptions.Timeout:
         return {"status": "error", "message": "timeout"}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        logger.error(f"[Ping] 请求异常: {e}")
+        return {"status": "error", "message": "请求失败"}
