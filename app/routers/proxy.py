@@ -184,7 +184,8 @@ def proxy_image(item_id: str, img_type: str, request: Request, v: str = None, no
     - nocache: 是否跳过后端缓存，直接请求新图片
     - 缓存策略：后端缓存7天 + 浏览器缓存1年
     """
-    # 🔒 img_type 白名单校验，防止路径逃逸至 Emby 其他端点
+    # 🔒 img_type 白名单校验，防止路径逃逸至 Emby 其他端点（兼容大小写）
+    img_type = img_type.capitalize()
     if img_type not in ALLOWED_IMG_TYPES:
         return Response(status_code=400)
     # 🔒 item_id 严格字符集校验（GUID/UUID/数字）
@@ -271,7 +272,7 @@ def proxy_smart_image(request: Request, item_id: str, name: str = "", year: str 
             pass 
 
     target_id = cached_result if cached_result and not str(cached_result).startswith('http') else item_id
-    img_type = type
+    img_type = type.capitalize()
     params = {"maxWidth": 1920, "quality": 80} if img_type.lower() == 'backdrop' else {"maxHeight": 800, "maxWidth": 600, "quality": 90}
     
     if img_type.lower() == 'primary' and target_id == item_id:
