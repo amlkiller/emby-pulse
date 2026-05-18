@@ -2,8 +2,9 @@ version: '3.8'
 
 services:
   emby-pulse:
-    # 1. 更换为 Pro 版镜像名
-    image: zeyu8023/embypulse-pro:latest
+    # 镜像通过 GitHub Actions 自动构建并发布到 GHCR
+    # 锁定版本可改为 ghcr.io/amlkiller/emby-pulse:1.4.0-OssSecurity
+    image: ghcr.io/amlkiller/emby-pulse:latest
     container_name: emby-pulse
     restart: unless-stopped
     # 使用端口映射替代 host 网络模式（更安全）

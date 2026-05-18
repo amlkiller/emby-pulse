@@ -5,6 +5,13 @@
 
   <h3>Emby 服务器的专业级管理中枢：影巢集成 · 风险管控 · 智能运维</h3>
 
+  <p>
+    <img src="https://img.shields.io/badge/version-1.4.0--OssSecurity-2EA44F?style=flat-square" alt="Version" />
+    <img src="https://img.shields.io/badge/python-3.9+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python" />
+    <img src="https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
+    <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License" />
+  </p>
+
   <a href="https://t.me/Emby_Pulse">
     <img src="https://img.shields.io/badge/Telegram-加入交流群-2CA5E0?style=for-the-badge&logo=telegram" alt="Telegram Group">
   </a>
@@ -142,26 +149,50 @@ Pro 版内置多个功能插件：
 
 ## 🚀 快速部署
 
+> 本仓库镜像通过 GitHub Actions 自动构建并发布到 **GHCR**（GitHub Container Registry），支持 `linux/amd64` 与 `linux/arm64`。
+
+**镜像地址：**
+
+| 镜像 | 说明 |
+|------|------|
+| `ghcr.io/amlkiller/emby-pulse:latest` | 本仓库（amlkiller）最新稳定版 |
+| `ghcr.io/amlkiller/emby-pulse:1.4.0-OssSecurity` | 锁定具体版本 |
+| `zeyu8023/embypulse-pro:latest` | 上游官方镜像 |
+
+### 端口说明
+
+EmbyPulse-Pro 物理隔离了两个端口，分别承载不同角色：
+
+| 端口 | 角色 | 说明 |
+|------|------|------|
+| `10307` | **管理端口（admin portal）** | 主仪表盘、运维工具、所有管理 API |
+| `10308` | **用户端口（user portal）** | 仅对邀请/求片等公开页面开放，物理隔离 |
+
+> 如只对外开放注册 / 求片，**只暴露 10308 即可**，10307 留在内网，安全性更高。
+
 ### Docker Compose（推荐）
 
 ```yaml
 version: '3.8'
 services:
   embypulse-pro:
-    image: zeyu8023/embypulse-pro:latest
+    image: ghcr.io/amlkiller/emby-pulse:latest
     container_name: embypulse-pro
     restart: unless-stopped
     ports:
-      - "10307:10307"  # 自定义端口，格式为 "主机端口:容器端口"
+      - "10307:10307"   # 管理端口（建议仅内网暴露）
+      - "10308:10308"   # 用户端口（可对外）
     volumes:
-      - ./config:/app/config      # 配置文件目录
-      - ./data:/app/data           # 数据库目录
+      - ./config:/workspace/config      # 配置文件目录
+      - ./data:/workspace/data          # 数据库与持久化目录
       # - /path/to/emby/data:/emby-data  # API 模式下可不挂载数据库
     environment:
       - TZ=Asia/Shanghai
-      # - PORT=10307               # 自定义容器内端口（默认 10307）
+      # - PORT=10307                 # 管理端口（默认 10307）
+      # - REQUEST_PORT=10308         # 用户端口（默认 10308）
       # - DB_PATH=/emby-data/playback_reporting.db  # 本地模式必填
-      # - FORCE_MIGRATE=true       # 强制迁移系统数据库
+      # - CORS_ORIGINS=https://your.domain          # 不设置默认拒绝跨域
+      # - FORCE_MIGRATE=1            # 强制迁移系统数据库
 ```
 
 ### 环境变量说明
@@ -169,22 +200,31 @@ services:
 | 变量 | 说明 | 默认值 | 必填 |
 |------|------|--------|------|
 | `TZ` | 时区设置 | `Asia/Shanghai` | 推荐 |
-| `PORT` | 容器内服务端口 | `10307` | 可选 |
+| `PORT` | 管理端口 | `10307` | 可选 |
+| `REQUEST_PORT` | 用户端口 | `10308` | 可选 |
 | `DB_PATH` | Playback Reporting 数据库路径 | - | 本地模式必填 |
-| `FORCE_MIGRATE` | 强制迁移系统数据库 | `false` | 可选 |
+| `EMBY_HOST` | Emby 服务器 URL（可后台填写） | - | 推荐 |
+| `EMBY_API_KEY` | Emby API Key（敏感字段，建议环境变量） | - | 推荐 |
+| `SECRET_KEY` | 会话加密密钥（未设置时自动生成） | - | 可选 |
+| `CORS_ORIGINS` | 允许跨域来源，逗号分隔；未设置即拒绝所有跨域 | - | 可选 |
+| `FORCE_MIGRATE` | 强制迁移系统数据库 | `0` | 可选 |
+| `AUTO_MIGRATE_DB` | 启动时自动迁移 | `0` | 可选 |
+
+> 🔐 **安全提示**：`EMBY_API_KEY`、`TG_BOT_TOKEN` 等敏感字段优先从环境变量读取；若通过环境变量设置，将自动从磁盘配置文件中清除。
 
 ### 端口配置说明
 
 **方式一：使用 ports 映射（推荐）**
 ```yaml
 ports:
-  - "8080:10307"  # 主机 8080 端口映射到容器 10307
+  - "8080:10307"   # 主机 8080 → 容器 10307（管理）
+  - "8081:10308"   # 主机 8081 → 容器 10308（用户）
 ```
 
 **方式二：使用 network_mode: host**
 ```yaml
 network_mode: host  # 直接使用主机网络，无需端口映射
-# 此时服务监听 PORT 环境变量指定的端口（默认 10307）
+# 此时服务监听 PORT / REQUEST_PORT 指定的端口
 ```
 
 ### 数据库模式说明
@@ -196,11 +236,11 @@ network_mode: host  # 直接使用主机网络，无需端口映射
 
 ### 强制迁移说明
 
-当系统数据库结构发生变化时，可通过设置 `FORCE_MIGRATE=true` 强制执行数据库迁移：
+当系统数据库结构发生变化时，可通过设置 `FORCE_MIGRATE=1` 强制执行数据库迁移：
 
 ```yaml
 environment:
-  - FORCE_MIGRATE=true  # 启动时强制迁移
+  - FORCE_MIGRATE=1   # 启动时强制迁移
 ```
 
 > ⚠️ 迁移会自动备份原数据库，但建议在操作前手动备份 `data/` 目录
@@ -288,6 +328,32 @@ A: 不会。风控仅检测异常行为，正常使用不受影响。VIP 用户�
 
 A: 系统工具页面底部有 Debug 模式开关，开启后可查看详细请求日志。
 
+### Q: 管理端口和用户端口为什么要分开？
+
+A: 管理端口（10307）承载所有运维 API 与 Cookie 会话，对外暴露风险大；用户端口（10308）只挂载邀请注册、求片等公开页面，物理隔离后即使被扫描也无法触达管理面。
+
+## 🧪 本地开发
+
+```bash
+# 1. 安装依赖（推荐使用 uv）
+pip install -r requirements.txt
+
+# 2. 复制并填写环境变量
+cp .env.example .env
+
+# 3. 启动
+python run.py
+# 或：uvicorn app.main:app --host 0.0.0.0 --port 10307
+```
+
+**运行测试：**
+
+```bash
+uv run --with pytest pytest tests/ -v
+```
+
+> Windows 控制台输出含 Emoji，建议设置 `PYTHONIOENCODING=utf-8` 以避免 GBK 编码错误。
+
 ## ☕ 赞赏支持
 
 如果您觉得 EmbyPulse-Pro 好用，欢迎赞赏支持作者的持续迭代！
@@ -316,5 +382,5 @@ A: 系统工具页面底部有 Debug 模式开关，开启后可查看详细请�
 - 禁止闭源封装或商业销售
 
 <div align="center">
-  <sub>EmbyPulse-Pro Team © 2024-2025</sub>
+  <sub>EmbyPulse-Pro Team © 2024-2026</sub>
 </div>
