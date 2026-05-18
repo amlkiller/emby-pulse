@@ -20,10 +20,8 @@ COPY templates ./templates
 COPY static ./static
 
 # 预创建数据目录（volume 挂载点）
-RUN mkdir -p /workspace/config /workspace/data && \
-    useradd -m -r appuser && \
-    chown -R appuser:appuser /workspace
-USER appuser
+# 以 root 运行，避免宿主机挂载目录属主不匹配导致的写入权限问题
+RUN mkdir -p /workspace/config /workspace/data
 
 EXPOSE 10307 10308
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "10307"]
