@@ -240,7 +240,7 @@ def api_get_settings(request: Request):
             result_data[f"{field}_readonly"] = False
     
     # 🔥 Webhook Token 特殊处理
-    webhook_token = cfg.get("webhook_token", "embypulse")
+    webhook_token = cfg.get("webhook_token", "")
     webhook_source = cfg.get_env_source("webhook_token")
     
     if webhook_source == "env":
@@ -262,7 +262,7 @@ def api_get_settings(request: Request):
     else:
         result_data["webhook_url"] = f"{cfg.get('emby_public_url', '') or cfg.get('emby_host', '')}/api/v1/webhook"
     result_data["webhook_header_name"] = "X-Webhook-Token"
-    result_data["webhook_token_available"] = bool(webhook_token and webhook_token != "embypulse")
+    result_data["webhook_token_available"] = bool(webhook_token and webhook_token != "embypulse" and webhook_token not in ("emby", "test", "123456", "password"))
     
     return {"status": "success", "data": result_data}
 

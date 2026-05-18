@@ -341,6 +341,28 @@ app = FastAPI(
     redoc_url=None  # 🔒 关闭 ReDoc (/redoc)
 )
 
+# 🔒 全局异常处理器：未捕获异常统一返回脱敏响应，避免泄露堆栈
+import traceback
+import uuid
+from fastapi import Request as _Request
+from fastapi.responses import JSONResponse as _JSONResponse
+from starlette.exceptions import HTTPException as _StarletteHTTPException
+
+@app.exception_handler(Exception)
+async def _global_exception_handler(request: _Request, exc: Exception):
+    # HTTPException 走 FastAPI 默认处理，保留 status_code 与 detail
+    if isinstance(exc, _StarletteHTTPException):
+        raise exc
+    request_id = uuid.uuid4().hex[:12]
+    logging.getLogger("app.unhandled").error(
+        f"[未捕获异常] request_id={request_id} path={request.url.path} "
+        f"method={request.method}\n{traceback.format_exc()}"
+    )
+    return _JSONResponse(
+        status_code=500,
+        content={"error": "internal_error", "request_id": request_id},
+    )
+
 # 中间件
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(DatabaseSessionMiddleware)

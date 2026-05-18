@@ -75,7 +75,7 @@ def api_get_bot_settings(request: Request):
             all_config[field] = mask_sensitive(all_config[field])
     
     # 🔥 Webhook Token 特殊处理
-    webhook_token = cfg.get("webhook_token", "embypulse")
+    webhook_token = cfg.get("webhook_token", "")
     webhook_source = cfg.get_env_source("webhook_token")
     
     if webhook_source == "env":

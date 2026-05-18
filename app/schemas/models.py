@@ -10,7 +10,7 @@ class SettingsModel(BaseModel):
     emby_api_key: str
     tmdb_api_key: Optional[str] = ""
     proxy_url: Optional[str] = ""
-    webhook_token: Optional[str] = "embypulse"
+    webhook_token: Optional[str] = ""
     hidden_users: List[str] = []
     emby_public_url: Optional[str] = ""  
     welcome_message: Optional[str] = ""  
