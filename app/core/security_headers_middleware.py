@@ -62,10 +62,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com "
             "https://cdn.quilljs.com https://cdn.bootcdn.net https://html2canvas.hertzen.com"
         )
+        # Alpine.js / Tailwind CDN 需要 unsafe-eval 才能求值模板表达式
         response.headers["Content-Security-Policy"] = (
             f"default-src 'self'; "
-            f"script-src 'self' 'unsafe-inline' {cdn_sources}; "
-            f"script-src-elem 'self' 'nonce-{nonce}' {cdn_sources}; "
+            f"script-src 'self' 'unsafe-inline' 'unsafe-eval' {cdn_sources}; "
+            f"script-src-elem 'self' 'unsafe-eval' 'nonce-{nonce}' {cdn_sources}; "
             f"script-src-attr 'unsafe-inline'; "
             f"style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com https://cdn.quilljs.com; "
             f"img-src 'self' data: blob: https:; "
