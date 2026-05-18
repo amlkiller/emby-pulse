@@ -1595,8 +1595,8 @@ document.addEventListener('alpine:init', () => {
                 return;
             }
             
-            if(this.registerForm.password.length < 4) {
-                this.showToast('密码至少4个字符', 'error');
+            if(this.registerForm.password.length < 8) {
+                this.showToast('密码至少8个字符', 'error');
                 return;
             }
             

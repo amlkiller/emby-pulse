@@ -21,7 +21,7 @@ _MIME_BY_FORMAT = {
 }
 
 
-def _check_magic_bytes(content: bytes) -> bool:
+def check_magic_bytes(content: bytes) -> bool:
     if content.startswith(b"\x89PNG\r\n\x1a\n"):
         return True
     if content.startswith(b"\xff\xd8\xff"):
@@ -70,7 +70,7 @@ def validate_base64_image(data_url: str, max_bytes: int = 2 * 1024 * 1024) -> st
     if len(raw) > max_bytes:
         raise ValueError(f"头像不能超过 {max_bytes // 1024} KB")
 
-    if not _check_magic_bytes(raw):
+    if not check_magic_bytes(raw):
         raise ValueError("头像文件头校验失败，疑似伪造")
 
     try:

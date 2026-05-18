@@ -7,6 +7,7 @@ from app.core.media_adapter import media_api
 
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 from app.core.security import validate_password_strength  # 🔒 统一密码强度校验
+from app.utils.image_validator import check_magic_bytes  # 🔒 头像魔数校验
 import requests
 import datetime
 import secrets
@@ -728,6 +729,8 @@ async def api_user_self_avatar(request: Request, file: UploadFile = File(...)):
         img_data = await file.read()
         if len(img_data) > 10 * 1024 * 1024:
             return {"status": "error", "message": "图片不能超过 10MB"}
+        if not check_magic_bytes(img_data):
+            return {"status": "error", "message": "文件头校验失败，请上传有效的图片文件"}
         c_type = file.content_type or "image/jpeg"
         b64 = base64.b64encode(img_data)
         media_api.delete(f"/Users/{user_id}/Images/Primary")

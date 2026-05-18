@@ -46,6 +46,7 @@ RATE_LIMITS = {
     "/api/user/points/transfer": {"limit": 5, "window": 60},
     "/api/requests/auth": {"limit": 10, "window": 60},
     "/api/register": {"limit": 5, "window": 300},
+    "/api/requests/register": {"limit": 5, "window": 300},
     # Token 校验：暴破/枚举防护
     "/api/tokens/verify": {"limit": 30, "window": 60},
     # 图片缓存清理（管理操作）
