@@ -2701,7 +2701,7 @@ async function loadLocalAuthSettings() {
             const d = data.data;
             document.getElementById('enable_local_auth').checked = d.enable_local_auth || false;
             document.getElementById('disable_emby_auth').checked = d.disable_emby_auth || false;
-            updateLocalAuthUI(d.enable_local_auth, d.local_users_count > 0);
+            updateLocalAuthUI(d.enable_local_auth, d.has_local_admin);
         }
     } catch (e) {
         console.error('加载认证设置失败', e);

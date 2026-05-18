@@ -16,6 +16,7 @@ SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
 CSRF_EXEMPT_PATHS = {
     "/api/v1/webhook",
     "/api/bot/webhook",
+    "/api/bot/wecom_webhook",
     "/api/telegram/webhook",
     "/api/login",
     "/api/register",

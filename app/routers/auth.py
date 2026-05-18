@@ -419,7 +419,6 @@ async def get_auth_settings():
         "data": {
             "enable_local_auth": enable_local,
             "disable_emby_auth": cfg.get("disable_emby_auth", False),  # 新增：是否禁用 Emby 认证
-            "local_users_count": local_users_count,
             "has_local_admin": local_users_count > 0,
             "emby_configured": emby_configured  # Emby 是否已配置
         }

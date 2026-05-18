@@ -1352,6 +1352,10 @@ def delete_announcement(ann_id: int, request: Request):
 @router.post("/api/announcements/{ann_id}/view")
 def increment_announcement_view(ann_id: int, request: Request):
     """增加公告浏览次数"""
+    user = request.session.get("user") or request.session.get("req_user")
+    if not user:
+        return {"status": "error", "message": "请先登录"}
+
     _ensure_announcement_table()
     
     conn = sqlite3.connect(SYSTEM_DB_PATH)

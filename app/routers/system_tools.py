@@ -433,11 +433,9 @@ async def toggle_debug(req: Request):
 async def restart_system(req: Request):
     """重启 EmbyPulse 服务（Docker 环境下退出进程，由容器自动重启）"""
     # 🔒 安全检查：必须登录且为管理员
-    user = req.session.get("user")
-    if not user:
+    if not req.session.get("user"):
         return {"success": False, "msg": "未授权"}
-    is_admin = user.get("is_admin") or user.get("Policy", {}).get("IsAdministrator", False)
-    if not is_admin:
+    if not is_admin_user(req):
         return {"success": False, "msg": "需要管理员权限"}
 
     import os, signal, threading

@@ -951,6 +951,7 @@ def api_update_hidden_libraries(data: HiddenLibrariesModel, request: Request):
 @router.post("/api/manage/invite/gen")
 def api_gen_invite(data: InviteGenModelLocal, request: Request):
     if not request.session.get("user"): return {"status": "error"}
+    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
         admin_user = request.session.get("user", {})
         admin_name = admin_user.get("name", admin_user.get("username", "未知"))
@@ -990,6 +991,7 @@ def api_gen_invite(data: InviteGenModelLocal, request: Request):
 @router.get("/api/manage/invites")
 def api_get_invites(request: Request, code_type: str = "all"):
     if not request.session.get("user"): return {"status": "error"}
+    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
         if code_type in ("register", "renew"):
             rows = query_db("SELECT * FROM invitations WHERE type = ? ORDER BY created_at DESC", (code_type,))
@@ -1025,6 +1027,7 @@ def api_get_invites(request: Request, code_type: str = "all"):
 def api_export_invites(request: Request, code_type: str = "all"):
     """导出邀请码/续费码为CSV"""
     if not request.session.get("user"): return {"status": "error"}
+    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
         if code_type in ("register", "renew"):
             rows = query_db("SELECT code, type, days, used_count, max_uses, used_by, status, created_at, used_at, req_free, req_free_count FROM invitations WHERE type = ? ORDER BY created_at DESC", (code_type,))
@@ -1050,6 +1053,7 @@ def api_export_invites(request: Request, code_type: str = "all"):
 @router.post("/api/manage/invites/batch")
 def api_manage_invites_batch(data: InviteBatchModelLocal, request: Request):
     if not request.session.get("user"): return {"status": "error"}
+    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
         admin_user = request.session.get("user", {})
         admin_name = admin_user.get("name", admin_user.get("username", "未知"))
@@ -1502,6 +1506,8 @@ def api_manage_user_delete(user_id: str, request: Request):
     """删除单个用户 - 需要密码验证(首次验证后 30 分钟内有效,重启后失效)"""
     if not request.session.get("user"):
         return {"status": "error", "message": "未登录"}
+    if not is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限"}
 
     # 🔥 清除用户缓存
     invalidate_emby_users_cache()
@@ -1594,6 +1600,7 @@ def api_manage_user_delete(user_id: str, request: Request):
 @router.post("/api/manage/users/batch")
 def api_manage_users_batch(data: BatchActionModelLocal, request: Request):
     if not request.session.get("user"): return {"status": "error"}
+    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     if len(data.user_ids) > 100:
         return {"status": "error", "message": "单次批量操作最多 100 个用户"}
 
@@ -1855,6 +1862,7 @@ def api_set_default_template(data: dict, request: Request):
 def api_get_default_template(request: Request):
     """获取当前默认用户权限模板"""
     if not request.session.get("user"): return {"status": "error", "message": "未登录"}
+    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
         template_id = cfg.get("default_user_template_id") or ""
         return {"status": "success", "data": {"template_user_id": template_id}}

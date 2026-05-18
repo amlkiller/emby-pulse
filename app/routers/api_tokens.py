@@ -8,6 +8,7 @@ from typing import Optional
 import sqlite3
 import hashlib
 from app.core.database import SYSTEM_DB_PATH
+from app.routers.auth import is_admin_user
 from app.core.jwt_token import create_api_token, verify_api_token
 from app.core.config import cfg
 
@@ -37,6 +38,8 @@ async def create_token(request: Request, data: CreateTokenRequest):
     user = request.session.get("user")
     if not user:
         raise HTTPException(status_code=401, detail="未登录")
+    if not is_admin_user(request):
+        raise HTTPException(status_code=403, detail="需要管理员权限")
 
     # 检查过期时间上限
     MAX_TOKEN_EXPIRE_HOURS = 24 * 365  # 最大 1 年
@@ -95,7 +98,9 @@ async def list_tokens(request: Request):
     user = request.session.get("user")
     if not user:
         raise HTTPException(status_code=401, detail="未登录")
-    
+    if not is_admin_user(request):
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+
     try:
         conn = sqlite3.connect(SYSTEM_DB_PATH)
         c = conn.cursor()
@@ -133,7 +138,9 @@ async def delete_token(request: Request, token_id: int):
     user = request.session.get("user")
     if not user:
         raise HTTPException(status_code=401, detail="未登录")
-    
+    if not is_admin_user(request):
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+
     try:
         conn = sqlite3.connect(SYSTEM_DB_PATH)
         c = conn.cursor()
