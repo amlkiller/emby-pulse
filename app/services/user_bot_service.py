@@ -40,7 +40,6 @@ MAX_WAITING_TASKS = 200  # 最大等待任务数
 
 # 频率限制：防刷
 _rate_limit = defaultdict(float)  # tg_user_id -> last_action_time
-_reg_lock = threading.Lock()
 
 # 🚀 绑定状态缓存（减少数据库查询）
 _binding_cache = {}  # tg_user_id -> {"binding": dict, "cached_at": timestamp}
@@ -72,10 +71,30 @@ _username_locks = {}  # username_lower -> threading.Lock
 _username_locks_lock = threading.Lock()  # 保护 _username_locks 字典
 _USERNAME_LOCK_MAX_SIZE = 1000  # 最大锁数量，防止内存泄漏
 
-# 🚀 注册排队计数器
-_reg_queue_count = 0  # 当前正在注册的人数
-_reg_queue_lock = threading.Lock()
-MAX_CONCURRENT_REG = 10  # 最大同时注册人数
+# 🚀 注册并发控制（FIFO 排队 + 软预占）
+MAX_CONCURRENT_REG = 20             # 实际并发上限：Emby /Users/New 同时处理量
+REG_QUEUE_MAX_WAIT = 180            # 排队最长等待秒数，超时自动放弃
+USER_COUNT_CACHE_TTL = 30           # Emby /Users 缓存秒数
+USER_COUNT_NEAR_LIMIT_MARGIN = 3    # 临近 quota 时强制刷新缓存的安全边距
+BATCH_FLUSH_INTERVAL = 10           # batch_used 落盘间隔（秒）
+BATCH_FLUSH_THRESHOLD = 5           # 累计增量阈值触发落盘
+
+_reg_sema = threading.BoundedSemaphore(MAX_CONCURRENT_REG)
+_reg_waiters_lock = threading.Lock()
+_reg_waiters = 0                    # 含正在 acquire 等待的人数
+_reg_active = 0                     # 已 acquire 进入临界区的人数
+
+# quota 软预占：在调用 Emby 建号前先占槽，建号失败时回滚
+_quota_lock = threading.Lock()
+_quota_reserved = 0
+_user_count_cache = {"count": None, "users": None, "ts": 0.0}
+
+# batch_used 内存权威值 + 定时落盘到 cfg.json
+_batch_used_lock = threading.Lock()
+_batch_used_mem = None              # 懒初始化，None 表示未加载
+_batch_used_dirty = 0               # 距上次 flush 的累计增量
+_batch_flush_stop = threading.Event()
+_batch_flush_thread = None
 
 
 def _submit_task(func, *args, **kwargs):
@@ -119,23 +138,36 @@ def _get_queue_status():
 
 
 def _enter_reg_queue(chat_id):
-    """进入注册队列，如果队列满则返回 False 并发送提示"""
-    global _reg_queue_count
-    with _reg_queue_lock:
-        if _reg_queue_count >= MAX_CONCURRENT_REG:
-            # 队列已满，提示用户等待
-            waiting = _reg_queue_count - MAX_CONCURRENT_REG + 1
-            _send(chat_id, f"⏳ 注册人数较多，你前面还有 {waiting} 人排队，请稍候...")
-            return False
-        _reg_queue_count += 1
-        return True
+    """进入注册队列。超出并发上限时阻塞排队并发送位置提示，超时返回 False。"""
+    global _reg_waiters, _reg_active
+    with _reg_waiters_lock:
+        _reg_waiters += 1
+        pos = _reg_waiters
+        active = _reg_active
+    if active >= MAX_CONCURRENT_REG:
+        # 已经满了，告诉用户大致位置（含自己）
+        _send(chat_id, f"⏳ 当前注册人数较多，你排在第 {pos} 位，请稍候（最长等待 {REG_QUEUE_MAX_WAIT // 60} 分钟）...")
+    got = _reg_sema.acquire(timeout=REG_QUEUE_MAX_WAIT)
+    with _reg_waiters_lock:
+        _reg_waiters -= 1
+        if got:
+            _reg_active += 1
+    if not got:
+        _send(chat_id, "⌛ 注册排队等待超时，请稍后重试")
+        return False
+    return True
 
 
 def _leave_reg_queue():
-    """离开注册队列"""
-    global _reg_queue_count
-    with _reg_queue_lock:
-        _reg_queue_count = max(0, _reg_queue_count - 1)
+    """离开注册队列，释放信号量。"""
+    global _reg_active
+    with _reg_waiters_lock:
+        _reg_active = max(0, _reg_active - 1)
+    try:
+        _reg_sema.release()
+    except ValueError:
+        # BoundedSemaphore 释放次数超出上限，理论上不应发生
+        logger.exception("[UserBot] _reg_sema release 异常")
 
 
 def _send_open_reg_closed_notify(reason=""):
@@ -851,41 +883,269 @@ def cmd_register(chat_id, tg_user_id, tg_name):
           reply_markup={"inline_keyboard": [[{"text": "❌ 取消", "callback_data": "ub_cancel_state"}]]})
 
 
+# ==========================================
+# 注册 quota 软预占 / 用户数缓存 / batch_used 落盘
+# ==========================================
+
+def _load_batch_used_from_cfg():
+    """从 cfg.json 加载 batch_used 到内存，幂等"""
+    global _batch_used_mem, _batch_used_dirty
+    with _batch_used_lock:
+        if _batch_used_mem is None:
+            try:
+                _batch_used_mem = int(cfg.get("user_bot_reg_batch_used", 0) or 0)
+            except Exception:
+                _batch_used_mem = 0
+            _batch_used_dirty = 0
+
+
+def _flush_batch_used(force=False):
+    """把内存中的 batch_used 落盘到 cfg.json"""
+    global _batch_used_dirty
+    with _batch_used_lock:
+        if _batch_used_mem is None:
+            return
+        if not force and _batch_used_dirty == 0:
+            return
+        try:
+            cfg.set("user_bot_reg_batch_used", _batch_used_mem)
+            _batch_used_dirty = 0
+        except Exception:
+            logger.exception("[UserBot] batch_used 落盘失败")
+
+
+def _batch_flush_loop():
+    """后台线程：周期性把 _batch_used_mem flush 到 cfg.json"""
+    while not _batch_flush_stop.is_set():
+        try:
+            if _batch_flush_stop.wait(BATCH_FLUSH_INTERVAL):
+                break
+            _flush_batch_used()
+        except Exception:
+            logger.exception("[UserBot] batch_used flush 循环异常")
+            # 出错后稍候再试，避免热循环
+            if _batch_flush_stop.wait(5):
+                break
+
+
+def _start_batch_flush_thread():
+    """启动后台 flush 线程（幂等）"""
+    global _batch_flush_thread
+    _batch_flush_stop.clear()
+    if _batch_flush_thread is not None and _batch_flush_thread.is_alive():
+        return
+    _batch_flush_thread = threading.Thread(target=_batch_flush_loop, daemon=True, name="batch-flush")
+    _batch_flush_thread.start()
+
+
+def get_batch_used_snapshot():
+    """对外暴露的 batch_used 当前值，供 API 读取（避免 cfg.json 滞后）"""
+    with _batch_used_lock:
+        if _batch_used_mem is not None:
+            return _batch_used_mem
+    try:
+        return int(cfg.get("user_bot_reg_batch_used", 0) or 0)
+    except Exception:
+        return 0
+
+
+def _refresh_user_count_cache_locked(force=False, quota=0):
+    """在 _quota_lock 持有的前提下刷新缓存。返回 count 或 None。
+    quota>0 且当前 count 接近上限时，强制刷新以保证准确。
+    """
+    now = time.time()
+    cached = _user_count_cache.get("count")
+    cached_ts = _user_count_cache.get("ts", 0.0)
+    fresh = (cached is not None) and (now - cached_ts < USER_COUNT_CACHE_TTL)
+    near_limit = (
+        quota > 0 and cached is not None
+        and cached >= max(0, quota - USER_COUNT_NEAR_LIMIT_MARGIN)
+    )
+    if fresh and not force and not near_limit:
+        return cached
+    try:
+        users = media_api.get("/Users", timeout=5).json()
+        hidden_users = cfg.get("hidden_users") or []
+        normal_users = [
+            u for u in users
+            if u.get("Name") not in hidden_users
+            and not u.get("Policy", {}).get("IsAdministrator")
+        ]
+        _user_count_cache["count"] = len(normal_users)
+        _user_count_cache["users"] = users
+        _user_count_cache["ts"] = now
+        return _user_count_cache["count"]
+    except Exception as e:
+        logger.warning(f"[UserBot] 刷新 Emby 用户数失败: {e}")
+        return cached  # 退回到旧值（也可能是 None）
+
+
+def _invalidate_user_count_cache():
+    with _quota_lock:
+        _user_count_cache["ts"] = 0.0
+
+
+def get_cached_user_count_for_api(force=False):
+    """供 /api/bot/reg_quota_status 读取的入口"""
+    with _quota_lock:
+        cnt = _refresh_user_count_cache_locked(force=force)
+    return cnt if cnt is not None else 0
+
+
+def get_users_list_cached(max_age=USER_COUNT_CACHE_TTL):
+    """获取缓存的 Emby 用户列表（用于重名检查）。缓存失效时现拉。
+    返回 list 或 None（失败时）。
+    """
+    with _quota_lock:
+        users = _user_count_cache.get("users")
+        ts = _user_count_cache.get("ts", 0.0)
+        if users is not None and time.time() - ts < max_age:
+            return users
+    # 缓存失效，主动刷新一次
+    with _quota_lock:
+        _refresh_user_count_cache_locked(force=True)
+        return _user_count_cache.get("users")
+
+
+def _reserve_quota_slot(quota_mode, quota):
+    """软预占一个 quota 槽。成功返回 (True, None)，失败返回 (False, reason)。
+    reason in {"batch_full", "total_full", "emby_unreachable"}。
+    成功时 _quota_reserved 自增；调用方必须保证最终 _release_quota_slot 被调用。
+    """
+    global _quota_reserved
+    if quota <= 0:
+        return True, None
+    with _quota_lock:
+        if quota_mode == "batch":
+            _load_batch_used_from_cfg()  # 确保 _batch_used_mem 已初始化
+            used = _batch_used_mem or 0
+            if used + _quota_reserved >= quota:
+                return False, "batch_full"
+            _quota_reserved += 1
+            return True, None
+        # total 模式
+        cnt = _refresh_user_count_cache_locked(quota=quota)
+        if cnt is None:
+            # Emby 不可达：保守拒绝，避免无脑放行造成超额
+            if _quota_reserved > 0:
+                return False, "emby_unreachable"
+            # 没有任何在飞预占且缓存为空 → 让首请求探路放行
+            _quota_reserved += 1
+            return True, None
+        if cnt + _quota_reserved >= quota:
+            # 临近上限，再强制刷新一次确认
+            cnt2 = _refresh_user_count_cache_locked(force=True, quota=quota)
+            if cnt2 is not None and cnt2 + _quota_reserved >= quota:
+                return False, "total_full"
+        _quota_reserved += 1
+        return True, None
+
+
+def _release_quota_slot(committed, quota_mode, quota):
+    """释放软预占。committed=True 表示注册真的成功了。
+    - batch 模式：committed 时把 _batch_used_mem 自增 1，达 quota 关注册并通知。
+    - total 模式：committed 时失效用户数缓存，并强制刷新检查是否需要关注册。
+    """
+    global _quota_reserved
+    with _quota_lock:
+        if _quota_reserved > 0:
+            _quota_reserved -= 1
+    if not committed:
+        return
+    if quota_mode == "batch":
+        _inc_batch_used(quota)
+    else:
+        # total: 缓存里的旧 count 已经无效（多了一个新用户）
+        _invalidate_user_count_cache()
+        if quota > 0:
+            with _quota_lock:
+                cnt = _refresh_user_count_cache_locked(force=True, quota=quota)
+            if cnt is not None and cnt >= quota:
+                try:
+                    cfg.set("user_bot_open_reg", False)
+                    logger.info(f"[UserBot] 用户总数已达上限({cnt}/{quota})，开放注册已自动关闭")
+                    _send_open_reg_closed_notify("用户总数已达上限")
+                except Exception:
+                    logger.exception("[UserBot] 关闭开放注册失败")
+
+
+def _inc_batch_used(quota):
+    """batch 模式：注册成功后递增 batch_used。达 quota 立即落盘并关注册。"""
+    global _batch_used_mem, _batch_used_dirty
+    closed_now = False
+    with _batch_used_lock:
+        if _batch_used_mem is None:
+            try:
+                _batch_used_mem = int(cfg.get("user_bot_reg_batch_used", 0) or 0)
+            except Exception:
+                _batch_used_mem = 0
+            _batch_used_dirty = 0
+        _batch_used_mem += 1
+        _batch_used_dirty += 1
+        should_flush = _batch_used_dirty >= BATCH_FLUSH_THRESHOLD
+        if quota > 0 and _batch_used_mem >= quota:
+            closed_now = True
+            should_flush = True
+        if should_flush:
+            try:
+                cfg.set("user_bot_reg_batch_used", _batch_used_mem)
+                _batch_used_dirty = 0
+            except Exception:
+                logger.exception("[UserBot] batch_used 落盘失败")
+    if closed_now:
+        try:
+            cfg.set("user_bot_open_reg", False)
+            logger.info(f"[UserBot] 批次注册名额已用完({_batch_used_mem}/{quota})，开放注册已自动关闭")
+            _send_open_reg_closed_notify("批次名额已满")
+        except Exception:
+            logger.exception("[UserBot] 关闭开放注册失败")
+
+
 def _do_register(chat_id, tg_user_id, custom_name, tg_username="", tg_display_name=""):
     """执行注册逻辑"""
-    # 🚀 进入注册队列
+    # 🚀 进入注册队列（FIFO 排队，超出 MAX_CONCURRENT_REG 时阻塞等待）
     if not _enter_reg_queue(chat_id):
         return
-    
+
+    reserved = False
+    committed = False
+    quota_mode = "total"
+    quota = 0
     try:
         # 检查开放注册是否开启
         if not cfg.get("user_bot_open_reg"):
             _send(chat_id, "❌ 开放注册已关闭，请联系管理员获取注册码后使用 /code 注册码")
             return
 
-        # 🎯 新逻辑：支持两种名额模式
+        # 🎯 支持两种名额模式
         quota_mode = cfg.get("user_bot_reg_quota_mode", "total")
-        quota = int(cfg.get("user_bot_reg_quota", 0))
+        try:
+            quota = int(cfg.get("user_bot_reg_quota", 0) or 0)
+        except Exception:
+            quota = 0
 
+        # 🔒 软预占 quota（在调用 Emby 建号前先占槽，杜绝并发超额）
         if quota > 0:
-            if quota_mode == "batch":
-                batch_used = int(cfg.get("user_bot_reg_batch_used", 0))
-                if batch_used >= quota:
+            ok, reason = _reserve_quota_slot(quota_mode, quota)
+            if not ok:
+                if reason == "batch_full":
                     _send(chat_id, "❌ 本次开放注册名额已用完，请联系管理员")
-                    _send_open_reg_closed_notify("名额已满")
-                    return
-            else:
-                try:
-                    users = media_api.get("/Users", timeout=5).json()
-                    hidden_users = cfg.get("hidden_users") or []
-                    normal_users = [u for u in users if u.get("Name") not in hidden_users and not u.get("Policy", {}).get("IsAdministrator")]
-                    if len(normal_users) >= quota:
-                        _send(chat_id, "❌ 用户数量已达上限，开放注册已自动关闭")
+                    try:
                         cfg.set("user_bot_open_reg", False)
-                        _send_open_reg_closed_notify("名额已满")
-                        return
-                except Exception as e:
-                    logger.error(f"检查用户总数失败: {e}")
+                    except Exception:
+                        pass
+                    _send_open_reg_closed_notify("批次名额已满")
+                elif reason == "total_full":
+                    _send(chat_id, "❌ 用户数量已达上限，开放注册已自动关闭")
+                    try:
+                        cfg.set("user_bot_open_reg", False)
+                    except Exception:
+                        pass
+                    _send_open_reg_closed_notify("用户总数已达上限")
+                else:
+                    _send(chat_id, "❌ 暂时无法检查注册名额，请稍后重试")
+                return
+            reserved = True
 
         max_reg = int(cfg.get("user_bot_max_reg", 0))
         if max_reg > 0 and quota <= 0:
@@ -923,11 +1183,17 @@ def _do_register(chat_id, tg_user_id, custom_name, tg_username="", tg_display_na
         
         with username_lock:
             try:
-                users = media_api.get("/Users", timeout=5).json()
-                if any(u['Name'].lower() == safe_name.lower() for u in users):
-                    _send(chat_id, f"❌ 用户名 <b>{safe_name}</b> 已被占用，请换一个")
-                    _user_state[str(tg_user_id)] = {"action": "register_name"}
-                    return
+                # 优先复用缓存的用户列表（减少 Emby /Users 调用）
+                users = get_users_list_cached() or []
+                if any(u.get('Name', '').lower() == safe_name.lower() for u in users):
+                    # 缓存可能过时，force 拉一次确认
+                    with _quota_lock:
+                        _refresh_user_count_cache_locked(force=True)
+                        users = _user_count_cache.get("users") or []
+                    if any(u.get('Name', '').lower() == safe_name.lower() for u in users):
+                        _send(chat_id, f"❌ 用户名 <b>{safe_name}</b> 已被占用，请换一个")
+                        _user_state[str(tg_user_id)] = {"action": "register_name"}
+                        return
 
                 create_res = media_api.post("/Users/New", json={"Name": safe_name}, timeout=10)
                 if create_res.status_code not in [200, 201]:
@@ -987,25 +1253,8 @@ def _do_register(chat_id, tg_user_id, custom_name, tg_username="", tg_display_na
                 except Exception as e:
                     logger.error(f"记录注册日志失败: {e}")
 
-                if quota_mode == "batch" and quota > 0:
-                    with _reg_lock:
-                        batch_used = int(cfg.get("user_bot_reg_batch_used", 0)) + 1
-                        cfg.set("user_bot_reg_batch_used", batch_used)
-                        if batch_used >= quota:
-                            cfg.set("user_bot_open_reg", False)
-                            logger.info(f"[UserBot] 批次注册名额已用完({batch_used}/{quota})，开放注册已自动关闭")
-                            _send_open_reg_closed_notify("批次名额已满")
-
-                if quota_mode == "total" and quota > 0:
-                    try:
-                        users = media_api.get("/Users", timeout=5).json()
-                        hidden_users = cfg.get("hidden_users") or []
-                        normal_users = [u for u in users if u.get("Name") not in hidden_users and not u.get("Policy", {}).get("IsAdministrator")]
-                        if len(normal_users) >= quota:
-                            cfg.set("user_bot_open_reg", False)
-                            logger.info(f"[UserBot] 用户总数已达上限({len(normal_users)}/{quota})，开放注册已自动关闭")
-                            _send_open_reg_closed_notify("用户总数已达上限")
-                    except Exception: pass
+                # ✅ 标记为已提交：finally 中将调用 _release_quota_slot(committed=True, ...)
+                committed = True
 
                 _send(chat_id, f"🎉 <b>注册成功！</b>\n\n"
                       f"👤 用户名：<code>{safe_name}</code>\n"
@@ -1016,6 +1265,11 @@ def _do_register(chat_id, tg_user_id, custom_name, tg_username="", tg_display_na
             except Exception as e:
                 _send(chat_id, f"❌ 注册异常：{e}")
     finally:
+        if reserved:
+            try:
+                _release_quota_slot(committed, quota_mode, quota)
+            except Exception:
+                logger.exception("[UserBot] 释放 quota 预占失败")
         _leave_reg_queue()
 
 
@@ -4323,10 +4577,19 @@ class UserBot:
         # 🔥 启动定时任务线程
         self.scheduler_thread = threading.Thread(target=self._scheduler_loop, daemon=True)
         self.scheduler_thread.start()
+        # 🔒 加载 batch_used 内存值 + 启动定时落盘线程
+        _load_batch_used_from_cfg()
+        _start_batch_flush_thread()
         logger.info("🤖 [Pro] 用户 TG 机器人已启动")
 
     def stop(self):
         self.running = False
+        # 同步 flush 一次防止丢失增量
+        _batch_flush_stop.set()
+        try:
+            _flush_batch_used(force=True)
+        except Exception:
+            logger.exception("[UserBot] stop 时 flush batch_used 失败")
 
     def _set_commands(self):
         cmds = [

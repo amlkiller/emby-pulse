@@ -360,6 +360,22 @@
                             <span class="text-gray-500 dark:text-gray-400">当前状态</span>
                             <span id="quota-status-text" class="font-medium text-gray-700 dark:text-gray-300">-</span>
                         </div>
+                        <div class="flex items-center justify-between text-[12px] mt-2 pt-2 border-t border-gray-200/60 dark:border-white/5">
+                            <span class="text-gray-500 dark:text-gray-400">
+                                注册队列
+                                <span class="ml-1 text-gray-400 dark:text-gray-500" title="实时反映 /register 流程中正在处理 / 排队的请求数">
+                                    <i class="fa-regular fa-circle-question text-[10px]"></i>
+                                </span>
+                            </span>
+                            <span id="quota-queue-text" class="font-medium text-gray-700 dark:text-gray-300">-</span>
+                        </div>
+                        <div class="flex items-center justify-between text-[12px] mt-1">
+                            <span class="text-gray-500 dark:text-gray-400">开放注册累计</span>
+                            <span id="quota-open-total" class="font-medium text-gray-700 dark:text-gray-300">-</span>
+                        </div>
+                        <div class="flex items-center justify-end text-[10px] mt-2 text-gray-400 dark:text-gray-500">
+                            <span><i class="fa-regular fa-clock mr-1"></i>每 5 秒刷新 · <span id="quota-updated-at">-</span></span>
+                        </div>
                     </div>
                 </div>
 
@@ -1343,13 +1359,63 @@
     }
 
     // 加载名额状态
+    let quotaPollTimer = null;
+    const QUOTA_POLL_INTERVAL = 5000; // 5 秒轮询
+
+    function _stopQuotaPolling() {
+        if (quotaPollTimer) {
+            clearInterval(quotaPollTimer);
+            quotaPollTimer = null;
+        }
+    }
+
+    function _startQuotaPolling() {
+        if (quotaPollTimer) return;
+        quotaPollTimer = setInterval(() => {
+            if (document.visibilityState !== 'visible') return;
+            loadQuotaStatus();
+        }, QUOTA_POLL_INTERVAL);
+    }
+
+    function _renderQueueStatus(el, rq) {
+        // 用 DOM API 构建，避免 innerHTML 引入 XSS 隐患
+        el.textContent = '';
+        const active = Number.isFinite(rq.active) ? rq.active : 0;
+        const waiting = Number.isFinite(rq.waiting) ? rq.waiting : 0;
+        const max = Number.isFinite(rq.max) ? rq.max : 0;
+        const busy = max > 0 && (active >= max || waiting > 0);
+
+        const activeSpan = document.createElement('span');
+        activeSpan.className = busy ? 'text-amber-500' : '';
+        activeSpan.appendChild(document.createTextNode('活跃 '));
+        const activeB = document.createElement('b');
+        activeB.textContent = String(active);
+        activeSpan.appendChild(activeB);
+        el.appendChild(activeSpan);
+
+        el.appendChild(document.createTextNode(' · 排队 '));
+        const waitingB = document.createElement('b');
+        if (waiting > 0) waitingB.className = 'text-amber-500';
+        waitingB.textContent = String(waiting);
+        el.appendChild(waitingB);
+
+        el.appendChild(document.createTextNode(' · 上限 '));
+        const maxB = document.createElement('b');
+        maxB.textContent = max > 0 ? String(max) : '-';
+        el.appendChild(maxB);
+    }
+
     async function loadQuotaStatus() {
         const quota = parseInt(document.getElementById('user_bot_reg_quota').value) || 0;
         const statusDiv = document.getElementById('quota-status');
         const statusText = document.getElementById('quota-status-text');
+        const queueText = document.getElementById('quota-queue-text');
+        const openTotalText = document.getElementById('quota-open-total');
+        const updatedAt = document.getElementById('quota-updated-at');
 
         if (quota <= 0) {
             statusDiv.classList.add('hidden');
+            _stopQuotaPolling();
             return;
         }
 
@@ -1367,6 +1433,22 @@
                     const remaining = quota - data.total_users;
                     statusText.innerHTML = `<span class="text-blue-500">总人数模式</span>:当前 <b>${data.total_users}</b> 人,剩余 <b class="${remaining <= 0 ? 'text-red-500' : 'text-green-500'}">${remaining}</b> 名额`;
                 }
+
+                // 注册队列（新字段；用安全 DOM 构造）
+                if (queueText) {
+                    _renderQueueStatus(queueText, data.reg_queue || {});
+                }
+
+                if (openTotalText) {
+                    const n = Number(data.open_reg_total) || 0;
+                    openTotalText.textContent = `${n} 人`;
+                }
+
+                if (updatedAt) {
+                    updatedAt.textContent = new Date().toLocaleTimeString();
+                }
+
+                _startQuotaPolling();
             }
         } catch(e) {
             console.error('加载名额状态失败', e);

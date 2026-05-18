@@ -695,6 +695,14 @@ async def api_reset_reg_batch(request: Request):
     """重置批次计数"""
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     cfg.set("user_bot_reg_batch_used", 0)
+    # 同步重置内存中的 batch_used，避免后台线程把旧值写回
+    try:
+        from app.services import user_bot_service
+        with user_bot_service._batch_used_lock:
+            user_bot_service._batch_used_mem = 0
+            user_bot_service._batch_used_dirty = 0
+    except Exception:
+        pass
     return {"status": "success"}
 
 
@@ -702,23 +710,20 @@ async def api_reset_reg_batch(request: Request):
 async def api_get_reg_quota_status(request: Request):
     """获取名额状态（用于前端显示）"""
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    from app.core.database import SYSTEM_DB_PATH, query_db
+    from app.core.database import SYSTEM_DB_PATH
+    from app.services import user_bot_service
     import sqlite3
 
     quota_mode = cfg.get("user_bot_reg_quota_mode", "total")
     quota = int(cfg.get("user_bot_reg_quota", 0))
-    batch_used = int(cfg.get("user_bot_reg_batch_used", 0))
+    # 直接读内存权威值，避免 cfg.json 落盘滞后
+    batch_used = user_bot_service.get_batch_used_snapshot()
 
-    # 获取 Emby 用户总数（排除隐藏用户和管理员）
-    total_users = 0
+    # 用缓存的 Emby 用户数，避免每次轮询都打 /Users
     try:
-        from app.core.media_adapter import media_api
-        users = media_api.get("/Users", timeout=5).json()
-        hidden_users = cfg.get("hidden_users") or []
-        normal_users = [u for u in users if u.get("Name") not in hidden_users and not u.get("Policy", {}).get("IsAdministrator")]
-        total_users = len(normal_users)
-    except:
-        pass
+        total_users = user_bot_service.get_cached_user_count_for_api()
+    except Exception:
+        total_users = 0
 
     # 获取开放注册总数
     open_reg_total = 0
@@ -737,7 +742,12 @@ async def api_get_reg_quota_status(request: Request):
             "batch_used": batch_used,
             "total_users": total_users,
             "open_reg_total": open_reg_total,
-            "open_reg_enabled": cfg.get("user_bot_open_reg", False)
+            "open_reg_enabled": cfg.get("user_bot_open_reg", False),
+            "reg_queue": {
+                "active": user_bot_service._reg_active,
+                "waiting": user_bot_service._reg_waiters,
+                "max": user_bot_service.MAX_CONCURRENT_REG,
+            },
         }
     }
 
