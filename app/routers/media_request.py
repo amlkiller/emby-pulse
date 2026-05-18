@@ -6,6 +6,7 @@ import re
 from datetime import datetime, date
 from fastapi import APIRouter, Request, Depends, BackgroundTasks
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.core.security import validate_password_strength  # 🔒 统一密码强度校验
 from pydantic import BaseModel
 from typing import Optional, List
 import threading
@@ -2464,10 +2465,11 @@ async def user_community_register(data: UserRegisterModel, request: Request):
         if not safe_name:
             return {"status": "error", "message": "用户名无效，请使用字母、数字、中文、下划线(_)、连字符(-)、@ 或 ."}
         
-        # 3. 验证密码（至少6位）
+        # 3. 验证密码（统一策略：≥ 8 位 + 含小写 + 含大写或数字）
         password = data.password.strip()
-        if not password or len(password) < 6:
-            return {"status": "error", "message": "密码至少需要 6 个字符"}
+        pw_valid, pw_error = validate_password_strength(password)
+        if not pw_valid:
+            return {"status": "error", "message": pw_error}
         
         # 4. 检查用户名是否已存在
         try:

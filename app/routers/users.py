@@ -6,6 +6,7 @@ from app.core.database import query_db, SYSTEM_DB_PATH
 from app.core.media_adapter import media_api
 
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.core.security import validate_password_strength  # 🔒 统一密码强度校验
 import requests
 import datetime
 import secrets
@@ -743,8 +744,11 @@ def api_user_self_password(data: UserPasswordChangeModel, request: Request):
         return {"status": "error", "message": "请先登录"}
     user_id = user["Id"]
     user_name = user.get("Name", "")
-    if not data.new_password or len(data.new_password) < 6:
-        return {"status": "error", "message": "新密码至少 6 位"}
+    if not data.new_password:
+        return {"status": "error", "message": "新密码不能为空"}
+    pw_valid, pw_error = validate_password_strength(data.new_password)
+    if not pw_valid:
+        return {"status": "error", "message": pw_error}
     try:
         # 先用旧密码验证身份
         host = cfg.get("emby_host")

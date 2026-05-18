@@ -9,7 +9,6 @@ import json
 import re
 import ipaddress
 import sqlite3
-import urllib3
 from collections import defaultdict
 from app.core.config import cfg, REPORT_COVER_URL, FALLBACK_IMAGE_URL
 from app.core.database import query_db, get_base_filter, add_sys_notification, DB_PATH, SYSTEM_DB_PATH
@@ -19,8 +18,6 @@ from app.core.event_bus import bus
 # 🔥 引入共享 IP 归属地工具
 from app.utils.ip_location import get_location, get_isp
 
-# 禁用 HTTPS 测速时的无用警告
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 logger = logging.getLogger("uvicorn")
 
 # 🔒 XSS 防护：HTML 转义函数（用于 Telegram 消息）
@@ -2966,7 +2963,7 @@ class NotificationBot:
                             if r_url:
                                 try:
                                     r_start = time.time()
-                                    requests.get(f"{r_url}/web/favicon.ico", timeout=3, verify=False)
+                                    requests.get(f"{r_url}/web/favicon.ico", timeout=3)
                                     r_delay = int((time.time() - r_start) * 1000)
                                     icon = "🟢" if r_delay < 100 else ("🟡" if r_delay < 300 else "🔴")
                                     msg += f"{icon} {r_name}: {r_delay}ms\n"

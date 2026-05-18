@@ -695,7 +695,7 @@ async def api_ping(request: Request):
         ping_url = url.rstrip("/") + "/"
 
         start = time.time()
-        res = requests.get(ping_url, timeout=5, verify=False, allow_redirects=True)
+        res = requests.get(ping_url, timeout=5, allow_redirects=True)
         latency = int((time.time() - start) * 1000)
 
         # 只要有响应（2xx/3xx/4xx/5xx）都算通

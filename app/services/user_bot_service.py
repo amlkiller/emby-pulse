@@ -18,6 +18,7 @@ from app.core.config import cfg
 from app.core.database import DB_PATH, SYSTEM_DB_PATH, query_db
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
 from app.core.media_adapter import media_api
+from app.core.security import validate_password_strength  # 🔒 统一密码强度校验
 
 logger = logging.getLogger("uvicorn")
 
@@ -4127,8 +4128,9 @@ def cmd_password(chat_id, tg_user_id, args):
     if state and state.get("action") == "change_pwd_step2":
         # 用户已输入新密码，等待确认
         new_pwd = args.strip() if args else ""
-        if len(new_pwd) < 6:
-            _send(chat_id, "❌ 新密码至少6位，请重新输入：")
+        pw_valid, pw_error = validate_password_strength(new_pwd)
+        if not pw_valid:
+            _send(chat_id, f"❌ {pw_error}，请重新输入：")
             return
         # 确认新密码
         _user_state[str(tg_user_id)] = {"action": "change_pwd_confirm", "new_pwd": new_pwd}
@@ -4162,7 +4164,7 @@ def cmd_password(chat_id, tg_user_id, args):
 
     # 开始修改密码流程
     if not args or ' ' not in args.strip():
-        _send(chat_id, "🔐 <b>修改密码</b>\n\n请发送命令（当前密码和新密码用空格隔开）：\n<code>/password 当前密码 新密码</code>\n\n例如：<code>/password 123456 abc88888</code>\n\n⚠️ 新密码至少6位",
+        _send(chat_id, "🔐 <b>修改密码</b>\n\n请发送命令（当前密码和新密码用空格隔开）：\n<code>/password 当前密码 新密码</code>\n\n例如：<code>/password 当前密码 NewPass1</code>\n\n⚠️ 新密码至少 8 位，需包含小写字母 + 大写字母或数字",
               reply_markup={"inline_keyboard": [[{"text": "❌ 取消", "callback_data": "ub_back_menu"}]]})
         return
 
@@ -4170,8 +4172,9 @@ def cmd_password(chat_id, tg_user_id, args):
     old_pwd = parts[0].strip()
     new_pwd = parts[1].strip() if len(parts) > 1 else ""
 
-    if len(new_pwd) < 6:
-        _send(chat_id, "❌ 新密码至少6位，请检查后重试")
+    pw_valid, pw_error = validate_password_strength(new_pwd)
+    if not pw_valid:
+        _send(chat_id, f"❌ {pw_error}，请检查后重试")
         return
 
     # 验证当前密码 - 通过登录 API 验证
@@ -4228,7 +4231,7 @@ def cmd_server(chat_id, tg_user_id, msg_id=None):
             if url:
                 try:
                     start = time.time()
-                    requests.get(f"{url}/web/favicon.ico", timeout=3, verify=False)
+                    requests.get(f"{url}/web/favicon.ico", timeout=3)
                     delay = int((time.time() - start) * 1000)
                     icon = "🟢" if delay < 100 else ("🟡" if delay < 300 else "🔴")
                     msg += f"{icon} <b>{name}</b>：{delay}ms\n🔗 {url}\n\n"
@@ -4780,7 +4783,7 @@ class UserBot:
                   reply_markup={"inline_keyboard": [[{"text": "🔙 返回", "callback_data": "ub_back_menu"}]]})
         elif data == "ub_menu_password":
             _tg_api("answerCallbackQuery", {"callback_query_id": cq_id})
-            _edit(chat_id, msg_id, "🔐 <b>修改密码</b>\n\n请发送命令（当前密码和新密码用空格隔开）：\n<code>/password 当前密码 新密码</code>\n\n例如：<code>/password 123456 abc88888</code>\n\n⚠️ 新密码至少6位",
+            _edit(chat_id, msg_id, "🔐 <b>修改密码</b>\n\n请发送命令（当前密码和新密码用空格隔开）：\n<code>/password 当前密码 新密码</code>\n\n例如：<code>/password 当前密码 NewPass1</code>\n\n⚠️ 新密码至少 8 位，需包含小写字母 + 大写字母或数字",
                   reply_markup={"inline_keyboard": [[{"text": "🔙 返回", "callback_data": "ub_back_menu"}]]})
         elif data == "ub_menu_renew":
             _tg_api("answerCallbackQuery", {"callback_query_id": cq_id})

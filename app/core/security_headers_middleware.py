@@ -74,8 +74,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             f"frame-ancestors 'self';"
         )
 
-        # 仅 HTTPS 环境启用 HSTS
-        if request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https":
-            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        # 注意：HSTS (Strict-Transport-Security) 由前置 nginx 反向代理统一下发，
+        # 应用层不再重复设置，避免双重 header 与配置漂移。
 
         return response

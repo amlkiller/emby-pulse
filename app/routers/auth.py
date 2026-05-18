@@ -22,20 +22,9 @@ from app.core.database import query_db, SYSTEM_DB_PATH
 from app.core.config import cfg
 
 from app.core.security_utils import sanitize_html, safe_error_message
+from app.core.security import validate_password_strength
 import sqlite3
 
-
-def validate_password_strength(password: str) -> tuple:
-    """验证密码强度，返回 (is_valid, error_message)"""
-    if len(password) < 8:
-        return False, "密码至少需要 8 个字符"
-    if len(password) > 128:
-        return False, "密码不能超过 128 个字符"
-    if not re.search(r'[a-z]', password):
-        return False, "密码需要包含小写字母"
-    if not re.search(r'[A-Z0-9]', password):
-        return False, "密码需要包含大写字母或数字"
-    return True, ""
 
 logger = logging.getLogger("uvicorn")
 
@@ -752,14 +741,17 @@ async def update_avatar(request: Request, data: AvatarUpdate):
     if user.get("auth_type") != "local" or not user_id:
         return {"status": "error", "message": "Emby 账号暂不支持设置头像，请在 Emby 服务端修改"}
 
-    # 验证头像长度（限制 2MB，base64 约为原始大小的 1.37 倍，所以实际图片约 1.5MB）
-    if len(data.avatar) > 2 * 1024 * 1024:
-        return {"status": "error", "message": "头像数据过大，请压缩后重试（最大 1.5MB）"}
+    # 严格校验：magic bytes + PIL 二次解析 + 剥离 EXIF 并重新编码
+    from app.utils.image_validator import validate_base64_image
+    try:
+        safe_avatar = validate_base64_image(data.avatar, max_bytes=2 * 1024 * 1024)
+    except ValueError as ve:
+        return {"status": "error", "message": str(ve)}
 
     try:
         query_db(
             "UPDATE local_users SET avatar = ?, updated_at = ? WHERE id = ?",
-            (data.avatar, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), user_id)
+            (safe_avatar, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), user_id)
         )
 
         # 注意：头像数据存储在数据库中，不存储在 session 中（session 有大小限制）

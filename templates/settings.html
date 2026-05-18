@@ -1032,7 +1032,7 @@
                 
                 <div id="local-user-password-group">
                     <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wider pl-1">密码</label>
-                    <input type="password" id="local-user-password" class="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-[#2C2C2E] text-[13px] text-gray-800 dark:text-gray-100 focus:ring-2 focus:ring-teal-500/50 outline-none transition-all" placeholder="至少 6 个字符">
+                    <input type="password" id="local-user-password" class="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-[#2C2C2E] text-[13px] text-gray-800 dark:text-gray-100 focus:ring-2 focus:ring-teal-500/50 outline-none transition-all" placeholder="至少 8 个字符，含小写 + 大写或数字">
                 </div>
                 
                 <div>
@@ -2976,8 +2976,8 @@ async function saveLocalUser() {
             }
         } else {
             // 创建
-            if (!password || password.length < 6) {
-                showSettingsToast('密码至少需要 6 个字符', 'error');
+            if (!password || password.length < 8) {
+                showSettingsToast('密码至少需要 8 个字符', 'error');
                 return;
             }
             const res = await fetch('/api/auth/local-users', {
@@ -3000,11 +3000,11 @@ async function saveLocalUser() {
 }
 
 function changeLocalUserPassword(userId) {
-    const newPassword = prompt('请输入新密码（至少 6 个字符）:');
+    const newPassword = prompt('请输入新密码（至少 8 个字符，需包含小写字母 + 大写字母或数字）:');
     if (!newPassword) return;
-    
-    if (newPassword.length < 6) {
-        showSettingsToast('密码至少需要 6 个字符', 'error');
+
+    if (newPassword.length < 8) {
+        showSettingsToast('密码至少需要 8 个字符', 'error');
         return;
     }
     
