@@ -70,13 +70,6 @@ def _expected_origins(request: Request) -> list:
                 host = f"{host}:{port}"
         origins.append(f"{proto}://{host}")
 
-    # 3) 兜底：直接拿 Host 头（保持原 scheme 假设为 http/https 两种都接受）
-    host_header = request.headers.get("host")
-    if host_header:
-        # base_url 已经覆盖了原始 scheme + host，这里仅作为最后兜底
-        origins.append(f"https://{host_header}")
-        origins.append(f"http://{host_header}")
-
     return origins
 
 
