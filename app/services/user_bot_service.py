@@ -1320,6 +1320,20 @@ def cmd_code(chat_id, tg_user_id, args):
         return
 
 
+def _restore_invitation_code(code):
+    """Emby 用户创建失败时回滚邀请码消费计数"""
+    try:
+        conn = sqlite3.connect(SYSTEM_DB_PATH)
+        conn.execute(
+            "UPDATE invitations SET used_count = MAX(used_count - 1, 0), used_by = NULL, used_at = NULL WHERE code = ?",
+            (code,)
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+
 def _do_code_register(chat_id, tg_user_id, custom_name, code, days, tpl_id, routes=None, route_mode=None, tg_username="", tg_display_name=""):
     """执行注册码激活创建账号逻辑"""
     # 🚀 进入注册队列
@@ -1361,8 +1375,34 @@ def _do_code_register(chat_id, tg_user_id, custom_name, code, days, tpl_id, rout
                     _user_state[str(tg_user_id)] = {"action": "code_input_name", "code": code, "days": days, "tpl_id": tpl_id, "routes": routes, "route_mode": route_mode}
                     return
 
+                # 原子抢占注册码（防 TOCTOU 竞态）
+                conn = sqlite3.connect(SYSTEM_DB_PATH)
+                try:
+                    conn.execute("BEGIN IMMEDIATE")
+                    cur = conn.execute(
+                        """UPDATE invitations
+                           SET used_count = used_count + 1,
+                               used_at = datetime('now','localtime'),
+                               used_by = ?
+                           WHERE code = ? AND status != 1 AND used_count < max_uses""",
+                        (safe_name, code)
+                    )
+                    if cur.rowcount == 0:
+                        conn.rollback()
+                        conn.close()
+                        _send(chat_id, "❌ 注册码已失效或已达到使用上限")
+                        return
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+                    conn.close()
+                    raise
+                conn.close()
+
                 create_res = media_api.post("/Users/New", json={"Name": safe_name}, timeout=10)
                 if create_res.status_code not in [200, 201]:
+                    # Emby 创建失败，回滚注册码消费
+                    _restore_invitation_code(code)
                     _send(chat_id, "❌ 创建账号失败")
                     return
                 new_user = create_res.json()
@@ -1387,7 +1427,7 @@ def _do_code_register(chat_id, tg_user_id, custom_name, code, days, tpl_id, rout
                     expire = None  # 永久有效用 None 表示
                 else:
                     expire = (datetime.date.today() + datetime.timedelta(days=days)).strftime("%Y-%m-%d")
-                
+
                 allow_routes = ""
                 block_routes = ""
                 if routes:
@@ -1395,18 +1435,14 @@ def _do_code_register(chat_id, tg_user_id, custom_name, code, days, tpl_id, rout
                         allow_routes = routes
                     else:
                         block_routes = routes
-                
-                conn = sqlite3.connect(SYSTEM_DB_PATH)
-                conn.execute("""INSERT OR REPLACE INTO users_meta 
-                    (user_id, expire_date, allow_routes, block_routes, created_at) 
-                    VALUES (?, ?, ?, ?, datetime('now','localtime'))""", 
-                    (uid, expire, allow_routes, block_routes))
-                conn.commit()
-                conn.close()
 
                 conn = sqlite3.connect(SYSTEM_DB_PATH)
-                conn.execute("UPDATE invitations SET used_count = used_count + 1, used_at = datetime('now','localtime'), used_by = ? WHERE code = ?", (safe_name, code))
-                conn.execute("UPDATE invitations SET status = 1 WHERE code = ?", (code,))
+                conn.execute("""INSERT OR REPLACE INTO users_meta
+                    (user_id, expire_date, allow_routes, block_routes, created_at)
+                    VALUES (?, ?, ?, ?, datetime('now','localtime'))""",
+                    (uid, expire, allow_routes, block_routes))
+                # 标记注册码已用完（如果到达上限）
+                conn.execute("UPDATE invitations SET status = 1 WHERE code = ? AND used_count >= max_uses", (code,))
                 conn.commit()
                 conn.close()
 
@@ -1451,17 +1487,25 @@ def cmd_renew(chat_id, tg_user_id, args):
     code = args.strip()
     try:
         conn = sqlite3.connect(SYSTEM_DB_PATH)
-        # 🔥 只查询续期码（type = 'renew'），不能使用注册码续费
-        row = conn.execute("SELECT days, used_count, max_uses FROM invitations WHERE code = ? AND status = 0 AND type = 'renew'", (code,)).fetchone()
-        if not row:
+        conn.execute("BEGIN IMMEDIATE")
+        # 🔥 原子抢占续期码（防 TOCTOU 竞态）
+        cur = conn.execute(
+            """UPDATE invitations
+               SET used_count = used_count + 1,
+                   used_at = datetime('now','localtime'),
+                   used_by = ?
+               WHERE code = ? AND status != 1 AND used_count < max_uses
+               AND type = 'renew'""",
+            (binding['emby_username'], code)
+        )
+        if cur.rowcount == 0:
+            conn.rollback()
             conn.close()
-            _send(chat_id, "❌ 续期码无效、已被使用或不是续期码")
+            _send(chat_id, "❌ 续期码无效、已被使用、不是续期码或已达使用上限")
             return
-        days, used, max_uses = row
-        if used >= max_uses:
-            conn.close()
-            _send(chat_id, "❌ 该续期码已达使用上限")
-            return
+
+        row = conn.execute("SELECT days FROM invitations WHERE code = ?", (code,)).fetchone()
+        days = row[0]
 
         uid = binding['emby_user_id']
         exp_row = conn.execute("SELECT expire_date FROM users_meta WHERE user_id = ?", (uid,)).fetchone()
@@ -1469,6 +1513,7 @@ def cmd_renew(chat_id, tg_user_id, args):
 
         # 永久有效用户不需要续费
         if current_exp and ("2099" in current_exp or "3000" in current_exp or "永久" in current_exp):
+            conn.rollback()
             conn.close()
             _send(chat_id, "❌ 您的账号为永久有效，无需续费！")
             return
@@ -1487,9 +1532,8 @@ def cmd_renew(chat_id, tg_user_id, args):
             days_display = f"{days} 天"
 
         conn.execute("UPDATE users_meta SET expire_date = ? WHERE user_id = ?", (new_exp, uid))
-        conn.execute("UPDATE invitations SET used_count = used_count + 1, used_at = datetime('now','localtime'), used_by = ? WHERE code = ?", (binding['emby_username'], code))
-        if used + 1 >= max_uses:
-            conn.execute("UPDATE invitations SET status = 1 WHERE code = ?", (code,))
+        # 标记续期码已用完（如果到达上限）
+        conn.execute("UPDATE invitations SET status = 1 WHERE code = ? AND used_count >= max_uses", (code,))
         conn.commit()
         conn.close()
 

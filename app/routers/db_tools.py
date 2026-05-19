@@ -431,8 +431,12 @@ async def api_db_restore(request: Request):
         details={"backup_path": backup_path}
     )
     
-    # 安全检查：确保备份文件在备份目录中
-    if not backup_path.startswith(BACKUP_DIR):
+    # 安全检查：确保备份文件在备份目录中（防御路径穿越）
+    if ".." in backup_path.split("/") or ".." in backup_path.split("\\"):
+        return {"success": False, "error": "无效的备份文件路径"}
+    real_backup = os.path.realpath(backup_path)
+    real_backup_dir = os.path.realpath(BACKUP_DIR)
+    if not real_backup.startswith(real_backup_dir + os.sep) and real_backup != real_backup_dir:
         return {"success": False, "error": "无效的备份文件路径"}
     
     result = restore_backup(backup_path)

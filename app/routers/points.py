@@ -2023,9 +2023,13 @@ async def reveal_scratch_cell(request: Request):
         
         if cell_index < 0 or cell_index >= len(card['grid']):
             return {"status": "error", "message": "无效的格子"}
-        
+
         cell = card['grid'][cell_index]
-        
+
+        # 已刮开的格子不能重复领奖
+        if cell.get('revealed'):
+            return {"status": "error", "message": "该格子已刮开"}
+
         # 如果匹配，发放奖励
         if cell['matched'] and cell['reward'] > 0:
             conn = sqlite3.connect(SYSTEM_DB_PATH)
@@ -2048,7 +2052,9 @@ async def reveal_scratch_cell(request: Request):
 
             conn.commit()
             conn.close()
-            
+
+            cell['revealed'] = True
+
             return {
                 "status": "success",
                 "number": cell['number'],
@@ -2057,6 +2063,8 @@ async def reveal_scratch_cell(request: Request):
                 "new_points": current_points
             }
         else:
+            cell['revealed'] = True
+
             # 未匹配也返回格子的积分值（只是不能获得）
             return {
                 "status": "success",
@@ -2423,6 +2431,8 @@ async def buy_lottery(request: Request):
     try:
         data = await request.json()
         count = int(data.get('count', 1))
+        if count < 1:
+            return {"status": "error", "message": "购买数量无效"}
         custom_number = data.get('custom_number')  # 自选号码
         
         # 获取配置

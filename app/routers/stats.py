@@ -1506,83 +1506,6 @@ def api_system_monitor(request: Request):
         return {"status": "error", "message": safe_error_message(e, "探针读取失败")}
 
 
-# ==================== 🔥 仪表盘布局同步 ====================
-
-@router.get("/api/dashboard/layout")
-def api_get_dashboard_layout(request: Request):
-    """获取仪表盘布局（跨设备同步）"""
-    if not check_login(request):
-        return {"status": "error", "message": "请先登录"}
-    
-    try:
-        import sqlite3
-        import json
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        cursor = conn.cursor()
-        
-        # 🔥 创建布局表（如果不存在）
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS dashboard_layout (
-                user_id TEXT PRIMARY KEY,
-                layout_json TEXT,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # 获取当前用户的布局
-        user_id = request.session.get("user", {}).get("Id", "default")
-        cursor.execute("SELECT layout_json FROM dashboard_layout WHERE user_id = ?", (user_id,))
-        row = cursor.fetchone()
-        conn.close()
-        
-        if row and row[0]:
-            return {"status": "success", "data": json.loads(row[0])}
-        return {"status": "success", "data": None}
-    except Exception as e:
-        return {"status": "error", "message": safe_error_message(e)}
-
-
-@router.post("/api/dashboard/layout")
-async def api_save_dashboard_layout(request: Request):
-    """保存仪表盘布局（跨设备同步）"""
-    if not check_login(request):
-        return {"status": "error", "message": "请先登录"}
-    
-    try:
-        import sqlite3
-        import json
-        
-        layout_data = await request.json()
-        
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        cursor = conn.cursor()
-        
-        # 🔥 创建布局表（如果不存在）
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS dashboard_layout (
-                user_id TEXT PRIMARY KEY,
-                layout_json TEXT,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        user_id = request.session.get("user", {}).get("Id", "default")
-        layout_json = json.dumps(layout_data, ensure_ascii=False)
-        
-        # 使用 REPLACE 插入或更新
-        cursor.execute('''
-            INSERT OR REPLACE INTO dashboard_layout (user_id, layout_json, updated_at)
-            VALUES (?, ?, datetime('now', 'localtime'))
-        ''', (user_id, layout_json))
-        
-        conn.commit()
-        conn.close()
-        
-        return {"status": "success", "message": "布局已保存"}
-    except Exception as e:
-        return {"status": "error", "message": safe_error_message(e)}
-
-
 # ==================== 🔥 内容风云榜详情 API ====================
 
 @router.get("/api/stats/item_detail")
@@ -1590,7 +1513,15 @@ def api_item_detail(request: Request, item_id: str, item_name: Optional[str] = N
     """获取媒体详情（谁在看、播放历史）"""
     if not check_login(request):
         return {"status": "error", "message": "请先登录"}
-    
+
+    # 🔒 权限检查：非管理员只能查看自己的数据
+    admin_user = request.session.get("user", {})
+    req_user = request.session.get("req_user", {})
+    is_admin = admin_user.get("auth_type") == "emby" or admin_user.get("role") == "admin"
+    current_user_id = None
+    if not is_admin:
+        current_user_id = (req_user or admin_user).get("Id")
+
     try:
         # 1. 获取媒体基础信息
         item_info = None
@@ -1657,27 +1588,49 @@ def api_item_detail(request: Request, item_id: str, item_name: Optional[str] = N
             clean_name = clean_name.strip()
             logger.info(f"[item_detail] 按剧名查询: '{clean_name}' (原始: '{search_name}')")
             
-            sql_by_name = """
-                SELECT 
-                    ItemName, ItemType, PlayDuration, UserId, DateCreated
-                FROM PlaybackActivity 
-                WHERE ItemName LIKE ? 
-                ORDER BY DateCreated DESC 
-                LIMIT 500
-            """
-            rows = query_db(sql_by_name, [f"%{clean_name}%"])
+            if is_admin:
+                sql_by_name = """
+                    SELECT
+                        ItemName, ItemType, PlayDuration, UserId, DateCreated
+                    FROM PlaybackActivity
+                    WHERE ItemName LIKE ?
+                    ORDER BY DateCreated DESC
+                    LIMIT 500
+                """
+                rows = query_db(sql_by_name, [f"%{clean_name}%"])
+            else:
+                sql_by_name = """
+                    SELECT
+                        ItemName, ItemType, PlayDuration, UserId, DateCreated
+                    FROM PlaybackActivity
+                    WHERE ItemName LIKE ? AND UserId = ?
+                    ORDER BY DateCreated DESC
+                    LIMIT 500
+                """
+                rows = query_db(sql_by_name, [f"%{clean_name}%", current_user_id])
             logger.info(f"[item_detail] 按剧名查询结果: {len(rows) if rows else 0} 条")
         else:
             # 🔥 电影等其他类型，按 ItemId 查询
-            sql_by_id = """
-                SELECT 
-                    ItemName, ItemType, PlayDuration, UserId, DateCreated
-                FROM PlaybackActivity 
-                WHERE ItemId = ? 
-                ORDER BY DateCreated DESC 
-                LIMIT 100
-            """
-            rows = query_db(sql_by_id, [item_id])
+            if is_admin:
+                sql_by_id = """
+                    SELECT
+                        ItemName, ItemType, PlayDuration, UserId, DateCreated
+                    FROM PlaybackActivity
+                    WHERE ItemId = ?
+                    ORDER BY DateCreated DESC
+                    LIMIT 100
+                """
+                rows = query_db(sql_by_id, [item_id])
+            else:
+                sql_by_id = """
+                    SELECT
+                        ItemName, ItemType, PlayDuration, UserId, DateCreated
+                    FROM PlaybackActivity
+                    WHERE ItemId = ? AND UserId = ?
+                    ORDER BY DateCreated DESC
+                    LIMIT 100
+                """
+                rows = query_db(sql_by_id, [item_id, current_user_id])
             logger.info(f"[item_detail] 按 ItemId 查询结果: {len(rows) if rows else 0} 条")
         
         if not rows:

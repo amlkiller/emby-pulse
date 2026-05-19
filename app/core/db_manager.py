@@ -610,10 +610,19 @@ def get_backup_list() -> List[Dict]:
 
 def delete_backup(filename: str) -> Dict:
     """删除备份文件"""
+    # 防御路径穿越：拒绝包含 .. 的文件名
+    if ".." in filename or "/" in filename or "\\" in filename:
+        return {"success": False, "error": "无效的文件名"}
+
     filepath = os.path.join(BACKUP_DIR, filename)
+    real_path = os.path.realpath(filepath)
+    real_backup_dir = os.path.realpath(BACKUP_DIR)
+    if not real_path.startswith(real_backup_dir + os.sep):
+        return {"success": False, "error": "无效的备份文件路径"}
+
     if not os.path.exists(filepath):
         return {"success": False, "error": "备份文件不存在"}
-    
+
     try:
         os.remove(filepath)
         return {"success": True}

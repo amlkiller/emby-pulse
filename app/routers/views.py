@@ -536,7 +536,7 @@ async def api_register(data: RegisterModel, request: Request):
         try:
             users = media_api.get("/Users", timeout=5).json()
             if any(u['Name'].lower() == safe_name.lower() for u in users):
-                return {"status": "error", "message": f"用户名 {safe_name} 已被占用，请换一个"}
+                return {"status": "error", "message": "注册失败，请稍后再试"}
         except Exception as e:
             return {"status": "error", "message": safe_error_message(e, "检查用户名失败")}
         
@@ -544,7 +544,8 @@ async def api_register(data: RegisterModel, request: Request):
         try:
             create_res = media_api.post("/Users/New", json={"Name": safe_name}, timeout=10)
             if create_res.status_code not in [200, 201]:
-                return {"status": "error", "message": f"创建账号失败: {create_res.text}"}
+                logger.warning("Emby 用户创建失败: status=%s body=%s", create_res.status_code, create_res.text)
+                return {"status": "error", "message": "注册失败，请稍后再试"}
             
             new_user = create_res.json()
             uid = new_user.get("Id")

@@ -1,4 +1,5 @@
 import os
+import json
 import asyncio
 import threading
 import socket
@@ -198,7 +199,7 @@ async def user_portal_app(scope, receive, send):
             "/api/stats/top_movies",
             "/api/stats/monthly_stats",
             "/api/stats/recent_added",
-            "/api/stats/item_detail",
+            # "/api/stats/item_detail",  # 🔒 移除：非管理员可越权读取全量用户播放数据
             "/api/stats/poster_data",
             "/api/stats/live",
             "/api/points/config",

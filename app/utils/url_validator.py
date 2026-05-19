@@ -5,6 +5,7 @@ URL 安全验证工具
 from urllib.parse import urlparse
 import re
 import ipaddress
+import socket
 
 
 def validate_url(url: str, allow_internal: bool = False) -> dict:
@@ -41,7 +42,7 @@ def validate_url(url: str, allow_internal: bool = False) -> dict:
         bracket_end = domain.find(']')
         if bracket_end > 0:
             ipv6_addr = domain[1:bracket_end]
-            if is_internal_domain(ipv6_addr):
+            if _hostname_is_internal(ipv6_addr):
                 return {"valid": False, "error": f"不允许访问内网地址: {ipv6_addr}"}
             return {"valid": True, "domain": ipv6_addr}
 
@@ -49,10 +50,14 @@ def validate_url(url: str, allow_internal: bool = False) -> dict:
     if ':' in domain:
         domain = domain.split(':')[0]
 
-    # 检查是否是内网地址
+    # 检查是否是内网地址（使用 ipaddress 模块，覆盖所有私网/回环/链路本地/CGNAT 等）
     if not allow_internal:
-        if is_internal_domain(domain):
+        if _hostname_is_internal(domain):
             return {"valid": False, "error": f"不允许访问内网地址: {domain}"}
+
+        # DNS 解析后再次校验，防止 DNS rebinding / nip.io 等绕过
+        if not _validate_resolved_ips(domain):
+            return {"valid": False, "error": f"域名解析到内网地址: {domain}"}
 
     return {"valid": True, "domain": domain}
 
@@ -199,14 +204,22 @@ _ALLOWED_PROXY_SCHEMES = {"http", "https", "socks5", "socks5h", "socks4", "socks
 def _hostname_is_internal(hostname: str) -> bool:
     """
     增强版内网判断：先用 ipaddress 模块（最准确），再回退到 is_internal_domain。
+    覆盖十进制 IPv4、IPv4 简写、CGNAT 等边界场景。
     """
     if not hostname:
         return True
     h = hostname.strip().strip('[]')
-    # 先用 ipaddress 模块判断（覆盖所有 IPv4/IPv6 私网/回环/链路本地）
+
+    # 尝试规范化非标准 IPv4 格式（Python 3.9 的 ipaddress 不支持）
+    h = _normalize_ipv4(h)
+
     try:
         ip = ipaddress.ip_address(h)
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified:
+        if (ip.is_private or ip.is_loopback or ip.is_link_local
+                or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
+            return True
+        # CGNAT 100.64.0.0/10（RFC 6598）— Python 3.11 前 is_private 不覆盖
+        if isinstance(ip, ipaddress.IPv4Address) and ip in ipaddress.ip_network('100.64.0.0/10'):
             return True
         return False
     except ValueError:
@@ -214,14 +227,70 @@ def _hostname_is_internal(hostname: str) -> bool:
         return is_internal_domain(h)
 
 
-def validate_proxy_url(url: str) -> dict:
+def _normalize_ipv4(host: str) -> str:
+    """
+    将非标准 IPv4 表示规范化为点分十进制：
+    - 十进制整数 (2130706433 → 127.0.0.1)
+    - IPv4 简写 (127.1 → 127.0.0.1, 10.1 → 10.0.0.1)
+    """
+    # 十进制 IPv4：纯数字且值在 IPv4 范围内
+    if host.isdigit():
+        try:
+            val = int(host)
+            if 0 <= val <= 0xFFFFFFFF:
+                return str(ipaddress.IPv4Address(val))
+        except (ValueError, OverflowError):
+            pass
+
+    # IPv4 简写：含有点号但不足四组，补零
+    if '.' in host and not host.startswith('['):
+        parts = host.split('.')
+        if 1 <= len(parts) < 4 and all(p.isdigit() for p in parts):
+            # 补齐到 4 段
+            padded = parts + ['0'] * (4 - len(parts))
+            candidate = '.'.join(padded)
+            try:
+                ipaddress.IPv4Address(candidate)
+                return candidate
+            except ValueError:
+                pass
+
+    return host
+
+
+def _validate_resolved_ips(hostname: str) -> bool:
+    """
+    DNS 解析 hostname，校验所有解析结果是否均为公网地址。
+    防止 127.0.0.1.nip.io 等 DNS rebinding 绕过。
+
+    Returns:
+        True = 所有解析 IP 均为公网（安全），False = 存在内网 IP（不安全）
+    """
+    try:
+        infos = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+    except (socket.gaierror, OSError):
+        # DNS 解析失败，放行（让后续连接阶段报错，而非误拦合法域名）
+        return True
+
+    for _, _, _, _, sockaddr in infos:
+        ip_str = sockaddr[0]
+        if _hostname_is_internal(ip_str):
+            return False
+    return True
+
+
+def validate_proxy_url(url: str, allow_internal: bool = True) -> dict:
     """
     校验代理 URL（用于 proxy_url 配置项）。
 
     - 空字符串视为合法（表示不使用代理）
     - scheme 必须在 {http, https, socks5, socks5h, socks4, socks4a}
-    - hostname 必须为公网（IPv4/IPv6 私网、回环、链路本地一律拒绝）
+    - 默认允许内网地址（用户可能在内网部署 Clash/V2Ray 等代理工具）
     - 支持 user:pass@host:port userinfo 形式，仅校验 hostname 部分
+
+    Args:
+        url: 代理地址
+        allow_internal: 是否允许内网地址（默认 True，代理工具常部署在内网）
 
     Returns:
         {"valid": bool, "error": str}
@@ -249,7 +318,7 @@ def validate_proxy_url(url: str) -> dict:
     if not hostname:
         return {"valid": False, "error": "代理地址缺少主机名"}
 
-    if _hostname_is_internal(hostname):
+    if not allow_internal and _hostname_is_internal(hostname):
         return {"valid": False, "error": f"不允许使用内网代理地址: {hostname}"}
 
     return {"valid": True, "error": ""}
