@@ -457,26 +457,47 @@ class RegisterModel(BaseModel):
 async def api_register(data: RegisterModel, request: Request):
     """邀请码注册 API"""
     try:
-        # 1. 验证邀请码
-        invite = query_db("SELECT * FROM invitations WHERE code = ?", (data.code,), one=True)
-        if not invite:
-            return {"status": "error", "message": "邀请码无效"}
-        
-        # sqlite3.Row 对象用 ['key'] 访问，不能用 .get()
-        code_type = invite['type'] if invite['type'] else 'register'
-        if code_type != 'register':
-            return {"status": "error", "message": "此邀请码为续费码，请使用注册码注册"}
-        
-        # 检查使用次数
-        used_count = invite['used_count'] if invite['used_count'] else 0
-        max_uses = invite['max_uses'] if invite['max_uses'] else 1
-        if used_count >= max_uses:
-            return {"status": "error", "message": "邀请码已达到使用上限"}
-        
-        # 检查状态
-        if invite['status'] == 1:
-            return {"status": "error", "message": "邀请码已失效"}
-        
+        # 1. 原子抢占邀请码（防 TOCTOU 竞态）
+        conn = sqlite3.connect(SYSTEM_DB_PATH)
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            cur = conn.execute(
+                """UPDATE invitations
+                   SET used_count = used_count + 1,
+                       used_at = datetime('now','localtime'),
+                       used_by = ?
+                   WHERE code = ? AND status != 1 AND used_count < max_uses
+                   AND (type IS NULL OR type = 'register')""",
+                (data.username.strip(), data.code)
+            )
+            if cur.rowcount == 0:
+                conn.rollback()
+                # 区分无效码和已用尽码
+                exists = conn.execute(
+                    "SELECT 1 FROM invitations WHERE code = ?", (data.code,)
+                ).fetchone()
+                conn.close()
+                if not exists:
+                    return {"status": "error", "message": "邀请码无效"}
+                return {"status": "error", "message": "邀请码已失效或已达到使用上限"}
+
+            # 读取已抢占的邀请码详情
+            invite = conn.execute(
+                "SELECT * FROM invitations WHERE code = ?", (data.code,)
+            ).fetchone()
+
+            # 单次使用码：立即标记为已失效
+            used_count = invite['used_count'] if invite['used_count'] else 0
+            max_uses = invite['max_uses'] if invite['max_uses'] else 1
+            if used_count >= max_uses:
+                conn.execute("UPDATE invitations SET status = 1 WHERE code = ?", (data.code,))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
         days = invite['days'] if invite['days'] else 30
         template_user_id = invite['template_user_id'] if invite['template_user_id'] else None
         routes = invite['routes'] if invite['routes'] else ''
@@ -545,7 +566,11 @@ async def api_register(data: RegisterModel, request: Request):
             else:
                 # 没有模板时，确保账号启用
                 try:
-                    media_api.post(f"/Users/{uid}/Policy", json={"IsDisabled": False}, timeout=3)
+                    # 读取完整 Policy 再合并，避免 Emby 整体替换清空默认权限
+                    user_info = media_api.get(f"/Users/{uid}", timeout=5).json()
+                    policy = user_info.get("Policy", {})
+                    policy["IsDisabled"] = False
+                    media_api.post(f"/Users/{uid}/Policy", json=policy, timeout=3)
                 except:
                     pass
             
@@ -582,16 +607,7 @@ async def api_register(data: RegisterModel, request: Request):
             except:
                 pass
             
-            # 7. 更新邀请码状态
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            conn.execute("UPDATE invitations SET used_count = used_count + 1, used_at = datetime('now','localtime'), used_by = ? WHERE code = ?", (safe_name, data.code))
-            # 如果达到上限，标记为已用
-            if used_count + 1 >= max_uses:
-                conn.execute("UPDATE invitations SET status = 1 WHERE code = ?", (data.code,))
-            conn.commit()
-            conn.close()
-            
-            # 8. 发送通知
+            # 7. 发送通知
             try:
                 from app.services.bot_service import bot
                 from app.core.database import add_sys_notification

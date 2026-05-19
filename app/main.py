@@ -195,7 +195,6 @@ async def user_portal_app(scope, receive, send):
             "/api/stats/latest",
             "/api/stats/libraries",
             "/api/stats/top_movies",
-            "/api/stats/top_users_list",
             "/api/stats/monthly_stats",
             "/api/stats/recent_added",
             "/api/stats/item_detail",

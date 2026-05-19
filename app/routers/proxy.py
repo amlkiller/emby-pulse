@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Response, Request, Depends, HTTPException
+from fastapi.responses import RedirectResponse
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
-from app.core.security import require_login, require_any_login  # 🔒 统一登录依赖
+from app.core.security import require_login, require_any_login, is_admin_session  # 🔒 统一登录依赖
 from app.core.config import cfg
 from app.core.media_adapter import media_api  # 🔥 引入核心适配器
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
@@ -363,6 +364,12 @@ def proxy_user_image(request: Request, user_id: str, tag: str = None, _user: dic
     # 参数验证
     if not user_id or user_id == "undefined" or user_id == "null":
         return Response(status_code=404)
+
+    # 🔒 安全：非管理员只能查看自己的头像
+    current_id = _user.get("Id") or _user.get("id")
+    if not is_admin_session(_user) and str(user_id) != str(current_id):
+        return RedirectResponse(url="/static/img/logo-app.png", status_code=302)
+
     try:
         params = {"width": 200, "height": 200, "mode": "Crop", "quality": 90}
         if tag: params["tag"] = tag
@@ -378,13 +385,11 @@ def proxy_user_image(request: Request, user_id: str, tag: str = None, _user: dic
             return Response(content=resp.content, media_type=resp.headers.get("Content-Type", "image/jpeg"), headers=cache_headers)
         # 404 表示用户没有头像，返回默认头像（本地）
         elif resp.status_code == 404:
-            from fastapi.responses import RedirectResponse
             return RedirectResponse(url="/static/img/logo-app.png", status_code=302)
     except Exception:
         # 超时或连接失败，返回默认头像
         pass
     # 🔥 用户没有头像或请求失败时，返回本地默认头像，避免第三方泄露用户 IP
-    from fastapi.responses import RedirectResponse
     return RedirectResponse(url="/static/img/logo-app.png", status_code=302)
 
 @router.post("/api/proxy/clear_cache")

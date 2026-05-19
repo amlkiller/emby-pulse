@@ -94,18 +94,48 @@ def create_api_token(user_id: str, username: str, is_admin: bool = False) -> str
 
 def verify_api_token(token: str) -> Optional[Dict[str, Any]]:
     """
-    验证 API Token
-    
+    验证 API Token（JWT 签名 + 数据库存在性校验）
+
     Args:
         token: JWT Token
-    
+
     Returns:
         用户信息或 None
     """
     payload = verify_token(token)
-    if payload and payload.get("type") == "api_token":
-        return payload
-    return None
+    if not payload or payload.get("type") != "api_token":
+        return None
+
+    # 查数据库确认 token 未被撤销且未过期
+    try:
+        import hashlib
+        import sqlite3
+        from app.core.database import SYSTEM_DB_PATH
+
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+        conn = sqlite3.connect(SYSTEM_DB_PATH)
+        c = conn.cursor()
+        c.execute(
+            "SELECT expires_at FROM api_tokens WHERE token = ?",
+            (token_hash,),
+        )
+        row = c.fetchone()
+        conn.close()
+
+        if not row:
+            return None  # token 已被删除/撤销
+
+        # 检查数据库记录的过期时间（管理员可能设了比 JWT 更短的有效期）
+        if row[0]:
+            from datetime import datetime
+            expires_at = datetime.fromisoformat(row[0])
+            if datetime.utcnow() > expires_at:
+                return None  # 已过期
+    except Exception:
+        # 数据库异常时降级为仅 JWT 校验（保持可用性）
+        pass
+
+    return payload
 
 
 def create_password_reset_token(user_id: str, email: str) -> str:

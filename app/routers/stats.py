@@ -16,6 +16,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import psutil
 import time  # 🔥 用于预热缓存时间戳
+import copy
 import logging
 from app.core.security_utils import safe_error_message
 
@@ -150,7 +151,18 @@ def api_dashboard(request: Request, user_id: Optional[str] = None):
     # 🔒 安全检查：必须登录
     if not check_login(request):
         return {"status": "error", "message": "请先登录"}
-    
+
+    # 🔒 权限检查：普通用户只能查看自己的数据
+    admin_user = request.session.get("user", {})
+    req_user = request.session.get("req_user", {})
+    is_admin = admin_user.get("auth_type") == "emby" or admin_user.get("role") == "admin"
+
+    if not is_admin:
+        if req_user:
+            user_id = req_user.get("Id")
+        elif admin_user:
+            user_id = admin_user.get("id")
+
     # 🔥 尝试使用缓存（仅全局统计，不缓存特定用户）
     cache_key = f"dashboard_{user_id or 'all'}"
     cached = get_cached_stats(cache_key)
@@ -226,6 +238,18 @@ def api_recent_activity(request: Request, user_id: Optional[str] = None):
     # 🔒 安全检查
     if not check_login(request):
         return {"status": "error", "message": "请先登录"}
+
+    # 🔒 权限检查：普通用户只能查看自己的数据
+    admin_user = request.session.get("user", {})
+    req_user = request.session.get("req_user", {})
+    is_admin = admin_user.get("auth_type") == "emby" or admin_user.get("role") == "admin"
+
+    if not is_admin:
+        if req_user:
+            user_id = req_user.get("Id")
+        elif admin_user:
+            user_id = admin_user.get("id")
+
     try:
         where, params = get_base_filter(user_id)
         results = query_db(f"SELECT DateCreated, UserId, ItemId, ItemName, ItemType FROM PlaybackActivity {where} ORDER BY DateCreated DESC LIMIT 50", params)
@@ -256,6 +280,8 @@ def api_recent_activity(request: Request, user_id: Optional[str] = None):
             item['UserName'] = user_map.get(item['UserId'], "User")
             item['DisplayName'] = item.get('ItemName') or '未知记录'
             item['ImageTag'] = image_tags.get(item['ItemId'], "")  # 🔥 添加 ImageTag
+            if not is_admin:
+                item.pop('UserId', None)  # 🔒 非管理员不暴露原始 UserId
             data.append(item)
         return {"status": "success", "data": data}
     except: return {"status": "error", "data": []}
@@ -612,6 +638,8 @@ def api_user_details(request: Request, user_id: Optional[str] = None):
                         'UserName': u_map.get(r.get('UserId'), "User"),
                         'smart_poster': f"/api/proxy/smart_image?item_id={r.get('ItemId')}&type=Primary"
                     }
+                    if not is_admin:
+                        l.pop('UserId', None)  # 🔒 非管理员不暴露原始 UserId
                     logs.append(l)
                     processed += 1
                 
@@ -724,6 +752,18 @@ def api_poster_data(request: Request, user_id: Optional[str] = None, period: str
     # 🔒 安全检查
     if not check_login(request):
         return {"status": "error", "message": "请先登录"}
+
+    # 🔒 权限检查：普通用户只能查看自己的数据
+    admin_user = request.session.get("user", {})
+    req_user = request.session.get("req_user", {})
+    is_admin = admin_user.get("auth_type") == "emby" or admin_user.get("role") == "admin"
+
+    if not is_admin:
+        if req_user:
+            user_id = req_user.get("Id")
+        elif admin_user:
+            user_id = admin_user.get("id")
+
     try:
         where_base, params = get_base_filter(user_id)
         date_filter = ""
@@ -849,9 +889,9 @@ def api_poster_data(request: Request, user_id: Optional[str] = None, period: str
 
 @router.get("/api/stats/top_users_list")
 def api_top_users_list(request: Request, period: str = 'all'):
-    # 🔒 安全检查
-    if not check_login(request):
-        return {"status": "error", "message": "请先登录"}
+    # 🔒 安全检查：仅管理员可查看全站用户排名
+    if not is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限"}
     try:
         where_base, params = get_base_filter('all')
         date_filter = ""
@@ -1001,6 +1041,18 @@ def api_monthly_stats(request: Request, user_id: Optional[str] = None):
     # 🔒 安全检查
     if not check_login(request):
         return {"status": "error", "message": "请先登录"}
+
+    # 🔒 权限检查：普通用户只能查看自己的数据
+    admin_user = request.session.get("user", {})
+    req_user = request.session.get("req_user", {})
+    is_admin = admin_user.get("auth_type") == "emby" or admin_user.get("role") == "admin"
+
+    if not is_admin:
+        if req_user:
+            user_id = req_user.get("Id")
+        elif admin_user:
+            user_id = admin_user.get("id")
+
     try:
         where_base, params = get_base_filter(user_id)
         # 🔥 时区修复
@@ -1246,13 +1298,26 @@ async def api_dashboard_init(request: Request, user_id: Optional[str] = None):
     """
     仪表盘首屏聚合接口 - 核心数据快速返回
     """
+    # 🔒 权限判定
+    _admin_user = request.session.get("user", {})
+    _is_admin = _admin_user.get("auth_type") == "emby" or _admin_user.get("role") == "admin"
+
+    def _strip_user_id(data: dict) -> dict:
+        """非管理员返回时剥离 top_users 中的原始 UserId"""
+        if _is_admin:
+            return data
+        d = copy.deepcopy(data)
+        for u in d.get("top_users", []):
+            u.pop("UserId", None)
+        return d
+
     now = time.time()
     
     # 🔥 检查内存缓存（30秒内直接返回）
     if _dashboard_cache["data"] and (now - _dashboard_cache["ts"]) < _DASHBOARD_CACHE_TTL:
         return {
             "status": "success",
-            "data": _dashboard_cache["data"],
+            "data": _strip_user_id(_dashboard_cache["data"]),
             "cached": True
         }
     
@@ -1273,7 +1338,7 @@ async def api_dashboard_init(request: Request, user_id: Optional[str] = None):
     except asyncio.TimeoutError as e:
         print(f"[Dashboard Init] 请求超时: {e}")
         if _dashboard_cache["data"]:
-            return {"status": "success", "data": _dashboard_cache["data"], "cached": True, "timeout": True}
+            return {"status": "success", "data": _strip_user_id(_dashboard_cache["data"]), "cached": True, "timeout": True}
         dashboard = {"total_plays": 0, "active_users": 0, "total_duration": 0, "library": {}}
         users = []
         libraries = []
@@ -1294,7 +1359,7 @@ async def api_dashboard_init(request: Request, user_id: Optional[str] = None):
     
     return {
         "status": "success",
-        "data": result_data,
+        "data": _strip_user_id(result_data),
         "cached": False
     }
 

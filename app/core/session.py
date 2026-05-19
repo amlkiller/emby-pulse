@@ -141,9 +141,21 @@ class SessionDict:
         return default
 
     def clear(self):
-        self._data.clear()
+        """销毁当前 session 行并切换到全新的空 session_id。
+
+        登录成功时调用可防止 Session Fixation；登出时调用可避免数据库残留旧空行。
+        返回后对 self 的写入会落到新的 session_id 上。
+        """
+        old_id = self._session_id
+        # 先从待保存队列里把旧 id 摘掉，否则随后 save_modified 会把空数据回写到旧行
+        self._manager.discard_pending(old_id)
+        delete_session(old_id)
+        new_id = create_session({})
+        self._session_id = new_id
+        self._data = {}
         self._modified = True
-        self._manager.mark_modified(self._session_id, self._data)
+        # 不再 mark_modified：新行已经在 DB 中以空数据存在，
+        # 后续 __setitem__ 会按新 id 再排进 _modified_sessions。
 
     def keys(self):
         return self._data.keys()
@@ -185,6 +197,10 @@ class SessionManager:
 
     def delete_session(self, session_id: str):
         delete_session(session_id)
+        self._modified_sessions.pop(session_id, None)
+
+    def discard_pending(self, session_id: str):
+        """从待保存队列里移除指定 session_id，避免回写已删除的 session 行。"""
         self._modified_sessions.pop(session_id, None)
 
 

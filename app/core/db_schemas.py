@@ -448,7 +448,8 @@ TABLE_ALTERS = {
     ],
     "users_meta": [
         "ALTER TABLE users_meta ADD COLUMN req_free INTEGER DEFAULT 0",
-        "ALTER TABLE users_meta ADD COLUMN req_free_count INTEGER DEFAULT -1"
+        "ALTER TABLE users_meta ADD COLUMN req_free_count INTEGER DEFAULT -1",
+        "ALTER TABLE users_meta ADD COLUMN emby_pw_hash TEXT DEFAULT ''"
     ],
     "invitations": [
         "ALTER TABLE invitations ADD COLUMN template_user_id TEXT",

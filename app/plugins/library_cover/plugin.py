@@ -90,8 +90,12 @@ class LibraryCoverPlugin(PluginBase):
                 return {"status": "error", "message": str(e)}
 
         @self.router.get("/emby_image/{item_id}")
-        async def get_emby_image(item_id: str):
+        async def get_emby_image(item_id: str, request: Request):
             """代理获取 Emby 图片，避免浏览器跨域"""
+            if not request.session.get("user"):
+                return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             try:
                 res = media_api.get(f"/Items/{item_id}/Images/Primary", timeout=10)
                 if res.status_code == 200:
@@ -249,10 +253,14 @@ class LibraryCoverPlugin(PluginBase):
                 return {"status": "error", "message": str(e)}
 
         @self.router.get("/file/{filename}")
-        async def get_cover_file(filename: str):
+        async def get_cover_file(filename: str, request: Request):
             """获取封面文件"""
+            if not request.session.get("user"):
+                return {"status": "error", "message": "未登录"}
+            if not is_admin_user(request):
+                return {"status": "error", "message": "需要管理员权限"}
             from fastapi.responses import FileResponse
-            
+
             # 安全检查
             if ".." in filename or "/" in filename or "\\" in filename:
                 return {"status": "error", "message": "无效文件名"}

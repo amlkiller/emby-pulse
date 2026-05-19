@@ -330,32 +330,54 @@ def request_system_login(data: RequestLoginModel, request: Request):
     # 验证密码
     password_valid = False
     if has_password:
-        # 有密码，需要验证
-        try:
-            # 如果用户被 Emby 禁用（过期），需要临时启用来验证密码
-            if is_emby_disabled:
-                media_api.post(f"/Users/{user_id}/Policy", json={"IsDisabled": False}, timeout=3)
-            
-            res = requests.post(f"{host}/emby/Users/AuthenticateByName", json={"Username": data.username, "Pw": data.password}, headers=headers, timeout=8)
-            password_valid = res.status_code == 200
-            
-            # 恢复禁用状态
-            if is_emby_disabled:
-                media_api.post(f"/Users/{user_id}/Policy", json={"IsDisabled": True}, timeout=3)
-        except Exception as e:
-            print(f"[用户社区登录] 验证密码失败: {e}")
-            if is_emby_disabled:
+        if is_emby_disabled:
+            # 🔒 安全修复：已禁用账号不修改 Emby IsDisabled 状态，使用本地哈希验证
+            stored_hash = None
+            try:
+                conn = sqlite3.connect(SYSTEM_DB_PATH)
+                c = conn.cursor()
+                row = c.execute("SELECT emby_pw_hash FROM users_meta WHERE user_id = ?", (user_id,)).fetchone()
+                conn.close()
+                if row and row[0]:
+                    stored_hash = row[0]
+            except:
+                pass
+
+            if stored_hash:
                 try:
-                    media_api.post(f"/Users/{user_id}/Policy", json={"IsDisabled": True}, timeout=3)
+                    import bcrypt
+                    password_valid = bcrypt.checkpw(data.password.encode('utf-8'), stored_hash.encode('utf-8'))
                 except:
-                    pass
+                    password_valid = False
+            else:
+                # 无哈希缓存（用户从未成功登录过），安全拒绝
+                return {"status": "error", "message": "账号已过期，请联系管理员续费后登录", "disabled": True, "need_renew": True}
+        else:
+            # 正常账号：通过 Emby API 验证密码
+            try:
+                res = requests.post(f"{host}/emby/Users/AuthenticateByName", json={"Username": data.username, "Pw": data.password}, headers=headers, timeout=8)
+                password_valid = res.status_code == 200
+            except Exception as e:
+                print(f"[用户社区登录] 验证密码失败: {e}")
     else:
         # 无密码用户，直接允许登录
         password_valid = True
     
     if not password_valid:
         return {"status": "error", "message": "账号或密码错误"}
-    
+
+    # 🔒 登录成功后缓存密码哈希（用于过期账号本地验证，永不修改 Emby IsDisabled）
+    if has_password and data.password:
+        try:
+            import bcrypt
+            pw_hash = bcrypt.hashpw(data.password.encode('utf-8'), bcrypt.gensalt(rounds=12)).decode('utf-8')
+            conn = sqlite3.connect(SYSTEM_DB_PATH)
+            conn.execute("UPDATE users_meta SET emby_pw_hash = ? WHERE user_id = ?", (pw_hash, user_id))
+            conn.commit()
+            conn.close()
+        except:
+            pass
+
     # 登录成功 - 清除整个 Session，防止残留其他用户数据
     request.session.clear()
     request.session["req_user"] = {"Id": user_id, "Name": user_name, "expired": is_expired}
@@ -657,7 +679,8 @@ async def submit_media_request(request: Request):
 
         conn = sqlite3.connect(SYSTEM_DB_PATH)
         c = conn.cursor()
-        
+        conn.execute("BEGIN IMMEDIATE")
+
         # 🔥 求片积分配置
         c.execute("SELECT value FROM point_config WHERE key = 'enable_req_cost'")
         enable_cost_row = c.fetchone()
@@ -677,7 +700,7 @@ async def submit_media_request(request: Request):
             need_cost = False
             # 检查免费次数
             if user_req_free_count == 0:
-                conn.close()
+                conn.rollback(); conn.close()
                 return {"status": "error", "message": "您的免费求片次数已用完，请联系管理员。"}
         elif user_req_free == 2:
             # 用户设置为付费
@@ -716,7 +739,7 @@ async def submit_media_request(request: Request):
             current_points = pt_row[0] if pt_row else 0
             
             if current_points < actual_cost and actual_cost > 0:
-                conn.close()
+                conn.rollback(); conn.close()
                 mode_hint = {"per_request": "每次", "per_season": "每季"}
                 count_hint = len(seasons) if cost_mode == 'per_season' else 1
                 return {"status": "error", "message": f"积分不足！求片需消耗 {actual_cost} 积分（{mode_hint.get(cost_mode, '单次')}{base_cost}积分×{count_hint}），当前仅有 {current_points} 积分。请前往首页签到。"}
@@ -1900,7 +1923,8 @@ async def submit_update_request(request: Request):
         
         conn = sqlite3.connect(SYSTEM_DB_PATH)
         c = conn.cursor()
-        
+        conn.execute("BEGIN IMMEDIATE")
+
         # 🔥 先检查是否已有追新请求（用于积分计算）
         c.execute("SELECT COUNT(*) FROM media_requests WHERE tmdb_id = ? AND request_type = 'update'", (tmdb_id,))
         existing_update_count = c.fetchone()[0]
@@ -2046,7 +2070,7 @@ async def submit_update_request(request: Request):
             current_points = pt_row[0] if pt_row else 0
             
             if current_points < actual_cost and actual_cost > 0:
-                conn.close()
+                conn.rollback(); conn.close()
                 mode_hint = {"per_series": "每剧", "per_season": "每季", "per_episode": "每集"}
                 count_hint = len(episodes) if cost_mode == 'per_episode' else 1
                 return {"status": "error", "message": f"积分不足！追新需消耗 {actual_cost} 积分（{mode_hint.get(cost_mode, '单次')}{base_cost}积分×{count_hint}），当前仅有 {current_points} 积分"}
@@ -2153,7 +2177,8 @@ async def submit_update_request_batch(request: Request):
         
         conn = sqlite3.connect(SYSTEM_DB_PATH)
         c = conn.cursor()
-        
+        conn.execute("BEGIN IMMEDIATE")
+
         # 🔥 获取积分配置
         c.execute("SELECT value FROM point_config WHERE key = 'enable_update_cost'")
         enable_cost_row = c.fetchone()
@@ -2189,7 +2214,7 @@ async def submit_update_request_batch(request: Request):
             current_points = pt_row[0] if pt_row else 0
             
             if current_points < total_cost:
-                conn.close()
+                conn.rollback(); conn.close()
                 return {"status": "error", "message": f"积分不足！需消耗 {total_cost} 积分，当前仅有 {current_points} 积分"}
         
         # 🔥 批量插入请求
@@ -2430,25 +2455,44 @@ class UserRegisterModel(BaseModel):
 async def user_community_register(data: UserRegisterModel, request: Request):
     """用户社区注册 API - 注册成功后自动登录"""
     try:
-        # 1. 验证邀请码
-        invite = query_db("SELECT * FROM invitations WHERE code = ?", (data.code,), one=True)
-        if not invite:
-            return {"status": "error", "message": "邀请码无效"}
-        
-        code_type = invite['type'] if invite['type'] else 'register'
-        if code_type != 'register':
-            return {"status": "error", "message": "此邀请码为续费码，请使用注册码注册"}
-        
-        # 检查使用次数
-        used_count = invite['used_count'] if invite['used_count'] else 0
-        max_uses = invite['max_uses'] if invite['max_uses'] else 1
-        if used_count >= max_uses:
-            return {"status": "error", "message": "邀请码已达到使用上限"}
-        
-        # 检查状态
-        if invite['status'] == 1:
-            return {"status": "error", "message": "邀请码已失效"}
-        
+        # 1. 原子抢占邀请码（防 TOCTOU 竞态）
+        conn = sqlite3.connect(SYSTEM_DB_PATH)
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            cur = conn.execute(
+                """UPDATE invitations
+                   SET used_count = used_count + 1,
+                       used_at = datetime('now','localtime'),
+                       used_by = ?
+                   WHERE code = ? AND status != 1 AND used_count < max_uses
+                   AND (type IS NULL OR type = 'register')""",
+                (data.username.strip(), data.code)
+            )
+            if cur.rowcount == 0:
+                conn.rollback()
+                exists = conn.execute(
+                    "SELECT 1 FROM invitations WHERE code = ?", (data.code,)
+                ).fetchone()
+                conn.close()
+                if not exists:
+                    return {"status": "error", "message": "邀请码无效"}
+                return {"status": "error", "message": "邀请码已失效或已达到使用上限"}
+
+            invite = conn.execute(
+                "SELECT * FROM invitations WHERE code = ?", (data.code,)
+            ).fetchone()
+
+            used_count = invite['used_count'] if invite['used_count'] else 0
+            max_uses = invite['max_uses'] if invite['max_uses'] else 1
+            if used_count >= max_uses:
+                conn.execute("UPDATE invitations SET status = 1 WHERE code = ?", (data.code,))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
         days = invite['days'] if invite['days'] else 30
         template_user_id = invite['template_user_id'] if invite['template_user_id'] else None
         routes = invite['routes'] if invite['routes'] else ''
@@ -2520,7 +2564,11 @@ async def user_community_register(data: UserRegisterModel, request: Request):
                     pass
             else:
                 try:
-                    media_api.post(f"/Users/{uid}/Policy", json={"IsDisabled": False}, timeout=3)
+                    # 读取完整 Policy 再合并，避免 Emby 整体替换清空默认权限
+                    user_info = media_api.get(f"/Users/{uid}", timeout=5).json()
+                    policy = user_info.get("Policy", {})
+                    policy["IsDisabled"] = False
+                    media_api.post(f"/Users/{uid}/Policy", json=policy, timeout=3)
                 except:
                     pass
             
@@ -2555,14 +2603,9 @@ async def user_community_register(data: UserRegisterModel, request: Request):
                 (user_id, expire_date, allow_routes, block_routes, req_free, req_free_count, admin_enabled_folders, created_at) 
                 VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now','localtime'))
             """, (uid, expire_date, allow_routes, block_routes, req_free, req_free_count, admin_folders_str))
-            
-            # 7. 更新邀请码状态
-            conn.execute("UPDATE invitations SET used_count = used_count + 1, used_at = datetime('now','localtime'), used_by = ? WHERE code = ?", (safe_name, data.code))
-            if used_count + 1 >= max_uses:
-                conn.execute("UPDATE invitations SET status = 1 WHERE code = ?", (data.code,))
             conn.commit()
             conn.close()
-            
+
             # 清除用户列表缓存
             try:
                 from app.routers.users import invalidate_emby_users_cache

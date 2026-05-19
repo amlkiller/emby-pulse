@@ -81,7 +81,7 @@ def _check_login_locked(lock_key: str) -> tuple:
 
 def _record_login_failure(lock_key: str, lock_type: str):
     """记录登录失败
-    
+
     Args:
         lock_key: 锁定键（ip:xxx 或 user:xxx）
         lock_type: 锁定类型（ip 或 user）
@@ -89,22 +89,17 @@ def _record_login_failure(lock_key: str, lock_type: str):
     try:
         conn = sqlite3.connect(SYSTEM_DB_PATH)
         c = conn.cursor()
-        
-        # 获取当前失败次数
+
         c.execute("SELECT failure_count FROM login_failures WHERE lock_key = ?", (lock_key,))
         row = c.fetchone()
-        
-        if row:
-            failure_count = row[0] + 1
-        else:
-            failure_count = 1
-        
-        # 计算锁定时间
+
+        failure_count = (row[0] + 1) if row else 1
+
+        # 仅 IP 级别触发硬锁定；user 级别只记录次数，不做全局锁定（防 DoS）
         locked_until = None
-        if failure_count >= _LOGIN_MAX_FAILURES:
+        if lock_type == "ip" and failure_count >= _LOGIN_MAX_FAILURES:
             locked_until = datetime.datetime.fromtimestamp(time.time() + _LOGIN_LOCK_DURATION).isoformat()
-        
-        # 更新或插入
+
         c.execute("""
             INSERT INTO login_failures (lock_key, lock_type, failure_count, locked_until, updated_at)
             VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
@@ -113,7 +108,7 @@ def _record_login_failure(lock_key: str, lock_type: str):
                 locked_until = excluded.locked_until,
                 updated_at = CURRENT_TIMESTAMP
         """, (lock_key, lock_type, failure_count, locked_until))
-        
+
         conn.commit()
         conn.close()
     except Exception as e:
@@ -940,26 +935,15 @@ async def api_login(data: LoginModel, request: Request):
     ip_key = f"ip:{client_ip}"
     user_key = f"user:{username}"
     
-    # 检查 IP 锁定
+    # 检查 IP 锁定（唯一硬锁定源，防暴力破解）
     is_ip_locked, ip_remaining = _check_login_locked(ip_key)
     if is_ip_locked:
         log_audit("login_failed", user_name=username, ip_address=client_ip, user_agent=user_agent, details={"reason": "IP_locked"}, status="failed")
         return {
-            "status": "error", 
+            "status": "error",
             "message": f"登录失败次数过多，IP 已被锁定，请 {ip_remaining} 秒后重试",
             "locked": True,
             "remaining_seconds": ip_remaining
-        }
-    
-    # 检查用户名锁定
-    is_user_locked, user_remaining = _check_login_locked(user_key)
-    if is_user_locked:
-        log_audit("login_failed", user_name=username, ip_address=client_ip, user_agent=user_agent, details={"reason": "user_locked"}, status="failed")
-        return {
-            "status": "error", 
-            "message": f"账号 {username} 已被锁定，请 {user_remaining} 秒后重试",
-            "locked": True,
-            "remaining_seconds": user_remaining
         }
 
     # 本地账号登录
@@ -969,12 +953,8 @@ async def api_login(data: LoginModel, request: Request):
             # 🔒 登录成功，清除 IP 和用户名的失败记录
             _clear_login_failure(ip_key)
             _clear_login_failure(user_key)
-            # 🔒 安全：清除旧 Session，防止 Session 固定攻击
+            # 🔒 安全：销毁旧 Session 并切换新 session_id，防止 Session Fixation
             request.session.clear()
-            # 重新生成 session_id
-            from app.core.session import create_session
-            new_session_id = create_session({})
-            request.session._session_id = new_session_id
             request.session["user"] = result
             request.session["login_time"] = time.time()
             log_audit("login", user_id=str(result.get("id")), user_name=username, ip_address=client_ip, user_agent=user_agent, details={"auth_type": "local"})
@@ -983,7 +963,7 @@ async def api_login(data: LoginModel, request: Request):
             # 🔒 记录 IP 和用户名的失败
             _record_login_failure(ip_key, "ip")
             _record_login_failure(user_key, "user")
-            remaining = min(_get_remaining_attempts(ip_key), _get_remaining_attempts(user_key))
+            remaining = _get_remaining_attempts(ip_key)
             log_audit("login_failed", user_name=username, ip_address=client_ip, user_agent=user_agent, details={"reason": str(result), "remaining": remaining}, status="failed")
             return {
                 "status": "error", 
@@ -1025,7 +1005,7 @@ async def api_login(data: LoginModel, request: Request):
             # 🔒 记录 IP 和用户名的失败
             _record_login_failure(ip_key, "ip")
             _record_login_failure(user_key, "user")
-            remaining = min(_get_remaining_attempts(ip_key), _get_remaining_attempts(user_key))
+            remaining = _get_remaining_attempts(ip_key)
             return {"status": "error", "message": "账号或密码错误", "remaining_attempts": remaining}
 
         # 检查是否是管理员
@@ -1033,7 +1013,7 @@ async def api_login(data: LoginModel, request: Request):
             # 🔒 用户枚举防护：统一返回"账号或密码错误"，不暴露用户存在
             _record_login_failure(ip_key, "ip")
             _record_login_failure(user_key, "user")
-            remaining = min(_get_remaining_attempts(ip_key), _get_remaining_attempts(user_key))
+            remaining = _get_remaining_attempts(ip_key)
             return {"status": "error", "message": "账号或密码错误", "remaining_attempts": remaining}
 
         # 验证密码（如果有设置）
@@ -1041,7 +1021,7 @@ async def api_login(data: LoginModel, request: Request):
         if not has_password:
             _record_login_failure(ip_key, "ip")
             _record_login_failure(user_key, "user")
-            remaining = min(_get_remaining_attempts(ip_key), _get_remaining_attempts(user_key))
+            remaining = _get_remaining_attempts(ip_key)
             return {
                 "status": "error",
                 "message": "安全要求：请先在 Emby 中为管理员账号设置密码",
@@ -1059,7 +1039,7 @@ async def api_login(data: LoginModel, request: Request):
             if auth_res.status_code != 200:
                 _record_login_failure(ip_key, "ip")
                 _record_login_failure(user_key, "user")
-                remaining = min(_get_remaining_attempts(ip_key), _get_remaining_attempts(user_key))
+                remaining = _get_remaining_attempts(ip_key)
                 return {"status": "error", "message": "账号或密码错误", "remaining_attempts": remaining}
 
         # 🔒 登录成功，清除 IP 和用户名的失败记录
@@ -1091,12 +1071,8 @@ async def api_login(data: LoginModel, request: Request):
             "avatar": f"/api/user/image/{matched_user['Id']}" if matched_user.get("PrimaryImageTag") else ""
         }
 
-        # 🔒 安全：清除旧 Session，防止 Session 固定攻击
+        # 🔒 安全：销毁旧 Session 并切换新 session_id，防止 Session Fixation
         request.session.clear()
-        # 重新生成 session_id
-        from app.core.session import create_session
-        new_session_id = create_session({})
-        request.session._session_id = new_session_id
         request.session["user"] = user_info
         request.session["login_time"] = time.time()
         return {"status": "success", "message": "登录成功"}

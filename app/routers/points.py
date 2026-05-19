@@ -299,6 +299,7 @@ def batch_update_points(data: BatchPointsModel, request: Request):
         return {"status": "error", "message": "Emby 服务不可用，请稍后重试"}
     try:
         conn = sqlite3.connect(SYSTEM_DB_PATH); c = conn.cursor()
+        conn.execute("BEGIN IMMEDIATE")
         users = media_api.get("/Users", timeout=5).json()
         name_map = {u['Id']: u['Name'] for u in users}
         count = 0
@@ -510,12 +511,13 @@ def user_redeem(data: RedeemModel, request: Request):
     if not user: return {"status": "error"}
     try:
         conn = sqlite3.connect(SYSTEM_DB_PATH); c = conn.cursor()
+        conn.execute("BEGIN IMMEDIATE")
         config = {r[0]: r[1] for r in c.execute("SELECT key, value FROM point_config").fetchall()}
         try: store_items = json.loads(config.get('store_items', '[]'))
         except: store_items = []
-        
+
         target_item = next((x for x in store_items if x.get("id") == data.item_id), None)
-        if not target_item: conn.close(); return {"status": "error", "message": "商品不存在或已下架"}
+        if not target_item: conn.rollback(); conn.close(); return {"status": "error", "message": "商品不存在或已下架"}
 
         # 检查购买数量限制
         max_buys = int(target_item.get('max_buys', 0))  # 0 表示无限制
@@ -526,14 +528,14 @@ def user_redeem(data: RedeemModel, request: Request):
             ).fetchone()
             buy_count = buy_count_row[0] if buy_count_row else 0
             if buy_count >= max_buys:
-                conn.close()
+                conn.rollback(); conn.close()
                 return {"status": "error", "message": f"该商品限购 {max_buys} 次，您已购买 {buy_count} 次"}
 
         cost = int(target_item.get('cost', 0))
         row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (user['Id'],)).fetchone()
         current_points = row[0] if row else 0
 
-        if current_points < cost: conn.close(); return {"status": "error", "message": f"余额不足！需要 {cost} 积分。"}
+        if current_points < cost: conn.rollback(); conn.close(); return {"status": "error", "message": f"余额不足！需要 {cost} 积分。"}
 
         exp_row = c.execute("SELECT expire_date FROM users_meta WHERE user_id = ?", (user['Id'],)).fetchone()
         current_exp = exp_row[0] if exp_row else None
@@ -541,7 +543,7 @@ def user_redeem(data: RedeemModel, request: Request):
         # 检查永久用户不能购买续期类商品
         is_permanent = not current_exp or current_exp == "" or "2099" in current_exp or "3000" in current_exp or "永久" in current_exp
         if target_item.get("type") in ["renew", "random_renew"] and is_permanent:
-            conn.close(); return {"status": "error", "message": "您的账号当前为【永久有效】，无需兑换续期！"}
+            conn.rollback(); conn.close(); return {"status": "error", "message": "您的账号当前为【永久有效】，无需兑换续期！"}
 
         new_points = current_points - cost
         c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (new_points, user['Id']))
@@ -802,21 +804,22 @@ def user_transfer_points(data: TransferModel, request: Request):
     
     try:
         conn = sqlite3.connect(SYSTEM_DB_PATH); c = conn.cursor()
+        conn.execute("BEGIN IMMEDIATE")
         config = {r[0]: r[1] for r in c.execute("SELECT key, value FROM point_config").fetchall()}
-        
+
         # 检查是否启用转赠
         if int(config.get('enable_transfer', 0)) == 0:
-            conn.close(); return {"status": "error", "message": "积分转赠功能未开启"}
-        
+            conn.rollback(); conn.close(); return {"status": "error", "message": "积分转赠功能未开启"}
+
         # 检查转赠金额范围
         min_amount = int(config.get('transfer_min', 10))
         max_amount = int(config.get('transfer_max', 1000))
         if data.amount < min_amount or data.amount > max_amount:
-            conn.close(); return {"status": "error", "message": f"转赠金额需在 {min_amount}-{max_amount} 之间"}
-        
+            conn.rollback(); conn.close(); return {"status": "error", "message": f"转赠金额需在 {min_amount}-{max_amount} 之间"}
+
         # 不能转给自己
         if data.to_user_id == user['Id']:
-            conn.close(); return {"status": "error", "message": "不能转赠给自己"}
+            conn.rollback(); conn.close(); return {"status": "error", "message": "不能转赠给自己"}
         
         # 获取目标用户信息
         to_user_row = c.execute("SELECT user_id FROM users_meta WHERE user_id = ?", (data.to_user_id,)).fetchone()
@@ -825,16 +828,16 @@ def user_transfer_points(data: TransferModel, request: Request):
             try:
                 emby_users = media_api.get("/Users", timeout=5).json()
                 if not any(u['Id'] == data.to_user_id for u in emby_users):
-                    conn.close(); return {"status": "error", "message": "目标用户不存在"}
+                    conn.rollback(); conn.close(); return {"status": "error", "message": "目标用户不存在"}
             except:
-                conn.close(); return {"status": "error", "message": "无法验证目标用户"}
+                conn.rollback(); conn.close(); return {"status": "error", "message": "无法验证目标用户"}
         
         # 获取发送者积分
         row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (user['Id'],)).fetchone()
         from_points = row[0] if row else 0
         
         if from_points < data.amount:
-            conn.close(); return {"status": "error", "message": f"积分不足！当前积分: {from_points}"}
+            conn.rollback(); conn.close(); return {"status": "error", "message": f"积分不足！当前积分: {from_points}"}
         
         # 计算手续费
         fee_rate = int(config.get('transfer_fee_rate', 10))
@@ -900,11 +903,12 @@ def create_red_packet(data: RedPacketModel, request: Request):
     
     try:
         conn = sqlite3.connect(SYSTEM_DB_PATH); c = conn.cursor()
+        conn.execute("BEGIN IMMEDIATE")
         config = {r[0]: r[1] for r in c.execute("SELECT key, value FROM point_config").fetchall()}
-        
+
         # 检查是否启用红包
         if int(config.get('enable_red_packet', 0)) == 0:
-            conn.close(); return {"status": "error", "message": "积分红包功能未开启"}
+            conn.rollback(); conn.close(); return {"status": "error", "message": "积分红包功能未开启"}
         
         # 检查是否仅管理员可发
         if int(config.get('red_packet_admin_only', 1)) == 1:
@@ -915,18 +919,18 @@ def create_red_packet(data: RedPacketModel, request: Request):
             except:
                 is_admin = False
             if not is_admin:
-                conn.close(); return {"status": "error", "message": "仅管理员可发红包"}
+                conn.rollback(); conn.close(); return {"status": "error", "message": "仅管理员可发红包"}
         
         # 检查红包数量
         if data.total_count < 1 or data.total_count > 100:
-            conn.close(); return {"status": "error", "message": "红包数量需在 1-100 之间"}
+            conn.rollback(); conn.close(); return {"status": "error", "message": "红包数量需在 1-100 之间"}
         
         # 检查积分
         row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (user['Id'],)).fetchone()
         current_points = row[0] if row else 0
         
         if current_points < data.total_amount:
-            conn.close(); return {"status": "error", "message": f"积分不足！当前积分: {current_points}"}
+            conn.rollback(); conn.close(); return {"status": "error", "message": f"积分不足！当前积分: {current_points}"}
         
         # 计算过期时间
         expire_hours = int(config.get('red_packet_expire_hours', 24))
@@ -1124,15 +1128,16 @@ def user_rob(data: RobModel, request: Request):
     
     try:
         conn = sqlite3.connect(SYSTEM_DB_PATH); c = conn.cursor()
+        conn.execute("BEGIN IMMEDIATE")
         config = {r[0]: r[1] for r in c.execute("SELECT key, value FROM point_config").fetchall()}
-        
+
         # 检查是否启用打劫
         if int(config.get('enable_rob', 0)) == 0:
-            conn.close(); return {"status": "error", "message": "打劫功能未开启"}
-        
+            conn.rollback(); conn.close(); return {"status": "error", "message": "打劫功能未开启"}
+
         # 不能打劫自己
         if data.to_user_id == user['Id']:
-            conn.close(); return {"status": "error", "message": "不能打劫自己"}
+            conn.rollback(); conn.close(); return {"status": "error", "message": "不能打劫自己"}
         
         # 获取配置
         success_rate = int(config.get('rob_success_rate', 50))
@@ -1156,20 +1161,20 @@ def user_rob(data: RobModel, request: Request):
         
         # 🔥 检查攻击者积分是否低于保护阈值
         if from_points < protect_threshold:
-            conn.close(); return {"status": "error", "message": f"你的积分低于 {protect_threshold}，无法打劫他人"}
-        
+            conn.rollback(); conn.close(); return {"status": "error", "message": f"你的积分低于 {protect_threshold}，无法打劫他人"}
+
         # 检查目标用户是否存在
         try:
             emby_users = media_api.get("/Users", timeout=5).json()
             to_user_name = next((u['Name'] for u in emby_users if u['Id'] == data.to_user_id), None)
             if not to_user_name:
-                conn.close(); return {"status": "error", "message": "目标用户不存在"}
+                conn.rollback(); conn.close(); return {"status": "error", "message": "目标用户不存在"}
         except:
-            conn.close(); return {"status": "error", "message": "无法验证目标用户"}
-        
+            conn.rollback(); conn.close(); return {"status": "error", "message": "无法验证目标用户"}
+
         # 检查目标用户积分是否低于保护阈值
         if to_points < protect_threshold:
-            conn.close(); return {"status": "error", "message": f"对方积分低于 {protect_threshold}，处于保护状态"}
+            conn.rollback(); conn.close(); return {"status": "error", "message": f"对方积分低于 {protect_threshold}，处于保护状态"}
         
         # 检查攻击者今日打劫次数
         today_rob_count = c.execute(
@@ -1177,16 +1182,16 @@ def user_rob(data: RobModel, request: Request):
             (user['Id'],)
         ).fetchone()[0]
         if today_rob_count >= max_per_day:
-            conn.close(); return {"status": "error", "message": f"今日打劫次数已达上限（{max_per_day}次）"}
-        
+            conn.rollback(); conn.close(); return {"status": "error", "message": f"今日打劫次数已达上限（{max_per_day}次）"}
+
         # 检查目标用户今日被被打劫次数
         today_be_robbed_count = c.execute(
             "SELECT COUNT(*) FROM point_rob_logs WHERE to_user_id = ? AND date(created_at, 'localtime') = date('now', 'localtime')",
             (data.to_user_id,)
         ).fetchone()[0]
         if today_be_robbed_count >= max_be_robbed:
-            conn.close(); return {"status": "error", "message": f"对方今日已被打劫 {max_be_robbed} 次，休息一下吧"}
-        
+            conn.rollback(); conn.close(); return {"status": "error", "message": f"对方今日已被打劫 {max_be_robbed} 次，休息一下吧"}
+
         # 检查冷却时间
         last_rob = c.execute(
             "SELECT created_at FROM point_rob_logs WHERE from_user_id = ? AND to_user_id = ? ORDER BY created_at DESC LIMIT 1",
@@ -1199,7 +1204,7 @@ def user_rob(data: RobModel, request: Request):
                 cooldown_end = last_time + timedelta(hours=cooldown_hours)
                 if datetime.now(last_time.tzinfo) < cooldown_end:
                     remaining = int((cooldown_end - datetime.now(last_time.tzinfo)).total_seconds() / 60)
-                    conn.close(); return {"status": "error", "message": f"冷却中，还需等待 {remaining} 分钟"}
+                    conn.rollback(); conn.close(); return {"status": "error", "message": f"冷却中，还需等待 {remaining} 分钟"}
             except:
                 pass
         
@@ -1400,23 +1405,24 @@ def pk_accept(data: PKAcceptModel, request: Request):
     try:
         conn = sqlite3.connect(SYSTEM_DB_PATH)
         c = conn.cursor()
+        conn.execute("BEGIN IMMEDIATE")
         config = {r[0]: r[1] for r in c.execute("SELECT key, value FROM point_config").fetchall()}
-        
+
         # 获取邀请
         invite = c.execute(
             "SELECT * FROM pk_invitations WHERE id = ? AND status = 'pending'",
             (data.invite_id,)
         ).fetchone()
-        
+
         if not invite:
-            conn.close()
+            conn.rollback(); conn.close()
             return {"status": "error", "message": "邀请不存在或已过期"}
         
         # 检查是否是目标用户
         if invite[3] != user['Id']:  # target_id
-            conn.close()
+            conn.rollback(); conn.close()
             return {"status": "error", "message": "这不是发给你的PK邀请"}
-        
+
         # 检查是否过期
         from datetime import datetime
         expires_at = datetime.fromisoformat(invite[9])  # expires_at
@@ -1432,8 +1438,7 @@ def pk_accept(data: PKAcceptModel, request: Request):
         max_points = int(config.get('user_pk_max_points', 500))
         if points < min_points or points > max_points:
             c.execute("UPDATE pk_invitations SET status = 'cancelled' WHERE id = ?", (data.invite_id,))
-            conn.commit()
-            conn.close()
+            conn.commit(); conn.close()
             return {"status": "error", "message": f"积分范围已变更，PK取消（需在 {min_points}-{max_points} 之间）"}
         
         # 获取配置
@@ -1450,7 +1455,7 @@ def pk_accept(data: PKAcceptModel, request: Request):
         
         # 再次检查双方积分
         if challenger_points < points or target_points < points:
-            conn.close()
+            conn.rollback(); conn.close()
             return {"status": "error", "message": "双方积分不足，PK取消"}
         
         # 掷骰子
@@ -1679,13 +1684,14 @@ def slot_spin(request: Request):
     try:
         conn = sqlite3.connect(SYSTEM_DB_PATH)
         c = conn.cursor()
-        
+        conn.execute("BEGIN IMMEDIATE")
+
         # 获取配置
         config = {r[0]: r[1] for r in c.execute("SELECT key, value FROM point_config").fetchall()}
-        
+
         # 检查是否启用
         if config.get('enable_slot') != '1':
-            conn.close()
+            conn.rollback(); conn.close()
             return {"status": "error", "message": "老虎机功能未启用"}
         
         # 解析配置
@@ -1706,13 +1712,13 @@ def slot_spin(request: Request):
         
         # 检查每日次数限制
         if used_today >= max_per_day:
-            conn.close()
+            conn.rollback(); conn.close()
             return {"status": "error", "message": f"今日次数已用完（{max_per_day}次/天）"}
-        
+
         # 获取用户积分
         points_row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (user['Id'],)).fetchone()
         current_points = points_row[0] if points_row else 0
-        
+
         # 🔥 修复：当 daily_free = 0 时，永远不免费
         # 当 daily_free > 0 时，前 daily_free 次免费
         is_free = False
@@ -1935,9 +1941,10 @@ def buy_scratch_card(request: Request):
             return {"status": "error", "message": f"积分不足（需要 {cost} 积分）"}
         
         # 扣除积分
+        conn.execute("BEGIN IMMEDIATE")
         current_points -= cost
         c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (current_points, user['Id']))
-        
+
         # 记录日志
         c.execute(
             "INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
@@ -2023,21 +2030,22 @@ async def reveal_scratch_cell(request: Request):
         if cell['matched'] and cell['reward'] > 0:
             conn = sqlite3.connect(SYSTEM_DB_PATH)
             c = conn.cursor()
-            
+            conn.execute("BEGIN IMMEDIATE")
+
             # 获取当前积分
             points_row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (user['Id'],)).fetchone()
             current_points = points_row[0] if points_row else 0
-            
+
             # 增加积分
             current_points += cell['reward']
             c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (current_points, user['Id']))
-            
+
             # 记录日志
             c.execute(
                 "INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
                 (user['Id'], user['Name'], '刮刮乐-中奖', cell['reward'], current_points)
             )
-            
+
             conn.commit()
             conn.close()
             
@@ -2140,12 +2148,12 @@ async def spin_wheel(request: Request):
         # 扣除积分
         if not is_free:
             if current_points < cost:
-                conn.close()
+                conn.rollback(); conn.close()
                 return {"status": "error", "message": "积分不足"}
             current_points -= cost
             c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (current_points, user['Id']))
-        
-        
+
+
         # 根据权重随机选择扇区
         total_weight = sum(s['weight'] for s in sectors)
         rand_val = random.uniform(0, total_weight)
@@ -2239,21 +2247,22 @@ async def start_guess_game(request: Request):
         
         points_row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (user['Id'],)).fetchone()
         current_points = points_row[0] if points_row else 0
-        
+
         # 扣除积分
         if current_points < cost:
             conn.close()
             return {"status": "error", "message": "积分不足"}
-        
+
+        conn.execute("BEGIN IMMEDIATE")
         current_points -= cost
         c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (current_points, user['Id']))
-        
+
         # 记录扣分日志
         c.execute(
             "INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
             (user['Id'], user['Name'], '猜数字-开始', -cost, current_points)
         )
-        
+
         conn.commit()
         conn.close()
         
@@ -2316,6 +2325,7 @@ async def submit_guess(request: Request):
             # 发放奖励
             conn = sqlite3.connect(SYSTEM_DB_PATH)
             c = conn.cursor()
+            conn.execute("BEGIN IMMEDIATE")
             points_row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (user['Id'],)).fetchone()
             current_points = points_row[0] if points_row else 0
             current_points += reward
@@ -2426,8 +2436,9 @@ async def buy_lottery(request: Request):
         
         conn = sqlite3.connect(SYSTEM_DB_PATH)
         c = conn.cursor()
+        conn.execute("BEGIN IMMEDIATE")
         today = datetime.datetime.now().strftime('%Y-%m-%d')
-        
+
         # 检查今日已购买数量
         today_count = c.execute(
             "SELECT COUNT(*) FROM lottery_tickets WHERE user_id = ? AND draw_date = ?",
@@ -2435,7 +2446,7 @@ async def buy_lottery(request: Request):
         ).fetchone()[0]
         
         if today_count + count > max_per_day:
-            conn.close()
+            conn.rollback(); conn.close()
             return {"status": "error", "message": f"今日最多购买 {max_per_day} 张"}
         
         # 获取当前积分
@@ -2444,7 +2455,7 @@ async def buy_lottery(request: Request):
         
         total_cost = cost * count
         if current_points < total_cost:
-            conn.close()
+            conn.rollback(); conn.close()
             return {"status": "error", "message": "积分不足"}
         
         # 扣除积分

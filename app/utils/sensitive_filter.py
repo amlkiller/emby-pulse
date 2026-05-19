@@ -6,7 +6,7 @@ import re
 # 敏感字段正则模式
 SENSITIVE_PATTERNS = [
     # Telegram Bot Token: 123456789:ABCdefGHIjklMNOpqrsTUVwxyz
-    (r'\b(\d{8,10}:[A-Za-z0-9_-]{30,40})\b', r'\1[:4]****\1[-4:]'),
+    (r'\b(\d{8,10}:[A-Za-z0-9_-]{30,40})\b', lambda m: f'{m.group(1)[:4]}****{m.group(1)[-4:]}'),
     # API Key (通用): 32-64 位字母数字
     (r'\b([a-zA-Z0-9]{8})[a-zA-Z0-9]{16,48}([a-zA-Z0-9]{8})\b', r'\1****\2'),
     # Emby API Key: 32 位 hex
