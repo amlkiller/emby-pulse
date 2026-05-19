@@ -23,6 +23,7 @@ from app.core.config import cfg
 
 from app.core.security_utils import sanitize_html, safe_error_message
 from app.core.security import validate_password_strength
+from app.core.rate_limiter import get_client_ip
 import sqlite3
 
 
@@ -523,7 +524,7 @@ async def create_local_user(request: Request, data: LocalUserCreate):
             action="user_create",
             user_id=str(current_user.get("id", "")),
             user_name=current_user.get("name", ""),
-            ip_address=request.client.host if request.client else "",
+            ip_address=get_client_ip(request),
             resource_type="user",
             details={"new_username": username, "role": data.role}
         )
@@ -579,7 +580,7 @@ async def update_local_user(request: Request, user_id: int, data: LocalUserUpdat
             action="user_update",
             user_id=str(current_user.get("id", "")),
             user_name=current_user.get("name", ""),
-            ip_address=request.client.host if request.client else "",
+            ip_address=get_client_ip(request),
             resource_type="user",
             resource_id=str(user_id),
             details={"updated_fields": updates}
@@ -640,7 +641,7 @@ async def change_local_user_password(request: Request, user_id: int, data: Passw
             action="password_change",
             user_id=str(user_id),
             user_name=current_user.get("name", ""),
-            ip_address=request.client.host if request.client else "",
+            ip_address=get_client_ip(request),
             resource_type="user",
             resource_id=str(user_id)
         )
@@ -678,7 +679,7 @@ async def delete_local_user(request: Request, user_id: int):
             action="user_delete",
             user_id=str(current_user.get("id", "")),
             user_name=current_user.get("name", ""),
-            ip_address=request.client.host if request.client else "",
+            ip_address=get_client_ip(request),
             resource_type="user",
             resource_id=str(user_id),
             details={"deleted_username": user['username']}
@@ -1097,7 +1098,7 @@ async def api_logout(request: Request):
             action="logout",
             user_id=str(user.get("id", "")),
             user_name=user.get("name", ""),
-            ip_address=request.client.host if request.client else ""
+            ip_address=get_client_ip(request)
         )
     request.session.clear()
     return {"status": "success", "message": "已登出"}

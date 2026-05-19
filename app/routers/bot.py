@@ -14,6 +14,7 @@ import datetime
 import sqlite3
 from app.core.database import SYSTEM_DB_PATH
 from app.core.security_utils import safe_error_message
+from app.core.rate_limiter import get_client_ip
 
 logger = logging.getLogger("uvicorn")
 
@@ -234,7 +235,7 @@ def api_save_bot_settings(data: BotSettingsModel, request: Request):
         action="config_update",
         user_id=str(user.get("id", "")),
         user_name=user.get("name", ""),
-        ip_address=request.client.host if request.client else "",
+        ip_address=get_client_ip(request),
         resource_type="bot_settings",
         details={
             "page": "机器人助手",

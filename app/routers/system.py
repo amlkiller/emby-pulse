@@ -7,6 +7,7 @@ import os
 import sqlite3
 import logging
 from app.core.security_utils import safe_error_message
+from app.core.rate_limiter import get_client_ip
 
 logger = logging.getLogger("uvicorn")
 
@@ -441,7 +442,7 @@ def api_update_settings(data: SettingsModel, request: Request):
         action="config_update",
         user_id=str(user.get("id", "")),
         user_name=user.get("name", ""),
-        ip_address=request.client.host if request.client else "",
+        ip_address=get_client_ip(request),
         resource_type="system_settings",
         details={
             "page": "系统设置",

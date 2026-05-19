@@ -176,6 +176,7 @@ async def user_portal_app(scope, receive, send):
             "/api/user/password",
             "/api/user/libraries",
             "/api/user/image",
+            "/api/user/renew",
             "/api/announcements",
             "/api/wallpaper",
             "/api/proxy/",
@@ -226,10 +227,10 @@ async def user_portal_app(scope, receive, send):
             "/api/requests/pending_notify",
         )
         if not scope["path"].startswith(allowed) or scope["path"].startswith(blocked):
-            async def send_404():
-                await send({"type": "http.response.start", "status": 404, "headers": [(b"content-type", b"text/html; charset=utf-8")]})
-                await send({"type": "http.response.body", "body": "<h1>404 Not Found</h1><p>非法越界，后台管理界面已被物理阻断。</p>".encode("utf-8")})
-            return await send_404()
+            body = json.dumps({"detail": "非法越界，后台管理界面已被物理阻断"}).encode("utf-8")
+            await send({"type": "http.response.start", "status": 403, "headers": [(b"content-type", b"application/json")]})
+            await send({"type": "http.response.body", "body": body})
+            return
 
         await app(scope, receive, send)
     else:

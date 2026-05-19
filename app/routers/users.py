@@ -16,6 +16,7 @@ import logging
 import sqlite3
 import time
 from app.core.security_utils import safe_error_message
+from app.core.rate_limiter import get_client_ip
 
 router = APIRouter()
 
@@ -669,7 +670,7 @@ async def api_update_user_image(request: Request, user_id: str = Form(...), url:
     try:
         admin_user = request.session.get("user", {})
         admin_name = admin_user.get("name", admin_user.get("username", "未知"))
-        ip_address = request.client.host if request.client else ""
+        ip_address = get_client_ip(request)
 
         # 获取目标用户名
         target_name = ""
@@ -781,7 +782,7 @@ def api_get_user_libraries(request: Request):
     if not user or not user.get("Id"):
         return {"status": "error", "message": "请先登录"}
     user_id = user["Id"]
-    
+
     try:
         # 获取所有媒体库
         libs_res = media_api.get("/Library/VirtualFolders", timeout=5)
@@ -789,7 +790,7 @@ def api_get_user_libraries(request: Request):
             return {"status": "error", "message": "媒体服务器无法连接"}
         libs = libs_res.json()
         all_guids = [lib["Guid"] for lib in libs if "Guid" in lib]
-        
+
         # 获取用户当前权限
         user_res = media_api.get(f"/Users/{user_id}", timeout=5)
         if user_res.status_code != 200:
@@ -798,7 +799,7 @@ def api_get_user_libraries(request: Request):
         policy = user_data.get("Policy", {})
         enable_all_folders = policy.get("EnableAllFolders", True)
         enabled_folders = policy.get("EnabledFolders", [])
-        
+
         # 🔥 从本地数据库获取管理员初始设置的媒体库权限
         conn = sqlite3.connect(SYSTEM_DB_PATH)
         c = conn.cursor()
@@ -808,25 +809,25 @@ def api_get_user_libraries(request: Request):
         if "admin_enabled_folders" not in cols:
             c.execute("ALTER TABLE users_meta ADD COLUMN admin_enabled_folders TEXT")
             conn.commit()
-        
+
         c.execute("SELECT admin_enabled_folders, hidden_libraries FROM users_meta WHERE user_id = ?", (user_id,))
         row = c.fetchone()
         admin_enabled_folders_str = row[0] if row and row[0] else None
         user_hidden_str = row[1] if row and len(row) > 1 and row[1] else None
         conn.close()
-        
+
         # 🔥 解析管理员允许的媒体库
         if admin_enabled_folders_str:
             admin_enabled_folders = set(g.strip() for g in admin_enabled_folders_str.split(",") if g.strip())
         else:
             admin_enabled_folders = None
-        
+
         # 🔥 解析用户自己隐藏的媒体库
         if user_hidden_str:
             user_hidden_folders = set(g.strip() for g in user_hidden_str.split(",") if g.strip())
         else:
             user_hidden_folders = set()
-        
+
         # 🔥 实时检测管理员是否又隐藏了新的媒体库
         # 如果当前 enabled_folders + 用户隐藏的 < admin_enabled_folders，说明管理员又隐藏了
         if admin_enabled_folders is not None:
@@ -834,7 +835,7 @@ def api_get_user_libraries(request: Request):
             # 当前 enabled_folders = 管理员允许的 - 用户隐藏的
             # 所以管理员当前允许的 = enabled_folders + 用户隐藏的（且在 admin_enabled_folders 中）
             current_admin_allowed = set(enabled_folders) | (user_hidden_folders & admin_enabled_folders)
-            
+
             # 如果 current_admin_allowed 比 admin_enabled_folders 少，说明管理员又隐藏了新的
             if current_admin_allowed < admin_enabled_folders:
                 # 更新 admin_enabled_folders
@@ -848,17 +849,17 @@ def api_get_user_libraries(request: Request):
                     conn.close()
                 except:
                     pass
-        
+
         # 构建返回数据（过滤掉管理员已隐藏的媒体库）
         result = []
         for lib in libs:
             guid = lib.get("Guid")
             name = lib.get("Name", "未知")
-            
+
             # 🔥 如果管理员限制了媒体库，且该媒体库不在管理员允许列表中，则跳过
             if admin_enabled_folders is not None and guid not in admin_enabled_folders:
                 continue  # 管理员已隐藏，不展示给用户
-            
+
             # 判断用户是否自己隐藏了该媒体库
             is_hidden = guid in user_hidden_folders
             result.append({
@@ -866,7 +867,7 @@ def api_get_user_libraries(request: Request):
                 "name": name,
                 "hidden": is_hidden
             })
-        
+
         return {"status": "success", "data": result}
     except Exception as e:
         return {"status": "error", "message": safe_error_message(e)}
@@ -883,7 +884,7 @@ def api_update_hidden_libraries(data: HiddenLibrariesModel, request: Request):
     if not user or not user.get("Id"):
         return {"status": "error", "message": "请先登录"}
     user_id = user["Id"]
-    
+
     try:
         # 获取所有媒体库
         libs_res = media_api.get("/Library/VirtualFolders", timeout=5)
@@ -891,7 +892,7 @@ def api_update_hidden_libraries(data: HiddenLibrariesModel, request: Request):
             return {"status": "error", "message": "媒体服务器无法连接"}
         libs = libs_res.json()
         all_guids = [lib["Guid"] for lib in libs if "Guid" in lib]
-        
+
         # 🔥 获取管理员设置的默认权限
         conn = sqlite3.connect(SYSTEM_DB_PATH)
         c = conn.cursor()
@@ -901,19 +902,19 @@ def api_update_hidden_libraries(data: HiddenLibrariesModel, request: Request):
         if "admin_enabled_folders" not in cols:
             c.execute("ALTER TABLE users_meta ADD COLUMN admin_enabled_folders TEXT")
             conn.commit()
-        
+
         c.execute("SELECT admin_enabled_folders FROM users_meta WHERE user_id = ?", (user_id,))
         row = c.fetchone()
         admin_enabled_folders_str = row[0] if row and row[0] else None
         conn.close()
-        
+
         # 🔥 解析管理员允许的媒体库
         if admin_enabled_folders_str:
             admin_enabled_folders = [g.strip() for g in admin_enabled_folders_str.split(",") if g.strip()]
         else:
             # 没有记录，说明管理员允许全部
             admin_enabled_folders = None
-        
+
         # 🔥 计算用户可操作的媒体库范围
         if admin_enabled_folders is not None:
             # 用户只能操作管理员允许的媒体库
@@ -921,11 +922,11 @@ def api_update_hidden_libraries(data: HiddenLibrariesModel, request: Request):
         else:
             # 管理员允许全部，用户可以操作所有媒体库
             user_available_guids = all_guids
-        
+
         # 🔥 计算用户选择隐藏的媒体库
         hidden_guids = [g for g in data.hidden_libraries if g in user_available_guids]
         enabled_guids = [g for g in user_available_guids if g not in hidden_guids]
-        
+
         # 🔥 同步到 Emby，让播放器生效
         user_res = media_api.get(f"/Users/{user_id}", timeout=5)
         if user_res.status_code == 200:
@@ -933,7 +934,7 @@ def api_update_hidden_libraries(data: HiddenLibrariesModel, request: Request):
             policy["EnableAllFolders"] = False
             policy["EnabledFolders"] = enabled_guids
             media_api.post(f"/Users/{user_id}/Policy", json=policy, timeout=5)
-        
+
         # 保存到本地数据库
         try:
             conn = sqlite3.connect(SYSTEM_DB_PATH)
@@ -948,7 +949,7 @@ def api_update_hidden_libraries(data: HiddenLibrariesModel, request: Request):
             conn.close()
         except Exception as e:
             logger.warning(f"保存隐藏媒体库到本地失败: {e}")
-        
+
         return {"status": "success", "message": "设置已保存"}
     except Exception as e:
         return {"status": "error", "message": safe_error_message(e)}
@@ -961,7 +962,7 @@ def api_gen_invite(data: InviteGenModelLocal, request: Request):
     try:
         admin_user = request.session.get("user", {})
         admin_name = admin_user.get("name", admin_user.get("username", "未知"))
-        ip_address = request.client.host if request.client else ""
+        ip_address = get_client_ip(request)
 
         count = data.count if data.count and data.count > 0 else 1
         code_type = data.type if data.type in ("register", "renew") else "register"
@@ -1063,7 +1064,7 @@ def api_manage_invites_batch(data: InviteBatchModelLocal, request: Request):
     try:
         admin_user = request.session.get("user", {})
         admin_name = admin_user.get("name", admin_user.get("username", "未知"))
-        ip_address = request.client.host if request.client else ""
+        ip_address = get_client_ip(request)
 
         if data.action == "delete":
             for code in data.codes: query_db("DELETE FROM invitations WHERE code = ?", (code,))
@@ -1093,24 +1094,24 @@ def api_manage_user_library(data: UserUpdateModelEx, request: Request):
         p_res = media_api.get(f"/Users/{data.user_id}")
         if p_res.status_code != 200:
             return {"status": "error", "message": "用户不存在"}
-        
+
         p = p_res.json().get('Policy', {})
-        
+
         # 获取旧的媒体库权限用于对比
         old_enable_all = p.get('EnableAllFolders', True)
         old_enabled_folders = set(p.get('EnabledFolders', []))
-        
+
         # 设置新的媒体库权限
         new_enable_all = bool(data.enable_all_folders)
         new_enabled_folders = set([str(x) for x in data.enabled_folders]) if not new_enable_all and data.enabled_folders is not None else set()
-        
+
         # 检测是否有变化
         library_changed = (old_enable_all != new_enable_all) or (old_enabled_folders != new_enabled_folders)
-        
+
         if library_changed:
             p['EnableAllFolders'] = new_enable_all
             p['EnabledFolders'] = list(new_enabled_folders) if not new_enable_all else []
-            
+
             # 同步更新 admin_enabled_folders，但保留用户的 hidden_libraries
             try:
                 conn = sqlite3.connect(SYSTEM_DB_PATH)
@@ -1121,35 +1122,35 @@ def api_manage_user_library(data: UserUpdateModelEx, request: Request):
                     c.execute("ALTER TABLE users_meta ADD COLUMN admin_enabled_folders TEXT")
                 if "hidden_libraries" not in cols:
                     c.execute("ALTER TABLE users_meta ADD COLUMN hidden_libraries TEXT")
-                
+
                 # 获取用户当前的 hidden_libraries
                 c.execute("SELECT hidden_libraries FROM users_meta WHERE user_id = ?", (data.user_id,))
                 row = c.fetchone()
                 user_hidden_str = row[0] if row and row[0] else ''
                 user_hidden_folders = set(g.strip() for g in user_hidden_str.split(',') if g.strip()) if user_hidden_str else set()
-                
+
                 if new_enable_all:
                     c.execute("UPDATE users_meta SET admin_enabled_folders = NULL WHERE user_id = ?", (data.user_id,))
                 else:
                     admin_folders_str = ','.join(new_enabled_folders) if new_enabled_folders else ''
                     c.execute("UPDATE users_meta SET admin_enabled_folders = ? WHERE user_id = ?", (admin_folders_str, data.user_id))
-                    
+
                     # 过滤掉不在管理员允许列表中的隐藏媒体库
                     valid_hidden = user_hidden_folders & new_enabled_folders
                     hidden_str = ','.join(valid_hidden) if valid_hidden else ''
                     c.execute("UPDATE users_meta SET hidden_libraries = ? WHERE user_id = ?", (hidden_str, data.user_id))
-                    
+
                     # 更新 Emby 的 EnabledFolders，排除用户隐藏的
                     final_enabled = [f for f in new_enabled_folders if f not in valid_hidden]
                     p['EnabledFolders'] = final_enabled
-                
+
                 conn.commit()
                 conn.close()
             except Exception: pass
-            
+
             # 更新 Emby Policy
             media_api.post(f"/Users/{data.user_id}/Policy", json=p)
-        
+
         return {"status": "success", "message": "媒体库权限已保存"}
     except Exception as e:
         return {"status": "error", "message": safe_error_message(e)}
@@ -1227,30 +1228,30 @@ def api_manage_user_update(data: UserUpdateModelEx, request: Request):
                                 c.execute("ALTER TABLE users_meta ADD COLUMN admin_enabled_folders TEXT")
                             if "hidden_libraries" not in cols:
                                 c.execute("ALTER TABLE users_meta ADD COLUMN hidden_libraries TEXT")
-                            
+
                             # 获取用户当前的 hidden_libraries
                             c.execute("SELECT hidden_libraries FROM users_meta WHERE user_id = ?", (data.user_id,))
                             row = c.fetchone()
                             user_hidden_str = row[0] if row and row[0] else ''
                             user_hidden_folders = set(g.strip() for g in user_hidden_str.split(',') if g.strip()) if user_hidden_str else set()
-                            
+
                             # 保存模板的媒体库权限
                             if p.get('EnableAllFolders', True):
                                 c.execute("UPDATE users_meta SET admin_enabled_folders = NULL WHERE user_id = ?", (data.user_id,))
                             else:
                                 admin_folders_str = ','.join(p.get('EnabledFolders', []))
                                 c.execute("UPDATE users_meta SET admin_enabled_folders = ? WHERE user_id = ?", (admin_folders_str, data.user_id))
-                                
+
                                 # 🔥 过滤掉不在模板允许列表中的隐藏媒体库
                                 admin_folders_set = set(p.get('EnabledFolders', []))
                                 valid_hidden = user_hidden_folders & admin_folders_set
                                 hidden_str = ','.join(valid_hidden) if valid_hidden else ''
                                 c.execute("UPDATE users_meta SET hidden_libraries = ? WHERE user_id = ?", (hidden_str, data.user_id))
-                                
+
                                 # 🔥 更新 Emby 的 EnabledFolders，排除用户隐藏的
                                 final_enabled = [f for f in p.get('EnabledFolders', []) if f not in valid_hidden]
                                 p['EnabledFolders'] = final_enabled
-                            
+
                             conn.commit()
                             conn.close()
                         except Exception: pass
@@ -1277,10 +1278,10 @@ def api_manage_user_update(data: UserUpdateModelEx, request: Request):
                 old_enabled_folders = set(old_policy.get('EnabledFolders', []))
                 new_enable_all = bool(data.enable_all_folders)
                 new_enabled_folders = set([str(x) for x in data.enabled_folders]) if not new_enable_all and data.enabled_folders is not None else set()
-                
+
                 # 🔥 只有媒体库权限真的变化时才更新
                 library_changed = (old_enable_all != new_enable_all) or (old_enabled_folders != new_enabled_folders)
-                
+
                 if library_changed:
                     p['EnableAllFolders'] = new_enable_all
                     p['EnabledFolders'] = list(new_enabled_folders) if not new_enable_all else []
@@ -1295,13 +1296,13 @@ def api_manage_user_update(data: UserUpdateModelEx, request: Request):
                             c.execute("ALTER TABLE users_meta ADD COLUMN admin_enabled_folders TEXT")
                         if "hidden_libraries" not in cols:
                             c.execute("ALTER TABLE users_meta ADD COLUMN hidden_libraries TEXT")
-                        
+
                         # 获取用户当前的 hidden_libraries
                         c.execute("SELECT hidden_libraries FROM users_meta WHERE user_id = ?", (data.user_id,))
                         row = c.fetchone()
                         user_hidden_str = row[0] if row and row[0] else ''
                         user_hidden_folders = set(g.strip() for g in user_hidden_str.split(',') if g.strip()) if user_hidden_str else set()
-                        
+
                         # 保存管理员设置的媒体库权限
                         if new_enable_all:
                             # 允许全部，清空限制
@@ -1310,16 +1311,16 @@ def api_manage_user_update(data: UserUpdateModelEx, request: Request):
                             # 限制特定媒体库
                             admin_folders_str = ','.join(new_enabled_folders) if new_enabled_folders else ''
                             c.execute("UPDATE users_meta SET admin_enabled_folders = ? WHERE user_id = ?", (admin_folders_str, data.user_id))
-                            
+
                             # 🔥 过滤掉不在管理员允许列表中的隐藏媒体库
                             valid_hidden = user_hidden_folders & new_enabled_folders
                             hidden_str = ','.join(valid_hidden) if valid_hidden else ''
                             c.execute("UPDATE users_meta SET hidden_libraries = ? WHERE user_id = ?", (hidden_str, data.user_id))
-                            
+
                             # 🔥 更新 Emby 的 EnabledFolders，排除用户隐藏的
                             final_enabled = [f for f in new_enabled_folders if f not in valid_hidden]
                             p['EnabledFolders'] = final_enabled
-                        
+
                         conn.commit()
                         conn.close()
                     except Exception: pass
@@ -1350,7 +1351,7 @@ def api_manage_user_update(data: UserUpdateModelEx, request: Request):
         # 记录审计日志
         admin_user = request.session.get("user", {})
         admin_name = admin_user.get("name", "未知")
-        ip_address = request.client.host if request.client else ""
+        ip_address = get_client_ip(request)
         # 获取目标用户名
         target_name = ""
         try:
@@ -1500,7 +1501,7 @@ def api_manage_user_new(data: NewUserModelEx, request: Request):
         # 记录审计日志
         admin_user = request.session.get("user", {})
         admin_name = admin_user.get("name", "未知")
-        ip_address = request.client.host if request.client else ""
+        ip_address = get_client_ip(request)
         add_audit_log(
             admin_id=admin_user.get("id", ""),
             admin_name=admin_name,
@@ -1600,7 +1601,7 @@ def api_manage_user_delete(user_id: str, request: Request):
                 pass
 
             # 记录审计日志
-            ip_address = request.client.host if request.client else ""
+            ip_address = get_client_ip(request)
             add_audit_log(
                 admin_id=admin_user.get("id", ""),
                 admin_name=admin_name,
@@ -1789,7 +1790,7 @@ def api_manage_users_batch(data: BatchActionModelLocal, request: Request):
                              (uid, req_free, req_free_count, datetime.datetime.now().isoformat()))
 
         # 记录审计日志
-        ip_address = request.client.host if request.client else ""
+        ip_address = get_client_ip(request)
         # 格式化用户名列表(最多显示10个)
         names_str = ', '.join(operated_names[:10]) + ('...' if len(operated_names) > 10 else '') if operated_names else ''
 
@@ -1944,7 +1945,7 @@ def api_pin_user(data: PinUserModel, request: Request):
             admin_name=user.get("name", "管理员"),
             action=action,
             target_user_id=data.user_id,
-            ip_address=request.client.host if request.client else ""
+            ip_address=get_client_ip(request)
         )
 
         return {"status": "success", "message": f"已{'置顶' if data.pinned else '取消置顶'}用户"}
@@ -2055,6 +2056,7 @@ def api_get_tags(request: Request):
     """获取所有标签"""
     if not request.session.get("user"):
         return {"status": "error", "message": "未登录"}
+    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
 
     try:
         conn = sqlite3.connect(SYSTEM_DB_PATH)
@@ -2107,7 +2109,7 @@ def api_delete_tag(tag_id: int, request: Request):
         c.execute("DELETE FROM user_tags WHERE id = ?", (tag_id,))
         conn.commit()
         conn.close()
-        
+
         return {"status": "success"}
     except Exception as e:
         return {"status": "error", "message": safe_error_message(e)}
@@ -2123,30 +2125,30 @@ def api_delete_tag_by_name(tag_name: str, request: Request):
     try:
         conn = sqlite3.connect(SYSTEM_DB_PATH)
         c = conn.cursor()
-        
+
         # 获取标签ID
         row = c.execute("SELECT id FROM user_tags WHERE name = ?", (tag_name,)).fetchone()
         if not row:
             conn.close()
             return {"status": "error", "message": "标签不存在"}
-        
+
         tag_id = row[0]
-        
+
         # 删除标签
         c.execute("DELETE FROM user_tags WHERE id = ?", (tag_id,))
-        
+
         # 🔥 从所有用户的标签中移除该标签
         c.execute("SELECT user_id, tags FROM users_meta WHERE tags IS NOT NULL AND tags != ''")
         users_with_tags = c.fetchall()
-        
+
         for user_id, user_tags in users_with_tags:
             tag_list = [t.strip() for t in user_tags.split(',') if t.strip() and t.strip() != tag_name]
             new_tags = ','.join(tag_list) if tag_list else ''
             c.execute("UPDATE users_meta SET tags = ? WHERE user_id = ?", (new_tags, user_id))
-        
+
         conn.commit()
         conn.close()
-        
+
         return {"status": "success", "message": f"标签 '{tag_name}' 已删除"}
     except Exception as e:
         return {"status": "error", "message": safe_error_message(e)}

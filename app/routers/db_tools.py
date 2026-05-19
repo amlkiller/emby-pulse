@@ -16,6 +16,7 @@ from app.core.config import DB_PATH, SYSTEM_DB_PATH
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 import os
 from app.core.security_utils import safe_error_message
+from app.core.rate_limiter import get_client_ip
 
 router = APIRouter(prefix="/api/db", tags=["数据库管理"])
 
@@ -235,7 +236,7 @@ async def api_db_repair(request: Request):
         action="db_repair",
         user_id=str(user.get("id", "")),
         user_name=user.get("name", ""),
-        ip_address=request.client.host if request.client else "",
+        ip_address=get_client_ip(request),
         resource_type="database",
         details={"message": "数据库修复"}
     )
@@ -274,7 +275,7 @@ async def api_db_backup(request: Request):
         action="backup_create",
         user_id=str(user.get("id", "")),
         user_name=user.get("name", ""),
-        ip_address=request.client.host if request.client else "",
+        ip_address=get_client_ip(request),
         resource_type="database",
         details={"message": "创建数据库备份"}
     )
@@ -330,7 +331,7 @@ async def api_delete_backup(request: Request, filename: str):
         action="backup_delete",
         user_id=str(user.get("id", "")),
         user_name=user.get("name", ""),
-        ip_address=request.client.host if request.client else "",
+        ip_address=get_client_ip(request),
         resource_type="backup",
         details={"filename": filename}
     )
@@ -363,7 +364,7 @@ async def api_db_migrate(
         action="db_migrate",
         user_id=str(user.get("id", "")),
         user_name=user.get("name", ""),
-        ip_address=request.client.host if request.client else "",
+        ip_address=get_client_ip(request),
         resource_type="database",
         details={"mode": mode, "tables": tables}
     )
@@ -425,7 +426,7 @@ async def api_db_restore(request: Request):
         action="backup_restore",
         user_id=str(user.get("id", "")),
         user_name=user.get("name", ""),
-        ip_address=request.client.host if request.client else "",
+        ip_address=get_client_ip(request),
         resource_type="database",
         details={"backup_path": backup_path}
     )

@@ -11,6 +11,7 @@ from app.core.media_adapter import media_api
 
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 from app.core.security_utils import safe_error_message
+from app.core.rate_limiter import get_client_ip
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -72,7 +73,7 @@ async def add_blacklist(data: BlacklistModel, request: Request):
         # 记录审计日志
         admin_user = request.session.get("user", {})
         admin_name = admin_user.get("name", admin_user.get("username", "未知"))
-        ip_address = request.client.host if request.client else ""
+        ip_address = get_client_ip(request)
         add_audit_log(
             admin_id=admin_user.get("id", ""),
             admin_name=admin_name,
@@ -97,7 +98,7 @@ async def delete_blacklist(app_name: str, request: Request):
     # 记录审计日志
     admin_user = request.session.get("user", {})
     admin_name = admin_user.get("name", admin_user.get("username", "未知"))
-    ip_address = request.client.host if request.client else ""
+    ip_address = get_client_ip(request)
     add_audit_log(
         admin_id=admin_user.get("id", ""),
         admin_name=admin_name,
@@ -137,7 +138,7 @@ async def add_whitelist(data: WhitelistModel, request: Request):
         # 记录审计日志
         admin_user = request.session.get("user", {})
         admin_name = admin_user.get("name", admin_user.get("username", "未知"))
-        ip_address = request.client.host if request.client else ""
+        ip_address = get_client_ip(request)
         add_audit_log(
             admin_id=admin_user.get("id", ""),
             admin_name=admin_name,
@@ -163,7 +164,7 @@ async def delete_whitelist(user_id: str, request: Request):
     # 记录审计日志
     admin_user = request.session.get("user", {})
     admin_name = admin_user.get("name", admin_user.get("username", "未知"))
-    ip_address = request.client.host if request.client else ""
+    ip_address = get_client_ip(request)
     add_audit_log(
         admin_id=admin_user.get("id", ""),
         admin_name=admin_name,
@@ -204,7 +205,7 @@ async def batch_add_whitelist(request: Request):
     # 记录审计日志
     admin_user = request.session.get("user", {})
     admin_name = admin_user.get("name", admin_user.get("username", "未知"))
-    ip_address = request.client.host if request.client else ""
+    ip_address = get_client_ip(request)
     add_audit_log(
         admin_id=admin_user.get("id", ""),
         admin_name=admin_name,
@@ -235,7 +236,7 @@ async def batch_delete_whitelist(request: Request):
     # 记录审计日志
     admin_user = request.session.get("user", {})
     admin_name = admin_user.get("name", admin_user.get("username", "未知"))
-    ip_address = request.client.host if request.client else ""
+    ip_address = get_client_ip(request)
     add_audit_log(
         admin_id=admin_user.get("id", ""),
         admin_name=admin_name,
@@ -437,7 +438,7 @@ async def execute_block(request: Request):
     # 记录审计日志
     admin_user = request.session.get("user", {})
     admin_name = admin_user.get("name", admin_user.get("username", "未知"))
-    ip_address = request.client.host if request.client else ""
+    ip_address = get_client_ip(request)
     add_audit_log(
         admin_id=admin_user.get("id", ""),
         admin_name=admin_name,
