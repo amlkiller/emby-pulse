@@ -6,7 +6,7 @@
   <h3>Emby 服务器的专业级管理中枢：影巢集成 · 风险管控 · 智能运维</h3>
 
   <p>
-    <img src="https://img.shields.io/badge/version-1.4.1-2EA44F?style=flat-square" alt="Version" />
+    <img src="https://img.shields.io/badge/version-1.4.2-2EA44F?style=flat-square" alt="Version" />
     <img src="https://img.shields.io/badge/python-3.9+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python" />
     <img src="https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
     <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License" />
@@ -156,7 +156,7 @@ Pro 版内置多个功能插件：
 | 镜像 | 说明 |
 |------|------|
 | `ghcr.io/amlkiller/emby-pulse:latest` | 本仓库（amlkiller）最新稳定版 |
-| `ghcr.io/amlkiller/emby-pulse:1.4.1` | 锁定具体版本 |
+| `ghcr.io/amlkiller/emby-pulse:1.4.2` | 锁定具体版本 |
 | `zeyu8023/embypulse-pro:latest` | 上游官方镜像 |
 
 ### 端口说明
