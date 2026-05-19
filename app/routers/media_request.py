@@ -2451,11 +2451,56 @@ class UserRegisterModel(BaseModel):
     username: str
     password: str
 
+def _restore_invitation_code(code):
+    """Emby 用户创建失败时回滚邀请码消费计数"""
+    try:
+        conn = sqlite3.connect(SYSTEM_DB_PATH)
+        conn.execute(
+            "UPDATE invitations SET used_count = MAX(used_count - 1, 0), used_by = NULL, used_at = NULL WHERE code = ?",
+            (code,)
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+
 @router.post("/api/requests/register")
 async def user_community_register(data: UserRegisterModel, request: Request):
     """用户社区注册 API - 注册成功后自动登录"""
     try:
-        # 1. 原子抢占邀请码（防 TOCTOU 竞态）
+        # 1. 先校验用户名和密码（不消耗邀请码）
+        username = data.username.strip()
+        if not username or len(username) < 2:
+            return {"status": "error", "message": "用户名至少需要 2 个字符"}
+
+        if len(username) > 16:
+            return {"status": "error", "message": "用户名最多 16 个字符，当前 " + str(len(username)) + " 个字符"}
+
+        safe_name = re.sub(r'[^a-zA-Z0-9一-龥_\-.@]', '', username)
+
+        if safe_name != username:
+            invalid_chars = set(re.findall(r'[^a-zA-Z0-9一-龥_\-.@]', username))
+            invalid_str = ', '.join(f"'{c}'" for c in list(invalid_chars)[:5])
+            return {"status": "error", "message": f"用户名包含不支持的字符: {invalid_str}。只允许字母、数字、中文、下划线(_)、连字符(-)、@ 和 ."}
+
+        if not safe_name:
+            return {"status": "error", "message": "用户名无效，请使用字母、数字、中文、下划线(_)、连字符(-)、@ 或 ."}
+
+        password = data.password.strip()
+        pw_valid, pw_error = validate_password_strength(password)
+        if not pw_valid:
+            return {"status": "error", "message": pw_error}
+
+        # 2. 检查 Emby 用户名是否已存在
+        try:
+            users = media_api.get("/Users", timeout=5).json()
+            if any(u['Name'].lower() == safe_name.lower() for u in users):
+                return {"status": "error", "message": f"用户名 {safe_name} 已被占用，请换一个"}
+        except Exception as e:
+            return {"status": "error", "message": safe_error_message(e, "检查用户名失败")}
+
+        # 3. 所有校验通过后，原子抢占邀请码（防 TOCTOU 竞态）
         conn = sqlite3.connect(SYSTEM_DB_PATH)
         try:
             conn.execute("BEGIN IMMEDIATE")
@@ -2466,7 +2511,7 @@ async def user_community_register(data: UserRegisterModel, request: Request):
                        used_by = ?
                    WHERE code = ? AND status != 1 AND used_count < max_uses
                    AND (type IS NULL OR type = 'register')""",
-                (data.username.strip(), data.code)
+                (safe_name, data.code)
             )
             if cur.rowcount == 0:
                 conn.rollback()
@@ -2499,46 +2544,12 @@ async def user_community_register(data: UserRegisterModel, request: Request):
         route_mode = invite['route_mode'] if invite['route_mode'] else 'block'
         req_free = invite['req_free'] if 'req_free' in invite.keys() else 0
         req_free_count = invite['req_free_count'] if 'req_free_count' in invite.keys() else -1
-        
-        # 2. 验证用户名
-        username = data.username.strip()
-        if not username or len(username) < 2:
-            return {"status": "error", "message": "用户名至少需要 2 个字符"}
-        
-        # 检查用户名长度限制
-        if len(username) > 16:
-            return {"status": "error", "message": "用户名最多 16 个字符，当前 " + str(len(username)) + " 个字符"}
-        
-        # 清理用户名（允许字母、数字、中文、下划线、连字符、@、.）
-        safe_name = re.sub(r'[^a-zA-Z0-9\u4e00-\u9fa5_\-.@]', '', username)
-        
-        # 检查用户名是否包含不支持的字符（清理前后不一致）
-        if safe_name != username:
-            invalid_chars = set(re.findall(r'[^a-zA-Z0-9\u4e00-\u9fa5_\-.@]', username))
-            invalid_str = ', '.join(f"'{c}'" for c in list(invalid_chars)[:5])
-            return {"status": "error", "message": f"用户名包含不支持的字符: {invalid_str}。只允许字母、数字、中文、下划线(_)、连字符(-)、@ 和 ."}
 
-        if not safe_name:
-            return {"status": "error", "message": "用户名无效，请使用字母、数字、中文、下划线(_)、连字符(-)、@ 或 ."}
-        
-        # 3. 验证密码（统一策略：≥ 8 位 + 含小写 + 含大写或数字）
-        password = data.password.strip()
-        pw_valid, pw_error = validate_password_strength(password)
-        if not pw_valid:
-            return {"status": "error", "message": pw_error}
-        
-        # 4. 检查用户名是否已存在
-        try:
-            users = media_api.get("/Users", timeout=5).json()
-            if any(u['Name'].lower() == safe_name.lower() for u in users):
-                return {"status": "error", "message": f"用户名 {safe_name} 已被占用，请换一个"}
-        except Exception as e:
-            return {"status": "error", "message": safe_error_message(e, "检查用户名失败")}
-        
-        # 5. 创建 Emby 用户
+        # 4. 创建 Emby 用户
         try:
             create_res = media_api.post("/Users/New", json={"Name": safe_name}, timeout=10)
             if create_res.status_code not in [200, 201]:
+                _restore_invitation_code(data.code)
                 return {"status": "error", "message": f"创建账号失败: {create_res.text}"}
             
             new_user = create_res.json()
@@ -2669,6 +2680,7 @@ async def user_community_register(data: UserRegisterModel, request: Request):
             
         except Exception as e:
             logger.error(f"[用户社区注册] 创建用户失败: {e}")
+            _restore_invitation_code(data.code)
             return {"status": "error", "message": safe_error_message(e, "注册失败")}
             
     except Exception as e:

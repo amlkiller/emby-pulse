@@ -19,6 +19,7 @@ from app.core.database import DB_PATH, SYSTEM_DB_PATH, query_db
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
 from app.core.media_adapter import media_api
 from app.core.security import validate_password_strength  # 🔒 统一密码强度校验
+from app.core.security_utils import safe_error_message  # 🔒 错误脱敏
 
 logger = logging.getLogger("uvicorn")
 
@@ -864,7 +865,8 @@ def cmd_bind(chat_id, tg_user_id, args, tg_username="", tg_display_name=""):
         _send(chat_id, f"✅ <b>绑定成功！</b>\n\n👤 Emby 账号：<b>{uname}</b>\n\n发送 /menu 打开主菜单",
               reply_markup=_main_menu_keyboard({"emby_user_id": uid, "emby_username": uname}))
     except Exception as e:
-        _send(chat_id, f"❌ 绑定失败：{e}")
+        logger.error(f"[绑定] Emby绑定失败: {e}")
+        _send(chat_id, f"❌ 绑定失败：{safe_error_message(e, '绑定操作异常，请稍后重试')}")
 
 
 def cmd_register(chat_id, tg_user_id, tg_name):
@@ -1263,7 +1265,8 @@ def _do_register(chat_id, tg_user_id, custom_name, tg_username="", tg_display_na
                       f"💡 密码可在「个人中心」随时查看",
                       reply_markup=_main_menu_keyboard({"emby_user_id": uid, "emby_username": safe_name}))
             except Exception as e:
-                _send(chat_id, f"❌ 注册异常：{e}")
+                logger.error(f"[注册] 执行异常: {e}")
+                _send(chat_id, f"❌ 注册异常：{safe_error_message(e, '注册操作异常，请稍后重试')}")
     finally:
         if reserved:
             try:
@@ -1316,7 +1319,8 @@ def cmd_code(chat_id, tg_user_id, args):
         conn.close()
         return
     except Exception as e:
-        _send(chat_id, f"❌ 注册码验证失败：{e}")
+        logger.error(f"[注册码] 验证失败: {e}")
+        _send(chat_id, f"❌ 注册码验证失败：{safe_error_message(e, '注册码验证异常，请稍后重试')}")
         return
 
 
@@ -1471,7 +1475,8 @@ def _do_code_register(chat_id, tg_user_id, custom_name, code, days, tpl_id, rout
                     add_sys_notification("user", f"新用户注册: {safe_name}", f"TG机器人注册，有效期 {days_display}", "/users_manage")
                 except Exception: pass
             except Exception as e:
-                _send(chat_id, f"❌ 注册码使用失败：{e}")
+                logger.error(f"[注册码] 使用失败: {e}")
+                _send(chat_id, f"❌ 注册码使用失败：{safe_error_message(e, '注册操作异常，请稍后重试')}")
     finally:
         _leave_reg_queue()
 
@@ -1485,6 +1490,7 @@ def cmd_renew(chat_id, tg_user_id, args):
         _send(chat_id, "❌ 请先绑定账号：/bind 用户名")
         return
     code = args.strip()
+    conn = None
     try:
         conn = sqlite3.connect(SYSTEM_DB_PATH)
         conn.execute("BEGIN IMMEDIATE")
@@ -1541,7 +1547,14 @@ def cmd_renew(chat_id, tg_user_id, args):
 
         _send(chat_id, f"✅ <b>续期成功！</b>\n\n📅 新到期日：{new_exp}\n⏳ 延长了 {days_display}")
     except Exception as e:
-        _send(chat_id, f"❌ 续期失败：{e}")
+        logger.error(f"[续期] 执行失败: {e}")
+        if conn is not None:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            conn.close()
+        _send(chat_id, f"❌ 续期失败：{safe_error_message(e, '续期操作异常，请联系管理员')}")
 
 
 def cmd_checkin(chat_id, tg_user_id, msg_id=None, is_group=False, group_name="", user_msg_id=None):
@@ -1669,7 +1682,8 @@ def cmd_checkin(chat_id, tg_user_id, msg_id=None, is_group=False, group_name="",
             if bot_msg_id:
                 _delete_messages_later(chat_id, [bot_msg_id, user_msg_id], 30)
     except Exception as e:
-        _send(chat_id, f"❌ 签到失败：{e}")
+        logger.error(f"[签到] 执行失败: {e}")
+        _send(chat_id, f"❌ 签到失败：{safe_error_message(e, '签到操作异常，请稍后重试')}")
 
 
 def _delete_messages_later(chat_id, message_ids, delay_seconds=30):
@@ -2002,7 +2016,7 @@ def cmd_rob(chat_id, tg_user_id, text, is_group=False, entities=None):
             
     except Exception as e:
         logger.error(f"[UserBot] 打劫失败: {e}")
-        return _send(chat_id, f"❌ 打劫失败：{e}")
+        return _send(chat_id, f"❌ 打劫失败：{safe_error_message(e, '打劫操作异常，请稍后重试')}")
 
 # PK命令代码片段 - 需要追加到 user_bot_service.py
 
@@ -2219,7 +2233,7 @@ def _handle_pk_accept_callback(chat_id, tg_user_id, invite_id, cq_id, msg_id):
         
     except Exception as e:
         logger.error(f"[UserBot] PK接受回调失败: {e}")
-        _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": f"处理失败: {e}", "show_alert": True})
+        _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": "处理失败，请稍后重试", "show_alert": True})
 
 
 def _handle_pk_reject_callback(chat_id, tg_user_id, invite_id, cq_id, msg_id):
@@ -2293,7 +2307,7 @@ def _handle_pk_reject_callback(chat_id, tg_user_id, invite_id, cq_id, msg_id):
         
     except Exception as e:
         logger.error(f"[UserBot] PK拒绝回调失败: {e}")
-        _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": f"处理失败: {e}", "show_alert": True})
+        _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": "处理失败，请稍后重试", "show_alert": True})
 
 def cmd_pk_invite(chat_id, tg_user_id, text, is_group=False, entities=None, user_msg_id=None):
     """用户PK邀请"""
@@ -2478,7 +2492,7 @@ def cmd_pk_invite(chat_id, tg_user_id, text, is_group=False, entities=None, user
         
     except Exception as e:
         logger.error(f"[UserBot] PK邀请失败: {e}")
-        return _send(chat_id, f"❌ PK邀请失败：{e}")
+        return _send(chat_id, f"❌ PK邀请失败：{safe_error_message(e, 'PK邀请异常，请稍后重试')}")
 
 def cmd_pk_accept(chat_id, tg_user_id, text, is_group=False):
     """接受PK邀请"""
@@ -2615,7 +2629,7 @@ def cmd_pk_accept(chat_id, tg_user_id, text, is_group=False):
         
     except Exception as e:
         logger.error(f"[UserBot] 接受PK失败: {e}")
-        return _send(chat_id, f"❌ 接受PK失败：{e}")
+        return _send(chat_id, f"❌ 接受PK失败：{safe_error_message(e, '接受PK异常，请稍后重试')}")
 
 def cmd_pk_reject(chat_id, tg_user_id, text, is_group=False):
     """拒绝PK邀请"""
@@ -2654,7 +2668,7 @@ def cmd_pk_reject(chat_id, tg_user_id, text, is_group=False):
         
     except Exception as e:
         logger.error(f"[UserBot] 拒绝PK失败: {e}")
-        return _send(chat_id, f"❌ 拒绝PK失败：{e}")
+        return _send(chat_id, f"❌ 拒绝PK失败：{safe_error_message(e, '拒绝PK异常，请稍后重试')}")
 
 def cmd_transfer(chat_id, tg_user_id, text, is_group=False, entities=None):
     """转赠积分"""
@@ -3866,7 +3880,8 @@ def cmd_shop(chat_id, tg_user_id, msg_id=None):
             keyboard["inline_keyboard"].append([{"text": f"🛒 {item['name']} ({item['cost']}积分)", "callback_data": f"ub_redeem_{item['id']}"}])
         _reply(chat_id, msg.strip(), reply_markup=keyboard, msg_id=msg_id)
     except Exception as e:
-        _reply(chat_id, f"❌ 商城加载失败：{e}", msg_id=msg_id)
+        logger.error(f"[商城] 加载失败: {e}")
+        _reply(chat_id, f"❌ 商城加载失败：{safe_error_message(e, '商城加载异常，请稍后重试')}", msg_id=msg_id)
 
 
 def cmd_redeem_callback(chat_id, tg_user_id, item_id, cq_id):
@@ -4018,7 +4033,8 @@ def cmd_redeem_callback(chat_id, tg_user_id, item_id, cq_id):
             add_sys_notification("points", f"商城订单: {target['name']}", f"用户 {uname} 通过TG机器人兑换", "/points")
         except Exception: pass
     except Exception as e:
-        _send(chat_id, f"❌ 兑换失败：{e}")
+        logger.error(f"[兑换] 执行失败: {e}")
+        _send(chat_id, f"❌ 兑换失败：{safe_error_message(e, '兑换操作异常，请稍后重试')}")
 
 
 def cmd_request(chat_id, tg_user_id, args):
@@ -4058,7 +4074,8 @@ def cmd_request(chat_id, tg_user_id, args):
             keyboard["inline_keyboard"].append([{"text": f"{mtype} {name} ({year})", "callback_data": f"ub_req_{r['media_type']}_{r['id']}"}])
         _send(chat_id, msg + "\n点击下方按钮提交求片：", reply_markup=keyboard)
     except Exception as e:
-        _send(chat_id, f"❌ 搜索失败：{e}")
+        logger.error(f"[搜索] 执行失败: {e}")
+        _send(chat_id, f"❌ 搜索失败：{safe_error_message(e, '搜索异常，请稍后重试')}")
 
 
 def cmd_request_callback(chat_id, tg_user_id, media_type, tmdb_id, cq_id):
@@ -4095,7 +4112,8 @@ def cmd_request_callback(chat_id, tg_user_id, media_type, tmdb_id, cq_id):
                 keyboard["inline_keyboard"].append([{"text": "🔙 返回", "callback_data": "ub_back_menu"}])
                 _send(chat_id, msg, reply_markup=keyboard)
         except Exception as e:
-            _send(chat_id, f"❌ 获取季数失败：{e}")
+            logger.error(f"[求片] 获取季数失败: {e}")
+            _send(chat_id, f"❌ 获取季数失败：{safe_error_message(e, '获取季数异常，请稍后重试')}")
         return
 
     # 电影直接提交
@@ -4222,7 +4240,8 @@ def _submit_request(chat_id, tg_user_id, media_type, tmdb_id, season):
             bot.send_photo("sys_notify", poster_url, msg, reply_markup=keyboard, platform="all")
         except Exception: pass
     except Exception as e:
-        _send(chat_id, f"❌ 求片提交失败：{e}")
+        logger.error(f"[求片] 提交失败: {e}")
+        _send(chat_id, f"❌ 求片提交失败：{safe_error_message(e, '求片提交异常，请稍后重试')}")
 
 
 # 🔥 追新功能已删除 - 请使用用户社区追新功能
@@ -4256,7 +4275,8 @@ def cmd_myrequests(chat_id, tg_user_id, msg_id=None):
         _reply(chat_id, msg.strip(),
               reply_markup={"inline_keyboard": [[{"text": "🎬 继续求片", "callback_data": "ub_menu_request"}, {"text": "🔙 主菜单", "callback_data": "ub_back_menu"}]]}, msg_id=msg_id)
     except Exception as e:
-        _reply(chat_id, f"❌ 查询失败：{e}", msg_id=msg_id)
+        logger.error(f"[求片] 查询失败: {e}")
+        _reply(chat_id, f"❌ 查询失败：{safe_error_message(e, '查询异常，请稍后重试')}", msg_id=msg_id)
 
 
 def cmd_profile(chat_id, tg_user_id, msg_id=None):
@@ -4354,7 +4374,8 @@ def cmd_profile(chat_id, tg_user_id, msg_id=None):
             [{"text": "🔙 主菜单", "callback_data": "ub_back_menu"}]
         ]}, msg_id=msg_id)
     except Exception as e:
-        _reply(chat_id, f"❌ 获取信息失败：{e}", msg_id=msg_id)
+        logger.error(f"[个人信息] 获取失败: {e}")
+        _reply(chat_id, f"❌ 获取信息失败：{safe_error_message(e, '获取信息异常，请稍后重试')}", msg_id=msg_id)
 
 
 def cmd_unbind(chat_id, tg_user_id):
@@ -4389,7 +4410,8 @@ def cmd_bind_channel(chat_id, tg_user_id, args):
         else:
             _send(chat_id, "❌ 绑定失败，请稍后重试")
     except Exception as e:
-        _send(chat_id, f"❌ 绑定失败：{e}")
+        logger.error(f"[频道绑定] 执行失败: {e}")
+        _send(chat_id, f"❌ 绑定失败：{safe_error_message(e, '频道绑定异常，请稍后重试')}")
 
 
 def cmd_unbind_channel(chat_id, tg_user_id, args):
@@ -4456,7 +4478,8 @@ def cmd_password(chat_id, tg_user_id, args):
             else:
                 _send(chat_id, "❌ 修改密码失败，请稍后重试")
         except Exception as e:
-            _send(chat_id, f"❌ 修改密码失败：{e}")
+            logger.error(f"[改密] 执行失败: {e}")
+            _send(chat_id, f"❌ 修改密码失败：{safe_error_message(e, '密码修改异常，请稍后重试')}")
         _user_state.pop(str(tg_user_id), None)
         return
 
@@ -4501,7 +4524,8 @@ def cmd_password(chat_id, tg_user_id, args):
         else:
             _send(chat_id, "❌ 修改密码失败，请稍后重试")
     except Exception as e:
-        _send(chat_id, f"❌ 修改密码失败：{e}")
+        logger.error(f"[设密] 执行失败: {e}")
+        _send(chat_id, f"❌ 修改密码失败：{safe_error_message(e, '密码修改异常，请稍后重试')}")
 
 
 def cmd_server(chat_id, tg_user_id, msg_id=None):
