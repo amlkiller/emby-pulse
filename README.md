@@ -6,7 +6,7 @@
   <h3>Emby 服务器的专业级管理中枢：影巢集成 · 风险管控 · 智能运维</h3>
 
   <p>
-    <img src="https://img.shields.io/badge/version-1.4.2-2EA44F?style=flat-square" alt="Version" />
+    <img src="https://img.shields.io/badge/version-1.4.4-2EA44F?style=flat-square" alt="Version" />
     <img src="https://img.shields.io/badge/python-3.9+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python" />
     <img src="https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
     <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License" />
@@ -156,7 +156,7 @@ Pro 版内置多个功能插件：
 | 镜像 | 说明 |
 |------|------|
 | `ghcr.io/amlkiller/emby-pulse:latest` | 本仓库（amlkiller）最新稳定版 |
-| `ghcr.io/amlkiller/emby-pulse:1.4.2` | 锁定具体版本 |
+| `ghcr.io/amlkiller/emby-pulse:1.4.4` | 锁定具体版本 |
 | `zeyu8023/embypulse-pro:latest` | 上游官方镜像 |
 
 ### 端口说明
@@ -171,6 +171,8 @@ EmbyPulse-Pro 物理隔离了两个端口，分别承载不同角色：
 > 如只对外开放注册 / 求片，**只暴露 10308 即可**，10307 留在内网，安全性更高。
 
 ### Docker Compose（推荐）
+
+仓库根目录已提供完整 `docker-compose.yml` 模板，直接修改卷路径与环境变量即可：
 
 ```yaml
 version: '3.8'
@@ -188,12 +190,35 @@ services:
       # - /path/to/emby/data:/emby-data  # API 模式下可不挂载数据库
     environment:
       - TZ=Asia/Shanghai
+      - EMBY_HOST=http://192.168.x.x:8096   # 必填：用于登录校验 Emby 管理员账号
       # - PORT=10307                 # 管理端口（默认 10307）
       # - REQUEST_PORT=10308         # 用户端口（默认 10308）
       # - DB_PATH=/emby-data/playback_reporting.db  # 本地模式必填
       # - CORS_ORIGINS=https://your.domain          # 不设置默认拒绝跨域
       # - FORCE_MIGRATE=1            # 强制迁移系统数据库
+    # 推荐使用 env_file 注入 EMBY_API_KEY / TG_BOT_TOKEN / TMDB_API_KEY / WEBHOOK_TOKEN
+    # env_file:
+    #   - ./.env
 ```
+
+> ⚠️ **反向代理 / CSRF 必读**：1.4.x 起所有 POST/PUT/DELETE/PATCH 请求都会进行严格的同源校验
+> （`app/core/csrf_middleware.py`）。如果你通过 Nginx / Caddy / Traefik 反代访问，**必须**
+> 让反代下发以下头部，否则浏览器的 `Origin` / `Referer` 会与容器内部 `base_url` 不一致，
+> 提交任何表单都会收到 `403 CSRF 验证失败：Origin 不匹配`：
+>
+> - `X-Forwarded-Proto`：`http` 或 `https`（必须与浏览器栏一致）
+> - `X-Forwarded-Host`：用户访问的真实域名（可含端口）
+> - `X-Forwarded-Port`：非默认端口时务必下发
+>
+> 示例（Nginx）：
+> ```nginx
+> proxy_set_header Host              $host;
+> proxy_set_header X-Forwarded-Proto $scheme;
+> proxy_set_header X-Forwarded-Host  $host;
+> proxy_set_header X-Forwarded-Port  $server_port;
+> ```
+>
+> 直连访问（`http://ip:10307`、`http://ip:10308`）无需任何额外配置。
 
 ### 环境变量说明
 
@@ -331,6 +356,13 @@ A: 系统工具页面底部有 Debug 模式开关，开启后可查看详细请�
 ### Q: 管理端口和用户端口为什么要分开？
 
 A: 管理端口（10307）承载所有运维 API 与 Cookie 会话，对外暴露风险大；用户端口（10308）只挂载邀请注册、求片等公开页面，物理隔离后即使被扫描也无法触达管理面。
+
+### Q: 反代后所有操作都报 `403 CSRF 验证失败：Origin 不匹配` 怎么办？
+
+A: 反代未把浏览器看到的真实域名/协议传到容器内部。请在 Nginx / Caddy / Traefik
+等反向代理上下发 `X-Forwarded-Proto`、`X-Forwarded-Host`（非默认端口再加
+`X-Forwarded-Port`）。中间件位于 `app/core/csrf_middleware.py`，会用这三个头
+组合出"合法源"用来对比 `Origin` / `Referer`，缺一不可。
 
 ## 🧪 本地开发
 
