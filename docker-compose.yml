@@ -3,7 +3,7 @@ version: '3.8'
 services:
   emby-pulse:
     # 镜像通过 GitHub Actions 自动构建并发布到 GHCR
-    # 锁定版本可改为 ghcr.io/amlkiller/emby-pulse:1.4.2
+    # 锁定版本可改为 ghcr.io/amlkiller/emby-pulse:1.4.3
     image: ghcr.io/amlkiller/emby-pulse:latest
     container_name: emby-pulse
     restart: unless-stopped
@@ -11,40 +11,69 @@ services:
     # 如需 host 模式，取消下方注释并删除 ports 配置
     # network_mode: host
     ports:
-      - "10307:10307"
-      - "10308:10308"
+      - "10307:10307"   # 管理端口（admin portal，建议仅内网暴露）
+      - "10308:10308"   # 用户端口（user portal，可对外）
 
     volumes:
       # --- 数据与配置 ---
-      - /volume1/docker/emby/data:/emby-data #本地数据模式需要挂载emby数据库，API模式下不需要
+      - /volume1/docker/emby/data:/emby-data                 # 本地数据模式需要挂载 Emby playback_reporting.db；API 模式可删除
       - /volume1/docker/emby-pulse/config:/workspace/config  # 配置文件目录
-      - /volume1/docker/emby-pulse/data:/workspace/data      # 持久化本地数据库 (IP 归属地数据)
+      - /volume1/docker/emby-pulse/data:/workspace/data      # 持久化系统数据库 / IP 归属地数据 / 会话
 
     environment:
       - TZ=Asia/Shanghai
-      # 保持不变
+
+      # 数据库（本地模式必填）
       - DB_PATH=/emby-data/playback_reporting.db
-      - EMBY_HOST=http://192.168.31.2:8096 #重要！必填，否则无法登录！账号密码为你emby管理员账号密码
-      
-      # 🔒 敏感 Token 配置（推荐使用 .env 文件）
-      # 方式一：直接在这里配置（不推荐，会暴露在 docker-compose.yml 中）
+
+      # 重要！必填，否则无法登录！登录账号密码即为该 Emby 的管理员账号密码
+      - EMBY_HOST=http://192.168.31.2:8096
+
+      # ===========================================================
+      # 🔐 CSRF / 反向代理（务必阅读）
+      # -----------------------------------------------------------
+      # 1.4.x 起所有 POST/PUT/DELETE/PATCH 会在 app/core/csrf_middleware.py
+      # 中做严格同源校验。直连 http://ip:10307 / http://ip:10308 无需任何配置。
+      #
+      # 若通过 Nginx / Caddy / Traefik 反代访问，反代必须下发以下请求头，否则
+      # 容器内 base_url 与浏览器看到的域名不一致，所有表单都会 403：
+      #   X-Forwarded-Proto  http 或 https（必须与浏览器地址栏一致）
+      #   X-Forwarded-Host   用户访问的真实域名（可带端口）
+      #   X-Forwarded-Port   非默认端口时下发
+      #
+      # Nginx 示例：
+      #   proxy_set_header Host              $host;
+      #   proxy_set_header X-Forwarded-Proto $scheme;
+      #   proxy_set_header X-Forwarded-Host  $host;
+      #   proxy_set_header X-Forwarded-Port  $server_port;
+      # ===========================================================
+
+      # CORS：未设置时默认拒绝所有跨域；逗号分隔多源。* / null 会被剥离
+      # - CORS_ORIGINS=https://your.domain
+
+      # 数据库迁移（结构变化时启用，迁移前请先手动备份 data 目录）
+      # - FORCE_MIGRATE=1
+      # - AUTO_MIGRATE_DB=1
+
+      # 端口覆盖（一般无需修改）
+      # - PORT=10307
+      # - REQUEST_PORT=10308
+
+      # 🔒 敏感 Token 配置（推荐使用下方 env_file 注入，避免暴露在 docker-compose.yml）
+      # - EMBY_API_KEY=your_emby_api_key
       # - TG_BOT_TOKEN=123456789:ABCdef...
       # - TG_CHAT_ID=123456789
-      # - EMBY_API_KEY=your_emby_api_key
       # - TMDB_API_KEY=your_tmdb_api_key
       # - WEBHOOK_TOKEN=your_secure_token
-      
-      # 方式二：使用 .env 文件（推荐）
-      # 1. 在 /volume1/docker/emby-pulse/ 目录下创建 .env 文件
-      # 2. 取消下面的注释
-      # 3. 重启容器: docker-compose down && docker-compose up -d
-    
-    # 🔒 使用 .env 文件（推荐方式）
-    # 创建 /volume1/docker/emby-pulse/.env 文件，内容如下：
-    # TG_BOT_TOKEN=你的TOKEN
-    # TG_CHAT_ID=你的CHAT_ID
-    # EMBY_API_KEY=你的API_KEY
-    # TMDB_API_KEY=你的TMDB_KEY
-    # WEBHOOK_TOKEN=你的TOKEN
+      # - SECRET_KEY=自定义会话密钥（未设置时启动随机生成，重启即失效全部会话）
+
+    # 🔒 推荐：使用 .env 文件统一管理敏感字段
+    # 在 /volume1/docker/emby-pulse/ 下创建 .env 文件，写入：
+    #   EMBY_API_KEY=xxx
+    #   TG_BOT_TOKEN=xxx
+    #   TG_CHAT_ID=xxx
+    #   TMDB_API_KEY=xxx
+    #   WEBHOOK_TOKEN=xxx
+    # 注意：环境变量优先级高于 web 后台填写，并会从磁盘配置文件中清除明文
     env_file:
       - /volume1/docker/emby-pulse/.env

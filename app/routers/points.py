@@ -24,6 +24,7 @@ from app.core.security_utils import safe_error_message
 
 def get_point_config():
     """获取积分配置"""
+    conn = None
     try:
         conn = sqlite3.connect(SYSTEM_DB_PATH)
         c = conn.cursor()
@@ -34,9 +35,13 @@ def get_point_config():
         return {row[0]: row[1] for row in rows}
     except:
         return {}
+    finally:
+        try: conn and conn.close()
+        except: pass
 
 def ensure_lottery_table():
     """确保彩票表存在"""
+    conn = None
     try:
         conn = sqlite3.connect(SYSTEM_DB_PATH)
         c = conn.cursor()
@@ -58,7 +63,11 @@ def ensure_lottery_table():
             conn.commit()
         conn.close()
     except:
-        pass
+        try: conn and conn.rollback()
+        except: pass
+    finally:
+        try: conn and conn.close()
+        except: pass
 
 # 初始化彩票表
 ensure_lottery_table()
@@ -206,7 +215,13 @@ def ensure_points_schema():
             c.executemany("INSERT INTO point_config (key, value) VALUES (?, ?)", defaults)
             
         conn.commit(); conn.close()
-    except Exception as e: print(f"初始化积分系统数据库失败: {e}")
+    except Exception as e:
+        try: conn.rollback()
+        except: pass
+        print(f"初始化积分系统数据库失败: {e}")
+    finally:
+        try: conn.close()
+        except: pass
 
 ensure_points_schema()
 
@@ -288,7 +303,13 @@ def get_users_points(request: Request, page: int = 1, page_size: int = 20):
         paged_results = results[start:end]
         
         return {"status": "success", "data": paged_results, "total": total, "page": page, "page_size": page_size, "total_pages": total_pages}
-    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
+    except Exception as e:
+        try: conn.rollback()
+        except: pass
+        return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 # 👇 批量发钱功能依然严格锁死！
 @router.post("/api/points/batch_update")
@@ -313,7 +334,13 @@ def batch_update_points(data: BatchPointsModel, request: Request):
             count += 1
         conn.commit(); conn.close()
         return {"status": "success", "message": f"成功修改了 {count} 名用户的资产"}
-    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
+    except Exception as e:
+        try: conn.rollback()
+        except: pass
+        return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 @router.get("/api/points/logs")
 def get_point_logs(request: Request, user_id: str = None, page: int = 1, page_size: int = 50, action_type: str = None):
@@ -375,7 +402,13 @@ def get_point_logs(request: Request, user_id: str = None, page: int = 1, page_si
             "page_size": page_size,
             "total_pages": (total + page_size - 1) // page_size
         }
-    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
+    except Exception as e:
+        try: conn.rollback()
+        except: pass
+        return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 # ==========================================
 # C端 API
@@ -397,7 +430,13 @@ def get_user_points_info(request: Request):
         config['store_items'] = store_items
         conn.close()
         return {"status": "success", "data": {"points": points, "has_checked_in": has_checked_in, "config": config, "req_free": req_free, "req_free_count": req_free_count}}
-    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
+    except Exception as e:
+        try: conn.rollback()
+        except: pass
+        return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 @router.get("/api/user/points/logs")
 def get_my_point_logs(request: Request, page: int = 1, page_size: int = 20):
@@ -425,7 +464,13 @@ def get_my_point_logs(request: Request, page: int = 1, page_size: int = 20):
             "page_size": page_size,
             "total_pages": (total + page_size - 1) // page_size
         }
-    except Exception as e: return {"status": "error"}
+    except Exception as e:
+        try: conn.rollback()
+        except: pass
+        return {"status": "error"}
+    finally:
+        try: conn.close()
+        except: pass
 
 @router.post("/api/user/points/checkin")
 def user_checkin(request: Request):
@@ -501,7 +546,13 @@ def user_checkin(request: Request):
             "streak_bonus": streak_bonus
         }
         return result
-    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
+    except Exception as e:
+        try: conn.rollback()
+        except: pass
+        return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 class RedeemModel(BaseModel): item_id: str
 
@@ -701,7 +752,13 @@ def user_redeem(data: RedeemModel, request: Request):
         
         return {"status": "success", "message": f"兑换成功！{target_item.get('name')}已生效。"}
 
-    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
+    except Exception as e:
+        try: conn.rollback()
+        except: pass
+        return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 
 # ==========================================
@@ -722,25 +779,32 @@ def user_use_renew_code(data: RenewCodeModel, request: Request):
         conn = sqlite3.connect(SYSTEM_DB_PATH)
         c = conn.cursor()
         conn.execute("BEGIN IMMEDIATE")
-        row = c.execute("SELECT days, used_count, max_uses, type FROM invitations WHERE code = ? AND status = 0", (code,)).fetchone()
+        # 🔥 原子抢占续费码（防 TOCTOU 竞态）
+        cur = c.execute(
+            """UPDATE invitations
+               SET used_count = used_count + 1,
+                   used_at = datetime('now','localtime'),
+                   used_by = ?
+               WHERE code = ? AND status != 1 AND used_count < max_uses
+               AND type = 'renew'""",
+            (uname, code)
+        )
+        if cur.rowcount == 0:
+            conn.rollback(); conn.close()
+            return {"status": "error", "message": "续费码无效、已被使用、不是续费码或已达使用上限"}
+        row = c.execute("SELECT days FROM invitations WHERE code = ?", (code,)).fetchone()
         if not row:
             conn.rollback(); conn.close()
-            return {"status": "error", "message": "续费码无效或已被使用"}
-        days, used, max_uses, code_type = row
-        if code_type != "renew":
-            conn.rollback(); conn.close()
-            return {"status": "error", "message": "这不是续费码，请使用正确的续费码"}
-        if used >= max_uses:
-            conn.rollback(); conn.close()
-            return {"status": "error", "message": "该续费码已达使用上限"}
+            return {"status": "error", "message": "续费码数据异常"}
+        days = row[0]
 
         # 计算新到期时间
         exp_row = c.execute("SELECT expire_date FROM users_meta WHERE user_id = ?", (uid,)).fetchone()
         current_exp = exp_row[0] if exp_row and exp_row[0] else ""
 
-        # 永久有效用户不需要续费
+        # 永久有效用户不需要续费（回滚已消费的续费码）
         if current_exp and ("2099" in current_exp or "3000" in current_exp or "永久" in current_exp):
-            conn.close()
+            conn.rollback(); conn.close()
             return {"status": "error", "message": "您的账号为永久有效，无需续费！"}
 
         # 处理永久续期码：days = -1 或 days = 0 或 days >= 36500
@@ -757,9 +821,8 @@ def user_use_renew_code(data: RenewCodeModel, request: Request):
             days_display = f"{days} 天"
 
         c.execute("UPDATE users_meta SET expire_date = ? WHERE user_id = ?", (new_exp, uid))
-        c.execute("UPDATE invitations SET used_count = used_count + 1, used_at = datetime('now','localtime'), used_by = ? WHERE code = ?", (uname, code))
-        if used + 1 >= max_uses:
-            c.execute("UPDATE invitations SET status = 1 WHERE code = ?", (code,))
+        # 标记续费码已用完（used_count 已在原子抢占时递增）
+        c.execute("UPDATE invitations SET status = 1 WHERE code = ? AND used_count >= max_uses", (code,))
         
         # 检查是否需要自动解除禁用（仅当 admin_disabled != 1 时才解除）
         admin_disabled_row = c.execute("SELECT admin_disabled FROM users_meta WHERE user_id = ?", (uid,)).fetchone()
@@ -786,7 +849,13 @@ def user_use_renew_code(data: RenewCodeModel, request: Request):
                 print(f"[续费码] 解除禁用失败: {e}")
 
         return {"status": "success", "message": f"续期成功！账号有效期已延长 {days_display}，至 {new_exp}"}
-    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
+    except Exception as e:
+        try: conn.rollback()
+        except: pass
+        return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 
 # ==========================================
@@ -884,7 +953,13 @@ def user_transfer_points(data: TransferModel, request: Request):
             "fee": fee,
             "balance": new_from_points
         }
-    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
+    except Exception as e:
+        try: conn.rollback()
+        except: pass
+        return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 
 # ==========================================
@@ -956,7 +1031,13 @@ def create_red_packet(data: RedPacketModel, request: Request):
             "packet_id": packet_id,
             "balance": new_points
         }
-    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
+    except Exception as e:
+        try: conn.rollback()
+        except: pass
+        return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 
 class GrabRedPacketModel(BaseModel):
@@ -1062,7 +1143,13 @@ def grab_red_packet(data: GrabRedPacketModel, request: Request):
             "balance": new_points,
             "creator_name": creator_name
         }
-    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
+    except Exception as e:
+        try: conn.rollback()
+        except: pass
+        return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 
 @router.get("/api/points/red_packet/logs")
@@ -1077,7 +1164,13 @@ def get_red_packet_logs(request: Request, packet_id: int):
         logs = [dict(zip(cols, row)) for row in c.fetchall()]
         conn.close()
         return {"status": "success", "data": logs}
-    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
+    except Exception as e:
+        try: conn.rollback()
+        except: pass
+        return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 
 # ==========================================
@@ -1111,7 +1204,13 @@ def get_points_rank(request: Request, limit: int = 10):
         
         conn.close()
         return {"status": "success", "data": rank_list}
-    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
+    except Exception as e:
+        try: conn.rollback()
+        except: pass
+        return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 
 # ==========================================
@@ -1271,8 +1370,14 @@ def user_rob(data: RobModel, request: Request):
                 "counter_amount": actual_counter,
                 "balance": new_from_points
             }
-            
-    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
+
+    except Exception as e:
+        try: conn.rollback()
+        except: pass
+        return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 
 # ==========================================
@@ -1390,9 +1495,14 @@ def pk_invite(data: PKInviteModel, request: Request):
             "expires_at": expires_at.isoformat(),
             "timeout_minutes": timeout_minutes
         }
-        
+
     except Exception as e:
+        try: conn.rollback()
+        except: pass
         return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 
 @router.post("/api/user/points/pk/accept")
@@ -1540,9 +1650,14 @@ def pk_accept(data: PKAcceptModel, request: Request):
             "win_amount": actual_win,
             "tax": tax
         }
-        
+
     except Exception as e:
+        try: conn.rollback()
+        except: pass
         return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 
 @router.post("/api/user/points/pk/reject")
@@ -1580,9 +1695,14 @@ def pk_reject(data: PKRejectModel, request: Request):
             "status": "success",
             "message": f"已拒绝 {invite[2]} 的PK邀请"
         }
-        
+
     except Exception as e:
+        try: conn.rollback()
+        except: pass
         return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 
 @router.get("/api/user/points/pk/pending")
@@ -1619,9 +1739,14 @@ def pk_pending(request: Request):
             })
         
         return {"status": "success", "data": result}
-        
+
     except Exception as e:
+        try: conn.rollback()
+        except: pass
         return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 
 @router.post("/api/points/pk/clear")
@@ -1643,9 +1768,14 @@ def clear_pk_invitations(request: Request):
         conn.close()
         
         return {"status": "success", "count": count, "message": f"已清除 {count} 条PK邀请"}
-        
+
     except Exception as e:
+        try: conn.rollback()
+        except: pass
         return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 
 # ===================== 🎰 老虎机 API =====================
@@ -1669,9 +1799,14 @@ def get_slot_usage(request: Request):
         
         conn.close()
         return {"status": "success", "used_today": row[0] if row else 0}
-        
+
     except Exception as e:
+        try: conn.rollback()
+        except: pass
         return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 
 @router.post("/api/slot/spin")
@@ -1883,9 +2018,14 @@ def slot_spin(request: Request):
             "new_points": current_points,
             "used_today": used_today + 1
         }
-        
+
     except Exception as e:
+        try: conn.rollback()
+        except: pass
         return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 
 # ===================== 🎫 刮刮乐 API =====================
@@ -2000,9 +2140,14 @@ def buy_scratch_card(request: Request):
             "grid": grid,
             "new_points": current_points
         }
-        
+
     except Exception as e:
+        try: conn.rollback()
+        except: pass
         return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 
 @router.post("/api/scratch/reveal")
@@ -2073,9 +2218,14 @@ async def reveal_scratch_cell(request: Request):
                 "matched": False,
                 "new_points": None
             }
-        
+
     except Exception as e:
+        try: conn.rollback()
+        except: pass
         return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 # 🎡 幸运转盘
 wheel_usage = {}  # 用户使用次数缓存
@@ -2134,6 +2284,7 @@ async def spin_wheel(request: Request):
         # 查询今日使用次数（使用 SQLite 本地时间函数）
         conn = sqlite3.connect(SYSTEM_DB_PATH)
         c = conn.cursor()
+        conn.execute("BEGIN IMMEDIATE")
         used_today = c.execute(
             "SELECT COUNT(*) FROM point_logs WHERE user_id = ? AND action = '幸运转盘' AND date(created_at, 'localtime') = date('now', 'localtime')",
             (user['Id'],)
@@ -2211,9 +2362,14 @@ async def spin_wheel(request: Request):
             "used_today": used_today,
             "is_free": is_free
         }
-        
+
     except Exception as e:
+        try: conn.rollback()
+        except: pass
         return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 # 🎲 猜数字
 guess_games = {}  # 用户游戏状态缓存
@@ -2289,9 +2445,14 @@ async def start_guess_game(request: Request):
             "status": "success",
             "new_points": current_points
         }
-        
+
     except Exception as e:
+        try: conn.rollback()
+        except: pass
         return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 @router.post("/api/guess/submit")
 async def submit_guess(request: Request):
@@ -2390,9 +2551,14 @@ async def submit_guess(request: Request):
                 "hint": hint,
                 "tries_left": game['tries_left']
             }
-        
+
     except Exception as e:
+        try: conn.rollback()
+        except: pass
         return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 # 🎟️ 彩票
 @router.get("/api/lottery/my_tickets")
@@ -2419,7 +2585,12 @@ async def get_my_lottery_tickets(request: Request):
             "tickets": [t[0] for t in tickets]
         }
     except Exception as e:
+        try: conn.rollback()
+        except: pass
         return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 @router.post("/api/lottery/buy")
 async def buy_lottery(request: Request):
@@ -2509,9 +2680,14 @@ async def buy_lottery(request: Request):
             "today_tickets": today_count + len(tickets),
             "new_points": current_points
         }
-        
+
     except Exception as e:
+        try: conn.rollback()
+        except: pass
         return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 @router.get("/api/lottery/pool")
 async def api_user_lottery_pool(request: Request):
@@ -2599,7 +2775,12 @@ async def api_user_lottery_pool(request: Request):
             }
         }
     except Exception as e:
+        try: conn.rollback()
+        except: pass
         return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 @router.get("/api/lottery/results")
 async def get_lottery_results(request: Request):
     """获取开奖结果"""
@@ -2696,4 +2877,9 @@ async def get_lottery_results(request: Request):
             "results": formatted_results
         }
     except Exception as e:
+        try: conn.rollback()
+        except: pass
         return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass

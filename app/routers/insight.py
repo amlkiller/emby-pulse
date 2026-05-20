@@ -53,7 +53,13 @@ def ignore_item(data: IgnoreModel, request: Request):
         conn.commit()
         conn.close()
         return {"status": "success"}
-    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
+    except Exception as e:
+        try: conn.rollback()
+        except: pass
+        return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 # --- 🔥 新增：批量原子忽略 (彻底解决并发锁死问题) ---
 @router.post("/api/insight/ignore_batch")
@@ -68,7 +74,13 @@ def ignore_items_batch(data: BatchIgnoreModel, request: Request):
         conn.commit()
         conn.close()
         return {"status": "success"}
-    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
+    except Exception as e:
+        try: conn.rollback()
+        except: pass
+        return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 # --- 批量恢复 ---
 @router.post("/api/insight/unignore_batch")
@@ -82,7 +94,13 @@ def unignore_items_batch(data: BatchUnignoreModel, request: Request):
         conn.commit()
         conn.close()
         return {"status": "success"}
-    except Exception as e: return {"status": "error"}
+    except Exception as e:
+        try: conn.rollback()
+        except: pass
+        return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 @router.get("/api/insight/ignores")
 def get_ignored_items(request: Request):

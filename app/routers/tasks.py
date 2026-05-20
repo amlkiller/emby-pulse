@@ -122,7 +122,13 @@ async def get_task_config(request: Request):
         row = c.execute("SELECT value FROM task_config WHERE key = 'enable_notify'").fetchone()
         conn.close()
         return {"status": "success", "enable_notify": row[0] == '1' if row else True}
-    except Exception as e: return {"status": "error"}
+    except Exception as e:
+        try: conn.rollback()
+        except: pass
+        return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 @router.post("/api/tasks/config")
 async def set_task_config(data: TaskConfigModel, request: Request):
@@ -135,7 +141,13 @@ async def set_task_config(data: TaskConfigModel, request: Request):
         conn.commit()
         conn.close()
         return {"status": "success"}
-    except Exception as e: return {"status": "error"}
+    except Exception as e:
+        try: conn.rollback()
+        except: pass
+        return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 
 # ==========================================

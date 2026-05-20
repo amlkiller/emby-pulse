@@ -554,15 +554,6 @@ async def api_register(data: RegisterModel, request: Request):
                 logger.warning("Emby 用户创建失败: status=%s body=%s", create_res.status_code, create_res.text)
                 _restore_invitation_code(data.code)
                 return {"status": "error", "message": "注册失败，请稍后再试"}
-        except Exception as e:
-            return {"status": "error", "message": safe_error_message(e, "检查用户名失败")}
-        
-        # 5. 创建 Emby 用户
-        try:
-            create_res = media_api.post("/Users/New", json={"Name": safe_name}, timeout=10)
-            if create_res.status_code not in [200, 201]:
-                logger.warning("Emby 用户创建失败: status=%s body=%s", create_res.status_code, create_res.text)
-                return {"status": "error", "message": "注册失败，请稍后再试"}
             
             new_user = create_res.json()
             uid = new_user.get("Id")

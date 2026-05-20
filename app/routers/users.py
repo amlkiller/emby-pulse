@@ -214,8 +214,13 @@ def api_get_audit_logs(request: Request, page: int = 1, limit: int = 20,
             }
         }
     except Exception as e:
+        try: conn.rollback()
+        except: pass
         logging.error(f"[审计日志] 查询失败: {e}")
         return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 @router.get("/api/manage/audit_logs/stats")
 def api_get_audit_stats(request: Request, days: int = 7):
@@ -260,7 +265,12 @@ def api_get_audit_stats(request: Request, days: int = 7):
             }
         }
     except Exception as e:
+        try: conn.rollback()
+        except: pass
         return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 @router.delete("/api/manage/audit_logs/{log_id}")
 def api_delete_audit_log(log_id: int, request: Request):
@@ -275,7 +285,12 @@ def api_delete_audit_log(log_id: int, request: Request):
         conn.close()
         return {"status": "success", "message": "删除成功"}
     except Exception as e:
+        try: conn.rollback()
+        except: pass
         return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 @router.post("/api/manage/audit_logs/clear")
 def api_clear_audit_logs(request: Request, days: int = 30):
@@ -294,7 +309,12 @@ def api_clear_audit_logs(request: Request, days: int = 30):
         conn.close()
         return {"status": "success", "message": f"已清理 {deleted_count} 条日志"}
     except Exception as e:
+        try: conn.rollback()
+        except: pass
         return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 @router.post("/api/manage/user/verify_password")
 def api_verify_delete_password(data: PasswordVerifyModel, request: Request):
@@ -870,7 +890,12 @@ def api_get_user_libraries(request: Request):
 
         return {"status": "success", "data": result}
     except Exception as e:
+        try: conn.rollback()
+        except: pass
         return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 
 class HiddenLibrariesModel(BaseModel):
@@ -952,7 +977,12 @@ def api_update_hidden_libraries(data: HiddenLibrariesModel, request: Request):
 
         return {"status": "success", "message": "设置已保存"}
     except Exception as e:
+        try: conn.rollback()
+        except: pass
         return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 
 @router.post("/api/manage/invite/gen")
@@ -1950,7 +1980,12 @@ def api_pin_user(data: PinUserModel, request: Request):
 
         return {"status": "success", "message": f"已{'置顶' if data.pinned else '取消置顶'}用户"}
     except Exception as e:
+        try: conn.rollback()
+        except: pass
         return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 @router.get("/api/users")
 def api_get_users(request: Request):
@@ -2012,7 +2047,12 @@ def api_update_user_req_permission(data: UserReqPermissionModel, request: Reques
 
         return {"status": "success", "message": "求片权限已更新"}
     except Exception as e:
+        try: conn.rollback()
+        except: pass
         return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 @router.get("/api/manage/user/req_permission")
 def api_get_user_req_permission(user_id: str, request: Request):
@@ -2033,7 +2073,12 @@ def api_get_user_req_permission(user_id: str, request: Request):
         else:
             return {"status": "success", "data": {"req_free": 0, "req_free_count": -1}}
     except Exception as e:
+        try: conn.rollback()
+        except: pass
         return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 # ==========================================
 # 🔥 用户标签 API
@@ -2069,7 +2114,12 @@ def api_get_tags(request: Request):
         tags = [{"id": r['id'], "name": r['name'], "color": r['color'] or 'blue'} for r in rows]
         return {"status": "success", "data": tags}
     except Exception as e:
+        try: conn.rollback()
+        except: pass
         return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 class TagCreateModel(BaseModel):
     name: str
@@ -2092,9 +2142,16 @@ def api_create_tag(data: TagCreateModel, request: Request):
 
         return {"status": "success", "data": {"id": tag_id, "name": data.name.strip(), "color": data.color}}
     except sqlite3.IntegrityError:
+        try: conn.rollback()
+        except: pass
         return {"status": "error", "message": "标签已存在"}
     except Exception as e:
+        try: conn.rollback()
+        except: pass
         return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 @router.delete("/api/manage/tags/{tag_id}")
 def api_delete_tag(tag_id: int, request: Request):
@@ -2112,7 +2169,12 @@ def api_delete_tag(tag_id: int, request: Request):
 
         return {"status": "success"}
     except Exception as e:
+        try: conn.rollback()
+        except: pass
         return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 
 @router.delete("/api/manage/tags/name/{tag_name}")
@@ -2151,7 +2213,12 @@ def api_delete_tag_by_name(tag_name: str, request: Request):
 
         return {"status": "success", "message": f"标签 '{tag_name}' 已删除"}
     except Exception as e:
+        try: conn.rollback()
+        except: pass
         return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 class UserTagsUpdateModel(BaseModel):
     user_id: str
@@ -2183,7 +2250,12 @@ def api_update_user_tags(data: UserTagsUpdateModel, request: Request):
 
         return {"status": "success"}
     except Exception as e:
+        try: conn.rollback()
+        except: pass
         return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass
 
 @router.get("/api/manage/user/tags")
 def api_get_user_tags(user_id: str, request: Request):
@@ -2202,4 +2274,9 @@ def api_get_user_tags(user_id: str, request: Request):
         tags = row[0] if row and row[0] else ""
         return {"status": "success", "data": tags}
     except Exception as e:
+        try: conn.rollback()
+        except: pass
         return {"status": "error", "message": safe_error_message(e)}
+    finally:
+        try: conn.close()
+        except: pass

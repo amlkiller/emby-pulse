@@ -1827,10 +1827,11 @@ def cmd_rob(chat_id, tg_user_id, text, is_group=False, entities=None):
         
         conn = sqlite3.connect(SYSTEM_DB_PATH)
         c = conn.cursor()
-        
+        conn.execute("BEGIN IMMEDIATE")
+
         # 获取配置
         config = {r[0]: r[1] for r in c.execute("SELECT key, value FROM point_config").fetchall()}
-        
+
         # 检查是否启用打劫
         if int(config.get('enable_rob', 0)) == 0:
             conn.close()
@@ -1973,35 +1974,35 @@ def cmd_rob(chat_id, tg_user_id, text, is_group=False, entities=None):
         if is_success:
             # 打劫成功
             actual_amount = min(rob_amount, to_points)
-            
-            new_from_points = from_points + actual_amount
-            new_to_points = to_points - actual_amount
-            
-            c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (new_from_points, binding['emby_user_id']))
-            c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (new_to_points, to_user_id))
-            
+
+            c.execute("UPDATE users_meta SET points = points + ? WHERE user_id = ?", (actual_amount, binding['emby_user_id']))
+            c.execute("UPDATE users_meta SET points = points - ? WHERE user_id = ?", (actual_amount, to_user_id))
+
+            new_from_points = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (binding['emby_user_id'],)).fetchone()[0]
+            new_to_points = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (to_user_id,)).fetchone()[0]
+
             c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
                      (binding['emby_user_id'], binding['emby_username'], f"打劫 {to_user_name}", actual_amount, new_from_points))
             c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
                      (to_user_id, to_user_name, f"被 {binding['emby_username']} 打劫", -actual_amount, new_to_points))
             c.execute("INSERT INTO point_rob_logs (from_user_id, from_user_name, to_user_id, to_user_name, amount, success, counter_amount) VALUES (?, ?, ?, ?, ?, 1, 0)",
                      (binding['emby_user_id'], binding['emby_username'], to_user_id, to_user_name, actual_amount))
-            
+
             conn.commit()
             conn.close()
-            
+
             return _send(chat_id, f"🎉 <b>打劫成功！</b>\n\n👤 从 <b>{display_name}</b> 身上抢到 <b>{actual_amount}</b> 积分\n💰 当前余额：<b>{new_from_points}</b> 积分")
         else:
             # 打劫失败，触发反杀
             counter_amount = rand_module.randint(counter_min, counter_max)
             actual_counter = min(counter_amount, from_points)
-            
-            new_from_points = from_points - actual_counter
-            new_to_points = to_points + actual_counter
-            
-            c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (new_from_points, binding['emby_user_id']))
-            c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (new_to_points, to_user_id))
-            
+
+            c.execute("UPDATE users_meta SET points = points - ? WHERE user_id = ?", (actual_counter, binding['emby_user_id']))
+            c.execute("UPDATE users_meta SET points = points + ? WHERE user_id = ?", (actual_counter, to_user_id))
+
+            new_from_points = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (binding['emby_user_id'],)).fetchone()[0]
+            new_to_points = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (to_user_id,)).fetchone()[0]
+
             c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
                      (binding['emby_user_id'], binding['emby_username'], f"打劫 {to_user_name} 失败", -actual_counter, new_from_points))
             c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
@@ -2696,7 +2697,8 @@ def cmd_transfer(chat_id, tg_user_id, text, is_group=False, entities=None):
         
         conn = sqlite3.connect(SYSTEM_DB_PATH)
         c = conn.cursor()
-        
+        conn.execute("BEGIN IMMEDIATE")
+
         # 🔥 优先从 entities 获取被 @ 用户的真实 TG ID
         mentioned_user_id = None
         if entities:
@@ -2796,20 +2798,21 @@ def cmd_transfer(chat_id, tg_user_id, text, is_group=False, entities=None):
         to_tg_display_name = to_tg_row[1] if to_tg_row and to_tg_row[1] else None
         logger.info(f"[转赠] 目标用户 emby_user_id={to_user_id}, tg_username={to_tg_username}, tg_display_name={to_tg_display_name}, emby_name={to_user_name}")
         
-        # 更新积分
-        new_from_points = from_points - amount
+        # 更新积分（原子操作）
+        c.execute("UPDATE users_meta SET points = points - ? WHERE user_id = ?", (amount, binding['emby_user_id']))
         if to_row:
-            c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (to_points, to_user_id))
+            c.execute("UPDATE users_meta SET points = points + ? WHERE user_id = ?", (actual_amount, to_user_id))
         else:
-            c.execute("INSERT INTO users_meta (user_id, points) VALUES (?, ?)", (to_user_id, to_points))
-        
-        c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (new_from_points, binding['emby_user_id']))
-        
+            c.execute("INSERT INTO users_meta (user_id, points) VALUES (?, ?)", (to_user_id, actual_amount))
+
+        new_from_points = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (binding['emby_user_id'],)).fetchone()[0]
+        new_to_points = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (to_user_id,)).fetchone()[0]
+
         # 记录日志
         c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
                  (binding['emby_user_id'], binding['emby_username'], f"转赠给 {to_user_name} (手续费{fee})", -amount, new_from_points))
         c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-                 (to_user_id, to_user_name, f"收到 {binding['emby_username']} 转赠", actual_amount, to_points))
+                 (to_user_id, to_user_name, f"收到 {binding['emby_username']} 转赠", actual_amount, new_to_points))
         
         conn.commit(); conn.close()
         
@@ -2854,8 +2857,9 @@ def cmd_redpacket(chat_id, tg_user_id, text, is_group=False, tg_name="", user_ms
         
         conn = sqlite3.connect(SYSTEM_DB_PATH)
         c = conn.cursor()
+        conn.execute("BEGIN IMMEDIATE")
         config = {r[0]: r[1] for r in c.execute("SELECT key, value FROM point_config").fetchall()}
-        
+
         # 检查是否启用红包
         if int(config.get('enable_red_packet', 0)) == 0:
             conn.close()
@@ -2890,9 +2894,9 @@ def cmd_redpacket(chat_id, tg_user_id, text, is_group=False, tg_name="", user_ms
         expire_hours = int(config.get('red_packet_expire_hours', 24))
         expires_at = datetime.datetime.now() + datetime.timedelta(hours=expire_hours)
         
-        # 扣除积分
-        new_points = current_points - total_amount
-        c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (new_points, binding['emby_user_id']))
+        # 扣除积分（原子操作）
+        c.execute("UPDATE users_meta SET points = points - ? WHERE user_id = ?", (total_amount, binding['emby_user_id']))
+        new_points = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (binding['emby_user_id'],)).fetchone()[0]
         
         # 创建红包
         creator_display = tg_name or binding['emby_username']
@@ -2943,10 +2947,11 @@ def cmd_pk(chat_id, tg_user_id, text, is_group=False, tg_name="", user_msg_id=No
         
         conn = sqlite3.connect(SYSTEM_DB_PATH)
         c = conn.cursor()
-        
+        conn.execute("BEGIN IMMEDIATE")
+
         # 获取配置
         config = {r[0]: r[1] for r in c.execute("SELECT key, value FROM point_config").fetchall()}
-        
+
         # 检查是否启用 PK
         if int(config.get('enable_pk', 0)) == 0:
             conn.close()
@@ -3006,25 +3011,27 @@ def cmd_pk(chat_id, tg_user_id, text, is_group=False, tg_name="", user_msg_id=No
         # 判断胜负
         if user_dice > bot_dice:
             # 用户赢
-            new_points = current_points + amount
-            result_text = f"🎉 <b>{user_at} 赢了！</b>\n\n🎲 掷出 <b>{user_dice}</b> 点，机器人掷出 <b>{bot_dice}</b> 点\n💰 获得 <b>+{amount}</b> 积分\n📊 余额：<b>{new_points}</b> 积分"
+            c.execute("UPDATE users_meta SET points = points + ? WHERE user_id = ?", (amount, binding['emby_user_id']))
             log_action = f"PK赢了 (骰子{user_dice}vs{bot_dice})"
             log_amount = amount
         elif user_dice < bot_dice:
             # 用户输
-            new_points = current_points - amount
-            result_text = f"😢 <b>{user_at} 输了！</b>\n\n🎲 掷出 <b>{user_dice}</b> 点，机器人掷出 <b>{bot_dice}</b> 点\n💰 扣除 <b>-{amount}</b> 积分\n📊 余额：<b>{new_points}</b> 积分"
+            c.execute("UPDATE users_meta SET points = points - ? WHERE user_id = ?", (amount, binding['emby_user_id']))
             log_action = f"PK输了 (骰子{user_dice}vs{bot_dice})"
             log_amount = -amount
         else:
             # 平局
-            new_points = current_points
-            result_text = f"🤝 <b>平局！</b>\n\n🎲 {user_at} 掷出 <b>{user_dice}</b> 点，机器人掷出 <b>{bot_dice}</b> 点\n💰 积分不变\n📊 余额：<b>{new_points}</b> 积分"
             log_action = f"PK平局 (骰子{user_dice}vs{bot_dice})"
             log_amount = 0
-        
-        # 更新积分
-        c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (new_points, binding['emby_user_id']))
+
+        new_points = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (binding['emby_user_id'],)).fetchone()[0]
+
+        if log_amount > 0:
+            result_text = f"🎉 <b>{user_at} 赢了！</b>\n\n🎲 掷出 <b>{user_dice}</b> 点，机器人掷出 <b>{bot_dice}</b> 点\n💰 获得 <b>+{amount}</b> 积分\n📊 余额：<b>{new_points}</b> 积分"
+        elif log_amount < 0:
+            result_text = f"😢 <b>{user_at} 输了！</b>\n\n🎲 掷出 <b>{user_dice}</b> 点，机器人掷出 <b>{bot_dice}</b> 点\n💰 扣除 <b>-{amount}</b> 积分\n📊 余额：<b>{new_points}</b> 积分"
+        else:
+            result_text = f"🤝 <b>平局！</b>\n\n🎲 {user_at} 掷出 <b>{user_dice}</b> 点，机器人掷出 <b>{bot_dice}</b> 点\n💰 积分不变\n📊 余额：<b>{new_points}</b> 积分"
         
         # 记录日志
         c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
@@ -3419,11 +3426,12 @@ def cmd_lottery(chat_id, tg_user_id, text, is_group=False, user_msg_id=None):
         return _send(chat_id, f"❌ 积分不足！需要 {total_cost} 积分，当前: {current_points}")
     
     logger.info(f"[彩票] 积分检查通过，开始扣除积分")
-    
+
     try:
-        # 扣除积分
-        new_points = current_points - total_cost
-        c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (new_points, binding['emby_user_id']))
+        conn.execute("BEGIN IMMEDIATE")
+        # 扣除积分（原子操作）
+        c.execute("UPDATE users_meta SET points = points - ? WHERE user_id = ?", (total_cost, binding['emby_user_id']))
+        new_points = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (binding['emby_user_id'],)).fetchone()[0]
         logger.info(f"[彩票] 积分已扣除: {current_points} -> {new_points}")
         
         # 记录彩票
@@ -3685,9 +3693,9 @@ def _handle_scratch(chat_id, tg_user_id, card_id, slot_number, tg_name=""):
             conn.close()
             return _send(chat_id, f"❌ 积分不足！需要 {price} 积分，当前: {current_points}")
         
-        # 扣除积分
-        new_points = current_points - price
-        c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (new_points, binding['emby_user_id']))
+        # 扣除积分（原子操作）
+        c.execute("UPDATE users_meta SET points = points - ? WHERE user_id = ?", (price, binding['emby_user_id']))
+        new_points = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (binding['emby_user_id'],)).fetchone()[0]
         
         # 标记格子为已刮
         prize_amount = slot[2]
@@ -3799,8 +3807,8 @@ def _scratch_draw_result(chat_id, card_id):
             if user_id:
                 row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (user_id,)).fetchone()
                 if row:
-                    new_points = row[0] + prize
-                    c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (new_points, user_id))
+                    c.execute("UPDATE users_meta SET points = points + ? WHERE user_id = ?", (prize, user_id))
+                    new_points = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (user_id,)).fetchone()[0]
                     # 更新日志
                     display_name = uname or f"用户{user_id}"
                     c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
