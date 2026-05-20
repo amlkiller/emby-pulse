@@ -504,6 +504,7 @@ async def api_register(data: RegisterModel, request: Request):
 
         # 3. 所有校验通过后，原子抢占邀请码（防 TOCTOU 竞态）
         conn = sqlite3.connect(SYSTEM_DB_PATH)
+        conn.row_factory = sqlite3.Row
         try:
             conn.execute("BEGIN IMMEDIATE")
             cur = conn.execute(
