@@ -59,7 +59,7 @@ def get_notify_rule(notify_type: str) -> dict:
             return {
                 "notify_type": notify_type,
                 "notify_name": t["name"],
-                "enabled": 0,
+                "enabled": 1,
                 "channels": t["default_channels"]
             }
     return None

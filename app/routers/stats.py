@@ -1107,12 +1107,54 @@ from concurrent.futures import ThreadPoolExecutor
 # ==========================================
 _executor = ThreadPoolExecutor(max_workers=8)
 
-# 🔥 内存缓存：用于快速响应重复请求
-_dashboard_cache = {"data": None, "ts": 0}
+# 🔥 内存缓存：用于快速响应重复请求（按访问上下文隔离，避免用户/管理员数据串用）
+_DASHBOARD_PRELOAD_KEY = "admin:all"
+_dashboard_cache = {}
+_dashboard_cache_user_ids = {}
 _DASHBOARD_CACHE_TTL = int(cfg.get("dashboard_cache_ttl") or 300)  # 默认5分钟
 _DASHBOARD_ACTIVE_WINDOW = 600
-_dashboard_last_access = 0
+_dashboard_last_access = {}
 _dashboard_refresh_lock = asyncio.Lock()
+
+def _normalize_dashboard_user_id(user_id):
+    if user_id is None or user_id == "" or user_id == "all":
+        return None
+    return str(user_id)
+
+def _get_dashboard_context(request: Request, user_id: Optional[str] = None):
+    admin_user = request.session.get("user", {}) or {}
+    req_user = request.session.get("req_user", {}) or {}
+    is_admin = admin_user.get("auth_type") == "emby" or admin_user.get("role") == "admin"
+
+    if is_admin:
+        effective_user_id = _normalize_dashboard_user_id(user_id)
+        cache_key = f"admin:{effective_user_id or 'all'}"
+    else:
+        effective_user_id = req_user.get("Id") if req_user else admin_user.get("id")
+        effective_user_id = _normalize_dashboard_user_id(effective_user_id)
+        cache_key = f"user:{effective_user_id or 'unknown'}"
+
+    return cache_key, effective_user_id, is_admin
+
+def _get_dashboard_cache_entry(cache_key: str):
+    return _dashboard_cache.get(cache_key, {"data": None, "ts": 0})
+
+def _get_dashboard_cached_data(cache_key: str, now: float = None):
+    now = now or time.time()
+    entry = _get_dashboard_cache_entry(cache_key)
+    if entry.get("data") and (now - entry.get("ts", 0)) < _DASHBOARD_CACHE_TTL:
+        return entry["data"]
+    return None
+
+def _set_dashboard_cache(cache_key: str, data: dict, user_id=None, ts: float = None):
+    _dashboard_cache[cache_key] = {
+        "data": data,
+        "ts": ts or time.time()
+    }
+    _dashboard_cache_user_ids[cache_key] = user_id
+
+def _mark_dashboard_access(cache_key: str, now: float = None):
+    _dashboard_last_access[cache_key] = now or time.time()
 
 async def _fetch_dashboard_core(user_id: str) -> dict:
     """核心仪表盘数据（播放统计、媒体库储量）- 快速"""
@@ -1220,7 +1262,7 @@ async def _fetch_trend(user_id: str) -> dict:
 _preload_started = False
 _last_refresh_log_time = 0  # 上次打印刷新日志的时间
 
-async def preload_dashboard_cache(silent: bool = False):
+async def preload_dashboard_cache(silent: bool = False, cache_key: str = _DASHBOARD_PRELOAD_KEY, user_id=None):
     """
     后台预热仪表盘缓存
     在容器启动后自动执行，用户打开首页即可秒出数据
@@ -1243,12 +1285,13 @@ async def preload_dashboard_cache(silent: bool = False):
             if not silent:
                 print("[🔥 预热] 开始预热仪表盘缓存...")
         
+            effective_user_id = _normalize_dashboard_user_id(user_id)
             results = await asyncio.gather(
-                asyncio.wait_for(_fetch_dashboard_core(None), timeout=15),
+                asyncio.wait_for(_fetch_dashboard_core(effective_user_id), timeout=15),
                 asyncio.wait_for(_fetch_users_list(), timeout=10),
                 asyncio.wait_for(_fetch_libraries(), timeout=15),
                 asyncio.wait_for(_fetch_top_users(), timeout=10),
-                asyncio.wait_for(_fetch_trend(None), timeout=10),
+                asyncio.wait_for(_fetch_trend(effective_user_id), timeout=10),
                 return_exceptions=True
             )
         
@@ -1262,8 +1305,7 @@ async def preload_dashboard_cache(silent: bool = False):
                 "trend": trend if not isinstance(trend, Exception) else {}
             }
         
-            _dashboard_cache["data"] = result_data
-            _dashboard_cache["ts"] = time.time()
+            _set_dashboard_cache(cache_key, result_data, effective_user_id)
         
             if not silent:
                 print(f"[🔥 预热] 仪表盘缓存预热完成！媒体库: {len(result_data['libraries'])} 个, 用户: {len(result_data['users'])} 个")
@@ -1284,15 +1326,23 @@ async def start_dashboard_cache_refresh_loop():
         await asyncio.sleep(60)
         try:
             now = time.time()
-            if now - _dashboard_last_access > _DASHBOARD_ACTIVE_WINDOW:
-                continue
-            cache_age = now - _dashboard_cache["ts"] if _dashboard_cache["ts"] > 0 else 999
-            if cache_age >= _DASHBOARD_CACHE_TTL:
-                await preload_dashboard_cache(silent=True)
-                # 每5分钟打印一次刷新日志（避免刷屏）
-                if now - _last_refresh_log_time >= 300:
-                    _last_refresh_log_time = now
-                    print(f"[🔥 缓存] 后台刷新完成，下次刷新: 25秒后")
+            active_keys = [
+                key for key, last_access in list(_dashboard_last_access.items())
+                if now - last_access <= _DASHBOARD_ACTIVE_WINDOW
+            ]
+            for cache_key in active_keys:
+                entry = _get_dashboard_cache_entry(cache_key)
+                cache_age = now - entry.get("ts", 0) if entry.get("ts", 0) > 0 else 999
+                if cache_age >= _DASHBOARD_CACHE_TTL:
+                    await preload_dashboard_cache(
+                        silent=True,
+                        cache_key=cache_key,
+                        user_id=_dashboard_cache_user_ids.get(cache_key),
+                    )
+                    # 每5分钟打印一次刷新日志（避免刷屏）
+                    if now - _last_refresh_log_time >= 300:
+                        _last_refresh_log_time = now
+                        print("[🔥 缓存] 后台刷新完成，下次刷新: 60秒后")
         except Exception as e:
             # 刷新失败不打印日志，避免刷屏
             pass
@@ -1307,29 +1357,29 @@ async def api_preload_status(request: Request):
     if not check_login(request):
         return {"status": "error", "message": "请先登录"}
     
+    entry = _get_dashboard_cache_entry(_DASHBOARD_PRELOAD_KEY)
+    data = entry.get("data")
+    ts = entry.get("ts", 0)
     return {
         "status": "success",
         "data": {
-            "cached": _dashboard_cache["data"] is not None,
-            "cache_age": round(time.time() - _dashboard_cache["ts"]) if _dashboard_cache["ts"] > 0 else 0,
+            "cached": data is not None,
+            "cache_age": round(time.time() - ts) if ts > 0 else 0,
             "cache_ttl": _DASHBOARD_CACHE_TTL,
-            "libraries_count": len(_dashboard_cache["data"].get("libraries", [])) if _dashboard_cache["data"] else 0,
-            "users_count": len(_dashboard_cache["data"].get("users", [])) if _dashboard_cache["data"] else 0
+            "libraries_count": len(data.get("libraries", [])) if data else 0,
+            "users_count": len(data.get("users", [])) if data else 0
         }
     }
 
 @router.get("/api/dashboard/init")
 async def api_dashboard_init(request: Request, user_id: Optional[str] = None):
-    global _dashboard_last_access
     # 🔒 安全检查
     if not check_login(request):
         return {"status": "error", "message": "请先登录"}
     """
     仪表盘首屏聚合接口 - 核心数据快速返回
     """
-    # 🔒 权限判定
-    _admin_user = request.session.get("user", {})
-    _is_admin = _admin_user.get("auth_type") == "emby" or _admin_user.get("role") == "admin"
+    cache_key, effective_user_id, _is_admin = _get_dashboard_context(request, user_id)
 
     def _strip_user_id(data: dict) -> dict:
         """非管理员返回时剥离 top_users 中的原始 UserId"""
@@ -1341,34 +1391,34 @@ async def api_dashboard_init(request: Request, user_id: Optional[str] = None):
         return d
 
     now = time.time()
-    _dashboard_last_access = now
+    _mark_dashboard_access(cache_key, now)
     
     # 🔥 检查内存缓存（30秒内直接返回）
-    if _dashboard_cache["data"] and (now - _dashboard_cache["ts"]) < _DASHBOARD_CACHE_TTL:
+    cached_data = _get_dashboard_cached_data(cache_key, now)
+    if cached_data:
         return {
             "status": "success",
-            "data": _strip_user_id(_dashboard_cache["data"]),
+            "data": _strip_user_id(cached_data),
             "cached": True
         }
-    
-    loop = asyncio.get_event_loop()
     
     # 🔥 并发执行核心数据（快速）
     try:
         results = await asyncio.gather(
-            asyncio.wait_for(_fetch_dashboard_core(user_id), timeout=5),
+            asyncio.wait_for(_fetch_dashboard_core(effective_user_id), timeout=5),
             asyncio.wait_for(_fetch_users_list(), timeout=3),
             asyncio.wait_for(_fetch_libraries(), timeout=5),
             asyncio.wait_for(_fetch_top_users(), timeout=3),
-            asyncio.wait_for(_fetch_trend(user_id), timeout=3),
+            asyncio.wait_for(_fetch_trend(effective_user_id), timeout=3),
             return_exceptions=True
         )
         
         dashboard, users, libraries, top_users, trend = results
     except asyncio.TimeoutError as e:
         print(f"[Dashboard Init] 请求超时: {e}")
-        if _dashboard_cache["data"]:
-            return {"status": "success", "data": _strip_user_id(_dashboard_cache["data"]), "cached": True, "timeout": True}
+        stale_entry = _get_dashboard_cache_entry(cache_key)
+        if stale_entry.get("data"):
+            return {"status": "success", "data": _strip_user_id(stale_entry["data"]), "cached": True, "timeout": True}
         dashboard = {"total_plays": 0, "active_users": 0, "total_duration": 0, "library": {}}
         users = []
         libraries = []
@@ -1384,8 +1434,7 @@ async def api_dashboard_init(request: Request, user_id: Optional[str] = None):
     }
     
     # 🔥 更新内存缓存
-    _dashboard_cache["data"] = result_data
-    _dashboard_cache["ts"] = now
+    _set_dashboard_cache(cache_key, result_data, effective_user_id, now)
     
     return {
         "status": "success",
