@@ -9,7 +9,7 @@
 SYSTEM_TABLES = [
     "users_meta", "invitations", "sys_license", "tg_user_bindings",
     "tg_user_blacklist", "media_requests", "request_users", "media_feedback",
-    "risk_logs", "sys_notifications", "point_logs", "point_config",
+    "request_admin_messages", "risk_logs", "sys_notifications", "point_logs", "point_config",
     "plugin_state", "plugin_logs", "sys_dashboard", "insight_ignores", "notify_mutes",
     "UserList", "client_blacklist", "client_whitelist", "gap_records", "gap_config",
     "gap_perfect_series", "gap_scan_cache", "dedupe_results", "dedupe_whitelist",
@@ -115,6 +115,18 @@ TABLE_SCHEMAS = {
         season INTEGER DEFAULT 0,
         requested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(tmdb_id, user_id, season)
+    )""",
+
+    "request_admin_messages": """CREATE TABLE IF NOT EXISTS request_admin_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tmdb_id INTEGER NOT NULL,
+        chat_id TEXT NOT NULL,
+        message_id INTEGER NOT NULL,
+        is_caption INTEGER DEFAULT 1,
+        original_text TEXT DEFAULT '',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(tmdb_id, chat_id, message_id)
     )""",
     
     "media_feedback": """CREATE TABLE IF NOT EXISTS media_feedback (

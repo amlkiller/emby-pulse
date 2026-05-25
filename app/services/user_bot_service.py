@@ -3870,7 +3870,9 @@ def cmd_shop(chat_id, tg_user_id, msg_id=None):
         conn.close()
         items = json.loads(items_row[0]) if items_row and items_row[0] else []
         if not items:
-            _send(chat_id, "🏪 积分商城暂无商品")
+            _reply(chat_id, "🏪 积分商城暂无商品",
+                   reply_markup={"inline_keyboard": [[{"text": "🔙 主菜单", "callback_data": "ub_back_menu"}]]},
+                   msg_id=msg_id)
             return
         msg = f"🏪 <b>积分商城</b>\n💰 你的余额：<b>{pts}</b> 积分\n\n"
         keyboard = {"inline_keyboard": []}
@@ -3886,6 +3888,7 @@ def cmd_shop(chat_id, tg_user_id, msg_id=None):
             else:
                 msg += f"• <b>{item['name']}</b> — {item['cost']} 积分\n  {item.get('desc', '')}\n\n"
             keyboard["inline_keyboard"].append([{"text": f"🛒 {item['name']} ({item['cost']}积分)", "callback_data": f"ub_redeem_{item['id']}"}])
+        keyboard["inline_keyboard"].append([{"text": "🔙 主菜单", "callback_data": "ub_back_menu"}])
         _reply(chat_id, msg.strip(), reply_markup=keyboard, msg_id=msg_id)
     except Exception as e:
         logger.error(f"[商城] 加载失败: {e}")
@@ -4080,6 +4083,7 @@ def cmd_request(chat_id, tg_user_id, args):
             mtype = "🎬" if r["media_type"] == "movie" else "📺"
             msg += f"{mtype} {name} ({year})\n"
             keyboard["inline_keyboard"].append([{"text": f"{mtype} {name} ({year})", "callback_data": f"ub_req_{r['media_type']}_{r['id']}"}])
+        keyboard["inline_keyboard"].append([{"text": "🔙 主菜单", "callback_data": "ub_back_menu"}])
         _send(chat_id, msg + "\n点击下方按钮提交求片：", reply_markup=keyboard)
     except Exception as e:
         logger.error(f"[搜索] 执行失败: {e}")
@@ -4237,16 +4241,30 @@ def _submit_request(chat_id, tg_user_id, media_type, tmdb_id, season):
             from app.services.bot_service import bot
             from app.core.database import add_sys_notification
             from app.core.config import REPORT_COVER_URL
-            add_sys_notification("request", f"收到新求片: {title}", f"用户 {uname} 通过TG机器人求片", "/requests_admin")
+            from app.routers.notify_admin import get_notify_rule
             msg = f"🎬 <b>收到新求片心愿</b>\n\n👤 <b>用户：</b>{uname}\n📺 <b>内容：</b>{title} ({year}){season_str}\n📱 <b>来源：</b>TG 用户机器人\n\n请及时前往后台审批处理。"
             admin_url = cfg.get("pulse_url") or cfg.get_main_public_url() or "http://127.0.0.1:10307"
             keyboard = {"inline_keyboard": [
                 [{"text": "🚀 推送 MP", "callback_data": f"req_approve_{tmdb_id}"}, {"text": "✋ 手动接单", "callback_data": f"req_manual_{tmdb_id}"}],
                 [{"text": "❌ 拒绝求片", "callback_data": f"req_reject_menu_{tmdb_id}"}, {"text": "💻 网页审批", "url": f"{admin_url.rstrip('/')}/requests_admin"}]
             ]}
-            poster_url = f"https://image.tmdb.org/t/p/w500{poster}" if poster else REPORT_COVER_URL
-            bot.send_photo("sys_notify", poster_url, msg, reply_markup=keyboard, platform="all")
-        except Exception: pass
+            rule = get_notify_rule('request_new')
+            if rule and rule.get('enabled'):
+                channels = rule.get('channels', [])
+                platform = "none"
+                if 'tg_bot' in channels and 'wecom' in channels:
+                    platform = "all"
+                elif 'tg_bot' in channels:
+                    platform = "tg"
+                elif 'wecom' in channels:
+                    platform = "wecom"
+                if platform != "none":
+                    poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}" if poster_path else REPORT_COVER_URL
+                    bot.send_photo("sys_notify", poster_url, msg, reply_markup=keyboard, platform=platform)
+                if 'web' in channels:
+                    add_sys_notification("request", f"收到新求片: {title}", f"用户 {uname} 通过TG机器人求片", "/requests_admin")
+        except Exception as e:
+            logger.error(f"[求片通知] 发送失败: {e}")
     except Exception as e:
         logger.error(f"[求片] 提交失败: {e}")
         _send(chat_id, f"❌ 求片提交失败：{safe_error_message(e, '求片提交异常，请稍后重试')}")

@@ -20,6 +20,103 @@ from app.utils.ip_location import get_location, get_isp
 
 logger = logging.getLogger("uvicorn")
 
+def _ensure_request_admin_messages_table():
+    try:
+        conn = sqlite3.connect(SYSTEM_DB_PATH)
+        c = conn.cursor()
+        c.execute('''CREATE TABLE IF NOT EXISTS request_admin_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tmdb_id INTEGER NOT NULL,
+            chat_id TEXT NOT NULL,
+            message_id INTEGER NOT NULL,
+            is_caption INTEGER DEFAULT 1,
+            original_text TEXT DEFAULT '',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(tmdb_id, chat_id, message_id)
+        )''')
+        c.execute("CREATE INDEX IF NOT EXISTS idx_request_admin_messages_tmdb ON request_admin_messages(tmdb_id)")
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.error(f"[求片审核同步] 初始化消息表失败: {e}")
+
+def _extract_request_tmdb_id(reply_markup):
+    if not reply_markup:
+        return None
+    for row in reply_markup.get("inline_keyboard", []):
+        for button in row:
+            data = button.get("callback_data", "")
+            if data.startswith("req_approve_") or data.startswith("req_manual_") or data.startswith("req_reject_menu_"):
+                parts = data.split("_")
+                for part in parts:
+                    if part.isdigit():
+                        return int(part)
+    return None
+
+def _record_request_admin_message(tmdb_id, chat_id, message_id, is_caption, original_text):
+    if not tmdb_id or not chat_id or not message_id:
+        return
+    try:
+        _ensure_request_admin_messages_table()
+        conn = sqlite3.connect(SYSTEM_DB_PATH)
+        c = conn.cursor()
+        c.execute('''
+            INSERT OR REPLACE INTO request_admin_messages
+            (tmdb_id, chat_id, message_id, is_caption, original_text, updated_at)
+            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ''', (int(tmdb_id), str(chat_id), int(message_id), 1 if is_caption else 0, original_text or ""))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.error(f"[求片审核同步] 记录消息失败: {e}")
+
+def _sync_request_admin_messages(tmdb_id, action_text, operator, token, proxies, fallback_text="", fallback_is_caption=True):
+    if not tmdb_id:
+        return
+    try:
+        _ensure_request_admin_messages_table()
+        conn = sqlite3.connect(SYSTEM_DB_PATH)
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        c.execute("SELECT chat_id, message_id, is_caption, original_text FROM request_admin_messages WHERE tmdb_id = ?", (int(tmdb_id),))
+        rows = c.fetchall()
+        conn.close()
+
+        seen = set()
+        for row in rows:
+            key = (str(row["chat_id"]), int(row["message_id"]))
+            if key in seen:
+                continue
+            seen.add(key)
+            base_text = row["original_text"] or fallback_text or "求片请求"
+            new_text = f"{base_text}\n\n━━━━━━━━━━━━━━\n{action_text}\n(操作人: {operator})"
+            method = "editMessageCaption" if row["is_caption"] else "editMessageText"
+            payload_key = "caption" if row["is_caption"] else "text"
+            try:
+                payload = {"chat_id": row["chat_id"], "message_id": row["message_id"], payload_key: new_text, "parse_mode": "HTML", "reply_markup": {"inline_keyboard": []}}
+                requests.post(
+                    f"https://api.telegram.org/bot{token}/{method}",
+                    json=payload,
+                    proxies=proxies, timeout=5
+                )
+            except Exception as e:
+                logger.error(f"[求片审核同步] 更新副本失败 chat_id={row['chat_id']} message_id={row['message_id']}: {e}")
+
+        if not rows and fallback_text:
+            logger.info(f"[求片审核同步] 未找到已记录副本 tmdb_id={tmdb_id}")
+        elif rows:
+            try:
+                conn = sqlite3.connect(SYSTEM_DB_PATH)
+                c = conn.cursor()
+                c.execute("DELETE FROM request_admin_messages WHERE tmdb_id = ?", (int(tmdb_id),))
+                conn.commit()
+                conn.close()
+            except Exception as e:
+                logger.error(f"[求片审核同步] 清理消息记录失败: {e}")
+    except Exception as e:
+        logger.error(f"[求片审核同步] 批量更新失败: {e}")
+
 # 🔒 XSS 防护：HTML 转义函数（用于 Telegram 消息）
 def escape_html(text):
     """转义 HTML 特殊字符，防止 XSS 攻击"""
@@ -2023,7 +2120,14 @@ class NotificationBot:
                     if photo_bytes:
                         r = requests.post(f"https://api.telegram.org/bot{cfg.get('tg_bot_token')}/sendPhoto", data=data, files={"photo": ("image.jpg", io.BytesIO(photo_bytes), "image/jpeg")}, proxies=self._get_proxies(), timeout=20)
                         logger.info(f"[Bot] TG photo response: {r.status_code} - {r.text[:300] if r.text else 'empty'}")
-                        if r.status_code != 200: 
+                        if r.status_code == 200:
+                            try:
+                                tmdb_id = _extract_request_tmdb_id(reply_markup)
+                                result = r.json().get("result", {})
+                                _record_request_admin_message(tmdb_id, tg_cid, result.get("message_id"), True, caption)
+                            except Exception as e:
+                                logger.error(f"[求片审核同步] 解析发送结果失败: {e}")
+                        else:
                             logger.error(f"[Bot] TG photo failed, fallback to text")
                             self.send_message(tg_cid, caption, parse_mode, reply_markup, platform="tg")
                     else:
@@ -2063,7 +2167,14 @@ class NotificationBot:
                     data = {"chat_id": tg_cid, "text": text, "parse_mode": parse_mode}
                     if reply_markup: data["reply_markup"] = json.dumps(reply_markup)
                     r = requests.post(f"https://api.telegram.org/bot{cfg.get('tg_bot_token')}/sendMessage", json=data, proxies=self._get_proxies(), timeout=10)
-                    if r.status_code != 200:
+                    if r.status_code == 200:
+                        try:
+                            tmdb_id = _extract_request_tmdb_id(reply_markup)
+                            result = r.json().get("result", {})
+                            _record_request_admin_message(tmdb_id, tg_cid, result.get("message_id"), False, text)
+                        except Exception as e:
+                            logger.error(f"[求片审核同步] 解析文字发送结果失败: {e}")
+                    else:
                         logger.error(f"[Bot] ❌ 发送失败: {r.status_code} - {r.text[:200]}")
                 except Exception as e:
                     logger.error(f"[Bot] ❌ 发送异常: {e}")
@@ -2435,14 +2546,12 @@ class NotificationBot:
             operator = cq.get('from', {}).get('first_name', 'Admin')
             if "caption" in msg_obj:
                 orig_caption = msg_obj.get("caption", "求片请求")
-                new_caption = f"{orig_caption}\n\n━━━━━━━━━━━━━━\n{action_text}\n(操作人: {operator})"
-                try: requests.post(f"https://api.telegram.org/bot{token}/editMessageCaption", json={"chat_id": cid, "message_id": mid, "caption": new_caption, "reply_markup": {"inline_keyboard": []}}, proxies=proxies, timeout=5)
-                except Exception: pass
+                _record_request_admin_message(tid, cid, mid, True, orig_caption)
+                _sync_request_admin_messages(tid, action_text, operator, token, proxies, orig_caption, True)
             else:
                 orig_text = msg_obj.get("text", "求片请求")
-                new_text = f"{orig_text}\n\n━━━━━━━━━━━━━━\n{action_text}\n(操作人: {operator})"
-                try: requests.post(f"https://api.telegram.org/bot{token}/editMessageText", json={"chat_id": cid, "message_id": mid, "text": new_text, "reply_markup": {"inline_keyboard": []}}, proxies=proxies, timeout=5)
-                except Exception: pass
+                _record_request_admin_message(tid, cid, mid, False, orig_text)
+                _sync_request_admin_messages(tid, action_text, operator, token, proxies, orig_text, False)
 
     def _set_commands(self):
         token = cfg.get("tg_bot_token")
