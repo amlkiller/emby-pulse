@@ -2459,6 +2459,7 @@ class NotificationBot:
             {"command": "check", "description": "📡 系统探针"}, 
             {"command": "calendar", "description": "📺 今日更新"}, 
             {"command": "emby_restart", "description": "🔄 重启Emby(Pro)"},
+            {"command": "whois", "description": "👤 查询绑定信息"},
             {"command": "help", "description": "🤖 帮助菜单"}
         ]
         try: requests.post(f"https://api.telegram.org/bot{token}/setMyCommands", json={"commands": cmds}, proxies=self._get_proxies(), timeout=10)
@@ -2495,6 +2496,7 @@ class NotificationBot:
         elif text.startswith("/recent"): self._cmd_recent(cid, platform)
         elif text.startswith("/calendar"): self._cmd_calendar(cid, platform)
         elif text.startswith("/emby_restart"): self._cmd_emby_restart(cid, text, platform)
+        elif text.startswith("/whois"): self._cmd_whois(cid, text, platform)
         elif text.startswith("/help"): self._cmd_help(cid, platform)
         else:
             # 非命令消息，仅管理员可触发事件总线
@@ -3037,6 +3039,113 @@ class NotificationBot:
             logger.error(f"[Bot] calendar error: {e}")
             self.send_message(cid, "❌ 获取今日更新失败", platform=platform)
 
+    def _format_expire_status(self, expire_date):
+        if not expire_date:
+            return "永久有效"
+        expire_text = str(expire_date).strip()
+        if not expire_text:
+            return "永久有效"
+
+        try:
+            exp_date = datetime.date.fromisoformat(expire_text[:10])
+            today = datetime.date.today()
+            days_left = (exp_date - today).days
+            if days_left < 0:
+                return f"{expire_text[:10]}（已过期 {abs(days_left)} 天）"
+            if days_left == 0:
+                return f"{expire_text[:10]}（今天到期）"
+            return f"{expire_text[:10]}（{days_left} 天后到期）"
+        except Exception:
+            return expire_text
+
+    def _format_whois_row(self, row, index=None):
+        prefix = f"<b>匹配 {index}</b>\n" if index else "<b>绑定信息</b>\n"
+        tg_username = row.get("tg_username") or ""
+        tg_display_name = row.get("tg_display_name") or ""
+        tg_username_text = f"@{tg_username}" if tg_username and not tg_username.startswith("@") else (tg_username or "未记录")
+        expire_status = self._format_expire_status(row.get("expire_date"))
+
+        return (
+            f"{prefix}"
+            f"👤 <b>Emby 用户：</b>{escape_html(row.get('emby_username') or '未记录')}\n"
+            f"🆔 <b>Emby ID：</b><code>{escape_html(row.get('emby_user_id') or '未记录')}</code>\n"
+            f"📅 <b>到期时间：</b>{escape_html(expire_status)}\n"
+            f"✈️ <b>TG ID：</b><code>{escape_html(row.get('tg_user_id') or '未记录')}</code>\n"
+            f"🔗 <b>TG 用户名：</b>{escape_html(tg_username_text)}\n"
+            f"🏷️ <b>TG 名称：</b>{escape_html(tg_display_name or '未记录')}\n"
+            f"⏱️ <b>绑定时间：</b>{escape_html(row.get('bound_at') or '未记录')}"
+        )
+
+    def _cmd_whois(self, cid, text, platform):
+        parts = text.split(None, 1)
+        if len(parts) < 2 or not parts[1].strip():
+            return self.send_message(cid, "👤 请使用: /whois TG用户名/TG ID/Emby用户名", platform=platform)
+
+        keyword = parts[1].strip()
+        normalized = keyword.lstrip("@").strip()
+        if not normalized:
+            return self.send_message(cid, "👤 请使用: /whois TG用户名/TG ID/Emby用户名", platform=platform)
+
+        select_sql = """
+            SELECT
+                b.tg_user_id,
+                b.tg_username,
+                b.tg_display_name,
+                b.emby_user_id,
+                b.emby_username,
+                b.bound_at,
+                m.expire_date
+            FROM tg_user_bindings b
+            LEFT JOIN users_meta m ON m.user_id = b.emby_user_id
+        """
+
+        try:
+            params = []
+            where_parts = []
+            if normalized.isdigit():
+                where_parts.append("b.tg_user_id = ?")
+                params.append(normalized)
+
+            where_parts.extend([
+                "LOWER(COALESCE(b.tg_username, '')) = LOWER(?)",
+                "LOWER(COALESCE(b.emby_username, '')) = LOWER(?)"
+            ])
+            params.extend([normalized, normalized])
+
+            rows = query_db(
+                f"{select_sql} WHERE {' OR '.join(where_parts)} ORDER BY b.bound_at DESC LIMIT 10",
+                tuple(params)
+            ) or []
+
+            if not rows:
+                like_keyword = f"%{normalized}%"
+                rows = query_db(
+                    f"""
+                    {select_sql}
+                    WHERE LOWER(COALESCE(b.tg_display_name, '')) LIKE LOWER(?)
+                       OR LOWER(COALESCE(b.tg_username, '')) LIKE LOWER(?)
+                       OR LOWER(COALESCE(b.emby_username, '')) LIKE LOWER(?)
+                    ORDER BY b.bound_at DESC
+                    LIMIT 10
+                    """,
+                    (like_keyword, like_keyword, like_keyword)
+                ) or []
+
+            if not rows:
+                return self.send_message(cid, f"📭 未找到与 <b>{escape_html(keyword)}</b> 相关的绑定信息", platform=platform)
+
+            result_rows = [dict(r) for r in rows]
+            if len(result_rows) == 1:
+                msg = self._format_whois_row(result_rows[0])
+            else:
+                msg = f"🔎 <b>找到 {len(result_rows)} 条匹配结果</b>\n\n"
+                msg += "\n\n".join(self._format_whois_row(row, i + 1) for i, row in enumerate(result_rows))
+
+            self.send_message(cid, msg, platform=platform)
+        except Exception as e:
+            logger.error(f"[Bot] whois query error: {e}")
+            self.send_message(cid, "❌ 查询绑定信息失败", platform=platform)
+
     def _cmd_help(self, cid, platform):
         msg = ("🤖 <b>EmbyPulse 智能助理指南</b>\n\n"
                "📊 <b>数据报表指令</b>\n"
@@ -3053,6 +3162,7 @@ class NotificationBot:
                "🛠 <b>系统管理指令</b>\n"
                "/check - 测试 Emby 服务器连通性与测速探针\n"
                "/emby_restart - 重启 Emby 服务器（Pro）\n"
+               "/whois [TG用户名/TG ID/Emby用户名] - 查询绑定信息与到期时间\n"
                "/help - 获取本帮助菜单")
         self.send_message(cid, msg.strip(), platform=platform)
 
