@@ -192,7 +192,7 @@ class UserBackupPlugin(PluginBase):
                     "remark": meta.get('remark', ''),
                     "risk_level": meta.get('risk_level', 'safe'),
                     "req_free": meta.get('req_free', 0) or 0,
-                    "req_free_count": meta.get('req_free_count', -1) or -1,
+                    "req_free_count": meta.get('req_free_count') if meta.get('req_free_count') is not None else -1,
                     "admin_disabled": bool(meta.get('admin_disabled', 0)),
                     "enable_all_folders": policy.get('EnableAllFolders', True),
                     "enabled_folders": ','.join(policy.get('EnabledFolders', [])),
@@ -268,7 +268,7 @@ class UserBackupPlugin(PluginBase):
         for row_idx, user in enumerate(users, 2):
             # 求片权限显示文本
             req_free_text = "免费求片" if user['req_free'] == 1 else "跟随全局"
-            req_free_count_text = "无限" if user['req_free_count'] == -1 else str(user['req_free_count'])
+            req_free_count_text = ("无限" if user['req_free_count'] == -1 else str(user['req_free_count'])) if user['req_free'] == 1 else ""
             
             values = [
                 user['user_id'],
@@ -689,7 +689,7 @@ class UserBackupPlugin(PluginBase):
                                 if backup_val == "无限" or backup_val == -1:
                                     backup_val = "无限"
                                 else:
-                                    backup_val = str(backup_val or "无限")
+                                    backup_val = str(backup_val) if backup_val not in (None, "") else ""
                                 # 当前值：-1=无限, >=0=次数
                                 if current_val == -1 or current_val is None:
                                     current_val = "无限"
@@ -905,8 +905,8 @@ class UserBackupPlugin(PluginBase):
                             if backup_val_text == "无限":
                                 backup_val = -1
                             else:
-                                backup_val = int(backup_val_text) if backup_val_text else -1
-                            current_val = int(current_meta.get('req_free_count') or -1) if current_meta else -1
+                                backup_val = int(backup_val_text) if backup_val_text not in (None, "") else -1
+                            current_val = int(current_meta.get('req_free_count')) if current_meta and current_meta.get('req_free_count') is not None else -1
                             # 增量模式：值相同则跳过
                             if mode == "increment" and current_val == backup_val:
                                 pass

@@ -179,6 +179,11 @@ def ensure_points_schema():
         )''')
         
         # 🔥 数据库迁移：检查并添加缺失的列
+        red_packet_columns = c.execute("PRAGMA table_info(point_red_packets)").fetchall()
+        red_packet_column_names = [col[1] for col in red_packet_columns]
+        if 'message_id' not in red_packet_column_names:
+            c.execute("ALTER TABLE point_red_packets ADD COLUMN message_id TEXT")
+
         # 检查 pk_invitations 表是否有 TG 名称列
         columns = c.execute("PRAGMA table_info(pk_invitations)").fetchall()
         column_names = [col[1] for col in columns]

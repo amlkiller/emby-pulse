@@ -6,6 +6,7 @@ import datetime
 import logging
 import math
 import random
+import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from app.core.config import cfg, FONT_PATH, FONT_URLS, THEMES, BUILTIN_FONT_PATH
 from app.core.database import query_db, get_base_filter
@@ -547,6 +548,69 @@ class ReportGenerator:
             pass
         return None
 
+    def _fetch_tmdb_poster(self, item_name, width=120, height=160, is_tv=False):
+        if not item_name or not HAS_PIL:
+            return None
+        tmdb_key = cfg.get("tmdb_api_key")
+        if not tmdb_key:
+            return None
+
+        clean_name = str(item_name).split(' - ')[0].strip()
+        if not clean_name:
+            return None
+
+        try:
+            proxies = None
+            try:
+                from app.utils.proxy_helper import get_safe_proxies
+                proxies = get_safe_proxies()
+            except Exception:
+                pass
+
+            media_type = "tv" if is_tv else "movie"
+            url = (
+                f"https://api.themoviedb.org/3/search/{media_type}"
+                f"?api_key={tmdb_key}&language=zh-CN&query={urllib.parse.quote(clean_name)}"
+            )
+            res = requests.get(url, proxies=proxies, timeout=5)
+            if res.status_code != 200:
+                return None
+            results = res.json().get("results", [])
+            poster_path = next((r.get("poster_path") for r in results if r.get("poster_path")), None)
+            if not poster_path and not is_tv:
+                url = (
+                    f"https://api.themoviedb.org/3/search/tv"
+                    f"?api_key={tmdb_key}&language=zh-CN&query={urllib.parse.quote(clean_name)}"
+                )
+                tv_res = requests.get(url, proxies=proxies, timeout=5)
+                if tv_res.status_code == 200:
+                    poster_path = next((r.get("poster_path") for r in tv_res.json().get("results", []) if r.get("poster_path")), None)
+            if not poster_path:
+                return None
+
+            img_url = f"https://image.tmdb.org/t/p/w500{poster_path}"
+            img_res = requests.get(img_url, proxies=proxies, timeout=8)
+            if img_res.status_code == 200:
+                poster = Image.open(io.BytesIO(img_res.content)).convert('RGB')
+                poster = poster.resize((width, height), Image.LANCZOS)
+                logger.info(f"[海报生成] TMDB 封面兜底成功: {clean_name}")
+                return poster
+        except Exception as e:
+            logger.debug(f"[海报生成] TMDB 封面兜底失败: {item_name}, {e}")
+        return None
+
+    def _get_best_poster(self, item_id, item_name, width=120, height=160, is_tv=False):
+        poster = None
+        if is_tv and item_id:
+            series_id = self._get_series_id(item_id, item_name)
+            if series_id:
+                poster = self._fetch_emby_poster(series_id, width, height)
+        if not poster and item_id:
+            poster = self._fetch_emby_poster(item_id, width, height)
+        if not poster:
+            poster = self._fetch_tmdb_poster(item_name, width, height, is_tv=is_tv)
+        return poster
+
     def generate_daily_poster(self, period='yesterday', tv_list=None, movie_list=None, theme='cinema'):
         """生成观影TOP榜海报 - 支持多主题
         
@@ -713,8 +777,7 @@ class ReportGenerator:
             # 🔥 从 pc 字典获取 where 条件
             where = pc.get("where", "")
 
-            # 增加查询数量，确保有足够的封面
-            all_tops = query_db(f"SELECT ItemName, ItemId, ItemType, COUNT(*) as C, COALESCE(SUM(PlayDuration), 0) as Duration FROM PlaybackActivity {where}{exclude_sql} GROUP BY ItemName ORDER BY Duration DESC LIMIT 100", tuple(exclude_types) if exclude_types else None)
+            all_tops = query_db(f"SELECT ItemName, ItemId, ItemType, COUNT(*) as C, COALESCE(SUM(PlayDuration), 0) as Duration FROM PlaybackActivity {where}{exclude_sql} GROUP BY ItemName ORDER BY Duration DESC", tuple(exclude_types) if exclude_types else None)
             if not all_tops:
                 return None
             
@@ -733,7 +796,7 @@ class ReportGenerator:
                 logger.error(f"[海报生成] 调试日志错误: {e}")
 
             tv_pattern = re.compile(r' - [sS]\d|第.+[集期]|EP?\d', re.IGNORECASE)
-            tv_list = []
+            tv_map = {}
             movie_list = []
             
             for item in all_tops:
@@ -741,13 +804,16 @@ class ReportGenerator:
                     name = item['ItemName'] if 'ItemName' in item.keys() else ''
                     item_id = item['ItemId'] if 'ItemId' in item.keys() else None
                     count = item['C'] if 'C' in item.keys() else 0
+                    item_type = item['ItemType'] if 'ItemType' in item.keys() else ''
                 except (KeyError, TypeError):
                     name = str(item[0]) if len(item) > 0 else ''
                     item_id = item[1] if len(item) > 1 else None
-                    count = item[2] if len(item) > 2 else 0
+                    item_type = item[2] if len(item) > 2 else ''
+                    count = item[3] if len(item) > 3 else 0
                 
                 series_name = name
-                if tv_pattern.search(name):
+                is_tv = str(item_type) == 'Episode' or tv_pattern.search(name)
+                if is_tv:
                     parts = name.split(' - ')
                     series_name = parts[0] if parts else name
                 
@@ -756,26 +822,29 @@ class ReportGenerator:
                     duration = 0
                 item_dict = {'ItemName': name, 'SeriesName': series_name, 'ItemId': item_id, 'C': count, 'Duration': duration}
                 
-                if tv_pattern.search(name):
-                    existing = [t for t in tv_list if t['SeriesName'] == series_name]
-                    if not existing and len(tv_list) < 5:
-                        tv_list.append(item_dict)
-                    elif existing:
-                        existing[0]['C'] += count
-                        existing[0]['Duration'] += duration
-                        # 重新按时长排序
-                        tv_list.sort(key=lambda x: x['Duration'], reverse=True)
+                if is_tv:
+                    existing = tv_map.get(series_name)
+                    if existing:
+                        existing['C'] += count
+                        existing['Duration'] += duration
+                        if duration > existing.get('_best_episode_duration', 0):
+                            existing['ItemName'] = name
+                            existing['ItemId'] = item_id
+                            existing['_best_episode_duration'] = duration
+                    else:
+                        item_dict['_best_episode_duration'] = duration
+                        tv_map[series_name] = item_dict
                 else:
-                    if len(movie_list) < 5:
-                        movie_list.append(item_dict)
-                
-                # 当两个列表都满了才停止
-                if len(tv_list) >= 5 and len(movie_list) >= 5:
-                    break
+                    movie_list.append(item_dict)
 
-            # 最终再排序一次，确保顺序正确
+            # 先完整聚合同一剧集，再取 TOP，避免前 100 条单集数据导致剧集总榜被截断。
+            tv_list = list(tv_map.values())
             tv_list.sort(key=lambda x: x['Duration'], reverse=True)
             movie_list.sort(key=lambda x: x['Duration'], reverse=True)
+            tv_list = tv_list[:5]
+            movie_list = movie_list[:5]
+            for item in tv_list:
+                item.pop('_best_episode_duration', None)
             
             # 调试日志：打印排序后的列表
             logger.info(f"[海报生成] 剧集列表排序后: {[(t['SeriesName'], t['Duration']) for t in tv_list]}")
@@ -953,15 +1022,9 @@ class ReportGenerator:
             # 并行获取封面（优化性能）
             def fetch_poster_for_item(idx, item):
                 item_id = get_val(item, 'ItemId')
-                poster = None
-                # 获取封面
-                if "剧集" in cn_title:
-                    if tv_pattern.search(get_val(item, 'ItemName', '')):
-                        series_id = self._get_series_id(item_id, get_val(item, 'ItemName'))
-                        if series_id:
-                            poster = self._fetch_emby_poster(series_id, poster_w, poster_h)
-                if not poster and item_id:
-                    poster = self._fetch_emby_poster(item_id, poster_w, poster_h)
+                item_name = get_val(item, 'ItemName', '')
+                is_tv = "剧集" in cn_title and tv_pattern.search(item_name)
+                poster = self._get_best_poster(item_id, item_name, poster_w, poster_h, is_tv=is_tv)
                 return idx, poster
             
             # 并行获取最多5个封面
@@ -1293,15 +1356,7 @@ class ReportGenerator:
                 # 获取封面
                 item_id = item.get('ItemId')
                 item_name = item.get('ItemName', '')
-                poster = None
-                
-                # 剧集需要获取SeriesId的封面
-                if is_tv and item_id:
-                    series_id = self._get_series_id(item_id, item_name)
-                    if series_id:
-                        poster = self._fetch_emby_poster(series_id, poster_w, poster_h)
-                if not poster and item_id:
-                    poster = self._fetch_emby_poster(item_id, poster_w, poster_h)
+                poster = self._get_best_poster(item_id, item_name, poster_w, poster_h, is_tv=is_tv)
                 
                 # 绘制封面
                 poster_x = card_x + (card_w - poster_w) // 2
@@ -1461,13 +1516,7 @@ class ReportGenerator:
         item_name = item.get('ItemName', '')
         
         # 获取封面
-        poster = None
-        if is_tv and item_id:
-            series_id = self._get_series_id(item_id, item_name)
-            if series_id:
-                poster = self._fetch_emby_poster(series_id, w, h)
-        if not poster and item_id:
-            poster = self._fetch_emby_poster(item_id, w, h)
+        poster = self._get_best_poster(item_id, item_name, w, h, is_tv=is_tv)
         
         # 卡片背景
         card_bg = colors.get('card_bg', (30, 30, 38))
@@ -1589,13 +1638,7 @@ class ReportGenerator:
                 item_name = item.get('ItemName', '')
                 
                 # 获取封面
-                poster = None
-                if is_tv and item_id:
-                    series_id = self._get_series_id(item_id, item_name)
-                    if series_id:
-                        poster = self._fetch_emby_poster(series_id, poster_w, poster_h)
-                if not poster and item_id:
-                    poster = self._fetch_emby_poster(item_id, poster_w, poster_h)
+                poster = self._get_best_poster(item_id, item_name, poster_w, poster_h, is_tv=is_tv)
                 
                 # 绘制卡片背景
                 draw.rounded_rectangle([(poster_x - 5, poster_y - 5), 

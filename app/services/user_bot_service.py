@@ -1818,6 +1818,7 @@ def cmd_rob(chat_id, tg_user_id, text, is_group=False, entities=None):
     if len(parts) < 2:
         return _send(chat_id, "💡 使用方法：/rob @用户\n示例：/rob @张三\n\n💡 也可以直接使用 Emby 用户名")
     
+    conn = None
     try:
         # 用户名可能是多个部分
         target = ' '.join(parts[1:]).lstrip('@')
@@ -2016,6 +2017,15 @@ def cmd_rob(chat_id, tg_user_id, text, is_group=False, entities=None):
             return _send(chat_id, f"😢 <b>打劫失败！</b>\n\n💥 被 <b>{display_name}</b> 反杀，损失 <b>{actual_counter}</b> 积分\n💰 当前余额：<b>{new_from_points}</b> 积分")
             
     except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            try:
+                conn.close()
+            except Exception:
+                pass
         logger.error(f"[UserBot] 打劫失败: {e}")
         return _send(chat_id, f"❌ 打劫失败：{safe_error_message(e, '打劫操作异常，请稍后重试')}")
 
@@ -2915,6 +2925,17 @@ def cmd_redpacket(chat_id, tg_user_id, text, is_group=False, tg_name="", user_ms
                             f"📦 共 <b>{total_count}</b> 个\n"
                             f"⏰ {expire_hours}小时后过期\n\n"
                             f"💡 发送 /grab {packet_id} 抢红包")
+
+        if result and result.get("ok"):
+            msg_id = result.get("result", {}).get("message_id")
+            if msg_id:
+                try:
+                    conn = sqlite3.connect(SYSTEM_DB_PATH)
+                    conn.execute("UPDATE point_red_packets SET message_id = ? WHERE id = ?", (str(msg_id), packet_id))
+                    conn.commit()
+                    conn.close()
+                except Exception as e:
+                    logger.warning(f"[红包] 记录红包消息ID失败: {e}")
         
         # 群聊中只删除用户命令消息，红包消息等抢完或过期后再删
         if is_group and user_msg_id:
@@ -3078,6 +3099,7 @@ def cmd_grab(chat_id, tg_user_id, text, is_group=False, tg_name="", user_msg_id=
     if len(parts) < 2:
         return _send(chat_id, "💡 使用方法：/grab 红包ID\n示例：/grab 123")
     
+    conn = None
     try:
         packet_id = int(parts[1])
         
@@ -3211,6 +3233,8 @@ def cmd_grab(chat_id, tg_user_id, text, is_group=False, tg_name="", user_msg_id=
     except Exception as e:
         logger.error(f"[UserBot] 抢红包失败: {e}")
         try: conn.rollback()
+        except Exception: pass
+        try: conn.close()
         except Exception: pass
         return _send(chat_id, f"❌ 抢红包失败：{str(e)}")
 
