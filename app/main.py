@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 # 应用版本号（单一来源，修改版本只改这里）
-APP_VERSION = "1.4.4"
+APP_VERSION = "1.4.5"
 
 # 🔥 安全：日志脱敏过滤器
 from app.utils.sensitive_filter import SensitiveLogFilter
