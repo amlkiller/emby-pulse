@@ -774,39 +774,59 @@ def api_poster_data(request: Request, user_id: Optional[str] = None, period: str
         server_res = query_db(f"SELECT COUNT(*) as Plays FROM PlaybackActivity {get_base_filter('all')[0]} {date_filter}", get_base_filter('all')[1])
         server_plays = server_res[0]['Plays'] if server_res else 0
 
-        raw_sql = f"SELECT DateCreated, ItemName, ItemId, ItemType, PlayDuration FROM PlaybackActivity {where_base + date_filter}"
-        rows = query_db(raw_sql, params)
-        
-        total_plays = 0; total_duration = 0; aggregated = {}
-        daily_duration = defaultdict(int)
+        summary = query_db(
+            f"SELECT COUNT(*) as plays, COALESCE(SUM(PlayDuration), 0) as duration FROM PlaybackActivity {where_base + date_filter}",
+            params,
+            one=True,
+        )
+        total_plays = int(summary['plays'] if summary else 0)
+        total_duration = int(summary['duration'] if summary else 0)
+
+        daily_rows = query_db(
+            f"""SELECT substr(replace(DateCreated, 'T', ' '), 1, 10) as day,
+                       COALESCE(SUM(PlayDuration), 0) as duration
+                FROM PlaybackActivity {where_base + date_filter}
+                GROUP BY day ORDER BY day DESC""",
+            params,
+        ) or []
+        daily_duration = {r['day']: int(r['duration'] or 0) for r in daily_rows if r['day']}
+
         late_night_record = None
-        late_night_hour = -1
+        late_row = query_db(
+            f"""SELECT DateCreated, ItemName, ItemType
+                FROM PlaybackActivity {where_base + date_filter}
+                AND CAST(substr(replace(DateCreated, 'T', ' '), 12, 2) AS INTEGER) BETWEEN 1 AND 5
+                ORDER BY substr(replace(DateCreated, 'T', ' '), 12, 8) DESC
+                LIMIT 1""",
+            params,
+            one=True,
+        )
+        if late_row and late_row.get('DateCreated'):
+            dc = late_row.get('DateCreated', '')
+            m = re.search(r'T(\d{2}):(\d{2}):(\d{2})', dc) or re.search(r' (\d{2}):(\d{2}):(\d{2})', dc)
+            if m:
+                late_night_record = {
+                    "time": f"{m.group(1)}:{m.group(2)}",
+                    "date": dc[:10][5:].replace('-', '月') + '日',
+                    "name": get_clean_name(late_row.get('ItemName'), late_row.get('ItemType', ''))
+                }
 
-        if rows:
-            for row in rows:
-                row_dict = dict(row)
-                total_plays += 1; dur = row_dict['PlayDuration'] or 0; total_duration += dur
-                
-                dc = row_dict.get('DateCreated', '')
-                if dc:
-                    day_str = dc[:10]
-                    daily_duration[day_str] += dur
-                    
-                    m = re.search(r'T(\d{2}):(\d{2}):(\d{2})', dc)
-                    if m:
-                        hour = int(m.group(1))
-                        if 1 <= hour <= 5:
-                            if hour > late_night_hour:
-                                late_night_hour = hour
-                                late_night_record = {
-                                    "time": f"{hour:02d}:{m.group(2)}",
-                                    "date": day_str[5:].replace('-', '月') + '日',
-                                    "name": get_clean_name(row_dict.get('ItemName'), row_dict.get('ItemType', ''))
-                                }
-
-                clean = get_clean_name(row_dict.get('ItemName'), row_dict.get('ItemType', ''))
-                if clean not in aggregated: aggregated[clean] = {'ItemName': clean, 'ItemId': row_dict['ItemId'], 'Count': 0, 'Duration': 0}
-                aggregated[clean]['Count'] += 1; aggregated[clean]['Duration'] += dur
+        top_rows = query_db(
+            f"""SELECT ItemName, ItemId, ItemType, COUNT(*) as Count, COALESCE(SUM(PlayDuration), 0) as Duration
+                FROM PlaybackActivity {where_base + date_filter}
+                GROUP BY ItemName
+                ORDER BY Count DESC
+                LIMIT 200""",
+            params,
+        ) or []
+        aggregated = {}
+        for row in top_rows:
+            row_dict = dict(row)
+            clean = get_clean_name(row_dict.get('ItemName'), row_dict.get('ItemType', ''))
+            if clean not in aggregated:
+                aggregated[clean] = {'ItemName': clean, 'ItemId': row_dict['ItemId'], 'Count': 0, 'Duration': 0}
+            aggregated[clean]['Count'] += int(row_dict.get('Count') or 0)
+            aggregated[clean]['Duration'] += int(row_dict.get('Duration') or 0)
                 
         binge_day = None
         if daily_duration:
@@ -821,7 +841,7 @@ def api_poster_data(request: Request, user_id: Optional[str] = None, period: str
             if user_id and user_id != 'all':
                 # 🔥 从当前时间段播放的影片中获取类型（更准确）
                 # 先获取这段时间播放过的 ItemId
-                item_ids = list(set([row_dict['ItemId'] for row_dict in rows if row_dict.get('ItemId')]))[:50]  # 最多50个
+                item_ids = list({r['ItemId'] for r in top_rows if r.get('ItemId')})[:50]  # 最多50个
                 
                 if item_ids:
                     genre_counts = defaultdict(int)
@@ -1089,7 +1109,10 @@ _executor = ThreadPoolExecutor(max_workers=8)
 
 # 🔥 内存缓存：用于快速响应重复请求
 _dashboard_cache = {"data": None, "ts": 0}
-_DASHBOARD_CACHE_TTL = 30  # 30秒内存缓存
+_DASHBOARD_CACHE_TTL = int(cfg.get("dashboard_cache_ttl") or 300)  # 默认5分钟
+_DASHBOARD_ACTIVE_WINDOW = 600
+_dashboard_last_access = 0
+_dashboard_refresh_lock = asyncio.Lock()
 
 async def _fetch_dashboard_core(user_id: str) -> dict:
     """核心仪表盘数据（播放统计、媒体库储量）- 快速"""
@@ -1212,54 +1235,59 @@ async def preload_dashboard_cache(silent: bool = False):
         await asyncio.sleep(8)
         _preload_started = True
     
-    try:
-        if not silent:
-            print("[🔥 预热] 开始预热仪表盘缓存...")
-        
-        results = await asyncio.gather(
-            asyncio.wait_for(_fetch_dashboard_core(None), timeout=15),
-            asyncio.wait_for(_fetch_users_list(), timeout=10),
-            asyncio.wait_for(_fetch_libraries(), timeout=15),
-            asyncio.wait_for(_fetch_top_users(), timeout=10),
-            asyncio.wait_for(_fetch_trend(None), timeout=10),
-            return_exceptions=True
-        )
-        
-        dashboard, users, libraries, top_users, trend = results
-        
-        result_data = {
-            "dashboard": dashboard if not isinstance(dashboard, Exception) else {"total_plays": 0, "active_users": 0, "total_duration": 0, "library": {}},
-            "users": users if not isinstance(users, Exception) else [],
-            "libraries": libraries if not isinstance(libraries, Exception) else [],
-            "top_users": top_users if not isinstance(top_users, Exception) else [],
-            "trend": trend if not isinstance(trend, Exception) else {}
-        }
-        
-        _dashboard_cache["data"] = result_data
-        _dashboard_cache["ts"] = time.time()
-        
-        if not silent:
-            print(f"[🔥 预热] 仪表盘缓存预热完成！媒体库: {len(result_data['libraries'])} 个, 用户: {len(result_data['users'])} 个")
-        return True
-    except Exception as e:
-        if not silent:
-            print(f"[🔥 预热] 预热失败: {e}")
+    if _dashboard_refresh_lock.locked():
         return False
+
+    async with _dashboard_refresh_lock:
+        try:
+            if not silent:
+                print("[🔥 预热] 开始预热仪表盘缓存...")
+        
+            results = await asyncio.gather(
+                asyncio.wait_for(_fetch_dashboard_core(None), timeout=15),
+                asyncio.wait_for(_fetch_users_list(), timeout=10),
+                asyncio.wait_for(_fetch_libraries(), timeout=15),
+                asyncio.wait_for(_fetch_top_users(), timeout=10),
+                asyncio.wait_for(_fetch_trend(None), timeout=10),
+                return_exceptions=True
+            )
+        
+            dashboard, users, libraries, top_users, trend = results
+        
+            result_data = {
+                "dashboard": dashboard if not isinstance(dashboard, Exception) else {"total_plays": 0, "active_users": 0, "total_duration": 0, "library": {}},
+                "users": users if not isinstance(users, Exception) else [],
+                "libraries": libraries if not isinstance(libraries, Exception) else [],
+                "top_users": top_users if not isinstance(top_users, Exception) else [],
+                "trend": trend if not isinstance(trend, Exception) else {}
+            }
+        
+            _dashboard_cache["data"] = result_data
+            _dashboard_cache["ts"] = time.time()
+        
+            if not silent:
+                print(f"[🔥 预热] 仪表盘缓存预热完成！媒体库: {len(result_data['libraries'])} 个, 用户: {len(result_data['users'])} 个")
+            return True
+        except Exception as e:
+            if not silent:
+                print(f"[🔥 预热] 预热失败: {e}")
+            return False
 
 async def start_dashboard_cache_refresh_loop():
     """
     后台定时刷新仪表盘缓存
-    每 25 秒检查一次，只在缓存即将过期时才刷新
+    每分钟检查一次，只在近期有人访问且缓存过期时刷新
     """
     global _last_refresh_log_time
     
     while True:
-        await asyncio.sleep(25)  # 检查间隔
+        await asyncio.sleep(60)
         try:
             now = time.time()
-            # 只在缓存即将过期时才刷新（剩余 TTL < 5 秒）
+            if now - _dashboard_last_access > _DASHBOARD_ACTIVE_WINDOW:
+                continue
             cache_age = now - _dashboard_cache["ts"] if _dashboard_cache["ts"] > 0 else 999
-            if cache_age >= (_DASHBOARD_CACHE_TTL - 5):  # 剩余不到5秒才刷新
+            if cache_age >= _DASHBOARD_CACHE_TTL:
                 await preload_dashboard_cache(silent=True)
                 # 每5分钟打印一次刷新日志（避免刷屏）
                 if now - _last_refresh_log_time >= 300:
@@ -1292,6 +1320,7 @@ async def api_preload_status(request: Request):
 
 @router.get("/api/dashboard/init")
 async def api_dashboard_init(request: Request, user_id: Optional[str] = None):
+    global _dashboard_last_access
     # 🔒 安全检查
     if not check_login(request):
         return {"status": "error", "message": "请先登录"}
@@ -1312,6 +1341,7 @@ async def api_dashboard_init(request: Request, user_id: Optional[str] = None):
         return d
 
     now = time.time()
+    _dashboard_last_access = now
     
     # 🔥 检查内存缓存（30秒内直接返回）
     if _dashboard_cache["data"] and (now - _dashboard_cache["ts"]) < _DASHBOARD_CACHE_TTL:

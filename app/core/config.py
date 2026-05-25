@@ -130,7 +130,14 @@ DEFAULT_CONFIG = {
     "server_type": "emby",
     "default_user_template_id": "",
     "user_portal_url": "",  # 用户社区公网地址,用于生成邀请链接
-    "disable_emby_auth": False  # 禁用 Emby 管理员登录(需先开启本地认证)
+    "disable_emby_auth": False,  # 禁用 Emby 管理员登录(需先开启本地认证)
+    "dashboard_cache_ttl": 300,
+    "image_proxy_max_bytes": 10 * 1024 * 1024,
+    "bot_worker_count": 8,
+    "user_bot_worker_count": 16,
+    "library_notify_queue_max": 300,
+    "slow_query_ms": 800,
+    "report_top_query_limit": 300,
 }
 
 class ConfigManager:

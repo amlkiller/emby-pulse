@@ -31,6 +31,8 @@ router = APIRouter()
 # 缓存结构: {key: {"data": ..., "expires_at": timestamp}}
 _community_cache = {}
 _community_cache_lock = threading.Lock()
+_COMMUNITY_CACHE_MAX_SIZE = 64
+_community_refresh_lock = threading.Lock()
 
 # 缓存 TTL 配置（秒）
 COMMUNITY_CACHE_TTL = 300  # 默认 5 分钟
@@ -52,9 +54,16 @@ def _get_cache(key: str):
 def _set_cache(key: str, data, ttl: int = COMMUNITY_CACHE_TTL):
     """设置缓存"""
     with _community_cache_lock:
+        now = time.time()
+        expired_keys = [k for k, v in _community_cache.items() if v.get("expires_at", 0) <= now]
+        for k in expired_keys:
+            _community_cache.pop(k, None)
+        if len(_community_cache) >= _COMMUNITY_CACHE_MAX_SIZE and key not in _community_cache:
+            oldest_key = min(_community_cache, key=lambda k: _community_cache[k].get("expires_at", 0))
+            _community_cache.pop(oldest_key, None)
         _community_cache[key] = {
             "data": data,
-            "expires_at": time.time() + ttl
+            "expires_at": now + ttl
         }
 
 def _invalidate_cache(key: str = None):
@@ -1465,10 +1474,12 @@ def get_safe_latest(limit: int = 15, request: Request = None):
 
 def _refresh_community_cache():
     """后台刷新用户社区首页缓存（由定时任务调用）"""
+    if not _community_refresh_lock.acquire(blocking=False):
+        logger.info("用户社区缓存正在刷新，跳过本次请求")
+        return
     try:
         host = cfg.get("emby_host")
         key = cfg.get("emby_api_key")
-        
         # 获取 admin 用户 ID
         admin_id = get_emby_admin(host, key)
         if not admin_id:
@@ -1557,6 +1568,11 @@ def _refresh_community_cache():
             
     except Exception as e:
         logger.error(f"用户社区缓存刷新失败: {e}")
+    finally:
+        try:
+            _community_refresh_lock.release()
+        except RuntimeError:
+            pass
 
 
 @router.post("/api/requests/refresh_cache")

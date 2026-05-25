@@ -777,7 +777,15 @@ class ReportGenerator:
             # 🔥 从 pc 字典获取 where 条件
             where = pc.get("where", "")
 
-            all_tops = query_db(f"SELECT ItemName, ItemId, ItemType, COUNT(*) as C, COALESCE(SUM(PlayDuration), 0) as Duration FROM PlaybackActivity {where}{exclude_sql} GROUP BY ItemName ORDER BY Duration DESC", tuple(exclude_types) if exclude_types else None)
+            top_limit = int(cfg.get("report_top_query_limit") or 300)
+            all_tops = query_db(
+                f"""SELECT ItemName, ItemId, ItemType, COUNT(*) as C, COALESCE(SUM(PlayDuration), 0) as Duration
+                    FROM PlaybackActivity {where}{exclude_sql}
+                    GROUP BY ItemName
+                    ORDER BY Duration DESC
+                    LIMIT ?""",
+                tuple(list(exclude_types) + [top_limit]) if exclude_types else (top_limit,)
+            )
             if not all_tops:
                 return None
             

@@ -10,6 +10,7 @@ import re
 import ipaddress
 import sqlite3
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from app.core.config import cfg, REPORT_COVER_URL, FALLBACK_IMAGE_URL
 from app.core.database import query_db, get_base_filter, add_sys_notification, DB_PATH, SYSTEM_DB_PATH
 from app.utils.proxy_helper import get_safe_proxies, get_safe_wecom_base  # 🔒 SSRF 安全代理读取
@@ -19,6 +20,24 @@ from app.core.event_bus import bus
 from app.utils.ip_location import get_location, get_isp
 
 logger = logging.getLogger("uvicorn")
+
+def _get_bot_worker_count() -> int:
+    try:
+        return max(2, min(int(cfg.get("bot_worker_count") or 8), 32))
+    except Exception:
+        return 8
+
+_BOT_WORKER_COUNT = _get_bot_worker_count()
+_bot_executor = ThreadPoolExecutor(max_workers=_BOT_WORKER_COUNT, thread_name_prefix="notify-bot")
+_bot_executor_slots = threading.BoundedSemaphore(_BOT_WORKER_COUNT * 4)
+
+def _submit_bot_task(fn, *args):
+    if not _bot_executor_slots.acquire(blocking=False):
+        logger.warning("[Bot] 后台任务队列已满，丢弃本次异步任务")
+        return False
+    future = _bot_executor.submit(fn, *args)
+    future.add_done_callback(lambda _f: _bot_executor_slots.release())
+    return True
 
 def _ensure_request_admin_messages_table():
     try:
@@ -713,6 +732,14 @@ class SystemDaemon:
 
     def add_library_task(self, item):
         with self.library_lock:
+            max_queue = 300
+            try:
+                max_queue = max(50, min(int(cfg.get("library_notify_queue_max") or 300), 2000))
+            except Exception:
+                pass
+            if len(self.library_queue) >= max_queue:
+                dropped = self.library_queue.pop(0)
+                logger.warning(f"[入库通知] 队列已满，丢弃最旧项目: {dropped.get('Name') or dropped.get('Id')}")
             if not any(x.get('Id') == item.get('Id') for x in self.library_queue):
                 self.library_queue.append(item)
 
@@ -2093,7 +2120,7 @@ class NotificationBot:
         if platform in ["all", "wecom"] and cfg.get("wecom_corpid"):
             # 企业微信不识别 "sys_notify" 这样的虚拟 ID，统一使用配置的 touser 或 @all
             wecom_touser = cfg.get("wecom_touser", "@all")
-            threading.Thread(target=self._send_wecom_photo, args=(wecom_photo_bytes, caption, reply_markup, wecom_touser)).start()
+            _submit_bot_task(self._send_wecom_photo, wecom_photo_bytes, caption, reply_markup, wecom_touser)
 
         if platform in ["all", "tg"] and cfg.get("tg_bot_token"):
             raw_cids = str(cfg.get("tg_chat_id", ""))
@@ -2145,7 +2172,7 @@ class NotificationBot:
         if platform in ["all", "wecom"] and cfg.get("wecom_corpid"):
             # 企业微信不识别 "sys_notify" 这样的虚拟 ID，统一使用配置的 touser 或 @all
             wecom_touser = cfg.get("wecom_touser", "@all")
-            threading.Thread(target=self._send_wecom_message, args=(text, reply_markup, wecom_touser)).start()
+            _submit_bot_task(self._send_wecom_message, text, reply_markup, wecom_touser)
 
         if platform in ["all", "tg"] and cfg.get("tg_bot_token"):
             raw_cids = str(cfg.get("tg_chat_id", ""))
@@ -2246,7 +2273,7 @@ class NotificationBot:
                             # 🔥 安全检查：必须配置 tg_chat_id 且 chat_id 在白名单中
                             if not admin_ids or cid not in admin_ids:
                                 continue
-                            threading.Thread(target=self._handle_callback, args=(cq,)).start()
+                            _submit_bot_task(self._handle_callback, cq)
                 else: time.sleep(5)
             except: time.sleep(5)
 

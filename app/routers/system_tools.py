@@ -16,11 +16,65 @@ from fastapi import APIRouter, Request
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 from app.core.config import cfg, DB_PATH, SYSTEM_DB_PATH
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
-from app.core.database import query_db
+from app.core.database import query_db, get_query_perf_stats
 from app.core.db_schemas import SYSTEM_TABLES
 from app.core.security_utils import safe_error_message
 
 router = APIRouter(prefix="/api/system", tags=["System Tools"])
+
+@router.get("/perf")
+def api_perf_status(request: Request):
+    """性能状态概览（管理员）"""
+    if not is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限"}
+
+    process = None
+    try:
+        import psutil
+        process = psutil.Process(os.getpid())
+    except Exception:
+        process = None
+
+    image_cache = {"files": 0, "bytes": 0}
+    try:
+        from app.routers import proxy
+        if os.path.exists(proxy.IMAGE_CACHE_DIR):
+            for name in os.listdir(proxy.IMAGE_CACHE_DIR):
+                path = os.path.join(proxy.IMAGE_CACHE_DIR, name)
+                if os.path.isfile(path):
+                    image_cache["files"] += 1
+                    image_cache["bytes"] += os.path.getsize(path)
+        image_cache["smart_image_cache"] = len(proxy.smart_image_cache)
+        image_cache["max_bytes_per_image"] = proxy._image_max_bytes()
+    except Exception:
+        pass
+
+    caches = {}
+    try:
+        from app.routers import media_request
+        caches["community_cache"] = len(media_request._community_cache)
+    except Exception:
+        pass
+    try:
+        from app.routers import stats
+        caches["dashboard_cached"] = stats._dashboard_cache.get("data") is not None
+        caches["dashboard_cache_age"] = int(time.time() - stats._dashboard_cache.get("ts", 0)) if stats._dashboard_cache.get("ts") else None
+    except Exception:
+        pass
+
+    return {
+        "status": "success",
+        "data": {
+            "process": {
+                "rss_mb": round(process.memory_info().rss / 1024 / 1024, 2) if process else None,
+                "threads": process.num_threads() if process else threading.active_count(),
+                "python_threads": threading.active_count(),
+            },
+            "queries": get_query_perf_stats(),
+            "caches": caches,
+            "image_cache": image_cache,
+        }
+    }
 
 # ==================== 🔥 天气缓存 ====================
 _weather_cache = {

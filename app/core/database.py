@@ -5,11 +5,54 @@ import json
 import logging
 import datetime  # 🔥 新增导入 datetime 模块
 import shutil
+import time
+from collections import deque
 from app.core.config import cfg, DB_PATH, SYSTEM_DB_PATH
 
 # 🔥 导出 SYSTEM_DB_PATH 供其他模块使用
 __all__ = ['init_db', 'query_db', 'get_base_filter', 'add_sys_notification',
-           'DB_PATH', 'SYSTEM_DB_PATH', 'auto_migrate_system_db', 'get_db_connection']
+           'DB_PATH', 'SYSTEM_DB_PATH', 'auto_migrate_system_db', 'get_db_connection',
+           'get_query_perf_stats']
+
+_slow_queries = deque(maxlen=50)
+_query_stats = {
+    "total": 0,
+    "select": 0,
+    "slow": 0,
+    "large_result": 0,
+}
+
+def _get_slow_query_ms() -> int:
+    try:
+        return int(cfg.get("slow_query_ms") or 800)
+    except Exception:
+        return 800
+
+def _record_query_perf(query: str, elapsed_ms: float, row_count: int = 0):
+    _query_stats["total"] += 1
+    if query.strip().upper().startswith("SELECT"):
+        _query_stats["select"] += 1
+    if row_count >= 1000:
+        _query_stats["large_result"] += 1
+
+    slow_ms = _get_slow_query_ms()
+    if elapsed_ms >= slow_ms:
+        _query_stats["slow"] += 1
+        normalized = " ".join(query.strip().split())
+        _slow_queries.append({
+            "elapsed_ms": round(elapsed_ms, 1),
+            "rows": row_count,
+            "sql": normalized[:300],
+            "ts": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        })
+        logger.warning(f"[慢查询] {elapsed_ms:.1f}ms rows={row_count} sql={normalized[:180]}")
+
+def get_query_perf_stats():
+    return {
+        **_query_stats,
+        "slow_query_ms": _get_slow_query_ms(),
+        "recent_slow_queries": list(_slow_queries),
+    }
 
 # 🔥 统一数据库连接函数 - 解决 "database is locked" 问题
 def get_db_connection(db_path, timeout=30.0, enable_wal=True):
@@ -930,6 +973,7 @@ def get_playback_column_name() -> str:
 
 
 def query_db(query, args=(), one=False):
+    started = time.perf_counter()
     mode = cfg.get("playback_data_mode", "sqlite")
     is_playback_query = "PlaybackActivity" in query or "PlaybackReporting" in query or "tv_calendar_cache" in query.lower()
 
@@ -994,7 +1038,9 @@ def query_db(query, args=(), one=False):
                     data = [APIRow(item) if isinstance(item, dict) else item for item in final_data]
 
                     if query.strip().upper().startswith("SELECT"):
+                        _record_query_perf(query, (time.perf_counter() - started) * 1000, len(data))
                         return (data[0] if data else None) if one else data
+                    _record_query_perf(query, (time.perf_counter() - started) * 1000, 0)
                     return True
                 else:
                     print(f"[API 引擎] ❌ 接口拒绝请求! 响应: {res.text[:200]}")
@@ -1034,14 +1080,22 @@ def query_db(query, args=(), one=False):
         cur = conn.cursor()
         cur.execute(query, args)
         if query.strip().upper().startswith("SELECT"):
+            if one:
+                row = cur.fetchone()
+                conn.close()
+                result = APIRow(dict(row)) if row else None
+                _record_query_perf(query, (time.perf_counter() - started) * 1000, 1 if row else 0)
+                return result
             rv = cur.fetchall()
             conn.close()
             # 🔥 包装成 APIRow，统一支持 .get() 方法
             rv = [APIRow(dict(row)) for row in rv]
-            return (rv[0] if rv else None) if one else rv
+            _record_query_perf(query, (time.perf_counter() - started) * 1000, len(rv))
+            return rv
         else:
             conn.commit()
             conn.close()
+            _record_query_perf(query, (time.perf_counter() - started) * 1000, 0)
             return True
     except sqlite3.OperationalError as e:
         err_msg = str(e).lower()

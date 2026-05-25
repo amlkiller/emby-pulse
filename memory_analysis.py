@@ -4,6 +4,8 @@
 import sys
 import gc
 import tracemalloc
+import os
+import threading
 from collections import defaultdict
 
 def analyze_memory():
@@ -22,8 +24,17 @@ def analyze_memory():
         print("  - IP 缓存: 无法访问")
     
     try:
-        from app.routers.proxy import smart_image_cache
+        from app.routers.proxy import smart_image_cache, IMAGE_CACHE_DIR
         print(f"  - 智能图片缓存: {len(smart_image_cache)} 条")
+        if os.path.exists(IMAGE_CACHE_DIR):
+            file_count = 0
+            total_bytes = 0
+            for name in os.listdir(IMAGE_CACHE_DIR):
+                path = os.path.join(IMAGE_CACHE_DIR, name)
+                if os.path.isfile(path):
+                    file_count += 1
+                    total_bytes += os.path.getsize(path)
+            print(f"  - 图片磁盘缓存: {file_count} 个文件, {total_bytes / 1024 / 1024:.2f} MB")
     except:
         print("  - 智能图片缓存: 无法访问")
     
@@ -32,6 +43,19 @@ def analyze_memory():
         print(f"  - 社区缓存 (_community_cache): {len(_community_cache)} 条")
     except:
         print("  - 社区缓存: 无法访问")
+
+    try:
+        from app.routers.stats import _dashboard_cache
+        print(f"  - 仪表盘缓存: {'已缓存' if _dashboard_cache.get('data') else '未缓存'}")
+    except:
+        print("  - 仪表盘缓存: 无法访问")
+
+    try:
+        from app.core.database import get_query_perf_stats
+        perf = get_query_perf_stats()
+        print(f"  - 慢查询统计: {perf.get('slow')} 条, 大结果集: {perf.get('large_result')} 次")
+    except:
+        print("  - 查询统计: 无法访问")
     
     try:
         from app.plugins.media_search.plugin import _search_cache, _tmdb_cache
@@ -58,6 +82,11 @@ def analyze_memory():
             print(f"  - library_queue: {len(bot_service.library_queue)} 条")
     except Exception as e:
         print(f"  - Bot Service 缓存: 无法访问 ({e})")
+
+    print("\n[2.5] 线程检查:")
+    print(f"  - Python 活跃线程: {threading.active_count()} 个")
+    for t in threading.enumerate()[:20]:
+        print(f"  - {t.name}")
     
     # 3. 检查对象数量
     print("\n[3] 对象统计 (前 20):")

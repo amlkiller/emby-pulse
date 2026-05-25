@@ -31,7 +31,10 @@ def escape_html(text):
     return str(text).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
 # 🚀 线程池：限制最大并发数，防止线程爆炸
-MAX_CONCURRENT_TASKS = 50  # 最大并发任务数
+try:
+    MAX_CONCURRENT_TASKS = max(4, min(int(cfg.get("user_bot_worker_count") or 16), 50))
+except Exception:
+    MAX_CONCURRENT_TASKS = 16
 _task_executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENT_TASKS, thread_name_prefix="userbot")
 _active_tasks = 0  # 当前活跃任务数
 _active_tasks_lock = threading.Lock()

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Response, Request, Depends, HTTPException
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, FileResponse, StreamingResponse
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 from app.core.security import require_login, require_any_login, is_admin_session  # 🔒 统一登录依赖
 from app.core.config import cfg
@@ -44,6 +44,12 @@ IMAGE_CACHE_DIR = "/workspace/data/image_cache"
 IMAGE_CACHE_MAX_AGE = 86400 * 7  # 7天过期
 IMAGE_CACHE_MAX_SIZE = 500 * 1024 * 1024  # 最大 500MB
 
+def _image_max_bytes() -> int:
+    try:
+        return int(cfg.get("image_proxy_max_bytes") or 10 * 1024 * 1024)
+    except Exception:
+        return 10 * 1024 * 1024
+
 def ensure_cache_dir():
     """确保缓存目录存在"""
     if not os.path.exists(IMAGE_CACHE_DIR):
@@ -56,8 +62,8 @@ def get_cache_path(item_id: str, img_type: str, v: str = None) -> str:
     filename = hashlib.md5(key.encode()).hexdigest() + ".jpg"
     return os.path.join(IMAGE_CACHE_DIR, filename)
 
-def get_cached_image(cache_path: str) -> tuple:
-    """从缓存读取图片，返回 (content, content_type) 或 None"""
+def get_cached_image_meta(cache_path: str) -> str:
+    """检查缓存并返回 content_type；无有效缓存返回 None"""
     try:
         if os.path.exists(cache_path):
             # 检查是否过期
@@ -68,10 +74,7 @@ def get_cached_image(cache_path: str) -> tuple:
                 except:
                     pass
                 return None
-            
-            with open(cache_path, 'rb') as f:
-                content = f.read()
-            
+
             # 写入元数据文件获取 content_type
             meta_path = cache_path + ".meta"
             content_type = "image/jpeg"
@@ -81,24 +84,77 @@ def get_cached_image(cache_path: str) -> tuple:
                         content_type = f.read().strip()
                 except:
                     pass
-            
-            return (content, content_type)
+
+            return content_type
     except Exception as e:
         logger.debug(f"读取图片缓存失败: {e}")
     return None
 
-def save_cached_image(cache_path: str, content: bytes, content_type: str):
-    """保存图片到缓存"""
+def save_response_to_cache(cache_path: str, resp, content_type: str) -> bool:
+    """流式保存响应到缓存，避免整图进入内存"""
     try:
         ensure_cache_dir()
-        with open(cache_path, 'wb') as f:
-            f.write(content)
+        max_bytes = _image_max_bytes()
+        content_length = resp.headers.get("Content-Length")
+        if content_length and int(content_length) > max_bytes:
+            logger.warning(f"[图片代理] 图片过大，拒绝缓存: {content_length} bytes")
+            return False
+
+        tmp_path = cache_path + ".tmp"
+        written = 0
+        with open(tmp_path, 'wb') as f:
+            for chunk in resp.iter_content(chunk_size=64 * 1024):
+                if not chunk:
+                    continue
+                written += len(chunk)
+                if written > max_bytes:
+                    try:
+                        f.close()
+                        os.remove(tmp_path)
+                    except Exception:
+                        pass
+                    logger.warning(f"[图片代理] 图片超过大小限制: {written} bytes")
+                    return False
+                f.write(chunk)
+        os.replace(tmp_path, cache_path)
         # 保存 content_type
         meta_path = cache_path + ".meta"
         with open(meta_path, 'w') as f:
             f.write(content_type)
+        cleanup_old_cache()
+        return True
     except Exception as e:
         logger.debug(f"保存图片缓存失败: {e}")
+        return False
+    finally:
+        try:
+            resp.close()
+        except Exception:
+            pass
+
+def cache_headers(max_age: int, x_cache: str = None, etag: str = None) -> dict:
+    headers = {
+        "Cache-Control": f"public, max-age={max_age}, immutable" if max_age >= 31536000 else f"public, max-age={max_age}",
+        "CDN-Cache-Control": f"public, max-age={max_age}",
+    }
+    if x_cache:
+        headers["X-Cache"] = x_cache
+    if etag:
+        headers["ETag"] = f'"{etag}"'
+    return headers
+
+def streaming_response_from_requests(resp, content_type: str, headers: dict):
+    def iterator():
+        try:
+            for chunk in resp.iter_content(chunk_size=64 * 1024):
+                if chunk:
+                    yield chunk
+        finally:
+            try:
+                resp.close()
+            except Exception:
+                pass
+    return StreamingResponse(iterator(), media_type=content_type, headers=headers)
 
 def cleanup_old_cache():
     """清理过期的缓存文件"""
@@ -199,17 +255,13 @@ def proxy_image(item_id: str, img_type: str, request: Request, v: str = None, no
     # 🔥 先尝试从后端缓存读取（除非指定 nocache）
     cache_path = get_cache_path(item_id, img_type, v)
     if not nocache:
-        cached = get_cached_image(cache_path)
-        if cached:
-            content, content_type = cached
-            cache_headers = {
-                "Cache-Control": "public, max-age=31536000, immutable",
-                "CDN-Cache-Control": "public, max-age=31536000",
-                "X-Cache": "HIT"
-            }
-            if v:
-                cache_headers["ETag"] = f'"{v}"'
-            return Response(content=content, media_type=content_type, headers=cache_headers)
+        cached_content_type = get_cached_image_meta(cache_path)
+        if cached_content_type:
+            return FileResponse(
+                cache_path,
+                media_type=cached_content_type,
+                headers=cache_headers(31536000, "HIT", v),
+            )
     
     try:
         target_id = get_real_image_id_robust(item_id) if img_type.lower() == 'primary' else item_id
@@ -219,40 +271,26 @@ def proxy_image(item_id: str, img_type: str, request: Request, v: str = None, no
         resp = media_api.get(f"/Items/{target_id}/Images/{img_type}", params=params, timeout=10, stream=True)
 
         if resp.status_code == 200:
-            content = resp.content
             content_type = resp.headers.get("Content-Type", "image/jpeg")
-            
-            # 🔥 保存到后端缓存
-            save_cached_image(cache_path, content, content_type)
-            
-            # 🔥 长期缓存：1年（31536000秒），配合 v 参数实现版本控制
-            cache_headers = {
-                "Cache-Control": "public, max-age=31536000, immutable",
-                "CDN-Cache-Control": "public, max-age=31536000",
-                "X-Cache": "MISS"
-            }
-            # 如果有版本参数，添加 ETag 支持
-            if v:
-                cache_headers["ETag"] = f'"{v}"'
-            return Response(content=content, media_type=content_type, headers=cache_headers)
+            if save_response_to_cache(cache_path, resp, content_type):
+                return FileResponse(
+                    cache_path,
+                    media_type=content_type,
+                    headers=cache_headers(31536000, "MISS", v),
+                )
+            return Response(status_code=413)
 
         if resp.status_code == 404 and target_id != item_id:
             fallback_resp = media_api.get(f"/Items/{item_id}/Images/{img_type}", params=params, timeout=10, stream=True)
             if fallback_resp.status_code == 200:
-                content = fallback_resp.content
                 content_type = fallback_resp.headers.get("Content-Type", "image/jpeg")
-                
-                # 🔥 保存到后端缓存
-                save_cached_image(cache_path, content, content_type)
-                
-                cache_headers = {
-                    "Cache-Control": "public, max-age=31536000, immutable",
-                    "CDN-Cache-Control": "public, max-age=31536000",
-                    "X-Cache": "MISS"
-                }
-                if v:
-                    cache_headers["ETag"] = f'"{v}"'
-                return Response(content=content, media_type=content_type, headers=cache_headers)
+                if save_response_to_cache(cache_path, fallback_resp, content_type):
+                    return FileResponse(
+                        cache_path,
+                        media_type=content_type,
+                        headers=cache_headers(31536000, "MISS", v),
+                    )
+                return Response(status_code=413)
     except Exception: pass
     return Response(status_code=404)
 
@@ -268,7 +306,7 @@ def proxy_smart_image(request: Request, item_id: str, name: str = "", year: str 
             proxies = get_safe_proxies()
             resp = ext_session.get(cached_result, proxies=proxies, timeout=10, stream=True)
             if resp.status_code == 200:
-                return Response(content=resp.content, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=86400"})
+                return streaming_response_from_requests(resp, "image/jpeg", cache_headers(86400))
         except Exception as e:
             logger.error(f"从缓存获取 TMDB 图片失败: {e}")
             pass 
@@ -284,7 +322,7 @@ def proxy_smart_image(request: Request, item_id: str, name: str = "", year: str 
     try:
         resp = media_api.get(f"/Items/{target_id}/Images/{img_type}", params=params, timeout=5, stream=True)
         if resp.status_code == 200:
-            return Response(content=resp.content, media_type=resp.headers.get("Content-Type", "image/jpeg"), headers={"Cache-Control": "public, max-age=86400"})
+            return streaming_response_from_requests(resp, resp.headers.get("Content-Type", "image/jpeg"), cache_headers(86400))
     except requests.exceptions.RequestException as e: 
         logger.debug(f"媒体库图片请求超时或断开: {e}")
 
@@ -304,7 +342,7 @@ def proxy_smart_image(request: Request, item_id: str, name: str = "", year: str 
                     
                     n_resp = media_api.get(f"/Items/{new_id}/Images/{img_type}", params=params, timeout=5, stream=True)
                     if n_resp.status_code == 200:
-                        return Response(content=n_resp.content, media_type=n_resp.headers.get("Content-Type", "image/jpeg"), headers={"Cache-Control": "public, max-age=86400"})
+                        return streaming_response_from_requests(n_resp, n_resp.headers.get("Content-Type", "image/jpeg"), cache_headers(86400))
         except requests.exceptions.RequestException: pass
 
     # 4. 第 3 级防御：TMDB 终极兜底 (外部请求，保留 ext_session)
@@ -333,7 +371,7 @@ def proxy_smart_image(request: Request, item_id: str, name: str = "", year: str 
                                 _cleanup_smart_image_cache()
                                 final_resp = ext_session.get(final_url, proxies=proxies, timeout=8, stream=True)
                                 if final_resp.status_code == 200:
-                                    return Response(content=final_resp.content, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=86400"})
+                                    return streaming_response_from_requests(final_resp, "image/jpeg", cache_headers(86400))
 
                     if res.get("media_type") in ["movie", "tv"]:
                         img_path = res.get("backdrop_path") if img_type.lower() == 'backdrop' else res.get("poster_path")
@@ -346,7 +384,7 @@ def proxy_smart_image(request: Request, item_id: str, name: str = "", year: str 
                             
                             final_resp = ext_session.get(tmdb_img_url, proxies=proxies, timeout=8, stream=True)
                             if final_resp.status_code == 200:
-                                return Response(content=final_resp.content, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=86400"})
+                                return streaming_response_from_requests(final_resp, "image/jpeg", cache_headers(86400))
                         break
         except requests.exceptions.RequestException as e:
             logger.error(f"TMDB 兜底网络异常 [{clean_name}]: {e}")
@@ -376,13 +414,11 @@ def proxy_user_image(request: Request, user_id: str, tag: str = None, _user: dic
         # 🚀 替换为 media_api，缩短超时时间
         resp = media_api.get(f"/Users/{user_id}/Images/Primary", params=params, timeout=2, stream=True)
         if resp.status_code == 200:
-            cache_headers = {
-                "Cache-Control": "public, max-age=31536000, immutable",
-                "CDN-Cache-Control": "public, max-age=31536000",
-            }
-            if tag:
-                cache_headers["ETag"] = f'"{tag}"'
-            return Response(content=resp.content, media_type=resp.headers.get("Content-Type", "image/jpeg"), headers=cache_headers)
+            return streaming_response_from_requests(
+                resp,
+                resp.headers.get("Content-Type", "image/jpeg"),
+                cache_headers(31536000, etag=tag),
+            )
         # 404 表示用户没有头像，返回默认头像（本地）
         elif resp.status_code == 404:
             return RedirectResponse(url="/static/img/logo-app.png", status_code=302)
