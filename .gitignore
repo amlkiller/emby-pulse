@@ -11,6 +11,7 @@ config/*
 # 🔒 忽略所有 .md 文件（除了 README.md）
 *.md
 !README.md
+!CHANGELOG.md
 
 # 忽略 memory 目录
 memory/
