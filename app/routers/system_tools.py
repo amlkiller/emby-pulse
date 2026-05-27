@@ -435,8 +435,7 @@ async def get_logs(request: Request, lines: int = 150):
     user = request.session.get("user")
     if not user:
         return {"success": False, "msg": "未授权"}
-    is_admin = user.get("is_admin") or user.get("Policy", {}).get("IsAdministrator", False)
-    if not is_admin:
+    if not is_admin_user(request):
         return {"success": False, "msg": "需要管理员权限"}
 
     try:
@@ -455,8 +454,7 @@ async def toggle_debug(req: Request):
     user = req.session.get("user")
     if not user:
         return {"success": False, "msg": "未授权"}
-    is_admin = user.get("is_admin") or user.get("Policy", {}).get("IsAdministrator", False)
-    if not is_admin:
+    if not is_admin_user(req):
         return {"success": False, "msg": "需要管理员权限"}
 
     data = await req.json()

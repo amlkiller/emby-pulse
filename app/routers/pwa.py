@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from typing import Optional, List
 import glob
 from app.core.security_utils import safe_error_message
+from app.routers.auth import is_admin_user
 
 router = APIRouter()
 
@@ -201,9 +202,7 @@ async def upload_custom_icon(request: Request, file: UploadFile = File(...)):
     if not user:
         raise HTTPException(status_code=401, detail="未登录")
     
-    # 检查是否是管理员（兼容两种格式）
-    is_admin = user.get("is_admin") or user.get("Policy", {}).get("IsAdministrator", False)
-    if not is_admin:
+    if not is_admin_user(request):
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
     if not file.content_type or not file.content_type.startswith("image/"):
@@ -275,8 +274,7 @@ async def set_default_icon(request: Request):
     if not user:
         raise HTTPException(status_code=401, detail="未登录")
     
-    is_admin = user.get("is_admin") or user.get("Policy", {}).get("IsAdministrator", False)
-    if not is_admin:
+    if not is_admin_user(request):
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
     data = await request.json()
@@ -296,8 +294,7 @@ async def set_app_name(request: Request):
     if not user:
         raise HTTPException(status_code=401, detail="未登录")
     
-    is_admin = user.get("is_admin") or user.get("Policy", {}).get("IsAdministrator", False)
-    if not is_admin:
+    if not is_admin_user(request):
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
     data = await request.json()
@@ -319,8 +316,7 @@ async def delete_custom_icon(icon_id: str, request: Request):
     if not user:
         raise HTTPException(status_code=401, detail="未登录")
     
-    is_admin = user.get("is_admin") or user.get("Policy", {}).get("IsAdministrator", False)
-    if not is_admin:
+    if not is_admin_user(request):
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
     # 不能删除内置图标

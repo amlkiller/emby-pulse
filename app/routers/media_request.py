@@ -1135,6 +1135,8 @@ def batch_manage_action(data: BulkAdminActionModel, request: Request):
 
 @router.post("/api/manage/requests/action")
 def manage_request_action(data: AdminActionModel, request: Request):
+    if not is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限"}
     return batch_manage_action(BulkAdminActionModel(items=[{"tmdb_id": data.tmdb_id, "season": data.season}], action=data.action, reject_reason=data.reject_reason), request)
 
 @router.get("/api/requests/pending_notify")

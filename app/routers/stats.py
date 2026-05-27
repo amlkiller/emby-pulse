@@ -57,7 +57,7 @@ def check_login(request: Request) -> bool:
 
 def check_admin_login(request: Request) -> bool:
     """检查是否为管理员登录（管理API，仅后台管理员）"""
-    return request.session.get("user") is not None
+    return is_admin_user(request)
 
 def require_admin_login(request: Request):
     """要求管理员登录"""
@@ -1353,9 +1353,9 @@ async def api_preload_status(request: Request):
     获取缓存预热状态
     前端可以据此判断是否需要等待
     """
-    # 🔒 安全检查
-    if not check_login(request):
-        return {"status": "error", "message": "请先登录"}
+    # 🔒 管理后台聚合状态，仅管理员可访问
+    if not is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限"}
     
     entry = _get_dashboard_cache_entry(_DASHBOARD_PRELOAD_KEY)
     data = entry.get("data")
@@ -1373,9 +1373,9 @@ async def api_preload_status(request: Request):
 
 @router.get("/api/dashboard/init")
 async def api_dashboard_init(request: Request, user_id: Optional[str] = None):
-    # 🔒 安全检查
-    if not check_login(request):
-        return {"status": "error", "message": "请先登录"}
+    # 🔒 管理后台首屏聚合接口，仅管理员可访问
+    if not is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限"}
     """
     仪表盘首屏聚合接口 - 核心数据快速返回
     """

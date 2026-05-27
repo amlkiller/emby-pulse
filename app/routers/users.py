@@ -321,6 +321,8 @@ def api_verify_delete_password(data: PasswordVerifyModel, request: Request):
     """验证删除用户密码(需要管理员账号和密码)"""
     if not request.session.get("user"):
         return {"status": "error", "message": "未登录"}
+    if not is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限"}
 
     if not data.username:
         return {"status": "error", "message": "请输入管理员账号"}
@@ -342,6 +344,8 @@ def api_check_delete_verified(request: Request):
     """检查是否已验证删除密码"""
     if not request.session.get("user"):
         return {"status": "error", "message": "未登录", "verified": False}
+    if not is_admin_user(request):
+        return {"status": "error", "message": "需要管理员权限", "verified": False}
 
     verified = request.session.get("delete_verified", False)
     verified_time = request.session.get("delete_verified_time", "")
