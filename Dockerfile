@@ -7,7 +7,7 @@ RUN find app/ -name "*.py" -delete
 FROM python:3.9-slim
 WORKDIR /workspace
 # 修改这里自定义版本号
-ENV APP_VERSION=1.4.5
+ENV APP_VERSION=1.4.6
 ENV TZ=Asia/Shanghai
 
 # 先装依赖，利用 Docker 层缓存
