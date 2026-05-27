@@ -1,18 +1,18 @@
-# 🎬 EmbyPulse-Pro（映迹专业版）
+# 🎬 EmbyPulse-next
 
 <div align="center">
-  <img src="static/img/logo-light.png" alt="EmbyPulse-Pro Logo" width="200" />
+  <img src="logo-light.png" alt="EmbyPulse-next Logo" width="200" />
 
   <h3>Emby 服务器的专业级管理中枢：影巢集成 · 风险管控 · 智能运维</h3>
 
   <p>
-    <img src="https://img.shields.io/badge/version-1.4.5-2EA44F?style=flat-square" alt="Version" />
+    <img src="https://img.shields.io/badge/version-1.4.4-2EA44F?style=flat-square" alt="Version" />
     <img src="https://img.shields.io/badge/python-3.9+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python" />
     <img src="https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />
     <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License" />
   </p>
 
-  <a href="https://t.me/Emby_Pulse">
+  <a href="https://t.me/embypulse_next_chat">
     <img src="https://img.shields.io/badge/Telegram-加入交流群-2CA5E0?style=for-the-badge&logo=telegram" alt="Telegram Group">
   </a>
   <br/>
@@ -25,10 +25,10 @@
   </p>
 </div>
 
-## 🔥 Pro版独占特性
+## 🔥 NEXT版
 
-> 💡 **Pro 版** 是 EmbyPulse 的专业增强版，在保留原版全部功能的基础上，新增以下独占能力：
-
+> 💡 **NEXT 版** 是 EmbyPulse-pro 的安全分支，解锁pro全部功能。
+NEXT版基于原作者泄露的pro版 1.3.55-beta 修改而来，修复了所有重大安全问题，兼容直接从原作者版升级。但由于原作者代码质量非常差，仍需要大量重构修改，为尊重原作者的劳动成果和避免其他问题。不再维护时会开源。会制作迁移工具到其他面板。
 ### 🎬 影巢资源集成
 - **全局搜索**：本地库 + 影巢资源一键切换搜索
 - **TMDB 联动**：自动匹配海报、背景图、简介信息
@@ -156,12 +156,12 @@ Pro 版内置多个功能插件：
 | 镜像 | 说明 |
 |------|------|
 | `ghcr.io/amlkiller/emby-pulse:latest` | 本仓库（amlkiller）最新稳定版 |
-| `ghcr.io/amlkiller/emby-pulse:1.4.5` | 锁定具体版本 |
+| `ghcr.io/amlkiller/emby-pulse:1.4.4` | 锁定具体版本 |
 | `zeyu8023/embypulse-pro:latest` | 上游官方镜像 |
 
 ### 端口说明
 
-EmbyPulse-Pro 物理隔离了两个端口，分别承载不同角色：
+EmbyPulse-next物理隔离了两个端口，分别承载不同角色：
 
 | 端口 | 角色 | 说明 |
 |------|------|------|
@@ -281,6 +281,21 @@ environment:
 | `webhook_token` | Webhook 安全校验令牌 |
 | `emby_public_url` | 对外访问 Emby 的公网地址 |
 
+### Webhook 配置
+
+推荐在 Emby Webhook 插件中使用 Header 传递令牌：
+
+| 配置项 | 值 |
+|--------|----|
+| URL | `https://你的域名/api/v1/webhook` |
+| Header | `X-Webhook-Token: 你的 webhook_token` |
+
+如果插件或环境不方便配置 Header，也兼容 URL 参数方式：
+
+```text
+https://你的域名/api/v1/webhook?token=你的 webhook_token
+```
+
 ### 影巢配置（Pro独占）
 
 | 配置项 | 说明 |
@@ -388,22 +403,7 @@ uv run --with pytest pytest tests/ -v
 
 ## ☕ 赞赏支持
 
-如果您觉得 EmbyPulse-Pro 好用，欢迎赞赏支持作者的持续迭代！
-
-<div align="center">
-  <img src="static/img/zanshangma.png" alt="赞赏码" width="280" />
-  <sub>（扫码赞赏，请备注您的 Telegram ID）</sub>
-</div>
-
-## 🙏 鸣谢
-
-<div align="center">
-  <a href="https://new.yunai.link/register?aff=rPv1">
-    <img src="https://img.shields.io/badge/云AI-API%20平台-6366F1?style=for-the-badge&labelColor=4F46E5" alt="云AI" />
-  </a>
-  <br/>
-  <sub>感谢 <a href="https://new.yunai.link/register?aff=rPv1">云AI</a> 对本项目的赞助支持</sub>
-</div>
+如果您觉得 EmbyPulse-next 好用，欢迎赞赏支持作者的持续迭代！
 
 ## 📄 许可证
 
@@ -414,5 +414,5 @@ uv run --with pytest pytest tests/ -v
 - 禁止闭源封装或商业销售
 
 <div align="center">
-  <sub>EmbyPulse-Pro Team © 2024-2026</sub>
+  <sub>EmbyPulse-next Team © 2024-2026</sub>
 </div>
