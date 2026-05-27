@@ -2,6 +2,8 @@ import os
 import sys
 from types import SimpleNamespace
 
+import pytest
+
 _repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _repo_root not in sys.path:
     sys.path.insert(0, _repo_root)
@@ -94,3 +96,53 @@ def test_dashboard_cache_is_per_context(monkeypatch):
     assert stats._get_dashboard_cached_data("admin:all", now=1100)["dashboard"]["total_plays"] == 100
     assert stats._get_dashboard_cached_data("user:user-a", now=1100)["dashboard"]["total_plays"] == 7
     assert stats._get_dashboard_cached_data("admin:user-a", now=1100) is None
+
+
+@pytest.mark.parametrize("is_admin", [True, False])
+def test_request_login_rejects_passwordless_emby_users(monkeypatch, is_admin):
+    from app.routers import media_request
+
+    class FakeMediaResponse:
+        status_code = 200
+
+        def json(self):
+            return [
+                {
+                    "Id": "user-a",
+                    "Name": "zhangsan",
+                    "HasPassword": False,
+                    "Policy": {"IsAdministrator": is_admin, "IsDisabled": False},
+                }
+            ]
+
+    class FakeCursor:
+        def execute(self, *args, **kwargs):
+            return self
+
+        def fetchone(self):
+            return None
+
+    class FakeConn:
+        def cursor(self):
+            return FakeCursor()
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(media_request.cfg, "get", lambda key, default=None: "http://emby.local" if key == "emby_host" else default)
+    monkeypatch.setattr(media_request.media_api, "get", lambda *args, **kwargs: FakeMediaResponse())
+    monkeypatch.setattr(media_request.sqlite3, "connect", lambda *args, **kwargs: FakeConn())
+    monkeypatch.setattr(
+        media_request.requests,
+        "post",
+        lambda *args, **kwargs: pytest.fail("无密码用户不应调用 Emby 密码认证接口"),
+    )
+
+    request = SimpleNamespace(headers={"host": "127.0.0.1:10308"}, session={})
+    data = media_request.RequestLoginModel(username="zhangsan", password="")
+
+    result = media_request.request_system_login(data, request)
+
+    assert result["status"] == "error"
+    assert "设置密码" in result["message"]
+    assert request.session == {}

@@ -337,6 +337,9 @@ def request_system_login(data: RequestLoginModel, request: Request):
             pass
     
     # 验证密码
+    if not has_password:
+        return {"status": "error", "message": "安全要求：请先在 Emby 中为账号设置密码"}
+
     password_valid = False
     if has_password:
         if is_emby_disabled:
@@ -368,10 +371,7 @@ def request_system_login(data: RequestLoginModel, request: Request):
                 password_valid = res.status_code == 200
             except Exception as e:
                 print(f"[用户社区登录] 验证密码失败: {e}")
-    else:
-        # 无密码用户，直接允许登录
-        password_valid = True
-    
+
     if not password_valid:
         return {"status": "error", "message": "账号或密码错误"}
 
