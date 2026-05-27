@@ -98,6 +98,25 @@ def test_dashboard_cache_is_per_context(monkeypatch):
     assert stats._get_dashboard_cached_data("admin:user-a", now=1100) is None
 
 
+def test_webhook_token_accepts_url_query_param():
+    from app.routers import webhook
+
+    request = SimpleNamespace(headers={}, query_params={"token": "url-token"})
+
+    assert webhook._get_webhook_token(request) == "url-token"
+
+
+def test_webhook_token_prefers_header_over_url_query_param():
+    from app.routers import webhook
+
+    request = SimpleNamespace(
+        headers={"X-Webhook-Token": "header-token"},
+        query_params={"token": "url-token"},
+    )
+
+    assert webhook._get_webhook_token(request) == "header-token"
+
+
 @pytest.mark.parametrize("is_admin", [True, False])
 def test_request_login_rejects_passwordless_emby_users(monkeypatch, is_admin):
     from app.routers import media_request

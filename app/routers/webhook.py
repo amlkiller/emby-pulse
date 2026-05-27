@@ -19,6 +19,11 @@ router = APIRouter()
 MAX_WEBHOOK_PAYLOAD = 1024 * 1024
 
 
+def _get_webhook_token(request: Request):
+    """Header 优先，兼容 Emby Webhook 只能配置 URL 参数的场景。"""
+    return request.headers.get("X-Webhook-Token") or request.query_params.get("token")
+
+
 def _save_playback_ip_data(data, user_id, user_name, item, ip):
     """保存播放 IP 信息到本地数据库"""
     try:
@@ -144,10 +149,10 @@ async def emby_webhook(request: Request):
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid Content-Length")
 
-    # 🔒 安全：仅从 Header 获取 Token
-    token = request.headers.get("X-Webhook-Token")
+    # 🔒 安全：Header 优先；兼容 URL 参数 ?token=xxx
+    token = _get_webhook_token(request)
     if not token:
-        raise HTTPException(status_code=401, detail="缺少 Webhook Token，请使用 X-Webhook-Token Header")
+        raise HTTPException(status_code=401, detail="缺少 Webhook Token，请使用 X-Webhook-Token Header 或 ?token=URL 参数")
 
     # 🔒 常量时间比对，防止时序攻击
     expected = cfg.get("webhook_token") or ""
