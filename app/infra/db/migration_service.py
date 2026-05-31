@@ -7,9 +7,9 @@ existing implementation until schema ownership is fully moved out of app.core.
 import os
 
 from app.core.config import DB_PATH
-from app.core.database import auto_migrate_system_db, init_db  # noqa: F401
 from app.core.security_utils import safe_error_message
 from app.infra.db import db_manager
+from app.infra.db.database import auto_migrate_system_db, init_db  # noqa: F401
 from app.infra.db.schema_registry import SYSTEM_TABLES, TABLE_ALTERS
 from app.infra.db.system_store import system_store
 

@@ -1,7 +1,7 @@
 import os
 
 from app.core.config import DB_PATH, SYSTEM_DB_PATH
-from app.core.database import auto_migrate_system_db, init_db
+from app.infra.db.database import auto_migrate_system_db, init_db
 from app.infra.db.db_manager import ensure_tables
 
 
