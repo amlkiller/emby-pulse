@@ -2709,121 +2709,42 @@ def cmd_grab(chat_id, tg_user_id, text, is_group=False, tg_name="", user_msg_id=
     if len(parts) < 2:
         return _send(chat_id, "💡 使用方法：/grab 红包ID\n示例：/grab 123")
     
-    conn = None
     try:
         packet_id = int(parts[1])
-        
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        
-        # 🔥 使用 EXCLUSIVE 事务锁，防止并发抢红包
-        c.execute("BEGIN EXCLUSIVE")
-        
-        # 获取红包信息
-        packet_row = c.execute("SELECT id, total_amount, remain_amount, total_count, remain_count, creator_id, creator_name, expires_at FROM point_red_packets WHERE id = ?", (packet_id,)).fetchone()
-        if not packet_row:
-            conn.rollback()
-            conn.close()
-            return _send(chat_id, "❌ 红包不存在")
-        
-        _, total_amount, remain_amount, total_count, remain_count, creator_id, creator_name, expires_at = packet_row
-        
-        # 检查红包是否过期
-        if expires_at and datetime.datetime.fromisoformat(str(expires_at)) < datetime.datetime.now():
-            conn.rollback()
-            conn.close()
-            return _send(chat_id, "❌ 红包已过期")
-        
-        # 检查是否已抢完
-        if remain_count <= 0 or remain_amount <= 0:
-            conn.rollback()
-            conn.close()
-            return _send(chat_id, "❌ 红包已抢完")
-        
-        # 检查是否已抢过
-        grab_row = c.execute("SELECT id FROM point_red_packet_logs WHERE packet_id = ? AND user_id = ?", (packet_id, binding['emby_user_id'])).fetchone()
-        if grab_row:
-            conn.rollback()
-            conn.close()
-            return _send(chat_id, "❌ 你已经抢过这个红包了")
-        
-        # 不能抢自己的红包
-        if creator_id == binding['emby_user_id']:
-            conn.rollback()
-            conn.close()
-            return _send(chat_id, "❌ 不能抢自己发的红包")
-        
-        # 二倍均值法计算金额
-        if remain_count == 1:
-            grab_amount = remain_amount
-        else:
-            avg = remain_amount / remain_count
-            max_grab = min(int(avg * 2), remain_amount - remain_count + 1)
-            grab_amount = random.randint(1, max_grab) if max_grab > 0 else 1
-        
-        # 更新红包
-        new_remain_amount = remain_amount - grab_amount
-        new_remain_count = remain_count - 1
-        c.execute("UPDATE point_red_packets SET remain_amount = ?, remain_count = ? WHERE id = ?",
-                 (new_remain_amount, new_remain_count, packet_id))
-        
-        # 记录抢红包
-        grab_display_name = tg_name or binding['emby_username']
-        c.execute("INSERT INTO point_red_packet_logs (packet_id, user_id, user_name, amount) VALUES (?, ?, ?, ?)",
-                 (packet_id, binding['emby_user_id'], grab_display_name, grab_amount))
-        
-        # 更新用户积分
-        user_row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (binding['emby_user_id'],)).fetchone()
-        current_points = (user_row[0] or 0) + grab_amount if user_row else grab_amount
-        if user_row:
-            c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (current_points, binding['emby_user_id']))
-        else:
-            c.execute("INSERT INTO users_meta (user_id, points) VALUES (?, ?)", (binding['emby_user_id'], current_points))
-        
-        # 记录日志
-        c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-                 (binding['emby_user_id'], binding['emby_username'], f"抢红包 #{packet_id}", grab_amount, current_points))
-        
-        # 🔥 检查是否是最后一个红包，发送抢完通知
-        is_last_one = (new_remain_count == 0)
-        if is_last_one:
-            # 获取红包领取记录
-            c.execute("SELECT user_name, amount FROM point_red_packet_logs WHERE packet_id = ? ORDER BY created_at", (packet_id,))
-            grab_logs = c.fetchall()
-            
-            # 构建抢完通知消息
-            notify_msg = f"🧧 <b>红包已抢完</b>\n\n"
-            notify_msg += f"👤 <b>发红包</b>: {creator_name}\n"
-            notify_msg += f"💰 <b>总金额</b>: {total_amount} 积分\n"
-            notify_msg += f"📦 <b>总个数</b>: {total_count} 个\n\n"
-            notify_msg += f"📋 <b>领取明细</b>:\n"
-            for i, (uname, amt) in enumerate(grab_logs, 1):
-                notify_msg += f"{i}. {uname}: {amt} 积分\n"
-            
-            # 获取红包的 chat_id
-            chat_row = c.execute("SELECT chat_id FROM point_red_packets WHERE id = ?", (packet_id,)).fetchone()
-            packet_chat_id = chat_row[0] if chat_row else None
-            
-            # 发送通知
+
+        grab_result = point_dao.grab_red_packet(
+            packet_id,
+            binding['emby_user_id'],
+            tg_name or binding['emby_username'],
+            allow_creator=False,
+        )
+        if grab_result.get("status") != "success":
+            return _send(chat_id, f"❌ {grab_result.get('message', '抢红包失败')}")
+
+        if grab_result.get("is_last_one"):
+            notify_msg = "🧧 <b>红包已抢完</b>\n\n"
+            notify_msg += f"👤 <b>发红包</b>: {grab_result.get('creator_name')}\n"
+            notify_msg += f"💰 <b>总金额</b>: {grab_result.get('total_amount')} 积分\n"
+            notify_msg += f"📦 <b>总个数</b>: {grab_result.get('total_count')} 个\n\n"
+            notify_msg += "📋 <b>领取明细</b>:\n"
+            for i, log in enumerate(grab_result.get("grab_logs", []), 1):
+                notify_msg += f"{i}. {log.get('user_name')}: {log.get('amount')} 积分\n"
             try:
+                packet_chat_id = grab_result.get("chat_id")
                 if packet_chat_id:
                     _send(packet_chat_id, notify_msg)
-                    # 🔥 删除原始红包消息（抢完后）
-                    msg_row = c.execute("SELECT message_id FROM point_red_packets WHERE id = ?", (packet_id,)).fetchone()
-                    if msg_row and msg_row[0]:
-                        _delete_messages_later(int(packet_chat_id), [msg_row[0]], 15)
+                    message_id = grab_result.get("message_id")
+                    if message_id:
+                        _delete_messages_later(int(packet_chat_id), [message_id], 15)
                 else:
-                    # 发送到系统通知
                     from app.services.bot_service import bot
                     bot.send_message("sys_notify", notify_msg, platform="all")
             except Exception as e:
                 logger.error(f"[红包] 发送抢完通知失败: {e}")
-        
-        conn.commit(); conn.close()
-        
+
         result = _send(chat_id, f"🎉 <b>恭喜你！</b>\n\n"
-                            f"🧧 抢到 <b>{grab_amount}</b> 积分\n"
-                            f"💰 余额：<b>{current_points}</b> 积分")
+                            f"🧧 抢到 <b>{grab_result.get('amount', 0)}</b> 积分\n"
+                            f"💰 余额：<b>{grab_result.get('balance', 0)}</b> 积分")
         
         # 群聊中15秒后删除消息（抢红包）
         if is_group and result:
@@ -2837,15 +2758,9 @@ def cmd_grab(chat_id, tg_user_id, text, is_group=False, tg_name="", user_msg_id=
         return result
         
     except ValueError:
-        try: conn.rollback()
-        except Exception: pass
         return _send(chat_id, "❌ 红包ID必须是数字")
     except Exception as e:
         logger.error(f"[UserBot] 抢红包失败: {e}")
-        try: conn.rollback()
-        except Exception: pass
-        try: conn.close()
-        except Exception: pass
         return _send(chat_id, f"❌ 抢红包失败：{str(e)}")
 
 def cmd_lottery(chat_id, tg_user_id, text, is_group=False, user_msg_id=None):

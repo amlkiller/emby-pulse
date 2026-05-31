@@ -865,7 +865,7 @@ def create_red_packet(total_amount: int, total_count: int, chat_id, creator_id: 
             raise
 
 
-def grab_red_packet(packet_id: int, user_id: str, user_name: str) -> dict:
+def grab_red_packet(packet_id: int, user_id: str, user_name: str, allow_creator: bool = True) -> dict:
     with system_store.connect() as conn:
         cursor = conn.cursor()
         try:
@@ -888,10 +888,14 @@ def grab_red_packet(packet_id: int, user_id: str, user_name: str) -> dict:
                 remain_amount,
                 total_count,
                 remain_count,
-                _creator_id,
+                creator_id,
                 creator_name,
                 expires_at,
             ) = packet_row
+
+            if not allow_creator and creator_id == user_id:
+                conn.rollback()
+                return {"status": "error", "message": "不能抢自己发的红包"}
 
             if expires_at and datetime.datetime.fromisoformat(str(expires_at)) < datetime.datetime.now():
                 conn.rollback()
@@ -940,6 +944,7 @@ def grab_red_packet(packet_id: int, user_id: str, user_name: str) -> dict:
             is_last_one = new_remain_count == 0
             grab_logs = []
             chat_id = None
+            message_id = None
             if is_last_one:
                 grab_logs = [
                     {"user_name": row[0], "amount": row[1]}
@@ -948,8 +953,9 @@ def grab_red_packet(packet_id: int, user_id: str, user_name: str) -> dict:
                         (packet_id,),
                     ).fetchall()
                 ]
-                chat_row = cursor.execute("SELECT chat_id FROM point_red_packets WHERE id = ?", (packet_id,)).fetchone()
+                chat_row = cursor.execute("SELECT chat_id, message_id FROM point_red_packets WHERE id = ?", (packet_id,)).fetchone()
                 chat_id = chat_row[0] if chat_row else None
+                message_id = chat_row[1] if chat_row and len(chat_row) > 1 else None
 
             conn.commit()
             return {
@@ -963,6 +969,7 @@ def grab_red_packet(packet_id: int, user_id: str, user_name: str) -> dict:
                 "total_count": total_count,
                 "grab_logs": grab_logs,
                 "chat_id": chat_id,
+                "message_id": message_id,
             }
         except Exception:
             conn.rollback()
