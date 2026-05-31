@@ -29,3 +29,15 @@ def get_user_last_play(user_id: str):
         (user_id,),
         one=True,
     )
+
+
+def get_user_play_summary(user_id: str, start_str: str, end_str: str):
+    return playback_store.query(
+        """
+        SELECT SUM(PlayDuration) as total_dur, COUNT(DISTINCT date(DateCreated)) as active_days
+        FROM PlaybackActivity
+        WHERE UserId = ? AND DateCreated >= ? AND DateCreated < ?
+        """,
+        (user_id, start_str, end_str),
+        one=True,
+    )

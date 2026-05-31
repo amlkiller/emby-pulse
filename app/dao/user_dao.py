@@ -417,3 +417,15 @@ def save_user_tags(user_id: str, tags: str, created_at: str) -> None:
 def get_user_tags(user_id: str) -> str:
     row = system_store.fetch_one("SELECT tags FROM users_meta WHERE user_id = ?", (user_id,))
     return row["tags"] if row and row["tags"] else ""
+
+
+def list_permanent_user_expire_records():
+    return system_store.fetch_all(
+        """
+        SELECT user_id, expire_date FROM users_meta
+        WHERE expire_date IS NULL
+           OR expire_date = ''
+           OR expire_date >= '2099-01-01'
+           OR expire_date LIKE '%永久%'
+        """
+    )

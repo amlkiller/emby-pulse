@@ -7,12 +7,23 @@ import logging
 import threading
 import datetime
 import requests
-import sqlite3
 from fastapi import Request
 from app.plugins.base import PluginBase
 from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
 from app.core.config import cfg
-from app.core.database import query_db, DB_PATH, SYSTEM_DB_PATH
+from app.dao.keep_alive_dao import (
+    count_keep_alive_disabled,
+    count_keep_alive_unique_users,
+    count_keep_alive_violations,
+    ensure_keep_alive_violations_table,
+    list_keep_alive_months,
+    list_keep_alive_violations,
+    save_keep_alive_violation,
+    update_keep_alive_violation_disabled,
+)
+from app.dao.user_bot_dao import get_binding_by_emby_id
+from app.dao.user_dao import list_permanent_user_expire_records
+from app.queries.stats_queries import get_user_play_summary
 
 logger = logging.getLogger("uvicorn")
 
@@ -36,35 +47,7 @@ class KeepAlivePlugin(PluginBase):
     def _init_db(self):
         """初始化违规记录表"""
         try:
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            c = conn.cursor()
-            c.execute("""
-                CREATE TABLE IF NOT EXISTS keep_alive_violations (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id TEXT NOT NULL,
-                    user_name TEXT NOT NULL,
-                    year_month TEXT NOT NULL,
-                    hours REAL DEFAULT 0,
-                    days INTEGER DEFAULT 0,
-                    min_hours REAL DEFAULT 0,
-                    min_days INTEGER DEFAULT 0,
-                    action TEXT DEFAULT 'warn',
-                    disabled INTEGER DEFAULT 0,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(user_id, year_month)
-                )
-            """)
-            # 增量更新：为旧表添加缺失字段（静默忽略已存在的列）
-            try:
-                c.execute("ALTER TABLE keep_alive_violations ADD COLUMN action TEXT DEFAULT 'warn'")
-            except sqlite3.OperationalError:
-                pass  # 列已存在
-            try:
-                c.execute("ALTER TABLE keep_alive_violations ADD COLUMN disabled INTEGER DEFAULT 0")
-            except sqlite3.OperationalError:
-                pass  # 列已存在
-            conn.commit()
-            conn.close()
+            ensure_keep_alive_violations_table()
         except Exception as e:
             logger.error(f"[保号规则] 初始化数据库失败: {e}")
 
@@ -321,28 +304,14 @@ class KeepAlivePlugin(PluginBase):
         permanent_users = set()
         if auto_whitelist_enabled:
             try:
-                import sqlite3
-                self._log(f"🔍 查询永久用户，数据库路径: {SYSTEM_DB_PATH}")
-                conn = sqlite3.connect(SYSTEM_DB_PATH)
-                # 查询永久有效用户：
-                # 1. expire_date 为 NULL 或空字符串（无过期时间 = 永久）
-                # 2. 过期时间 >= 2099-01-01（超长有效期）
-                # 3. 包含"永久"字样
-                rows = conn.execute(
-                    """SELECT user_id, expire_date FROM users_meta
-                       WHERE expire_date IS NULL
-                          OR expire_date = ''
-                          OR expire_date >= '2099-01-01'
-                          OR expire_date LIKE '%永久%'"""
-                ).fetchall()
-                conn.close()
+                rows = list_permanent_user_expire_records()
                 self._log(f"🔍 查询到 {len(rows)} 条永久用户记录")
                 for row in rows:
-                    if row[0]:  # user_id 存在
-                        permanent_users.add(row[0])
+                    if row["user_id"]:
+                        permanent_users.add(row["user_id"])
                         if len(permanent_users) <= 10:  # 只打印前10个，避免日志过多
-                            exp_display = row[1] if row[1] else "永久"
-                            self._log(f"💎 永久用户白名单: {row[0]} (过期时间: {exp_display})")
+                            exp_display = row["expire_date"] if row["expire_date"] else "永久"
+                            self._log(f"💎 永久用户白名单: {row['user_id']} (过期时间: {exp_display})")
                 if permanent_users:
                     self._log(f"💎 自动白名单: 共检测到 {len(permanent_users)} 个永久有效用户")
                 else:
@@ -422,17 +391,13 @@ class KeepAlivePlugin(PluginBase):
 
             # 查询上月播放数据
             try:
-                rows = query_db(
-                    "SELECT SUM(PlayDuration) as total_dur, COUNT(DISTINCT date(DateCreated)) as active_days "
-                    "FROM PlaybackActivity WHERE UserId = ? AND DateCreated >= ? AND DateCreated < ?",
-                    (uid, start_str, end_str)
-                )
+                row = get_user_play_summary(uid, start_str, end_str)
             except Exception as e:
                 self._log(f"❌ 查询用户 {uname} 播放数据失败: {e}", level="error")
                 continue
 
-            total_dur = (rows[0]['total_dur'] or 0) if rows else 0
-            active_days = (rows[0]['active_days'] or 0) if rows else 0
+            total_dur = (row['total_dur'] or 0) if row else 0
+            active_days = (row['active_days'] or 0) if row else 0
             total_hours = round(total_dur / 3600, 1)
 
             failed_hours = min_hours > 0 and total_hours < min_hours
@@ -497,14 +462,16 @@ class KeepAlivePlugin(PluginBase):
     def _save_violation(self, violation, year_month, was_disabled):
         """保存违规记录到数据库"""
         try:
-            query_db(
-                """INSERT OR REPLACE INTO keep_alive_violations
-                   (user_id, user_name, year_month, hours, days, min_hours, min_days, action, disabled)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (violation["uid"], violation["name"], year_month,
-                 violation["hours"], violation["days"],
-                 violation["min_hours"], violation["min_days"],
-                 violation["action"], 1 if was_disabled else 0)
+            save_keep_alive_violation(
+                violation["uid"],
+                violation["name"],
+                year_month,
+                violation["hours"],
+                violation["days"],
+                violation["min_hours"],
+                violation["min_days"],
+                violation["action"],
+                was_disabled,
             )
         except Exception as e:
             logger.error(f"[保号规则] 保存违规记录失败: {e}")
@@ -572,7 +539,7 @@ class KeepAlivePlugin(PluginBase):
             self._init_db()
 
             # 获取所有月份列表
-            months = query_db("SELECT DISTINCT year_month FROM keep_alive_violations ORDER BY year_month DESC")
+            months = list_keep_alive_months()
             month_list = [m['year_month'] for m in (months or [])]
 
             # 如果没有指定月份，使用最新的
@@ -582,18 +549,8 @@ class KeepAlivePlugin(PluginBase):
             # 查询该月份的违规记录
             if year_month:
                 offset = (page - 1) * limit
-                rows = query_db(
-                    """SELECT * FROM keep_alive_violations
-                       WHERE year_month = ?
-                       ORDER BY created_at DESC
-                       LIMIT ? OFFSET ?""",
-                    (year_month, limit, offset)
-                )
-                total_result = query_db(
-                    "SELECT COUNT(*) as count FROM keep_alive_violations WHERE year_month = ?",
-                    (year_month,)
-                )
-                total = total_result[0]['count'] if total_result else 0
+                rows = list_keep_alive_violations(year_month, limit, offset)
+                total = count_keep_alive_violations(year_month)
             else:
                 rows = []
                 total = 0
@@ -669,10 +626,7 @@ class KeepAlivePlugin(PluginBase):
 
             # 更新违规记录状态
             if violation_id:
-                query_db(
-                    "UPDATE keep_alive_violations SET disabled = 0 WHERE id = ?",
-                    (violation_id,)
-                )
+                update_keep_alive_violation_disabled(violation_id, False)
 
             # 获取用户名
             user_res = requests.get(f"{host}/emby/Users/{user_id}?api_key={key}", timeout=5)
@@ -694,24 +648,17 @@ class KeepAlivePlugin(PluginBase):
             self._init_db()
 
             # 总违规次数
-            result = query_db("SELECT COUNT(*) as count FROM keep_alive_violations")
-            total_violations = result[0]['count'] if result else 0
+            total_violations = count_keep_alive_violations()
 
             # 被禁用次数
-            result = query_db("SELECT COUNT(*) as count FROM keep_alive_violations WHERE disabled = 1")
-            total_disabled = result[0]['count'] if result else 0
+            total_disabled = count_keep_alive_disabled()
 
             # 本月违规数
             current_month = datetime.date.today().strftime("%Y-%m")
-            result = query_db(
-                "SELECT COUNT(*) as count FROM keep_alive_violations WHERE year_month = ?",
-                (current_month,)
-            )
-            month_violations = result[0]['count'] if result else 0
+            month_violations = count_keep_alive_violations(current_month)
 
             # 违规用户数（去重）
-            result = query_db("SELECT COUNT(DISTINCT user_id) as count FROM keep_alive_violations")
-            unique_users = result[0]['count'] if result else 0
+            unique_users = count_keep_alive_unique_users()
 
             return {
                 "status": "success",
@@ -739,23 +686,18 @@ class KeepAlivePlugin(PluginBase):
                 self._log(f"⚠️ 未配置用户机器人 (tg_user_bot_token)，跳过用户通知", level="warning")
                 return False
 
-            # 查询用户的 Telegram 绑定 (tg_user_bindings 表在 SYSTEM_DB_PATH)
-            import sqlite3
-            from app.core.database import SYSTEM_DB_PATH
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            row = conn.execute("SELECT tg_user_id, emby_username FROM tg_user_bindings WHERE emby_user_id = ?", (user_id,)).fetchone()
-            conn.close()
+            binding = get_binding_by_emby_id(user_id)
 
-            if not row:
+            if not binding:
                 self._log(f"📢 用户 {user_id} 未绑定 Telegram（非TG注册用户），跳过通知")
                 return False
 
-            if not row[0]:
+            if not binding.get("tg_user_id"):
                 self._log(f"📢 用户 {user_id} 的 TG 绑定信息为空，跳过通知")
                 return False
 
-            chat_id = str(row[0])
-            emby_name = row[1] or user_id
+            chat_id = str(binding["tg_user_id"])
+            emby_name = binding.get("emby_username") or user_id
             self._log(f"📢 尝试通知用户 {emby_name} (TG chat_id: {chat_id})")
 
             # HTML 转义原因，避免解析错误
