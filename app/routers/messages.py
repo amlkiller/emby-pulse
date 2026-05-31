@@ -1,15 +1,52 @@
 from fastapi import APIRouter, Request, Depends
 from pydantic import BaseModel
 from typing import Optional
-from app.core.database import query_db, SYSTEM_DB_PATH
+from app.dao.message_dao import (
+    add_notify_block,
+    count_active_mutes,
+    count_admin_unread_conversations,
+    count_conversations,
+    create_announcement as create_announcement_record,
+    delete_all_conversations as delete_all_conversations_records,
+    delete_announcement_by_id,
+    delete_conversation_by_user,
+    ensure_announcement_tables,
+    ensure_msg_tables,
+    ensure_mute_table,
+    get_active_mute,
+    get_conversation_by_user,
+    get_local_user_avatar_by_emby_id,
+    get_local_user_profile_by_emby_id,
+    get_local_user_remark_by_emby_id,
+    get_user_messages,
+    get_user_meta_remark,
+    get_user_tg_id,
+    get_user_unread_count,
+    get_or_create_conversation,
+    increment_announcement_view_count,
+    insert_admin_message,
+    insert_user_message,
+    is_notify_blocked,
+    list_active_announcements_with_reads,
+    list_active_mutes,
+    list_announcements,
+    list_conversations,
+    list_messages,
+    list_notify_blocks,
+    list_user_remarks,
+    mark_admin_read,
+    mark_announcement_read as mark_announcement_read_record,
+    remove_notify_block,
+    send_broadcast_messages,
+    set_user_unmuted,
+    set_users_unmuted,
+    update_announcement_fields,
+    upsert_user_mute,
+)
 from app.core.media_adapter import media_api
 from app.core.security_utils import sanitize_html, sanitize_rich_html
 from app.core.security import require_admin
 from app.routers.auth import is_admin_user
-import sqlite3
-import datetime
-import sys
-import os
 from app.core.security_utils import safe_error_message
 
 router = APIRouter()
@@ -65,19 +102,14 @@ def get_all_users(request: Request, _admin: dict = Depends(require_admin)):
                 all_users = users_res.json()
                 log_msg(f"[消息中心] get_all_users: 获取到 {len(all_users)} 个用户")
                 
-                # 获取用户备注
-                conn = sqlite3.connect(SYSTEM_DB_PATH)
-                c = conn.cursor()
                 user_remarks = {}
                 try:
                     # 从 users_meta 获取备注（Emby 用户备注）
-                    c.execute("SELECT user_id, remark FROM users_meta WHERE remark IS NOT NULL AND remark != ''")
-                    for row in c.fetchall():
-                        user_remarks[row[0]] = row[1]
+                    for row in list_user_remarks():
+                        user_remarks[row["user_id"]] = row["remark"]
                     log_msg(f"[消息中心] get_all_users: 获取到 {len(user_remarks)} 个用户备注")
                 except Exception as e:
                     log_msg(f"[消息中心] get_all_users: 获取备注失败: {e}")
-                conn.close()
                 
                 users = []
                 for u in all_users:
@@ -125,18 +157,13 @@ def search_users(request: Request, q: str = ""):
             if users_res and users_res.status_code == 200:
                 all_users = users_res.json()
                 
-                # 获取用户备注
-                conn = sqlite3.connect(SYSTEM_DB_PATH)
-                c = conn.cursor()
                 user_remarks = {}
                 try:
                     # 从 users_meta 获取备注（Emby 用户备注）
-                    c.execute("SELECT user_id, remark FROM users_meta WHERE remark IS NOT NULL AND remark != ''")
-                    for row in c.fetchall():
-                        user_remarks[row[0]] = row[1]
+                    for row in list_user_remarks():
+                        user_remarks[row["user_id"]] = row["remark"]
                 except:
                     pass
-                conn.close()
                 
                 # 过滤匹配的用户
                 matched = []
@@ -168,36 +195,7 @@ def search_users(request: Request, q: str = ""):
 
 def _ensure_msg_tables():
     """确保消息表存在"""
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS msg_conversations (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id TEXT NOT NULL,
-        username TEXT,
-        user_avatar TEXT,
-        last_message TEXT,
-        last_time DATETIME DEFAULT CURRENT_TIMESTAMP,
-        unread_admin INTEGER DEFAULT 0,
-        unread_user INTEGER DEFAULT 0,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )''')
-    c.execute('''CREATE TABLE IF NOT EXISTS msg_items (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        conversation_id INTEGER,
-        sender_type TEXT DEFAULT 'admin',
-        sender_id TEXT,
-        sender_name TEXT,
-        content TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )''')
-    # 消息通知屏蔽表
-    c.execute('''CREATE TABLE IF NOT EXISTS msg_notify_block (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )''')
-    conn.commit()
-    conn.close()
+    ensure_msg_tables()
 
 
 @router.get("/api/messages/conversations")
@@ -214,28 +212,9 @@ def get_conversations(request: Request, page: int = 1, limit: int = 20):
 
     offset = (page - 1) * limit
     
-    # 直接连接数据库查询
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    
-    # 查询会话列表
-    c.execute("""
-        SELECT c.*, 
-               (SELECT COUNT(*) FROM msg_items WHERE conversation_id = c.id AND sender_type = 'user' AND created_at > COALESCE(
-                   (SELECT created_at FROM msg_items WHERE conversation_id = c.id AND sender_type = 'admin' ORDER BY created_at DESC LIMIT 1), '1970-01-01'
-               )) as new_replies
-        FROM msg_conversations c
-        ORDER BY c.last_time DESC
-        LIMIT ? OFFSET ?
-    """, (limit, offset))
-    rows = c.fetchall()
+    rows = list_conversations(limit, offset)
     conversations = [dict(row) for row in rows] if rows else []
-    
-    # 查询总数
-    c.execute("SELECT COUNT(*) as cnt FROM msg_conversations")
-    total_row = c.fetchone()
-    total_count = total_row["cnt"] if total_row else 0
+    total_count = count_conversations()
     
     # 获取所有 Emby 用户 ID（用于判断用户是否已删除）
     all_emby_user_ids = set()
@@ -255,13 +234,12 @@ def get_conversations(request: Request, page: int = 1, limit: int = 20):
         if conv and not conv.get("user_avatar"):
             # 先从本地数据库获取头像和备注
             try:
-                c.execute("SELECT avatar, remark FROM local_users WHERE emby_user_id = ?", (conv["user_id"],))
-                row = c.fetchone()
+                row = get_local_user_profile_by_emby_id(conv["user_id"])
                 if row:
-                    if row[0]:
-                        conv["user_avatar"] = row[0]
-                    if row[1]:
-                        conv["user_remark"] = row[1]
+                    if row["avatar"]:
+                        conv["user_avatar"] = row["avatar"]
+                    if row["remark"]:
+                        conv["user_remark"] = row["remark"]
             except:
                 pass
             # 如果没有头像，使用 Emby 用户头像代理
@@ -271,10 +249,9 @@ def get_conversations(request: Request, page: int = 1, limit: int = 20):
         # 从 users_meta 获取备注
         if conv and not conv.get("user_remark"):
             try:
-                c.execute("SELECT remark FROM users_meta WHERE user_id = ?", (conv["user_id"],))
-                row = c.fetchone()
-                if row and row[0]:
-                    conv["user_remark"] = row[0]
+                row = get_user_meta_remark(conv["user_id"])
+                if row and row["remark"]:
+                    conv["user_remark"] = row["remark"]
             except:
                 pass
         
@@ -290,8 +267,6 @@ def get_conversations(request: Request, page: int = 1, limit: int = 20):
         else:
             conv["pinned"] = False
     
-    conn.close()
-
     return {
         "status": "success",
         "data": conversations,
@@ -313,14 +288,8 @@ def get_conversation(user_id: str, request: Request, page: int = 1, limit: int =
     # 确保表存在
     _ensure_msg_tables()
 
-    # 直接连接数据库
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-
     # 查找或创建会话
-    c.execute("SELECT * FROM msg_conversations WHERE user_id = ?", (user_id,))
-    row = c.fetchone()
+    row = get_conversation_by_user(user_id)
     
     if not row:
         # 创建会话
@@ -335,12 +304,7 @@ def get_conversation(user_id: str, request: Request, page: int = 1, limit: int =
         except:
             pass
 
-        c.execute("""
-            INSERT INTO msg_conversations (user_id, username, user_avatar, created_at, last_time)
-            VALUES (?, ?, ?, datetime('now','localtime'), datetime('now','localtime'))
-        """, (user_id, username, user_avatar))
-        conn.commit()
-        conv_id = c.lastrowid
+        conv_id = get_or_create_conversation(user_id, username, user_avatar)[0]
         conv = {"id": conv_id, "user_id": user_id, "username": username, "user_avatar": user_avatar}
     else:
         conv = dict(row)
@@ -352,36 +316,26 @@ def get_conversation(user_id: str, request: Request, page: int = 1, limit: int =
 
     # 获取用户备注
     try:
-        c.execute("SELECT remark FROM local_users WHERE emby_user_id = ?", (user_id,))
-        row = c.fetchone()
-        if row and row[0]:
-            conv["user_remark"] = row[0]
+        row = get_local_user_remark_by_emby_id(user_id)
+        if row and row["remark"]:
+            conv["user_remark"] = row["remark"]
     except:
         pass
     if not conv.get("user_remark"):
         try:
-            c.execute("SELECT remark FROM users_meta WHERE user_id = ?", (user_id,))
-            row = c.fetchone()
-            if row and row[0]:
-                conv["user_remark"] = row[0]
+            row = get_user_meta_remark(user_id)
+            if row and row["remark"]:
+                conv["user_remark"] = row["remark"]
         except:
             pass
 
     # 获取消息列表
     offset = (page - 1) * limit
-    c.execute("""
-        SELECT * FROM msg_items
-        WHERE conversation_id = ?
-        ORDER BY created_at DESC
-        LIMIT ? OFFSET ?
-    """, (conv_id, limit, offset))
-    msg_rows = c.fetchall()
+    msg_rows = list_messages(conv_id, limit, offset)
     messages = [dict(m) for m in msg_rows] if msg_rows else []
 
     # 标记管理员已读
-    c.execute("UPDATE msg_conversations SET unread_admin = 0 WHERE id = ?", (conv_id,))
-    conn.commit()
-    conn.close()
+    mark_admin_read(conv_id)
 
     return {
         "status": "success",
@@ -406,12 +360,9 @@ def send_message(data: SendMessageModel, request: Request):
 
     admin_name = user.get("Name", "管理员")
 
-    # 查找或创建会话
-    conv = query_db("SELECT * FROM msg_conversations WHERE user_id = ?", (data.user_id,), one=True)
-    if not conv:
-        # 获取用户名
-        username = data.user_id
-        user_avatar = None
+    username = data.user_id
+    user_avatar = None
+    if not get_conversation_by_user(data.user_id):
         try:
             if media_api:
                 user_info = media_api.get(f"/Users/{data.user_id}")
@@ -420,32 +371,16 @@ def send_message(data: SendMessageModel, request: Request):
                     username = user_data.get("Name", data.user_id)
         except:
             pass
-
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        c.execute("""
-            INSERT INTO msg_conversations (user_id, username, user_avatar, created_at, last_time)
-            VALUES (?, ?, ?, datetime('now','localtime'), datetime('now','localtime'))
-        """, (data.user_id, username, user_avatar))
-        conv_id = c.lastrowid
-        conn.commit()
-        conn.close()
-    else:
-        conv_id = conv["id"]
+    conv_id, _ = get_or_create_conversation(data.user_id, username, user_avatar)
 
     # 插入消息
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    c = conn.cursor()
-    c.execute("""
-        INSERT INTO msg_items (conversation_id, sender_type, sender_id, sender_name, content, created_at)
-        VALUES (?, 'admin', ?, ?, ?, datetime('now','localtime'))
-    """, (conv_id, user.get("Id"), admin_name, sanitize_html(data.content, max_length=5000)))
-    c.execute("""
-        UPDATE msg_conversations SET last_message = ?, last_time = datetime('now','localtime'), unread_user = unread_user + 1
-        WHERE id = ?
-    """, (sanitize_html(data.content[:100]), conv_id))
-    conn.commit()
-    conn.close()
+    insert_admin_message(
+        conv_id,
+        user.get("Id"),
+        admin_name,
+        sanitize_html(data.content, max_length=5000),
+        sanitize_html(data.content[:100]),
+    )
 
     return {"status": "success", "message": "发送成功"}
 
@@ -464,23 +399,13 @@ def admin_reply(data: ReplyModel, request: Request):
 
     admin_name = user.get("Name", "管理员")
 
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    c = conn.cursor()
-
-    # 插入消息
-    c.execute("""
-        INSERT INTO msg_items (conversation_id, sender_type, sender_id, sender_name, content, created_at)
-        VALUES (?, 'admin', ?, ?, ?, datetime('now','localtime'))
-    """, (data.conversation_id, user.get("Id"), admin_name, sanitize_html(data.content, max_length=5000)))
-
-    # 更新会话
-    c.execute("""
-        UPDATE msg_conversations SET last_message = ?, last_time = datetime('now','localtime'), unread_user = unread_user + 1
-        WHERE id = ?
-    """, (sanitize_html(data.content[:100]), data.conversation_id))
-
-    conn.commit()
-    conn.close()
+    insert_admin_message(
+        data.conversation_id,
+        user.get("Id"),
+        admin_name,
+        sanitize_html(data.content, max_length=5000),
+        sanitize_html(data.content[:100]),
+    )
 
     return {"status": "success", "message": "回复成功"}
 
@@ -497,12 +422,7 @@ def get_unread_count(request: Request):
     # 确保表存在
     _ensure_msg_tables()
 
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT COUNT(*) as cnt FROM msg_conversations WHERE unread_admin > 0")
-    row = c.fetchone()
-    conn.close()
-    return {"status": "success", "count": row[0] if row else 0}
+    return {"status": "success", "count": count_admin_unread_conversations()}
 
 
 @router.post("/api/messages/mark_read/{conversation_id}")
@@ -514,11 +434,7 @@ def mark_read(conversation_id: int, request: Request):
     if not is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
 
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    c = conn.cursor()
-    c.execute("UPDATE msg_conversations SET unread_admin = 0 WHERE id = ?", (conversation_id,))
-    conn.commit()
-    conn.close()
+    mark_admin_read(conversation_id)
 
     return {"status": "success"}
 
@@ -540,59 +456,13 @@ def user_get_messages(request: Request, page: int = 1, limit: int = 50):
         request.session.pop("req_user", None)
         return {"status": "error", "message": "账号已被删除，请重新登录", "account_deleted": True}
     
-    # 确保消息表存在
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS msg_conversations (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id TEXT NOT NULL,
-        username TEXT,
-        user_avatar TEXT,
-        last_message TEXT,
-        last_time DATETIME DEFAULT CURRENT_TIMESTAMP,
-        unread_admin INTEGER DEFAULT 0,
-        unread_user INTEGER DEFAULT 0,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )''')
-    c.execute('''CREATE TABLE IF NOT EXISTS msg_items (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        conversation_id INTEGER,
-        sender_type TEXT DEFAULT 'admin',
-        sender_id TEXT,
-        sender_name TEXT,
-        content TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )''')
-    conn.commit()
-    
-    # 查找会话
-    c.execute("SELECT * FROM msg_conversations WHERE user_id = ?", (user_id,))
-    conv = c.fetchone()
-    if not conv:
-        conn.close()
-        return {"status": "success", "data": {"messages": [], "unread": 0}}
-    
-    # 获取列名
-    columns = [desc[0] for desc in c.description]
-    conv_dict = dict(zip(columns, conv))
-    conv_id = conv_dict["id"]
-    
-    # 获取消息列表
+    _ensure_msg_tables()
     offset = (page - 1) * limit
-    c.execute("""
-        SELECT * FROM msg_items
-        WHERE conversation_id = ?
-        ORDER BY created_at DESC
-        LIMIT ? OFFSET ?
-    """, (conv_id, limit, offset))
-    rows = c.fetchall()
-    msg_columns = [desc[0] for desc in c.description]
-    messages = [dict(zip(msg_columns, row)) for row in rows] if rows else []
-    
-    # 标记用户已读
-    c.execute("UPDATE msg_conversations SET unread_user = 0 WHERE id = ?", (conv_id,))
-    conn.commit()
-    conn.close()
+    result = get_user_messages(user_id, limit, offset)
+    if not result:
+        return {"status": "success", "data": {"messages": [], "unread": 0}}
+    conv_dict, rows = result
+    messages = [dict(row) for row in rows] if rows else []
 
     return {
         "status": "success",
@@ -636,76 +506,28 @@ def user_send_message(data: UserSendMessageModel, request: Request):
     
     log_msg(f"[消息中心] user_send_message: 用户 {username}({user_id}) 发送消息: {data.content[:50]}...")
     
-    # 确保消息表存在
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS msg_conversations (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id TEXT NOT NULL,
-        username TEXT,
-        user_avatar TEXT,
-        last_message TEXT,
-        last_time DATETIME DEFAULT CURRENT_TIMESTAMP,
-        unread_admin INTEGER DEFAULT 0,
-        unread_user INTEGER DEFAULT 0,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )''')
-    c.execute('''CREATE TABLE IF NOT EXISTS msg_items (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        conversation_id INTEGER,
-        sender_type TEXT DEFAULT 'admin',
-        sender_id TEXT,
-        sender_name TEXT,
-        content TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )''')
-    conn.commit()
+    _ensure_msg_tables()
     
     # 获取用户头像
     try:
-        c.execute("SELECT avatar FROM local_users WHERE emby_user_id = ?", (user_id,))
-        row = c.fetchone()
-        user_avatar = row[0] if row and row[0] else None
+        row = get_local_user_avatar_by_emby_id(user_id)
+        user_avatar = row["avatar"] if row and row["avatar"] else None
     except:
         user_avatar = None
 
-    # 查找或创建会话
-    c.execute("SELECT * FROM msg_conversations WHERE user_id = ?", (user_id,))
-    conv = c.fetchone()
-    if not conv:
-        c.execute("""
-            INSERT INTO msg_conversations (user_id, username, user_avatar, created_at, last_time)
-            VALUES (?, ?, ?, datetime('now','localtime'), datetime('now','localtime'))
-        """, (user_id, username, user_avatar))
-        conv_id = c.lastrowid
-        log_msg(f"[消息中心] user_send_message: 创建新会话 conv_id={conv_id}")
-    else:
-        conv_id = conv[0]  # id 是第一列
+    existed = get_conversation_by_user(user_id) is not None
+    conv_id = insert_user_message(
+        user_id,
+        username,
+        user_avatar,
+        sanitize_html(data.content, max_length=5000),
+        sanitize_html(data.content[:100]),
+        sanitize_html(f"用户 {username} 发来新消息"),
+    )
+    if existed:
         log_msg(f"[消息中心] user_send_message: 找到已有会话 conv_id={conv_id}")
-
-    # 插入消息
-    c.execute("""
-        INSERT INTO msg_items (conversation_id, sender_type, sender_id, sender_name, content, created_at)
-        VALUES (?, 'user', ?, ?, ?, datetime('now','localtime'))
-    """, (conv_id, user_id, username, sanitize_html(data.content, max_length=5000)))
-    c.execute("""
-        UPDATE msg_conversations SET last_message = ?, last_time = datetime('now','localtime'), unread_admin = unread_admin + 1
-        WHERE id = ?
-    """, (sanitize_html(data.content[:100]), conv_id))
-    
-    # 创建系统通知给管理员（检查是否屏蔽）
-    try:
-        c.execute("SELECT id FROM msg_notify_block WHERE user_id = ?", (user_id,))
-        if not c.fetchone():  # 未屏蔽
-            c.execute("""
-                INSERT INTO sys_notifications (type, title, message, action_url, created_at)
-                VALUES ('message', ?, ?, ?, datetime('now','localtime'))
-            """, ("新消息", sanitize_html(f"用户 {username} 发来新消息"), f"/messages?user={user_id}"))
-    except:
-        pass  # 如果表不存在就忽略
-    
-    conn.commit()
-    conn.close()
+    else:
+        log_msg(f"[消息中心] user_send_message: 创建新会话 conv_id={conv_id}")
     
     # 🔥 发送机器人通知给管理员
     _send_bot_notify_for_user_message(user_id, username, data.content, conv_id)
@@ -725,12 +547,7 @@ def user_get_unread(request: Request):
     user_id = req_user.get("Id")
     
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        c.execute("SELECT unread_user FROM msg_conversations WHERE user_id = ?", (user_id,))
-        row = c.fetchone()
-        conn.close()
-        return {"status": "success", "count": row[0] if row else 0}
+        return {"status": "success", "count": get_user_unread_count(user_id)}
     except:
         return {"status": "success", "count": 0}
 
@@ -766,18 +583,7 @@ def get_notify_block_list(request: Request):
     
     _ensure_msg_tables()
     
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    c.execute("""
-        SELECT b.id, b.user_id, c.username, c.user_avatar, b.created_at
-        FROM msg_notify_block b
-        LEFT JOIN msg_conversations c ON b.user_id = c.user_id
-        ORDER BY b.created_at DESC
-    """)
-    rows = c.fetchall()
-    conn.close()
-    
+    rows = list_notify_blocks()
     blocked = [dict(row) for row in rows] if rows else []
     # 设置头像代理
     for b in blocked:
@@ -798,17 +604,8 @@ def block_notify(user_id: str, request: Request):
     
     _ensure_msg_tables()
     
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    c = conn.cursor()
-    # 检查是否已屏蔽
-    c.execute("SELECT id FROM msg_notify_block WHERE user_id = ?", (user_id,))
-    if c.fetchone():
-        conn.close()
+    if not add_notify_block(user_id):
         return {"status": "success", "message": "已屏蔽"}
-    
-    c.execute("INSERT INTO msg_notify_block (user_id) VALUES (?)", (user_id,))
-    conn.commit()
-    conn.close()
     
     return {"status": "success", "message": "已屏蔽该用户的消息通知"}
 
@@ -824,11 +621,7 @@ def unblock_notify(user_id: str, request: Request):
     
     _ensure_msg_tables()
     
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    c = conn.cursor()
-    c.execute("DELETE FROM msg_notify_block WHERE user_id = ?", (user_id,))
-    conn.commit()
-    conn.close()
+    remove_notify_block(user_id)
     
     return {"status": "success", "message": "已取消屏蔽"}
 
@@ -852,34 +645,13 @@ class UnmuteModel(BaseModel):
 
 def _ensure_mute_table():
     """确保禁言表存在"""
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS user_mutes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id TEXT NOT NULL,
-        username TEXT,
-        is_muted INTEGER DEFAULT 1,
-        muted_until TEXT,
-        muted_reason TEXT,
-        muted_by TEXT,
-        muted_by_name TEXT,
-        muted_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id)
-    )''')
-    conn.commit()
-    conn.close()
+    ensure_mute_table()
 
 
 def _is_user_muted(user_id: str) -> tuple:
     """检查用户是否被禁言，返回 (is_muted, mute_info)"""
     _ensure_mute_table()
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    c.execute("SELECT * FROM user_mutes WHERE user_id = ? AND is_muted = 1", (user_id,))
-    row = c.fetchone()
-    conn.close()
+    row = get_active_mute(user_id)
     
     if not row:
         return False, None
@@ -902,11 +674,7 @@ def _is_user_muted(user_id: str) -> tuple:
 
 def _unmute_user(user_id: str):
     """解除用户禁言"""
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    c = conn.cursor()
-    c.execute("UPDATE user_mutes SET is_muted = 0 WHERE user_id = ?", (user_id,))
-    conn.commit()
-    conn.close()
+    set_user_unmuted(user_id)
 
 
 def _get_user_info(user_id: str) -> dict:
@@ -914,21 +682,15 @@ def _get_user_info(user_id: str) -> dict:
     info = {"avatar": f"/api/proxy/user_image/{user_id}", "remark": ""}
     
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.row_factory = sqlite3.Row
-        c = conn.cursor()
         # 从 local_users 获取备注
-        c.execute("SELECT remark FROM local_users WHERE emby_user_id = ?", (user_id,))
-        row = c.fetchone()
+        row = get_local_user_remark_by_emby_id(user_id)
         if row and row["remark"]:
             info["remark"] = row["remark"]
         # 从 users_meta 获取备注
         if not info["remark"]:
-            c.execute("SELECT remark FROM users_meta WHERE user_id = ?", (user_id,))
-            row = c.fetchone()
+            row = get_user_meta_remark(user_id)
             if row and row["remark"]:
                 info["remark"] = row["remark"]
-        conn.close()
     except:
         pass
     
@@ -946,24 +708,10 @@ def get_mute_list(request: Request, page: int = 1, limit: int = 20):
     
     _ensure_mute_table()
     
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    
     # 查询禁言用户
     offset = (page - 1) * limit
-    c.execute("""
-        SELECT * FROM user_mutes 
-        WHERE is_muted = 1 
-        ORDER BY muted_at DESC 
-        LIMIT ? OFFSET ?
-    """, (limit, offset))
-    rows = c.fetchall()
-    
-    # 查询总数
-    c.execute("SELECT COUNT(*) as cnt FROM user_mutes WHERE is_muted = 1")
-    total = c.fetchone()["cnt"]
-    conn.close()
+    rows = list_active_mutes(limit, offset)
+    total = count_active_mutes()
     
     mutes = []
     for row in rows:
@@ -1017,33 +765,14 @@ def mute_user(data: MuteUserModel, request: Request):
         if not username:
             username = data.user_id
     
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    c = conn.cursor()
-    
-    # 检查是否已存在
-    c.execute("SELECT id FROM user_mutes WHERE user_id = ?", (data.user_id,))
-    if c.fetchone():
-        # 更新
-        c.execute("""
-            UPDATE user_mutes SET 
-                is_muted = 1,
-                username = ?,
-                muted_until = ?,
-                muted_reason = ?,
-                muted_by = ?,
-                muted_by_name = ?,
-                muted_at = datetime('now','localtime')
-            WHERE user_id = ?
-        """, (username, muted_until, sanitize_html(data.reason) if data.reason else "", admin_id, admin_name, data.user_id))
-    else:
-        # 新增
-        c.execute("""
-            INSERT INTO user_mutes (user_id, username, is_muted, muted_until, muted_reason, muted_by, muted_by_name, muted_at)
-            VALUES (?, ?, 1, ?, ?, ?, ?, datetime('now','localtime'))
-        """, (data.user_id, username, muted_until, sanitize_html(data.reason) if data.reason else "", admin_id, admin_name))
-    
-    conn.commit()
-    conn.close()
+    upsert_user_mute(
+        data.user_id,
+        username,
+        muted_until,
+        sanitize_html(data.reason) if data.reason else "",
+        admin_id,
+        admin_name,
+    )
     
     return {"status": "success", "message": "禁言成功"}
 
@@ -1072,9 +801,6 @@ def batch_mute_users(data: BatchMuteModel, request: Request):
         until = datetime.now() + timedelta(hours=data.duration)
         muted_until = until.strftime("%Y-%m-%d %H:%M:%S")
     
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    c = conn.cursor()
-    
     success_count = 0
     for user_id in data.user_ids:
         # 获取用户名
@@ -1087,29 +813,15 @@ def batch_mute_users(data: BatchMuteModel, request: Request):
         except:
             pass
         
-        # 检查是否已存在
-        c.execute("SELECT id FROM user_mutes WHERE user_id = ?", (user_id,))
-        if c.fetchone():
-            c.execute("""
-                UPDATE user_mutes SET 
-                    is_muted = 1,
-                    username = ?,
-                    muted_until = ?,
-                    muted_reason = ?,
-                    muted_by = ?,
-                    muted_by_name = ?,
-                    muted_at = datetime('now','localtime')
-                WHERE user_id = ?
-            """, (username, muted_until, sanitize_html(data.reason) if data.reason else "", admin_id, admin_name, user_id))
-        else:
-            c.execute("""
-                INSERT INTO user_mutes (user_id, username, is_muted, muted_until, muted_reason, muted_by, muted_by_name, muted_at)
-                VALUES (?, ?, 1, ?, ?, ?, ?, datetime('now','localtime'))
-            """, (user_id, username, muted_until, sanitize_html(data.reason) if data.reason else "", admin_id, admin_name))
+        upsert_user_mute(
+            user_id,
+            username,
+            muted_until,
+            sanitize_html(data.reason) if data.reason else "",
+            admin_id,
+            admin_name,
+        )
         success_count += 1
-    
-    conn.commit()
-    conn.close()
     
     return {"status": "success", "message": f"成功禁言 {success_count} 个用户"}
 
@@ -1128,14 +840,7 @@ def unmute_users(data: UnmuteModel, request: Request):
     
     _ensure_mute_table()
     
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    c = conn.cursor()
-    
-    placeholders = ",".join(["?" for _ in data.user_ids])
-    c.execute(f"UPDATE user_mutes SET is_muted = 0 WHERE user_id IN ({placeholders})", data.user_ids)
-    
-    conn.commit()
-    conn.close()
+    set_users_unmuted(data.user_ids)
     
     return {"status": "success", "message": f"成功解除 {len(data.user_ids)} 个用户的禁言"}
 
@@ -1151,11 +856,7 @@ def unmute_single_user(user_id: str, request: Request):
     
     _ensure_mute_table()
     
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    c = conn.cursor()
-    c.execute("UPDATE user_mutes SET is_muted = 0 WHERE user_id = ?", (user_id,))
-    conn.commit()
-    conn.close()
+    set_user_unmuted(user_id)
     
     return {"status": "success", "message": "已解除禁言"}
 
@@ -1195,35 +896,7 @@ class AnnouncementUpdateModel(BaseModel):
 
 def _ensure_announcement_table():
     """确保公告表存在"""
-    # 🔥 确保数据库目录存在
-    db_dir = os.path.dirname(SYSTEM_DB_PATH)
-    if db_dir and not os.path.exists(db_dir):
-        os.makedirs(db_dir, exist_ok=True)
-    
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS announcements (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        content TEXT NOT NULL,
-        is_active INTEGER DEFAULT 1,
-        priority INTEGER DEFAULT 0,
-        view_count INTEGER DEFAULT 0,
-        created_by TEXT,
-        created_by_name TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-    )''')
-    # 🔥 用户公告已读记录表
-    c.execute('''CREATE TABLE IF NOT EXISTS announcement_reads (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        announcement_id INTEGER NOT NULL,
-        user_id TEXT NOT NULL,
-        read_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(announcement_id, user_id)
-    )''')
-    conn.commit()
-    conn.close()
+    ensure_announcement_tables()
 
 
 @router.get("/api/announcements")
@@ -1237,24 +910,7 @@ def get_announcements(request: Request, active_only: bool = False):
     
     _ensure_announcement_table()
     
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    
-    if active_only:
-        c.execute("""
-            SELECT * FROM announcements 
-            WHERE is_active = 1 
-            ORDER BY priority DESC, created_at DESC
-        """)
-    else:
-        c.execute("""
-            SELECT * FROM announcements 
-            ORDER BY is_active DESC, priority DESC, created_at DESC
-        """)
-    rows = c.fetchall()
-    conn.close()
-    
+    rows = list_announcements(active_only)
     announcements = [dict(row) for row in rows] if rows else []
     return {"status": "success", "data": announcements}
 
@@ -1273,15 +929,14 @@ def create_announcement(data: AnnouncementModel, request: Request):
     admin_id = user.get("Id", "")
     admin_name = user.get("Name", "管理员")
     
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    c = conn.cursor()
-    c.execute("""
-        INSERT INTO announcements (title, content, is_active, priority, created_by, created_by_name, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, datetime('now','localtime'), datetime('now','localtime'))
-    """, (sanitize_html(data.title), sanitize_rich_html(data.content, max_length=50000), 1 if data.is_active else 0, data.priority, admin_id, admin_name))
-    conn.commit()
-    ann_id = c.lastrowid
-    conn.close()
+    ann_id = create_announcement_record(
+        sanitize_html(data.title),
+        sanitize_rich_html(data.content, max_length=50000),
+        data.is_active,
+        data.priority,
+        admin_id,
+        admin_name,
+    )
     
     return {"status": "success", "message": "公告创建成功", "id": ann_id}
 
@@ -1297,35 +952,20 @@ def update_announcement(ann_id: int, data: AnnouncementUpdateModel, request: Req
     
     _ensure_announcement_table()
     
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    c = conn.cursor()
-    
-    # 构建更新语句
-    updates = []
-    params = []
+    updates = {}
     if data.title is not None:
-        updates.append("title = ?")
-        params.append(sanitize_html(data.title))
+        updates["title"] = sanitize_html(data.title)
     if data.content is not None:
-        updates.append("content = ?")
-        params.append(sanitize_rich_html(data.content, max_length=50000))
+        updates["content"] = sanitize_rich_html(data.content, max_length=50000)
     if data.is_active is not None:
-        updates.append("is_active = ?")
-        params.append(1 if data.is_active else 0)
+        updates["is_active"] = 1 if data.is_active else 0
     if data.priority is not None:
-        updates.append("priority = ?")
-        params.append(data.priority)
+        updates["priority"] = data.priority
     
     if not updates:
-        conn.close()
         return {"status": "error", "message": "无更新内容"}
     
-    updates.append("updated_at = datetime('now','localtime')")
-    params.append(ann_id)
-    
-    c.execute(f"UPDATE announcements SET {', '.join(updates)} WHERE id = ?", params)
-    conn.commit()
-    conn.close()
+    update_announcement_fields(ann_id, updates)
     
     return {"status": "success", "message": "公告更新成功"}
 
@@ -1341,11 +981,7 @@ def delete_announcement(ann_id: int, request: Request):
     
     _ensure_announcement_table()
     
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    c = conn.cursor()
-    c.execute("DELETE FROM announcements WHERE id = ?", (ann_id,))
-    conn.commit()
-    conn.close()
+    delete_announcement_by_id(ann_id)
     
     return {"status": "success", "message": "公告删除成功"}
 
@@ -1359,11 +995,7 @@ def increment_announcement_view(ann_id: int, request: Request):
 
     _ensure_announcement_table()
     
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    c = conn.cursor()
-    c.execute("UPDATE announcements SET view_count = view_count + 1 WHERE id = ?", (ann_id,))
-    conn.commit()
-    conn.close()
+    increment_announcement_view_count(ann_id)
     
     return {"status": "success"}
 
@@ -1381,29 +1013,7 @@ def user_get_announcements(request: Request):
     user_id = user.get('Id', '')
     _ensure_announcement_table()
     
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    
-    # 获取所有启用的公告
-    c.execute("""
-        SELECT id, title, content, view_count, created_at 
-        FROM announcements 
-        WHERE is_active = 1 
-        ORDER BY priority DESC, created_at DESC
-    """)
-    rows = c.fetchall()
-    
-    # 获取用户已读的公告ID
-    c.execute("SELECT announcement_id FROM announcement_reads WHERE user_id = ?", (user_id,))
-    read_ids = set(row[0] for row in c.fetchall())
-    conn.close()
-    
-    announcements = []
-    for row in rows:
-        ann = dict(row)
-        ann['is_new'] = ann['id'] not in read_ids  # 标记是否未读
-        announcements.append(ann)
+    announcements = list_active_announcements_with_reads(user_id)
     
     return {"status": "success", "data": announcements}
 
@@ -1418,15 +1028,7 @@ def mark_announcement_read(ann_id: int, request: Request):
     user_id = user.get('Id', '')
     _ensure_announcement_table()
     
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    c = conn.cursor()
-    # 使用 INSERT OR IGNORE 避免重复插入
-    c.execute("""
-        INSERT OR IGNORE INTO announcement_reads (announcement_id, user_id, read_at)
-        VALUES (?, ?, datetime('now','localtime'))
-    """, (ann_id, user_id))
-    conn.commit()
-    conn.close()
+    mark_announcement_read_record(ann_id, user_id)
     
     return {"status": "success", "message": "已标记为已读"}
 
@@ -1443,25 +1045,15 @@ def _send_bot_notify_for_user_message(user_id: str, username: str, content: str,
         if not cfg.get("msg_bot_notify_enabled", True):
             return
         
-        # 检查该用户是否被屏蔽通知
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        c.execute("SELECT id FROM msg_notify_block WHERE user_id = ?", (user_id,))
-        if c.fetchone():
-            conn.close()
+        if is_notify_blocked(user_id):
             return
-        conn.close()
         
         # 获取用户备注
         user_display = username
         try:
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            c = conn.cursor()
-            c.execute("SELECT remark FROM local_users WHERE emby_user_id = ?", (user_id,))
-            row = c.fetchone()
-            if row and row[0]:
-                user_display = f"{row[0]} ({username})"
-            conn.close()
+            row = get_local_user_remark_by_emby_id(user_id)
+            if row and row["remark"]:
+                user_display = f"{row['remark']} ({username})"
         except:
             pass
         
@@ -1515,18 +1107,13 @@ def _send_bot_reply_to_user(user_id: str, content: str, admin_name: str = "管�
         if not cfg.get("tg_user_bot_token"):
             return False
         
-        # 查找用户的 TG ID
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        c.execute("SELECT tg_id FROM tg_bot_users WHERE emby_user_id = ?", (user_id,))
-        row = c.fetchone()
-        conn.close()
+        row = get_user_tg_id(user_id)
         
-        if not row or not row[0]:
+        if not row or not row["tg_id"]:
             log_msg(f"[消息中心] 用户 {user_id} 未绑定 TG 机器人")
             return False
         
-        tg_id = row[0]
+        tg_id = row["tg_id"]
         
         # 发送消息给用户
         text = f"💌 <b>管理员回复</b>\n\n{content}"
@@ -1595,28 +1182,11 @@ def delete_conversation(user_id: str, request: Request):
     
     _ensure_msg_tables()
     
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    c = conn.cursor()
-    
     try:
-        # 获取会话 ID
-        c.execute("SELECT id FROM msg_conversations WHERE user_id = ?", (user_id,))
-        row = c.fetchone()
-        
-        if row:
-            conv_id = row[0]
-            # 删除消息
-            c.execute("DELETE FROM msg_items WHERE conversation_id = ?", (conv_id,))
-            # 删除会话
-            c.execute("DELETE FROM msg_conversations WHERE id = ?", (conv_id,))
-            conn.commit()
-            conn.close()
+        if delete_conversation_by_user(user_id):
             return {"status": "success", "message": "对话已删除"}
-        else:
-            conn.close()
-            return {"status": "error", "message": "对话不存在"}
+        return {"status": "error", "message": "对话不存在"}
     except Exception as e:
-        conn.close()
         import traceback
         traceback.print_exc()
         return {"status": "error", "message": safe_error_message(e, "删除失败")}
@@ -1633,19 +1203,10 @@ def delete_all_conversations(request: Request):
     
     _ensure_msg_tables()
     
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    c = conn.cursor()
-    
     try:
-        # 删除所有消息
-        c.execute("DELETE FROM msg_items")
-        # 删除所有会话
-        c.execute("DELETE FROM msg_conversations")
-        conn.commit()
-        conn.close()
+        delete_all_conversations_records()
         return {"status": "success", "message": "所有对话已清空"}
     except Exception as e:
-        conn.close()
         return {"status": "error", "message": f"清空失败: {e}"}
 
 
@@ -1677,58 +1238,22 @@ def broadcast_message(data: BroadcastModel, request: Request):
     admin_id = user.get("Id", "")
     content = sanitize_html(data.content.strip(), max_length=5000)
     
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    c = conn.cursor()
-    
-    success_count = 0
-    failed_count = 0
-    
+    user_entries = []
     for user_id in data.user_ids:
+        username = user_id
         try:
-            # 获取用户名
-            username = user_id
-            try:
-                if media_api and media_api.host and media_api.api_key:
-                    user_res = media_api.get(f"/Users/{user_id}", timeout=5)
-                    if user_res.status_code == 200:
-                        username = user_res.json().get("Name", user_id)
-            except:
-                pass
-            
-            # 查找或创建会话
-            c.execute("SELECT id FROM msg_conversations WHERE user_id = ?", (user_id,))
-            conv = c.fetchone()
-            
-            if not conv:
-                # 创建新会话
-                c.execute("""
-                    INSERT INTO msg_conversations (user_id, username, user_avatar, created_at, last_time)
-                    VALUES (?, ?, '', datetime('now','localtime'), datetime('now','localtime'))
-                """, (user_id, username))
-                conv_id = c.lastrowid
-            else:
-                conv_id = conv[0]
-            
-            # 插入消息
-            c.execute("""
-                INSERT INTO msg_items (conversation_id, sender_type, sender_id, sender_name, content, created_at)
-                VALUES (?, 'admin', ?, ?, ?, datetime('now','localtime'))
-            """, (conv_id, admin_id, admin_name, content))
-            
-            # 更新会话
-            c.execute("""
-                UPDATE msg_conversations 
-                SET last_message = ?, last_time = datetime('now','localtime'), unread_user = unread_user + 1
-                WHERE id = ?
-            """, (content[:100], conv_id))
-            
-            success_count += 1
-        except Exception as e:
-            log_msg(f"[群发消息] 发送给 {user_id} 失败: {e}")
-            failed_count += 1
-    
-    conn.commit()
-    conn.close()
+            if media_api and media_api.host and media_api.api_key:
+                user_res = media_api.get(f"/Users/{user_id}", timeout=5)
+                if user_res.status_code == 200:
+                    username = user_res.json().get("Name", user_id)
+        except:
+            pass
+        user_entries.append((user_id, username))
+
+    success_count, failed = send_broadcast_messages(user_entries, admin_id, admin_name, content)
+    for user_id, exc in failed:
+        log_msg(f"[群发消息] 发送给 {user_id} 失败: {exc}")
+    failed_count = len(failed)
     
     # 发送机器人通知
     if success_count > 0:

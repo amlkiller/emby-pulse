@@ -82,6 +82,7 @@ Define the architecture refactor target for EmbyPulse-Pro and implement the firs
 - [x] `app/routers/bot.py` delegates user-bot admin, registration log, TG binding, lottery, and scratch-card table access to a DAO.
 - [x] `app/routers/stats.py` delegates playback statistics SQL and base playback filters to a query service.
 - [x] `app/routers/auth.py` delegates login failure, local user, avatar, permission, and TOTP table access to a DAO.
+- [x] `app/routers/messages.py` delegates message conversations, message items, notification blocks, mutes, announcements, and related user lookups to a DAO.
 - [x] Existing tests or import checks pass.
 
 ## Out of Scope

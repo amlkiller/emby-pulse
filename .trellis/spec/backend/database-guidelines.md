@@ -10,7 +10,7 @@
 
 - Trigger: database infrastructure refactor that starts removing `query_db()` from representative modules.
 - Applies to new backend code that reads/writes EmbyPulse system data or playback reporting data.
-- First-stage sample modules include `app/routers/history.py`, `app/routers/api_tokens.py`, `app/routers/notifications.py`, `app/routers/notify_rules.py`, `app/routers/pro.py`, `app/routers/notify_admin.py`, `app/routers/pwa.py`, `app/routers/audit.py`, `app/routers/risk.py`, `app/routers/clients.py`, `app/routers/calendar_notify.py`, `app/routers/webhook.py`, `app/services/report_service.py`, `app/routers/insight.py`, `app/routers/system_tools.py`, `app/services/risk_service.py`, `app/services/calendar_service.py`, `app/routers/views.py`, `app/routers/tasks.py`, `app/routers/dedupe.py`, `app/routers/system.py`, `app/routers/db_tools.py`, `app/routers/gaps.py`, `app/routers/bot.py`, `app/routers/stats.py`, and `app/routers/auth.py`.
+- First-stage sample modules include `app/routers/history.py`, `app/routers/api_tokens.py`, `app/routers/notifications.py`, `app/routers/notify_rules.py`, `app/routers/pro.py`, `app/routers/notify_admin.py`, `app/routers/pwa.py`, `app/routers/audit.py`, `app/routers/risk.py`, `app/routers/clients.py`, `app/routers/calendar_notify.py`, `app/routers/webhook.py`, `app/services/report_service.py`, `app/routers/insight.py`, `app/routers/system_tools.py`, `app/services/risk_service.py`, `app/services/calendar_service.py`, `app/routers/views.py`, `app/routers/tasks.py`, `app/routers/dedupe.py`, `app/routers/system.py`, `app/routers/db_tools.py`, `app/routers/gaps.py`, `app/routers/bot.py`, `app/routers/stats.py`, `app/routers/auth.py`, and `app/routers/messages.py`.
 
 ### 2. Signatures
 
@@ -124,6 +124,17 @@
 - `app.dao.auth_dao.update_local_user_login(user_id: int, last_login_at: str, last_login_ip: str) -> None`
 - `app.dao.auth_dao.enable_local_user_totp(user_id: int, secret: str) -> None`
 - `app.dao.auth_dao.disable_local_user_totp(user_id: int) -> None`
+- `app.dao.message_dao.ensure_msg_tables() -> None`
+- `app.dao.message_dao.list_conversations(limit: int, offset: int) -> list[DataRow]`
+- `app.dao.message_dao.get_or_create_conversation(user_id: str, username: str, user_avatar=None) -> tuple[int, dict]`
+- `app.dao.message_dao.insert_admin_message(conversation_id: int, sender_id: str, sender_name: str, content: str, last_message: str) -> None`
+- `app.dao.message_dao.insert_user_message(user_id: str, username: str, user_avatar, content: str, last_message: str, notification_message: str) -> int`
+- `app.dao.message_dao.ensure_mute_table() -> None`
+- `app.dao.message_dao.upsert_user_mute(user_id: str, username: str, muted_until, reason: str, admin_id: str, admin_name: str) -> None`
+- `app.dao.message_dao.ensure_announcement_tables() -> None`
+- `app.dao.message_dao.list_announcements(active_only: bool = False) -> list[DataRow]`
+- `app.dao.message_dao.update_announcement_fields(announcement_id: int, updates: dict) -> None`
+- `app.dao.message_dao.send_broadcast_messages(user_entries, admin_id: str, admin_name: str, content: str) -> tuple[int, list]`
 - `app.infra.db.local_playback_store.insert_webhook_playback_ip_record(...) -> None`
 - `app.infra.db.perf_stats.get_query_perf_stats() -> dict`
 - `app.queries.client_queries.count_playback_clients_by_app() -> list[DataRow]`
@@ -190,6 +201,7 @@
 - Good: `bot.py` keeps bot settings validation, Telegram/WeCom HTTP calls, and admin response assembly in the route while delegating user-bot admin tables, registration logs, TG bindings, lottery, and scratch-card persistence to `bot_admin_dao`.
 - Good: `stats.py` keeps chart aggregation, media-server enrichment, and permission filtering in the route while delegating playback SQL execution and base user filters to `stats_queries`.
 - Good: `auth.py` keeps password hashing, local/Emby login decisions, TOTP validation, session updates, and audit logging in the route while delegating login failure and `local_users` persistence to `auth_dao`.
+- Good: `messages.py` keeps permission checks, Emby user lookups, content sanitization, bot notification delivery, and response assembly in the route while delegating message, mute, notification-block, announcement, and related user lookup tables to `message_dao`.
 - Bad: a router imports `query_db`, `SYSTEM_DB_PATH`, or `sqlite3` only to run route-local SQL.
 
 ### 6. Tests Required
