@@ -11,11 +11,11 @@ import ipaddress
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from app.core.config import cfg, REPORT_COVER_URL, FALLBACK_IMAGE_URL
-from app.core.database import get_base_filter
 from app.dao.notification_dao import add_sys_notification
 from app.dao import bot_service_dao, media_request_dao, message_dao, user_bot_dao
 from app.dao import gap_dao
 from app.dao import notify_admin_dao, notify_rule_dao
+from app.queries.playback_filters import get_base_filter
 from app.dao import user_dao
 from app.infra.db.local_playback_store import insert_bot_playback_history_record
 from app.queries import stats_queries

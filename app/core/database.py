@@ -6,54 +6,18 @@ import logging
 import datetime  # 🔥 新增导入 datetime 模块
 import shutil
 import time
-from collections import deque
 from app.core.config import cfg, DB_PATH, SYSTEM_DB_PATH
 from app.dao.notification_dao import add_system_notification
+from app.infra.db.query_perf import get_query_perf_stats, record_query_perf
+from app.queries.playback_filters import get_base_filter as _get_base_filter
 
 # 🔥 导出 SYSTEM_DB_PATH 供其他模块使用
 __all__ = ['init_db', 'query_db', 'get_base_filter', 'add_sys_notification',
            'DB_PATH', 'SYSTEM_DB_PATH', 'auto_migrate_system_db', 'get_db_connection',
            'get_query_perf_stats']
 
-_slow_queries = deque(maxlen=50)
-_query_stats = {
-    "total": 0,
-    "select": 0,
-    "slow": 0,
-    "large_result": 0,
-}
-
-def _get_slow_query_ms() -> int:
-    try:
-        return int(cfg.get("slow_query_ms") or 800)
-    except Exception:
-        return 800
-
 def _record_query_perf(query: str, elapsed_ms: float, row_count: int = 0):
-    _query_stats["total"] += 1
-    if query.strip().upper().startswith("SELECT"):
-        _query_stats["select"] += 1
-    if row_count >= 1000:
-        _query_stats["large_result"] += 1
-
-    slow_ms = _get_slow_query_ms()
-    if elapsed_ms >= slow_ms:
-        _query_stats["slow"] += 1
-        normalized = " ".join(query.strip().split())
-        _slow_queries.append({
-            "elapsed_ms": round(elapsed_ms, 1),
-            "rows": row_count,
-            "sql": normalized[:300],
-            "ts": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        })
-        logger.warning(f"[慢查询] {elapsed_ms:.1f}ms rows={row_count} sql={normalized[:180]}")
-
-def get_query_perf_stats():
-    return {
-        **_query_stats,
-        "slow_query_ms": _get_slow_query_ms(),
-        "recent_slow_queries": list(_slow_queries),
-    }
+    record_query_perf(query, elapsed_ms, row_count)
 
 # 🔥 统一数据库连接函数 - 解决 "database is locked" 问题
 def get_db_connection(db_path, timeout=30.0, enable_wal=True):
@@ -1120,20 +1084,7 @@ def query_db(query, args=(), one=False):
         return None
 
 def get_base_filter(user_id_filter):
-    where = "WHERE 1=1"
-    params = []
-
-    if user_id_filter and user_id_filter != 'all':
-        where += " AND UserId = ?"
-        params.append(user_id_filter)
-
-    hidden = cfg.get("hidden_users")
-    if (not user_id_filter or user_id_filter == 'all') and hidden and len(hidden) > 0:
-        placeholders = ','.join(['?'] * len(hidden))
-        where += f" AND UserId NOT IN ({placeholders})"
-        params.extend(hidden)
-
-    return where, params
+    return _get_base_filter(user_id_filter)
 
 # 👇 核心修复：强制获取北京时间并显式写入，拒绝使用 SQLite 默认的 UTC 零时区！
 def add_sys_notification(notify_type: str, title: str, message: str, action_url: str = ""):
