@@ -19,3 +19,9 @@ memory/
 # 忽略 docs 目录
 docs/
 data
+
+.codex/
+.cursor/
+.claude/
+.agents/
+.trellis/
