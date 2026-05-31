@@ -10,7 +10,7 @@
 
 - Trigger: database infrastructure refactor that starts removing `query_db()` from representative modules.
 - Applies to new backend code that reads/writes EmbyPulse system data or playback reporting data.
-- First-stage sample modules include `app/routers/history.py`, `app/routers/api_tokens.py`, `app/routers/notifications.py`, `app/routers/notify_rules.py`, `app/routers/pro.py`, `app/routers/notify_admin.py`, `app/routers/pwa.py`, `app/routers/audit.py`, `app/routers/risk.py`, `app/routers/clients.py`, `app/routers/calendar_notify.py`, `app/routers/webhook.py`, `app/services/report_service.py`, `app/routers/insight.py`, and `app/routers/system_tools.py`.
+- First-stage sample modules include `app/routers/history.py`, `app/routers/api_tokens.py`, `app/routers/notifications.py`, `app/routers/notify_rules.py`, `app/routers/pro.py`, `app/routers/notify_admin.py`, `app/routers/pwa.py`, `app/routers/audit.py`, `app/routers/risk.py`, `app/routers/clients.py`, `app/routers/calendar_notify.py`, `app/routers/webhook.py`, `app/services/report_service.py`, `app/routers/insight.py`, `app/routers/system_tools.py`, and `app/services/risk_service.py`.
 
 ### 2. Signatures
 
@@ -30,6 +30,10 @@
 - `app.dao.audit_dao.create_user_audit_log(...) -> None`
 - `app.dao.risk_dao.list_risk_logs(limit: int = 200) -> list[DataRow]`
 - `app.dao.risk_dao.count_recent_risk_actions() -> list[DataRow]`
+- `app.dao.risk_dao.set_user_admin_disabled(user_id: str, disabled: bool, created_at: str = "") -> None`
+- `app.dao.risk_dao.create_risk_log(user_id: str, username: str, action: str, reason: str) -> None`
+- `app.dao.risk_dao.get_user_concurrent_policy(user_id: str) -> DataRow | None`
+- `app.dao.risk_dao.get_tg_user_id_for_emby_user(user_id: str) -> str | None`
 - `app.dao.client_dao.list_client_blacklist() -> list[DataRow]`
 - `app.dao.client_dao.list_client_blacklist_names() -> list[DataRow]`
 - `app.dao.client_dao.add_client_blacklist(app_name: str) -> None`
@@ -94,6 +98,7 @@
 - Good: `report_service.py` keeps poster rendering and media image fetching in the service while delegating playback aggregate SQL to `report_queries`.
 - Good: `insight.py` keeps Emby library scanning and cache filtering in the route while delegating ignore-list persistence to `insight_dao`.
 - Good: `system_tools.py` keeps weather/log/restart HTTP behavior in the route while delegating database health checks and playback recency SQL to DAO/query modules.
+- Good: `risk_service.py` keeps Emby session control, event handling, and user messaging orchestration in the service while delegating `risk_logs`, `users_meta`, and `tg_user_bindings` access to DAOs.
 - Bad: a router imports `query_db`, `SYSTEM_DB_PATH`, or `sqlite3` only to run route-local SQL.
 
 ### 6. Tests Required

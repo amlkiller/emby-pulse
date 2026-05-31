@@ -71,6 +71,7 @@ Define the architecture refactor target for EmbyPulse-Pro and implement the firs
 - [x] `app/services/report_service.py` delegates playback report aggregate queries to a query service.
 - [x] `app/routers/insight.py` delegates `insight_ignores` table access to a DAO.
 - [x] `app/routers/system_tools.py` delegates playback recency checks, system DB health checks, and query perf stats to query/DAO/infra boundaries.
+- [x] `app/services/risk_service.py` delegates risk logs, user risk metadata, and TG binding reads to DAOs.
 - [x] Existing tests or import checks pass.
 
 ## Out of Scope

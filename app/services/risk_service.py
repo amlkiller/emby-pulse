@@ -1,12 +1,17 @@
-import sqlite3
 import requests
 import logging
 import time
 import threading
 import datetime
-from app.core.config import cfg, DB_PATH, SYSTEM_DB_PATH
-from app.core.database import add_sys_notification
+from app.core.config import cfg
 from app.core.event_bus import bus
+from app.dao.notification_dao import add_system_notification
+from app.dao.risk_dao import (
+    create_risk_log,
+    get_tg_user_id_for_emby_user,
+    get_user_concurrent_policy,
+    set_user_admin_disabled,
+)
 
 logger = logging.getLogger("uvicorn")
 
@@ -45,13 +50,7 @@ def ban_user(user_id: str):
             if update_res.status_code in [200, 204]:
                 # 🔥 设置 admin_disabled = 1，标记为管理员封禁（非过期禁用）
                 try:
-                    conn = sqlite3.connect(SYSTEM_DB_PATH)
-                    c = conn.cursor()
-                    c.execute("INSERT OR IGNORE INTO users_meta (user_id, created_at) VALUES (?, ?)", 
-                              (user_id, datetime.datetime.now().isoformat()))
-                    c.execute("UPDATE users_meta SET admin_disabled = 1 WHERE user_id = ?", (user_id,))
-                    conn.commit()
-                    conn.close()
+                    set_user_admin_disabled(user_id, True, datetime.datetime.now().isoformat())
                 except Exception as e:
                     logger.error(f"[风控] 设置 admin_disabled 失败: {e}")
                 return True
@@ -79,11 +78,7 @@ def unban_user(user_id: str):
             if update_res.status_code in [200, 204]:
                 # 🔥 清除 admin_disabled 标记
                 try:
-                    conn = sqlite3.connect(SYSTEM_DB_PATH)
-                    c = conn.cursor()
-                    c.execute("UPDATE users_meta SET admin_disabled = 0 WHERE user_id = ?", (user_id,))
-                    conn.commit()
-                    conn.close()
+                    set_user_admin_disabled(user_id, False)
                 except Exception as e:
                     logger.error(f"[风控] 清除 admin_disabled 失败: {e}")
                 return True
@@ -93,13 +88,7 @@ def unban_user(user_id: str):
 
 def log_risk_action(user_id: str, username: str, action: str, reason: str):
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        cur = conn.cursor()
-        cur.execute("INSERT INTO risk_logs (user_id, username, action, reason) VALUES (?, ?, ?, ?)", (user_id, username, action, reason))
-        if action == "ban":
-            cur.execute("UPDATE users_meta SET risk_level = 'banned' WHERE user_id = ?", (user_id,))
-        conn.commit()
-        conn.close()
+        create_risk_log(user_id, username, action, reason)
     except Exception as e:
         logger.error(f"[风控] 记录日志失败: {e}")
 
@@ -113,18 +102,14 @@ def get_user_concurrent_limit(user_id: str) -> tuple:
     VIP用户返回 (-1, True) 表示无限制
     """
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        cur = conn.cursor()
-        cur.execute("SELECT max_concurrent, is_vip FROM users_meta WHERE user_id = ?", (user_id,))
-        row = cur.fetchone()
-        conn.close()
+        row = get_user_concurrent_policy(user_id)
         if row:
-            is_vip = bool(row[1])
+            is_vip = bool(row["is_vip"])
             # VIP用户无限制
             if is_vip:
                 return (-1, True)
-            if row[0] is not None:
-                return (int(row[0]), False)
+            if row["max_concurrent"] is not None:
+                return (int(row["max_concurrent"]), False)
     except Exception: pass
     return (int(cfg.get("default_max_concurrent", 2)), False)
 
@@ -140,15 +125,10 @@ def _send_user_warning(user_id, username, current_count, limit, devices_info):
     """通过TG用户机器人给违规用户发送警告消息"""
     try:
         # 查找用户的TG绑定
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        row = conn.execute("SELECT tg_user_id FROM tg_user_bindings WHERE emby_user_id = ?", (user_id,)).fetchone()
-        conn.close()
-        
-        if not row:
+        tg_user_id = get_tg_user_id_for_emby_user(user_id)
+        if not tg_user_id:
             logger.info(f"[风控警告] 用户 {username} 未绑定TG，无法发送警告消息")
             return
-        
-        tg_user_id = row[0]
         
         # 构建警告消息
         devices_text = "\n".join([f"  🔸 {d}" for d in devices_info])
@@ -172,15 +152,10 @@ def _send_user_ban_notify(user_id, username, current_count, limit, devices_info)
     """通过TG用户机器人给被封禁用户发送通知"""
     try:
         # 查找用户的TG绑定
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        row = conn.execute("SELECT tg_user_id FROM tg_user_bindings WHERE emby_user_id = ?", (user_id,)).fetchone()
-        conn.close()
-        
-        if not row:
+        tg_user_id = get_tg_user_id_for_emby_user(user_id)
+        if not tg_user_id:
             logger.info(f"[风控封禁] 用户 {username} 未绑定TG，无法发送封禁通知")
             return
-        
-        tg_user_id = row[0]
         
         # 构建封禁通知消息
         devices_text = "\n".join([f"  🔸 {d}" for d in devices_info])
@@ -355,7 +330,7 @@ def _on_risk_alert_for_web(data):
         "auto_ban": "已自动封禁"
     }.get(violation_action, "仅提醒")
     
-    add_sys_notification(
+    add_system_notification(
         notify_type="risk",
         title=f"🚨 并发越界: {username}",
         message=f"当前并发 {current} / 额度 {limit}，处理: {action_text}",
