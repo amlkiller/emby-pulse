@@ -189,163 +189,52 @@ def user_redeem(data: RedeemModel, request: Request):
     user = request.session.get("req_user")
     if not user: return {"status": "error"}
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH); c = conn.cursor()
-        conn.execute("BEGIN IMMEDIATE")
-        config = {r[0]: r[1] for r in c.execute("SELECT key, value FROM point_config").fetchall()}
-        try: store_items = json.loads(config.get('store_items', '[]'))
-        except: store_items = []
+        result = point_dao.redeem_store_item(user['Id'], user['Name'], data.item_id)
+        if result.get("status") != "success":
+            return result
 
-        target_item = next((x for x in store_items if x.get("id") == data.item_id), None)
-        if not target_item: conn.rollback(); conn.close(); return {"status": "error", "message": "商品不存在或已下架"}
+        item_type = result.get("item_type")
+        item_name = result.get("item_name")
+        cost = result.get("cost", 0)
+        new_exp_str = result.get("new_exp_str", "")
+        actual_days = result.get("actual_days", 0)
+        base_days = result.get("base_days", 0)
+        random_bonus = result.get("random_bonus", 0)
+        random_min = result.get("random_min", 0)
+        random_max = result.get("random_max", 0)
 
-        # 检查购买数量限制
-        max_buys = int(target_item.get('max_buys', 0))  # 0 表示无限制
-        if max_buys > 0:
-            buy_count_row = c.execute(
-                "SELECT COUNT(*) FROM point_logs WHERE user_id = ? AND action LIKE ?",
-                (user['Id'], f'商城兑换: {target_item.get("name")}%')
-            ).fetchone()
-            buy_count = buy_count_row[0] if buy_count_row else 0
-            if buy_count >= max_buys:
-                conn.rollback(); conn.close()
-                return {"status": "error", "message": f"该商品限购 {max_buys} 次，您已购买 {buy_count} 次"}
-
-        cost = int(target_item.get('cost', 0))
-        row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (user['Id'],)).fetchone()
-        current_points = row[0] if row else 0
-
-        if current_points < cost: conn.rollback(); conn.close(); return {"status": "error", "message": f"余额不足！需要 {cost} 积分。"}
-
-        exp_row = c.execute("SELECT expire_date FROM users_meta WHERE user_id = ?", (user['Id'],)).fetchone()
-        current_exp = exp_row[0] if exp_row else None
-        
-        # 检查永久用户不能购买续期类商品
-        is_permanent = not current_exp or current_exp == "" or "2099" in current_exp or "3000" in current_exp or "永久" in current_exp
-        if target_item.get("type") in ["renew", "random_renew"] and is_permanent:
-            conn.rollback(); conn.close(); return {"status": "error", "message": "您的账号当前为【永久有效】，无需兑换续期！"}
-
-        new_points = current_points - cost
-        c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (new_points, user['Id']))
-
-        new_exp_str = ""
-        if target_item.get("type") == "renew":
-            days = int(target_item.get("val", 30))
-            today = datetime.date.today()
+        if item_type in ["renew", "random_renew"] and result.get("admin_disabled") != 1:
             try:
-                exp_date = datetime.datetime.strptime(current_exp, "%Y-%m-%d").date()
-                if exp_date < today: exp_date = today
-            except: exp_date = today
-
-            new_exp_date = exp_date + datetime.timedelta(days=days)
-            new_exp_str = new_exp_date.strftime("%Y-%m-%d")
-            c.execute("UPDATE users_meta SET expire_date = ? WHERE user_id = ?", (new_exp_str, user['Id']))
-            action_desc = f"商城兑换: {target_item.get('name')} (至 {new_exp_str})"
-            
-            # 检查是否需要自动解除禁用（仅当 admin_disabled != 1 时才解除）
-            admin_disabled_row = c.execute("SELECT admin_disabled FROM users_meta WHERE user_id = ?", (user['Id'],)).fetchone()
-            admin_disabled = admin_disabled_row[0] if admin_disabled_row else 0
-            if admin_disabled != 1:
-                try:
-                    # 获取当前 Policy，只修改 IsDisabled 字段
-                    u_res = requests.get(f"{cfg.get('emby_host')}/emby/Users/{user['Id']}?api_key={cfg.get('emby_api_key')}", timeout=5)
-                    if u_res.status_code == 200:
-                        user_data = u_res.json()
-                        policy = user_data.get('Policy', {})
-                        policy['IsDisabled'] = False
-                        requests.post(f"{cfg.get('emby_host')}/emby/Users/{user['Id']}/Policy?api_key={cfg.get('emby_api_key')}", json=policy, timeout=3)
-                except Exception: pass
-        
-        elif target_item.get("type") == "random_renew":
-            # 🎲 随机定价延期模式
-            base_days = int(target_item.get("base_days", 30))
-            random_min = int(target_item.get("random_min", -10))
-            random_max = int(target_item.get("random_max", 60))
-            
-            # 计算随机天数（简化的概率调节）
-            luck_mode = target_item.get("luck_mode", "normal")
-            luck_value = int(target_item.get("luck_value", 50))  # 0-100
-            
-            if luck_mode == "lucky":
-                # 幸运模式：值越高越容易抽中高天数（多次随机取最大）
-                import random as rand_module
-                times = max(1, int(luck_value / 25))  # 0-100 映射到 1-4 次
-                random_bonus = max(rand_module.randint(random_min, random_max) for _ in range(times))
-            elif luck_mode == "unlucky":
-                # 挑战模式：值越高越容易抽中低天数（多次随机取最小）
-                import random as rand_module
-                times = max(1, int(luck_value / 25))  # 0-100 映射到 1-4 次
-                random_bonus = min(rand_module.randint(random_min, random_max) for _ in range(times))
-            else:
-                # 均匀随机
-                random_bonus = random.randint(random_min, random_max)
-            
-            actual_days = base_days + random_bonus
-            actual_days = max(1, actual_days)  # 确保至少1天
-            
-            today = datetime.date.today()
-            try:
-                exp_date = datetime.datetime.strptime(current_exp, "%Y-%m-%d").date()
-                if exp_date < today: exp_date = today
-            except: exp_date = today
-
-            new_exp_date = exp_date + datetime.timedelta(days=actual_days)
-            new_exp_str = new_exp_date.strftime("%Y-%m-%d")
-            c.execute("UPDATE users_meta SET expire_date = ? WHERE user_id = ?", (new_exp_str, user['Id']))
-            
-            # 构建描述（包含随机结果）
-            bonus_text = f"+{random_bonus}" if random_bonus >= 0 else str(random_bonus)
-            action_desc = f"🎲商城兑换: {target_item.get('name')} (基础{base_days}天{bonus_text}={actual_days}天，至{new_exp_str})"
-            
-            # 检查是否需要自动解除禁用
-            admin_disabled_row = c.execute("SELECT admin_disabled FROM users_meta WHERE user_id = ?", (user['Id'],)).fetchone()
-            admin_disabled = admin_disabled_row[0] if admin_disabled_row else 0
-            if admin_disabled != 1:
-                try:
-                    # 获取当前 Policy，只修改 IsDisabled 字段
-                    u_res = requests.get(f"{cfg.get('emby_host')}/emby/Users/{user['Id']}?api_key={cfg.get('emby_api_key')}", timeout=5)
-                    if u_res.status_code == 200:
-                        user_data = u_res.json()
-                        policy = user_data.get('Policy', {})
-                        policy['IsDisabled'] = False
-                        requests.post(f"{cfg.get('emby_host')}/emby/Users/{user['Id']}/Policy?api_key={cfg.get('emby_api_key')}", json=policy, timeout=3)
-                except Exception: pass
-        else: 
-            action_desc = f"商城兑换: {target_item.get('name')}"
-
-        c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)", (user['Id'], user['Name'], action_desc, -cost, new_points))
-        conn.commit(); conn.close()
+                u_res = requests.get(f"{cfg.get('emby_host')}/emby/Users/{user['Id']}?api_key={cfg.get('emby_api_key')}", timeout=5)
+                if u_res.status_code == 200:
+                    user_data = u_res.json()
+                    policy = user_data.get('Policy', {})
+                    policy['IsDisabled'] = False
+                    requests.post(f"{cfg.get('emby_host')}/emby/Users/{user['Id']}/Policy?api_key={cfg.get('emby_api_key')}", json=policy, timeout=3)
+            except Exception: pass
 
         try:
-            msg = f"🎁 <b>积分商城兑换提醒</b>\n\n👤 <b>用户</b>: {user['Name']}\n🛒 <b>商品</b>: {target_item.get('name')}\n💰 <b>花费</b>: {cost} 积分\n"
-            if target_item.get("type") == "renew":
+            msg = f"🎁 <b>积分商城兑换提醒</b>\n\n👤 <b>用户</b>: {user['Name']}\n🛒 <b>商品</b>: {item_name}\n💰 <b>花费</b>: {cost} 积分\n"
+            if item_type == "renew":
                 msg += f"⏳ <b>结果</b>: 账号已自动续期至 {new_exp_str}"
-            elif target_item.get("type") == "random_renew":
-                base_days = int(target_item.get("base_days", 30))
-                random_min = int(target_item.get("random_min", -10))
-                random_max = int(target_item.get("random_max", 60))
-                random_bonus = actual_days - base_days
+            elif item_type == "random_renew":
                 bonus_text = f"+{random_bonus}" if random_bonus >= 0 else str(random_bonus)
                 msg += f"🎲 <b>随机结果</b>: 基础{base_days}天 {bonus_text} = {actual_days}天\n⏳ <b>新到期</b>: {new_exp_str}"
             else:
                 msg += f"⚠️ <b>结果</b>: 此商品需人工发货，请尽快联系用户！"
             
             bot.send_message("sys_notify", msg, platform="all")
-            add_sys_notification("points", f"商城订单: {target_item.get('name')}", f"用户 {user['Name']} 兑换了该商品", "/points")
+            add_sys_notification("points", f"商城订单: {item_name}", f"用户 {user['Name']} 兑换了该商品", "/points")
         except Exception: pass
 
-        if target_item.get("type") == "manual":
+        if item_type == "manual":
             return {"status": "success", "message": f"兑换成功！已提醒管理员，请凭账号名主动联系服主领取奖励！"}
         
         # 随机延期返回详细结果（带盲盒类型）
-        if target_item.get("type") == "random_renew":
-            base_days = int(target_item.get("base_days", 30))
-            random_bonus = actual_days - base_days
+        if item_type == "random_renew":
             bonus_text = f"+{random_bonus}" if random_bonus >= 0 else str(random_bonus)
-            result_emoji = "🎉" if random_bonus > 0 else ("😅" if random_bonus == 0 else "😢")
             
             # 🔥 判断盲盒结果类型（基于 random_bonus 相对于范围）
-            random_min = int(target_item.get("random_min", -10))
-            random_max = int(target_item.get("random_max", 60))
             range_span = random_max - random_min
             
             # 判断运气等级
@@ -372,21 +261,16 @@ def user_redeem(data: RedeemModel, request: Request):
                 "status": "success", 
                 "type": result_type,
                 "title": result_title,
-                "message": f"{target_item.get('name')}\n\n🎲 随机结果：基础{base_days}天 {bonus_text} = {actual_days}天\n📅 新到期日：{new_exp_str}", 
+                "message": f"{item_name}\n\n🎲 随机结果：基础{base_days}天 {bonus_text} = {actual_days}天\n📅 新到期日：{new_exp_str}",
                 "actual_days": actual_days, 
                 "random_bonus": random_bonus, 
                 "new_expire": new_exp_str
             }
         
-        return {"status": "success", "message": f"兑换成功！{target_item.get('name')}已生效。"}
+        return {"status": "success", "message": f"兑换成功！{item_name}已生效。"}
 
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 
 # ==========================================
@@ -452,96 +336,27 @@ def user_transfer_points(data: TransferModel, request: Request):
     """积分转赠"""
     user = request.session.get("req_user")
     if not user: return {"status": "error", "message": "未登录"}
-    
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH); c = conn.cursor()
-        conn.execute("BEGIN IMMEDIATE")
-        config = {r[0]: r[1] for r in c.execute("SELECT key, value FROM point_config").fetchall()}
-
-        # 检查是否启用转赠
-        if int(config.get('enable_transfer', 0)) == 0:
-            conn.rollback(); conn.close(); return {"status": "error", "message": "积分转赠功能未开启"}
-
-        # 检查转赠金额范围
-        min_amount = int(config.get('transfer_min', 10))
-        max_amount = int(config.get('transfer_max', 1000))
-        if data.amount < min_amount or data.amount > max_amount:
-            conn.rollback(); conn.close(); return {"status": "error", "message": f"转赠金额需在 {min_amount}-{max_amount} 之间"}
-
-        # 不能转给自己
-        if data.to_user_id == user['Id']:
-            conn.rollback(); conn.close(); return {"status": "error", "message": "不能转赠给自己"}
-        
-        # 获取目标用户信息
-        to_user_row = c.execute("SELECT user_id FROM users_meta WHERE user_id = ?", (data.to_user_id,)).fetchone()
-        if not to_user_row:
-            # 检查 Emby 用户是否存在
-            try:
-                emby_users = media_api.get("/Users", timeout=5).json()
-                if not any(u['Id'] == data.to_user_id for u in emby_users):
-                    conn.rollback(); conn.close(); return {"status": "error", "message": "目标用户不存在"}
-            except:
-                conn.rollback(); conn.close(); return {"status": "error", "message": "无法验证目标用户"}
-        
-        # 获取发送者积分
-        row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (user['Id'],)).fetchone()
-        from_points = row[0] if row else 0
-        
-        if from_points < data.amount:
-            conn.rollback(); conn.close(); return {"status": "error", "message": f"积分不足！当前积分: {from_points}"}
-        
-        # 计算手续费
-        fee_rate = int(config.get('transfer_fee_rate', 10))
-        fee = int(data.amount * fee_rate / 100)
-        actual_amount = data.amount - fee
-        
-        # 获取目标用户积分
-        to_row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (data.to_user_id,)).fetchone()
-        to_points = (to_row[0] or 0) + actual_amount if to_row else actual_amount
-        
-        # 更新积分
-        new_from_points = from_points - data.amount
-        if to_row:
-            c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (to_points, data.to_user_id))
-        else:
-            c.execute("INSERT INTO users_meta (user_id, points) VALUES (?, ?)", (data.to_user_id, to_points))
-        
-        if row:
-            c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (new_from_points, user['Id']))
-        else:
-            c.execute("INSERT INTO users_meta (user_id, points) VALUES (?, ?)", (user['Id'], new_from_points))
-        
-        # 获取目标用户名
+        target_exists = None
+        to_user_name = "未知用户"
         try:
             emby_users = media_api.get("/Users", timeout=5).json()
-            to_user_name = next((u['Name'] for u in emby_users if u['Id'] == data.to_user_id), "未知用户")
-        except:
-            to_user_name = "未知用户"
-        
-        # 记录日志
-        c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-                 (user['Id'], user['Name'], f"转赠给 {to_user_name} (手续费{fee})", -data.amount, new_from_points))
-        c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-                 (data.to_user_id, to_user_name, f"收到 {user['Name']} 转赠", actual_amount, to_points))
-        c.execute("INSERT INTO point_transfer_logs (from_user_id, from_user_name, to_user_id, to_user_name, amount, fee) VALUES (?, ?, ?, ?, ?, ?)",
-                 (user['Id'], user['Name'], data.to_user_id, to_user_name, data.amount, fee))
-        
-        conn.commit(); conn.close()
-        
-        return {
-            "status": "success",
-            "message": f"转赠成功！已转赠 {actual_amount} 积分给 {to_user_name}（手续费 {fee}）",
-            "actual_amount": actual_amount,
-            "fee": fee,
-            "balance": new_from_points
-        }
+            emby_user_names = {u['Id']: u['Name'] for u in emby_users}
+            target_exists = any(u['Id'] == data.to_user_id for u in emby_users)
+            to_user_name = emby_user_names.get(data.to_user_id, "未知用户")
+        except Exception:
+            pass
+
+        return point_dao.transfer_points(
+            user['Id'],
+            user['Name'],
+            data.to_user_id,
+            to_user_name,
+            data.amount,
+            target_exists,
+        )
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 
 # ==========================================
@@ -676,160 +491,19 @@ def user_rob(data: RobModel, request: Request):
     """打劫功能"""
     user = request.session.get("req_user")
     if not user: return {"status": "error", "message": "未登录"}
-    
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH); c = conn.cursor()
-        conn.execute("BEGIN IMMEDIATE")
-        config = {r[0]: r[1] for r in c.execute("SELECT key, value FROM point_config").fetchall()}
-
-        # 检查是否启用打劫
-        if int(config.get('enable_rob', 0)) == 0:
-            conn.rollback(); conn.close(); return {"status": "error", "message": "打劫功能未开启"}
-
-        # 不能打劫自己
-        if data.to_user_id == user['Id']:
-            conn.rollback(); conn.close(); return {"status": "error", "message": "不能打劫自己"}
-        
-        # 获取配置
-        success_rate = int(config.get('rob_success_rate', 50))
-        rob_min = int(config.get('rob_min', 1))
-        rob_max = int(config.get('rob_max', 10))
-        counter_rate = int(config.get('rob_counter_rate', 30))
-        counter_min = int(config.get('rob_counter_min', 1))
-        counter_max = int(config.get('rob_counter_max', 5))
-        protect_threshold = int(config.get('rob_protect_threshold', 50))
-        max_per_day = int(config.get('rob_max_per_day', 5))
-        max_be_robbed = int(config.get('rob_max_be_robbed', 3))
-        cooldown_hours = int(config.get('rob_cooldown_hours', 2))
-        
-        # 获取攻击者积分
-        from_row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (user['Id'],)).fetchone()
-        from_points = from_row[0] if from_row else 0
-        
-        # 获取目标用户积分
-        to_row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (data.to_user_id,)).fetchone()
-        to_points = to_row[0] if to_row else 0
-        
-        # 🔥 检查攻击者积分是否低于保护阈值
-        if from_points < protect_threshold:
-            conn.rollback(); conn.close(); return {"status": "error", "message": f"你的积分低于 {protect_threshold}，无法打劫他人"}
-
-        # 检查目标用户是否存在
         try:
             emby_users = media_api.get("/Users", timeout=5).json()
             to_user_name = next((u['Name'] for u in emby_users if u['Id'] == data.to_user_id), None)
             if not to_user_name:
-                conn.rollback(); conn.close(); return {"status": "error", "message": "目标用户不存在"}
-        except:
-            conn.rollback(); conn.close(); return {"status": "error", "message": "无法验证目标用户"}
+                return {"status": "error", "message": "目标用户不存在"}
+        except Exception:
+            return {"status": "error", "message": "无法验证目标用户"}
 
-        # 检查目标用户积分是否低于保护阈值
-        if to_points < protect_threshold:
-            conn.rollback(); conn.close(); return {"status": "error", "message": f"对方积分低于 {protect_threshold}，处于保护状态"}
-        
-        # 检查攻击者今日打劫次数
-        today_rob_count = c.execute(
-            "SELECT COUNT(*) FROM point_rob_logs WHERE from_user_id = ? AND date(created_at, 'localtime') = date('now', 'localtime')",
-            (user['Id'],)
-        ).fetchone()[0]
-        if today_rob_count >= max_per_day:
-            conn.rollback(); conn.close(); return {"status": "error", "message": f"今日打劫次数已达上限（{max_per_day}次）"}
-
-        # 检查目标用户今日被被打劫次数
-        today_be_robbed_count = c.execute(
-            "SELECT COUNT(*) FROM point_rob_logs WHERE to_user_id = ? AND date(created_at, 'localtime') = date('now', 'localtime')",
-            (data.to_user_id,)
-        ).fetchone()[0]
-        if today_be_robbed_count >= max_be_robbed:
-            conn.rollback(); conn.close(); return {"status": "error", "message": f"对方今日已被打劫 {max_be_robbed} 次，休息一下吧"}
-
-        # 检查冷却时间
-        last_rob = c.execute(
-            "SELECT created_at FROM point_rob_logs WHERE from_user_id = ? AND to_user_id = ? ORDER BY created_at DESC LIMIT 1",
-            (user['Id'], data.to_user_id)
-        ).fetchone()
-        if last_rob:
-            from datetime import datetime, timedelta
-            try:
-                last_time = datetime.fromisoformat(last_rob[0].replace('Z', '+00:00'))
-                cooldown_end = last_time + timedelta(hours=cooldown_hours)
-                if datetime.now(last_time.tzinfo) < cooldown_end:
-                    remaining = int((cooldown_end - datetime.now(last_time.tzinfo)).total_seconds() / 60)
-                    conn.rollback(); conn.close(); return {"status": "error", "message": f"冷却中，还需等待 {remaining} 分钟"}
-            except:
-                pass
-        
-        # 随机打劫金额
-        rob_amount = random.randint(rob_min, rob_max)
-        
-        # 判断是否成功
-        is_success = random.randint(1, 100) <= success_rate
-        
-        if is_success:
-            # 打劫成功
-            actual_amount = min(rob_amount, to_points)  # 不能超过对方持有积分
-            
-            # 更新积分
-            new_from_points = from_points + actual_amount
-            new_to_points = to_points - actual_amount
-            
-            c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (new_from_points, user['Id']))
-            c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (new_to_points, data.to_user_id))
-            
-            # 记录日志
-            c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-                     (user['Id'], user['Name'], f"打劫 {to_user_name}", actual_amount, new_from_points))
-            c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-                     (data.to_user_id, to_user_name, f"被 {user['Name']} 打劫", -actual_amount, new_to_points))
-            c.execute("INSERT INTO point_rob_logs (from_user_id, from_user_name, to_user_id, to_user_name, amount, success, counter_amount) VALUES (?, ?, ?, ?, ?, 1, 0)",
-                     (user['Id'], user['Name'], data.to_user_id, to_user_name, actual_amount))
-            
-            conn.commit(); conn.close()
-            
-            return {
-                "status": "success",
-                "message": f"🎉 打劫成功！从 {to_user_name} 身上抢到 {actual_amount} 积分",
-                "success": True,
-                "amount": actual_amount,
-                "balance": new_from_points
-            }
-        else:
-            # 打劫失败，触发反杀
-            counter_amount = random.randint(counter_min, counter_max)
-            actual_counter = min(counter_amount, from_points)  # 不能超过自己持有积分
-            
-            # 更新积分（攻击者损失，受害者获得）
-            new_from_points = from_points - actual_counter
-            new_to_points = to_points + actual_counter
-            
-            c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (new_from_points, user['Id']))
-            c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (new_to_points, data.to_user_id))
-            
-            # 记录日志
-            c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-                     (user['Id'], user['Name'], f"打劫 {to_user_name} 失败", -actual_counter, new_from_points))
-            c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-                     (data.to_user_id, to_user_name, f"反杀 {user['Name']}", actual_counter, new_to_points))
-            c.execute("INSERT INTO point_rob_logs (from_user_id, from_user_name, to_user_id, to_user_name, amount, success, counter_amount) VALUES (?, ?, ?, ?, ?, 0, ?)",
-                     (user['Id'], user['Name'], data.to_user_id, to_user_name, 0, actual_counter))
-            
-            conn.commit(); conn.close()
-            
-            return {
-                "status": "success",
-                "message": f"😢 打劫失败！被 {to_user_name} 反杀，损失 {actual_counter} 积分",
-                "success": False,
-                "counter_amount": actual_counter,
-                "balance": new_from_points
-            }
+        return point_dao.rob_points(user['Id'], user['Name'], data.to_user_id, to_user_name)
 
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 
 # ==========================================
