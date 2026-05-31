@@ -13,7 +13,7 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from app.core.config import cfg, REPORT_COVER_URL, FALLBACK_IMAGE_URL
 from app.core.database import query_db, get_base_filter, add_sys_notification, DB_PATH, SYSTEM_DB_PATH
-from app.dao import bot_service_dao, media_request_dao, message_dao
+from app.dao import bot_service_dao, media_request_dao, message_dao, user_bot_dao
 from app.dao import gap_dao
 from app.dao import notify_admin_dao, notify_rule_dao
 from app.dao import user_dao
@@ -3143,50 +3143,8 @@ class NotificationBot:
         if not normalized:
             return self.send_message(cid, "👤 请使用: /whois TG用户名/TG ID/Emby用户名", platform=platform)
 
-        select_sql = """
-            SELECT
-                b.tg_user_id,
-                b.tg_username,
-                b.tg_display_name,
-                b.emby_user_id,
-                b.emby_username,
-                b.bound_at,
-                m.expire_date
-            FROM tg_user_bindings b
-            LEFT JOIN users_meta m ON m.user_id = b.emby_user_id
-        """
-
         try:
-            params = []
-            where_parts = []
-            if normalized.isdigit():
-                where_parts.append("b.tg_user_id = ?")
-                params.append(normalized)
-
-            where_parts.extend([
-                "LOWER(COALESCE(b.tg_username, '')) = LOWER(?)",
-                "LOWER(COALESCE(b.emby_username, '')) = LOWER(?)"
-            ])
-            params.extend([normalized, normalized])
-
-            rows = query_db(
-                f"{select_sql} WHERE {' OR '.join(where_parts)} ORDER BY b.bound_at DESC LIMIT 10",
-                tuple(params)
-            ) or []
-
-            if not rows:
-                like_keyword = f"%{normalized}%"
-                rows = query_db(
-                    f"""
-                    {select_sql}
-                    WHERE LOWER(COALESCE(b.tg_display_name, '')) LIKE LOWER(?)
-                       OR LOWER(COALESCE(b.tg_username, '')) LIKE LOWER(?)
-                       OR LOWER(COALESCE(b.emby_username, '')) LIKE LOWER(?)
-                    ORDER BY b.bound_at DESC
-                    LIMIT 10
-                    """,
-                    (like_keyword, like_keyword, like_keyword)
-                ) or []
+            rows = user_bot_dao.search_whois_bindings(normalized) or []
 
             if not rows:
                 return self.send_message(cid, f"📭 未找到与 <b>{escape_html(keyword)}</b> 相关的绑定信息", platform=platform)

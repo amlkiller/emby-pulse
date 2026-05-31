@@ -152,6 +152,55 @@ def list_bindings():
     return [{"tg_user_id": row["tg_user_id"], "emby_user_id": row["emby_user_id"], "emby_username": row["emby_username"]} for row in rows]
 
 
+def search_whois_bindings(normalized: str):
+    select_sql = """
+        SELECT
+            b.tg_user_id,
+            b.tg_username,
+            b.tg_display_name,
+            b.emby_user_id,
+            b.emby_username,
+            b.bound_at,
+            m.expire_date
+        FROM tg_user_bindings b
+        LEFT JOIN users_meta m ON m.user_id = b.emby_user_id
+    """
+
+    params = []
+    where_parts = []
+    if normalized.isdigit():
+        where_parts.append("b.tg_user_id = ?")
+        params.append(normalized)
+
+    where_parts.extend(
+        [
+            "LOWER(COALESCE(b.tg_username, '')) = LOWER(?)",
+            "LOWER(COALESCE(b.emby_username, '')) = LOWER(?)",
+        ]
+    )
+    params.extend([normalized, normalized])
+
+    rows = system_store.fetch_all(
+        f"{select_sql} WHERE {' OR '.join(where_parts)} ORDER BY b.bound_at DESC LIMIT 10",
+        tuple(params),
+    )
+    if rows:
+        return rows
+
+    like_keyword = f"%{normalized}%"
+    return system_store.fetch_all(
+        f"""
+        {select_sql}
+        WHERE LOWER(COALESCE(b.tg_display_name, '')) LIKE LOWER(?)
+           OR LOWER(COALESCE(b.tg_username, '')) LIKE LOWER(?)
+           OR LOWER(COALESCE(b.emby_username, '')) LIKE LOWER(?)
+        ORDER BY b.bound_at DESC
+        LIMIT 10
+        """,
+        (like_keyword, like_keyword, like_keyword),
+    )
+
+
 def record_bot_user(tg_user_id, tg_name: str = "") -> None:
     system_store.execute(
         """
