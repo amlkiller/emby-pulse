@@ -79,6 +79,7 @@ Define the architecture refactor target for EmbyPulse-Pro and implement the firs
 - [x] `app/routers/system.py` delegates database diagnostics, repair, and dashboard layout persistence to query/DAO boundaries.
 - [x] `app/routers/db_tools.py` delegates database health, migration, backup, restore, and deep-check operations to `app.infra.db.migration_service`.
 - [x] `app/routers/gaps.py` delegates gap config, records, perfect-series, and scan-cache persistence to a DAO.
+- [x] `app/routers/bot.py` delegates user-bot admin, registration log, TG binding, lottery, and scratch-card table access to a DAO.
 - [x] Existing tests or import checks pass.
 
 ## Out of Scope

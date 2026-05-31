@@ -10,7 +10,7 @@
 
 - Trigger: database infrastructure refactor that starts removing `query_db()` from representative modules.
 - Applies to new backend code that reads/writes EmbyPulse system data or playback reporting data.
-- First-stage sample modules include `app/routers/history.py`, `app/routers/api_tokens.py`, `app/routers/notifications.py`, `app/routers/notify_rules.py`, `app/routers/pro.py`, `app/routers/notify_admin.py`, `app/routers/pwa.py`, `app/routers/audit.py`, `app/routers/risk.py`, `app/routers/clients.py`, `app/routers/calendar_notify.py`, `app/routers/webhook.py`, `app/services/report_service.py`, `app/routers/insight.py`, `app/routers/system_tools.py`, `app/services/risk_service.py`, `app/services/calendar_service.py`, `app/routers/views.py`, `app/routers/tasks.py`, `app/routers/dedupe.py`, `app/routers/system.py`, `app/routers/db_tools.py`, and `app/routers/gaps.py`.
+- First-stage sample modules include `app/routers/history.py`, `app/routers/api_tokens.py`, `app/routers/notifications.py`, `app/routers/notify_rules.py`, `app/routers/pro.py`, `app/routers/notify_admin.py`, `app/routers/pwa.py`, `app/routers/audit.py`, `app/routers/risk.py`, `app/routers/clients.py`, `app/routers/calendar_notify.py`, `app/routers/webhook.py`, `app/services/report_service.py`, `app/routers/insight.py`, `app/routers/system_tools.py`, `app/services/risk_service.py`, `app/services/calendar_service.py`, `app/routers/views.py`, `app/routers/tasks.py`, `app/routers/dedupe.py`, `app/routers/system.py`, `app/routers/db_tools.py`, `app/routers/gaps.py`, and `app/routers/bot.py`.
 
 ### 2. Signatures
 
@@ -98,6 +98,21 @@
 - `app.dao.gap_dao.list_gap_ignore_records() -> list[DataRow]`
 - `app.dao.gap_dao.list_gap_perfect_records() -> list[DataRow]`
 - `app.dao.gap_dao.get_gap_config_map() -> dict`
+- `app.dao.bot_admin_dao.list_user_blacklist() -> list[DataRow]`
+- `app.dao.bot_admin_dao.remove_user_blacklist(tg_user_id: str) -> None`
+- `app.dao.bot_admin_dao.list_registration_logs(days: int = 7) -> list[DataRow]`
+- `app.dao.bot_admin_dao.get_registration_stats() -> dict`
+- `app.dao.bot_admin_dao.clear_registration_logs() -> None`
+- `app.dao.bot_admin_dao.count_registration_logs() -> int`
+- `app.dao.bot_admin_dao.list_tg_bindings_for_sync() -> list[DataRow]`
+- `app.dao.bot_admin_dao.update_tg_binding_names(tg_user_id, username, display_name) -> None`
+- `app.dao.bot_admin_dao.list_tg_bindings() -> list[DataRow]`
+- `app.dao.bot_admin_dao.get_lottery_draw_result(draw_date: str) -> DataRow | None`
+- `app.dao.bot_admin_dao.reset_lottery_draw(today: str, tomorrow: str) -> dict`
+- `app.dao.bot_admin_dao.fix_lottery_pool(today: str, tomorrow: str) -> dict`
+- `app.dao.bot_admin_dao.clear_active_scratch_card() -> dict`
+- `app.dao.bot_admin_dao.get_lottery_pool_info(today: str, tomorrow: str) -> dict`
+- `app.dao.bot_admin_dao.adjust_lottery_pool(today: str, tomorrow: str, init_pool: int) -> dict`
 - `app.infra.db.local_playback_store.insert_webhook_playback_ip_record(...) -> None`
 - `app.infra.db.perf_stats.get_query_perf_stats() -> dict`
 - `app.queries.client_queries.count_playback_clients_by_app() -> list[DataRow]`
@@ -159,6 +174,7 @@
 - Good: `system.py` keeps settings validation, external connectivity probes, and response assembly in the route while delegating database diagnostics, repair DDL, and dashboard layout persistence to DAO/query modules.
 - Good: `db_tools.py` keeps admin permission checks, audit logging, and restore path validation in the route while delegating database health, migration, backup, restore, and deep-check operations to `migration_service`.
 - Good: `gaps.py` keeps Emby/TMDB scanning, download handoff, and in-memory scan-state updates in the route while delegating gap tables, config, and scan cache persistence to `gap_dao`.
+- Good: `bot.py` keeps bot settings validation, Telegram/WeCom HTTP calls, and admin response assembly in the route while delegating user-bot admin tables, registration logs, TG bindings, lottery, and scratch-card persistence to `bot_admin_dao`.
 - Bad: a router imports `query_db`, `SYSTEM_DB_PATH`, or `sqlite3` only to run route-local SQL.
 
 ### 6. Tests Required

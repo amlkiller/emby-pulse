@@ -1,6 +1,23 @@
 from fastapi import APIRouter, Request, Response
 from app.schemas.models import BotSettingsModel
 from app.core.config import cfg
+from app.dao.bot_admin_dao import (
+    adjust_lottery_pool,
+    clear_active_scratch_card,
+    clear_registration_logs,
+    count_registration_logs,
+    fix_lottery_pool,
+    get_lottery_draw_result,
+    get_lottery_pool_info,
+    get_registration_stats,
+    list_registration_logs,
+    list_tg_bindings,
+    list_tg_bindings_for_sync,
+    list_user_blacklist,
+    remove_user_blacklist,
+    reset_lottery_draw,
+    update_tg_binding_names,
+)
 from app.services.bot_service import bot
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 import requests
@@ -11,8 +28,6 @@ import hashlib
 import xml.etree.ElementTree as ET
 import logging
 import datetime
-import sqlite3
-from app.core.database import SYSTEM_DB_PATH
 from app.core.security_utils import safe_error_message
 from app.core.rate_limiter import get_client_ip
 
@@ -561,13 +576,8 @@ async def wecom_webhook_post(request: Request, msg_signature: str = "", timestam
 @router.get("/api/bot/user_blacklist")
 def api_get_user_blacklist(request: Request):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    import sqlite3
-    from app.core.database import SYSTEM_DB_PATH
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.row_factory = sqlite3.Row
-        rows = conn.execute("SELECT tg_user_id, reason, created_at FROM tg_user_blacklist ORDER BY created_at DESC").fetchall()
-        conn.close()
+        rows = list_user_blacklist()
         return {"status": "success", "data": [dict(r) for r in rows]}
     except:
         return {"status": "success", "data": []}
@@ -591,13 +601,8 @@ async def api_remove_user_blacklist(request: Request):
     data = await request.json()
     tg_id = data.get("tg_user_id", "").strip()
     if not tg_id: return {"status": "error"}
-    import sqlite3
-    from app.core.database import SYSTEM_DB_PATH
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.execute("DELETE FROM tg_user_blacklist WHERE tg_user_id = ?", (tg_id,))
-        conn.commit()
-        conn.close()
+        remove_user_blacklist(tg_id)
     except Exception: pass
     return {"status": "success"}
 
@@ -609,20 +614,8 @@ async def api_remove_user_blacklist(request: Request):
 def api_get_reg_logs(request: Request, days: int = 7):
     """获取开放注册日志"""
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    import sqlite3
-    from app.core.database import SYSTEM_DB_PATH
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.row_factory = sqlite3.Row
-        # 获取指定天数内的日志
-        rows = conn.execute("""
-            SELECT id, tg_user_id, emby_username, emby_user_id, reg_type, created_at
-            FROM tg_reg_logs
-            WHERE date(created_at) >= date('now', ?)
-            ORDER BY created_at DESC
-            LIMIT 500
-        """, (f'-{days} days',)).fetchall()
-        conn.close()
+        rows = list_registration_logs(days)
         return {"status": "success", "data": [dict(r) for r in rows]}
     except Exception as e:
         return {"status": "success", "data": []}
@@ -632,45 +625,8 @@ def api_get_reg_logs(request: Request, days: int = 7):
 def api_get_reg_stats(request: Request):
     """获取注册统计信息"""
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    import sqlite3
-    from app.core.database import SYSTEM_DB_PATH
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.row_factory = sqlite3.Row
-
-        # 今日注册数
-        today_count = conn.execute("SELECT COUNT(*) as cnt FROM tg_reg_logs WHERE date(created_at) = date('now')").fetchone()['cnt']
-
-        # 本周注册数
-        week_count = conn.execute("SELECT COUNT(*) as cnt FROM tg_reg_logs WHERE date(created_at) >= date('now', '-7 days')").fetchone()['cnt']
-
-        # 总注册数（通过开放注册）
-        total_count = conn.execute("SELECT COUNT(*) as cnt FROM tg_reg_logs").fetchone()['cnt']
-
-        # 每日统计（最近30天）
-        daily_stats = conn.execute("""
-            SELECT date(created_at) as date, COUNT(*) as count
-            FROM tg_reg_logs
-            WHERE date(created_at) >= date('now', '-30 days')
-            GROUP BY date(created_at)
-            ORDER BY date DESC
-        """).fetchall()
-
-        # 批次模式已使用数量
-        batch_used = conn.execute("SELECT COUNT(*) as cnt FROM tg_reg_logs WHERE reg_type = 'open'").fetchone()['cnt']
-
-        conn.close()
-
-        return {
-            "status": "success",
-            "data": {
-                "today": today_count,
-                "week": week_count,
-                "total": total_count,
-                "batch_used": batch_used,
-                "daily": [dict(r) for r in daily_stats]
-            }
-        }
+        return {"status": "success", "data": get_registration_stats()}
     except Exception as e:
         return {"status": "success", "data": {"today": 0, "week": 0, "total": 0, "batch_used": 0, "daily": []}}
 
@@ -679,13 +635,8 @@ def api_get_reg_stats(request: Request):
 async def api_clear_reg_logs(request: Request):
     """清空注册日志"""
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    import sqlite3
-    from app.core.database import SYSTEM_DB_PATH
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.execute("DELETE FROM tg_reg_logs")
-        conn.commit()
-        conn.close()
+        clear_registration_logs()
         return {"status": "success"}
     except Exception as e:
         return {"status": "error", "message": safe_error_message(e)}
@@ -711,9 +662,7 @@ async def api_reset_reg_batch(request: Request):
 async def api_get_reg_quota_status(request: Request):
     """获取名额状态（用于前端显示）"""
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    from app.core.database import SYSTEM_DB_PATH
     from app.services import user_bot_service
-    import sqlite3
 
     quota_mode = cfg.get("user_bot_reg_quota_mode", "total")
     quota = int(cfg.get("user_bot_reg_quota", 0))
@@ -729,9 +678,7 @@ async def api_get_reg_quota_status(request: Request):
     # 获取开放注册总数
     open_reg_total = 0
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        open_reg_total = conn.execute("SELECT COUNT(*) FROM tg_reg_logs").fetchone()[0]
-        conn.close()
+        open_reg_total = count_registration_logs()
     except:
         pass
 
@@ -756,30 +703,22 @@ async def api_get_reg_quota_status(request: Request):
 def api_sync_tg_usernames(request: Request):
     """同步已绑定用户的 TG 用户名和显示名称"""
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    
-    import sqlite3
-    from app.core.database import SYSTEM_DB_PATH
-    
+
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.row_factory = sqlite3.Row
-        
         # 获取所有已绑定用户
-        rows = conn.execute("SELECT tg_user_id, tg_username, tg_display_name FROM tg_user_bindings").fetchall()
-        
+        rows = list_tg_bindings_for_sync()
+
         if not rows:
-            conn.close()
             return {"status": "success", "data": {"updated": 0, "skipped": 0}, "message": "没有已绑定用户"}
-        
+
         # 获取用户机器人 token
         bot_token = cfg.get("tg_user_bot_token")
         if not bot_token:
-            conn.close()
             return {"status": "error", "message": "用户机器人未配置"}
-        
+
         updated = 0
         skipped = 0
-        
+
         for row in rows:
             tg_user_id = row['tg_user_id']
             existing_username = row['tg_username']
@@ -819,13 +758,9 @@ def api_sync_tg_usernames(request: Request):
                         need_update = True
                     if display_name and not existing_display_name:
                         need_update = True
-                    
+
                     if need_update:
-                        conn2 = sqlite3.connect(SYSTEM_DB_PATH)
-                        conn2.execute("UPDATE tg_user_bindings SET tg_username = ?, tg_display_name = ? WHERE tg_user_id = ?",
-                                     (username, display_name, tg_user_id))
-                        conn2.commit()
-                        conn2.close()
+                        update_tg_binding_names(tg_user_id, username, display_name)
                         updated += 1
                     else:
                         skipped += 1
@@ -834,10 +769,9 @@ def api_sync_tg_usernames(request: Request):
             except Exception as e:
                 logger.error(f"获取 TG 用户信息失败: {e}")
                 skipped += 1
-        
-        conn.close()
+
         return {"status": "success", "data": {"updated": updated, "skipped": skipped}}
-        
+
     except Exception as e:
         logger.error(f"同步 TG 用户名失败: {e}")
         return {"status": "error", "message": safe_error_message(e)}
@@ -846,20 +780,9 @@ def api_sync_tg_usernames(request: Request):
 def api_get_tg_bindings(request: Request):
     """获取已绑定用户列表"""
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    
-    import sqlite3
-    from app.core.database import SYSTEM_DB_PATH
-    
+
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.row_factory = sqlite3.Row
-        
-        rows = conn.execute("""
-            SELECT tg_user_id, emby_user_id, emby_username, tg_username, tg_display_name, bound_at 
-            FROM tg_user_bindings 
-            ORDER BY bound_at DESC
-        """).fetchall()
-        
+        rows = list_tg_bindings()
         bindings = []
         for row in rows:
             bindings.append({
@@ -870,10 +793,9 @@ def api_get_tg_bindings(request: Request):
                 "tg_display_name": row['tg_display_name'] or "",
                 "bound_at": row['bound_at']
             })
-        
-        conn.close()
+
         return {"status": "success", "data": bindings}
-        
+
     except Exception as e:
         return {"status": "error", "message": safe_error_message(e)}
 
@@ -885,13 +807,11 @@ def api_lottery_draw(request: Request):
     try:
         from app.services.user_bot_service import do_lottery_draw
         do_lottery_draw()
-        
+
         # 获取开奖结果
         today = datetime.datetime.now().strftime('%Y-%m-%d')
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        result = conn.execute("SELECT winning_numbers, total_pool FROM lottery_results WHERE draw_date = ?", (today,)).fetchone()
-        conn.close()
-        
+        result = get_lottery_draw_result(today)
+
         if result and result[0]:
             return {
                 "status": "success",
@@ -911,62 +831,21 @@ def api_lottery_draw(request: Request):
 def api_lottery_reset(request: Request):
     """清除今日开奖记录"""
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    
+
     try:
         today = datetime.datetime.now().strftime('%Y-%m-%d')
         tomorrow = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        
-        # 检查今天是否已开奖
-        result = c.execute("SELECT winning_numbers FROM lottery_results WHERE draw_date = ?", (today,)).fetchone()
-        if not result or not result[0]:
-            conn.close()
-            return {"status": "error", "message": "今日尚未开奖，无需清除"}
-        
-        # 计算已经累积到明天的剩余奖池，以便回退
-        today_pool = c.execute("SELECT total_pool FROM lottery_results WHERE draw_date = ?", (today,)).fetchone()
-        today_pool = today_pool[0] if today_pool else 0
-        
-        # 计算已分配的奖金
-        winners = c.execute("SELECT prize_level, COUNT(*), SUM(prize_amount) FROM lottery_winners WHERE draw_date = ? GROUP BY prize_level", (today,)).fetchall()
-        total_distributed = sum(row[2] for row in winners) if winners else 0
-        remaining_pool = max(0, today_pool - total_distributed)
-        
-        # 从明天的奖池中减去之前累积的剩余奖池
+        reset_result = reset_lottery_draw(today, tomorrow)
+        if not reset_result["ok"]:
+            return {"status": "error", "message": reset_result["message"]}
+
+        remaining_pool = reset_result["remaining_pool"]
         if remaining_pool > 0:
-            c.execute("UPDATE lottery_results SET total_pool = MAX(0, total_pool - ?) WHERE draw_date = ?", (remaining_pool, tomorrow))
             logger.info(f"[彩票] 从明天奖池中回退 {remaining_pool} 积分")
-        
-        # 退还幸运奖奖金（因为清除后需要重新开奖）
-        lucky_winners = c.execute("SELECT user_id, prize_amount FROM lottery_winners WHERE draw_date = ? AND prize_level = 5", (today,)).fetchall()
-        for user_id, prize_amount in lucky_winners:
-            row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (user_id,)).fetchone()
-            if row:
-                c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (row[0] - prize_amount, user_id))
-        
-        # 退还普通中奖奖金
-        normal_winners = c.execute("SELECT user_id, prize_amount FROM lottery_winners WHERE draw_date = ? AND prize_level != 5", (today,)).fetchall()
-        for user_id, prize_amount in normal_winners:
-            row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (user_id,)).fetchone()
-            if row:
-                c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (row[0] - prize_amount, user_id))
-        
-        # 清除开奖记录
-        c.execute("UPDATE lottery_results SET winning_numbers = '' WHERE draw_date = ?", (today,))
-        
-        # 删除中奖记录
-        c.execute("DELETE FROM lottery_winners WHERE draw_date = ?", (today,))
-        
-        # 删除中奖日志
-        c.execute("DELETE FROM point_logs WHERE action LIKE '彩票%' AND date(created_at) = ?", (today,))
-        
-        conn.commit()
-        conn.close()
-        
+
         logger.info(f"[彩票] 管理员清除今日开奖记录: {today}, 回退剩余奖池: {remaining_pool}")
         return {"status": "success", "message": f"今日开奖记录已清除，回退剩余奖池 {remaining_pool} 积分"}
-        
+
     except Exception as e:
         logger.error(f"清除开奖记录失败: {e}")
         return {"status": "error", "message": safe_error_message(e)}
@@ -975,59 +854,26 @@ def api_lottery_reset(request: Request):
 def api_lottery_fix_pool(request: Request):
     """修复奖池：重新计算正确的奖池值"""
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    
+
     try:
         today = datetime.datetime.now().strftime('%Y-%m-%d')
         tomorrow = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        
-        # 检查今天是否已开奖
-        today_drawn = c.execute("SELECT winning_numbers FROM lottery_results WHERE draw_date = ? AND winning_numbers != ''", (today,)).fetchone()
-        
-        if today_drawn:
-            # 今天已开奖，修复明天的奖池
-            today_pool = c.execute("SELECT total_pool FROM lottery_results WHERE draw_date = ?", (today,)).fetchone()
-            today_pool = today_pool[0] if today_pool else 0
-            
-            # 计算已分配的奖金
-            winners = c.execute("SELECT SUM(prize_amount) FROM lottery_winners WHERE draw_date = ?", (today,)).fetchone()
-            total_distributed = winners[0] if winners and winners[0] else 0
-            
-            # 正确的剩余奖池
-            correct_remaining = max(0, today_pool - total_distributed)
-            
-            # 明天的彩票购买金额
-            tomorrow_tickets = c.execute("SELECT SUM(cost) FROM lottery_tickets WHERE draw_date = ?", (tomorrow,)).fetchone()
-            tomorrow_ticket_pool = tomorrow_tickets[0] if tomorrow_tickets and tomorrow_tickets[0] else 0
-            
-            # 正确的明天奖池
-            correct_tomorrow_pool = correct_remaining + tomorrow_ticket_pool
-            
-            # 更新明天的奖池
-            c.execute("INSERT OR IGNORE INTO lottery_results (draw_date, winning_numbers, total_pool) VALUES (?, '', 0)", (tomorrow,))
-            c.execute("UPDATE lottery_results SET total_pool = ? WHERE draw_date = ?", (correct_tomorrow_pool, tomorrow))
-            
-            conn.commit()
-            conn.close()
-            
-            logger.info(f"[彩票] 修复明日奖池: {correct_tomorrow_pool} (剩余{correct_remaining} + 购票{tomorrow_ticket_pool})")
-            return {"status": "success", "data": {"new_pool": correct_tomorrow_pool, "remaining": correct_remaining, "ticket_pool": tomorrow_ticket_pool}}
-        else:
-            # 今天未开奖，修复今天的奖池
-            # 今天的彩票购买金额
-            today_tickets = c.execute("SELECT SUM(cost) FROM lottery_tickets WHERE draw_date = ?", (today,)).fetchone()
-            today_ticket_pool = today_tickets[0] if today_tickets and today_tickets[0] else 0
-            
-            c.execute("INSERT OR IGNORE INTO lottery_results (draw_date, winning_numbers, total_pool) VALUES (?, '', 0)", (today,))
-            c.execute("UPDATE lottery_results SET total_pool = ? WHERE draw_date = ?", (today_ticket_pool, today))
-            
-            conn.commit()
-            conn.close()
-            
-            logger.info(f"[彩票] 修复今日奖池: {today_ticket_pool}")
-            return {"status": "success", "data": {"new_pool": today_ticket_pool}}
-        
+        result = fix_lottery_pool(today, tomorrow)
+
+        if result["drawn"]:
+            logger.info(f"[彩票] 修复明日奖池: {result['new_pool']} (剩余{result['remaining']} + 购票{result['ticket_pool']})")
+            return {
+                "status": "success",
+                "data": {
+                    "new_pool": result["new_pool"],
+                    "remaining": result["remaining"],
+                    "ticket_pool": result["ticket_pool"],
+                },
+            }
+
+        logger.info(f"[彩票] 修复今日奖池: {result['new_pool']}")
+        return {"status": "success", "data": {"new_pool": result["new_pool"]}}
+
     except Exception as e:
         logger.error(f"修复奖池失败: {e}")
         return {"status": "error", "message": safe_error_message(e)}
@@ -1036,38 +882,15 @@ def api_lottery_fix_pool(request: Request):
 def api_scratch_clear(request: Request):
     """清除当前刮刮卡"""
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    
+
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        
-        # 获取当前活跃的刮刮乐
-        card = c.execute("SELECT id, status FROM scratch_cards WHERE status = 'active'").fetchone()
-        if not card:
-            conn.close()
-            return {"status": "error", "message": "没有进行中的刮刮卡"}
-        
-        card_id = card[0]
-        
-        # 退还已刮用户的积分
-        scratched = c.execute("SELECT user_id FROM scratch_card_slots WHERE card_id = ? AND is_scratched = 1", (card_id,)).fetchall()
-        price = c.execute("SELECT price FROM scratch_cards WHERE id = ?", (card_id,)).fetchone()[0]
-        
-        for (user_id,) in scratched:
-            row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (user_id,)).fetchone()
-            if row:
-                c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (row[0] + price, user_id))
-        
-        # 删除刮刮乐
-        c.execute("DELETE FROM scratch_card_slots WHERE card_id = ?", (card_id,))
-        c.execute("DELETE FROM scratch_cards WHERE id = ?", (card_id,))
-        
-        conn.commit()
-        conn.close()
-        
-        logger.info(f"[刮刮乐] 管理员清除刮刮卡 #{card_id}")
-        return {"status": "success", "message": f"已清除刮刮卡 #{card_id}，退还 {len(scratched)} 人积分"}
-        
+        result = clear_active_scratch_card()
+        if not result["ok"]:
+            return {"status": "error", "message": result["message"]}
+
+        logger.info(f"[刮刮乐] 管理员清除刮刮卡 #{result['card_id']}")
+        return {"status": "success", "message": f"已清除刮刮卡 #{result['card_id']}，退还 {result['refund_count']} 人积分"}
+
     except Exception as e:
         logger.error(f"清除刮刮卡失败: {e}")
         return {"status": "error", "message": safe_error_message(e)}
@@ -1076,55 +899,39 @@ def api_scratch_clear(request: Request):
 def api_lottery_pool(request: Request):
     """获取当前奖池信息"""
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    
+
     try:
         from app.routers.points import get_point_config
-        
+
         today = datetime.datetime.now().strftime('%Y-%m-%d')
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        
+        tomorrow = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+
         # 获取配置
         config = get_point_config()
         draw_hour = int(config.get('lottery_draw_hour', 20))
         max_per_day = int(config.get('lottery_max_per_day', 10))
-        
-        # 检查今天是否已开奖
-        today_drawn = conn.execute("SELECT winning_numbers FROM lottery_results WHERE draw_date = ? AND winning_numbers != ''", (today,)).fetchone()
-        
-        if today_drawn:
+
+        pool_info = get_lottery_pool_info(today, tomorrow)
+        if pool_info["is_drawn"]:
             # 今天已开奖，显示明天的奖池
-            target_date = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
             next_draw_time = f"明天 {(datetime.datetime.now() + datetime.timedelta(days=1)).strftime('%m-%d')} {draw_hour}:00"
         else:
-            target_date = today
             next_draw_time = f"今天 {datetime.datetime.now().strftime('%m-%d')} {draw_hour}:00"
-        
-        # 获取目标日期奖池
-        target_pool = conn.execute("SELECT total_pool FROM lottery_results WHERE draw_date = ?", (target_date,)).fetchone()
-        target_pool = target_pool[0] if target_pool else 0
-        
-        # 获取目标日期购票数
-        target_tickets = conn.execute("SELECT COUNT(*) FROM lottery_tickets WHERE draw_date = ?", (target_date,)).fetchone()[0]
-        
-        # 获取总累计奖池（未分配的）
-        total_accumulated = conn.execute("SELECT SUM(total_pool) FROM lottery_results WHERE winning_numbers = ''").fetchone()[0] or 0
-        
-        conn.close()
-        
+
         return {
             "status": "success",
             "data": {
-                "today_pool": target_pool,
-                "today_tickets": target_tickets,
-                "total_accumulated": total_accumulated,
-                "target_date": target_date,
+                "today_pool": pool_info["target_pool"],
+                "today_tickets": pool_info["target_tickets"],
+                "total_accumulated": pool_info["total_accumulated"],
+                "target_date": pool_info["target_date"],
                 "next_draw_time": next_draw_time,
                 "draw_hour": draw_hour,
                 "max_per_day": max_per_day,
-                "is_drawn": bool(today_drawn)
+                "is_drawn": pool_info["is_drawn"]
             }
         }
-        
+
     except Exception as e:
         logger.error(f"获取奖池信息失败: {e}")
         return {"status": "error", "message": safe_error_message(e)}
@@ -1133,35 +940,18 @@ def api_lottery_pool(request: Request):
 def api_lottery_init_pool(request: Request, data: dict):
     """设置初始奖池"""
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    
+
     try:
         init_pool = int(data.get("init_pool", 0))
         if init_pool == 0:
             return {"status": "error", "message": "请输入调整数值"}
-        
+
         today = datetime.datetime.now().strftime('%Y-%m-%d')
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        
-        # 检查今天是否已开奖，和 lottery_pool 保持一致
-        today_drawn = conn.execute("SELECT winning_numbers FROM lottery_results WHERE draw_date = ? AND winning_numbers != ''", (today,)).fetchone()
-        if today_drawn:
-            target_date = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
-        else:
-            target_date = today
-        
-        # 确保目标日期有记录
-        conn.execute("INSERT OR IGNORE INTO lottery_results (draw_date, winning_numbers, total_pool) VALUES (?, '', 0)", (target_date,))
-        
-        # 添加/减少奖池
-        conn.execute("UPDATE lottery_results SET total_pool = MAX(0, total_pool + ?) WHERE draw_date = ?", (init_pool, target_date))
-        conn.commit()
-        
-        # 获取更新后的奖池
-        new_pool = conn.execute("SELECT total_pool FROM lottery_results WHERE draw_date = ?", (target_date,)).fetchone()[0]
-        conn.close()
-        
-        return {"status": "success", "data": {"new_pool": new_pool, "target_date": target_date}}
-        
+        tomorrow = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+        result = adjust_lottery_pool(today, tomorrow, init_pool)
+
+        return {"status": "success", "data": result}
+
     except Exception as e:
         logger.error(f"设置初始奖池失败: {e}")
         return {"status": "error", "message": safe_error_message(e)}
