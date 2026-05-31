@@ -2,9 +2,14 @@ from fastapi import APIRouter, Request
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 from pydantic import BaseModel
 from app.core.config import cfg
-from app.core.database import query_db, DB_PATH, SYSTEM_DB_PATH
+from app.dao.insight_dao import (
+    delete_insight_ignores,
+    list_insight_ignore_item_ids,
+    list_insight_ignores,
+    save_insight_ignore,
+    save_insight_ignores,
+)
 import requests
-import sqlite3
 import logging
 import time
 from datetime import datetime
@@ -47,65 +52,35 @@ class BatchUnignoreModel(BaseModel):
 def ignore_item(data: IgnoreModel, request: Request):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        c.execute("INSERT OR REPLACE INTO insight_ignores (item_id, item_name) VALUES (?, ?)", (data.item_id, data.item_name))
-        conn.commit()
-        conn.close()
+        save_insight_ignore(data.item_id, data.item_name)
         return {"status": "success"}
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 # --- 🔥 新增：批量原子忽略 (彻底解决并发锁死问题) ---
 @router.post("/api/insight/ignore_batch")
 def ignore_items_batch(data: BatchIgnoreModel, request: Request):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        # 组装数据，使用 executemany 极速写入
-        records = [(item.item_id, item.item_name) for item in data.items]
-        c.executemany("INSERT OR REPLACE INTO insight_ignores (item_id, item_name) VALUES (?, ?)", records)
-        conn.commit()
-        conn.close()
+        save_insight_ignores(data.items)
         return {"status": "success"}
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 # --- 批量恢复 ---
 @router.post("/api/insight/unignore_batch")
 def unignore_items_batch(data: BatchUnignoreModel, request: Request):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        placeholders = ','.join(['?'] * len(data.item_ids))
-        c.execute(f"DELETE FROM insight_ignores WHERE item_id IN ({placeholders})", data.item_ids)
-        conn.commit()
-        conn.close()
+        delete_insight_ignores(data.item_ids)
         return {"status": "success"}
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 @router.get("/api/insight/ignores")
 def get_ignored_items(request: Request):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    rows = query_db("SELECT * FROM insight_ignores ORDER BY ignored_at DESC")
+    rows = list_insight_ignores()
     return {"status": "success", "data": [dict(r) for r in rows] if rows else []}
 
 def _fetch_items_page(host, key, start_index, limit, retry=2):
@@ -201,7 +176,7 @@ def scan_library_quality(request: Request):
     
     # 核心提速逻辑：动态剔除忽略名单
     def get_filtered_stats(stats):
-        ignore_rows = query_db("SELECT item_id FROM insight_ignores")
+        ignore_rows = list_insight_ignore_item_ids()
         ignore_set = {r['item_id'] for r in ignore_rows} if ignore_rows else set()
         
         if not ignore_set: return stats

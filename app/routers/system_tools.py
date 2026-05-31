@@ -4,9 +4,6 @@ import logging
 import sys
 import datetime
 import os
-import sqlite3
-import random
-import string
 import asyncio
 import threading
 
@@ -14,10 +11,11 @@ logger = logging.getLogger("uvicorn")
 from collections import deque
 from fastapi import APIRouter, Request
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
-from app.core.config import cfg, DB_PATH, SYSTEM_DB_PATH
+from app.core.config import cfg
+from app.dao.system_tool_dao import check_system_db_readwrite, check_system_table_integrity
+from app.infra.db.perf_stats import get_query_perf_stats
+from app.queries.system_tool_queries import get_latest_playback_date
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
-from app.core.database import query_db, get_query_perf_stats
-from app.core.db_schemas import SYSTEM_TABLES
 from app.core.security_utils import safe_error_message
 
 router = APIRouter(prefix="/api/system", tags=["System Tools"])
@@ -346,9 +344,9 @@ async def network_check(request: Request):
 
     last_webhook = "暂无记录"
     try:
-        rows = query_db("SELECT DateCreated FROM PlaybackActivity ORDER BY DateCreated DESC LIMIT 1")
-        if rows and rows[0]['DateCreated']:
-            last_webhook = rows[0]['DateCreated']
+        latest_playback_date = get_latest_playback_date()
+        if latest_playback_date:
+            last_webhook = latest_playback_date
             if 'T' in last_webhook:
                 last_webhook = last_webhook.replace('T', ' ')[:19]
     except Exception:
@@ -361,61 +359,10 @@ async def network_check(request: Request):
     db_readwrite = {"ok": False, "msg": "未检测"}
 
     # 1. 数据库完整性检查 - 检查系统数据库表
-    try:
-        if not os.path.exists(SYSTEM_DB_PATH):
-            db_integrity = {"ok": False, "msg": "系统数据库不存在"}
-        else:
-            conn = sqlite3.connect(SYSTEM_DB_PATH, timeout=3)
-            c = conn.cursor()
-            
-            # 使用 SYSTEM_TABLES 动态获取表列表
-            all_tables = SYSTEM_TABLES.copy()
-            existing_tables = []
-            missing_tables = []
-            
-            for table in all_tables:
-                try:
-                    c.execute(f"SELECT 1 FROM {table} LIMIT 1")
-                    existing_tables.append(table)
-                except:
-                    missing_tables.append(table)
-            conn.close()
-
-            if len(missing_tables) == 0:
-                db_integrity = {"ok": True, "msg": f"完整 ({len(existing_tables)} 表)"}
-            else:
-                db_integrity = {"ok": False, "msg": f"缺 {len(missing_tables)} 表: {', '.join(missing_tables[:3])}{'...' if len(missing_tables) > 3 else ''}"}
-    except Exception as e:
-        db_integrity = {"ok": False, "msg": safe_error_message(e)[:50]}
+    db_integrity = check_system_table_integrity()
 
     # 2. 数据库读写权限检查
-    try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH, timeout=3)
-        c = conn.cursor()
-
-        # 生成随机测试数据
-        test_key = f"_health_check_{''.join(random.choices(string.ascii_lowercase, k=8))}"
-        test_value = f"test_{int(time.time())}"
-
-        # 写入测试
-        c.execute("INSERT OR REPLACE INTO point_config (key, value) VALUES (?, ?)", (test_key, test_value))
-        conn.commit()
-
-        # 读取验证
-        c.execute("SELECT value FROM point_config WHERE key = ?", (test_key,))
-        result = c.fetchone()
-
-        # 删除测试数据
-        c.execute("DELETE FROM point_config WHERE key = ?", (test_key,))
-        conn.commit()
-        conn.close()
-
-        if result and result[0] == test_value:
-            db_readwrite = {"ok": True, "msg": "读写正常"}
-        else:
-            db_readwrite = {"ok": False, "msg": "数据验证失败"}
-    except Exception as e:
-        db_readwrite = {"ok": False, "msg": safe_error_message(e)[:50]}
+    db_readwrite = check_system_db_readwrite()
 
     return {
         "success": True,

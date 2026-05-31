@@ -9,8 +9,13 @@ import random
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from app.core.config import cfg, FONT_PATH, FONT_URLS, THEMES, BUILTIN_FONT_PATH
-from app.core.database import query_db, get_base_filter
-from app.core.database import DB_PATH, SYSTEM_DB_PATH
+from app.queries.report_queries import (
+    build_report_base_filter,
+    count_report_plays,
+    list_report_ranked_items,
+    list_report_top_items,
+    sum_report_duration,
+)
 
 logger = logging.getLogger("uvicorn")
 
@@ -419,7 +424,7 @@ class ReportGenerator:
         theme = THEMES.get(theme_name, THEMES["black_gold"])
         width, height = 800, 1200
 
-        where_base, params = get_base_filter(user_id)
+        where_base, params = build_report_base_filter(user_id)
         date_filter = ""
         title_period = "全量"
 
@@ -444,11 +449,9 @@ class ReportGenerator:
 
         full_where = where_base + date_filter
 
-        plays_res = query_db(f"SELECT COUNT(*) as c FROM PlaybackActivity {full_where}", params)
-        plays = plays_res[0]['c'] if plays_res else 0
+        plays = count_report_plays(full_where, params)
 
-        dur_res = query_db(f"SELECT SUM(PlayDuration) as c FROM PlaybackActivity {full_where}", params)
-        dur = dur_res[0]['c'] or 0
+        dur = sum_report_duration(full_where, params)
         hours = round(dur / 3600, 1)
 
         user_name = "Emby Server"
@@ -456,8 +459,7 @@ class ReportGenerator:
 
         top_list = []
         if plays > 0:
-            sql = f"SELECT ItemName, ItemId, COUNT(*) as C, SUM(PlayDuration) as D FROM PlaybackActivity {full_where} GROUP BY ItemName ORDER BY C DESC LIMIT 8"
-            top_list = query_db(sql, params)
+            top_list = list_report_top_items(full_where, params)
 
         try:
             font_lg = _get_font(60)
@@ -778,14 +780,7 @@ class ReportGenerator:
             where = pc.get("where", "")
 
             top_limit = int(cfg.get("report_top_query_limit") or 300)
-            all_tops = query_db(
-                f"""SELECT ItemName, ItemId, ItemType, COUNT(*) as C, COALESCE(SUM(PlayDuration), 0) as Duration
-                    FROM PlaybackActivity {where}{exclude_sql}
-                    GROUP BY ItemName
-                    ORDER BY Duration DESC
-                    LIMIT ?""",
-                tuple(list(exclude_types) + [top_limit]) if exclude_types else (top_limit,)
-            )
+            all_tops = list_report_ranked_items(where, exclude_sql, exclude_types, top_limit)
             if not all_tops:
                 return None
             

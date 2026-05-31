@@ -67,6 +67,10 @@ Define the architecture refactor target for EmbyPulse-Pro and implement the firs
 - [x] `app/routers/risk.py` delegates risk log and summary reads to a DAO.
 - [x] `app/routers/clients.py` delegates client blacklist/whitelist system table access to a DAO and playback client statistics to a query service.
 - [x] `app/routers/calendar_notify.py` delegates `calendar_notify_config` table access to a DAO.
+- [x] `app/routers/webhook.py` delegates client blacklist/whitelist reads and local playback IP writes to DAO/infra boundaries.
+- [x] `app/services/report_service.py` delegates playback report aggregate queries to a query service.
+- [x] `app/routers/insight.py` delegates `insight_ignores` table access to a DAO.
+- [x] `app/routers/system_tools.py` delegates playback recency checks, system DB health checks, and query perf stats to query/DAO/infra boundaries.
 - [x] Existing tests or import checks pass.
 
 ## Out of Scope

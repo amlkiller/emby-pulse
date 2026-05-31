@@ -10,7 +10,7 @@
 
 - Trigger: database infrastructure refactor that starts removing `query_db()` from representative modules.
 - Applies to new backend code that reads/writes EmbyPulse system data or playback reporting data.
-- First-stage sample modules include `app/routers/history.py`, `app/routers/api_tokens.py`, `app/routers/notifications.py`, `app/routers/notify_rules.py`, `app/routers/pro.py`, `app/routers/notify_admin.py`, `app/routers/pwa.py`, `app/routers/audit.py`, `app/routers/risk.py`, `app/routers/clients.py`, and `app/routers/calendar_notify.py`.
+- First-stage sample modules include `app/routers/history.py`, `app/routers/api_tokens.py`, `app/routers/notifications.py`, `app/routers/notify_rules.py`, `app/routers/pro.py`, `app/routers/notify_admin.py`, `app/routers/pwa.py`, `app/routers/audit.py`, `app/routers/risk.py`, `app/routers/clients.py`, `app/routers/calendar_notify.py`, `app/routers/webhook.py`, `app/services/report_service.py`, `app/routers/insight.py`, and `app/routers/system_tools.py`.
 
 ### 2. Signatures
 
@@ -42,8 +42,24 @@
 - `app.dao.calendar_notify_dao.get_calendar_notify_config() -> DataRow | None`
 - `app.dao.calendar_notify_dao.save_calendar_notify_config(enabled, notify_time, channels, tg_chat_id, wecom_touser) -> None`
 - `app.dao.calendar_notify_dao.mark_calendar_notify_sent() -> None`
+- `app.dao.webhook_playback_dao.save_webhook_playback_ip_data(data, user_id, user_name, item, ip) -> None`
+- `app.dao.insight_dao.save_insight_ignore(item_id: str, item_name: str) -> None`
+- `app.dao.insight_dao.save_insight_ignores(items) -> None`
+- `app.dao.insight_dao.delete_insight_ignores(item_ids) -> None`
+- `app.dao.insight_dao.list_insight_ignores() -> list[DataRow]`
+- `app.dao.insight_dao.list_insight_ignore_item_ids() -> list[DataRow]`
+- `app.dao.system_tool_dao.check_system_table_integrity() -> dict`
+- `app.dao.system_tool_dao.check_system_db_readwrite() -> dict`
+- `app.infra.db.local_playback_store.insert_webhook_playback_ip_record(...) -> None`
+- `app.infra.db.perf_stats.get_query_perf_stats() -> dict`
 - `app.queries.client_queries.count_playback_clients_by_app() -> list[DataRow]`
 - `app.queries.client_queries.count_playback_devices(limit: int = 10) -> list[DataRow]`
+- `app.queries.report_queries.build_report_base_filter(user_id_filter) -> tuple[str, list]`
+- `app.queries.report_queries.count_report_plays(where_sql: str, params) -> int`
+- `app.queries.report_queries.sum_report_duration(where_sql: str, params) -> int`
+- `app.queries.report_queries.list_report_top_items(where_sql: str, params, limit: int = 8) -> list[DataRow]`
+- `app.queries.report_queries.list_report_ranked_items(where_sql: str, exclude_sql: str, exclude_types, limit: int) -> list[DataRow]`
+- `app.queries.system_tool_queries.get_latest_playback_date() -> str | None`
 - Scenario modules live in `app/queries/*_queries.py` and `app/dao/*_dao.py` during the transition.
 
 ### 3. Contracts
@@ -51,6 +67,7 @@
 - System database access must go through `system_store` or a DAO that wraps it.
 - Playback reporting access must go through `playback_store` or a query service that wraps it.
 - `playback_store` owns the SQLite/API data-source switch for `PlaybackActivity`.
+- Local webhook fallback writes to `PlaybackActivity` must be isolated behind `app.infra.db.local_playback_store`, not route-local SQLite.
 - Route modules should call scenario functions such as `history_queries` or `api_token_dao`, not open SQLite connections directly.
 - Return rows use `DataRow`, which supports dict-style access, `.get()`, integer index access, and case-insensitive keys for compatibility with legacy callers.
 
@@ -73,6 +90,10 @@
 - Good: `risk.py` keeps Emby API control and config updates in the route/service layer while delegating `risk_logs` and `users_meta` summary reads to `risk_dao`.
 - Good: `clients.py` keeps media server device control and response assembly in the route while delegating blacklist/whitelist tables to `client_dao` and playback aggregates to `client_queries`.
 - Good: `calendar_notify.py` keeps notification sending, scheduling, and channel-specific HTTP calls in the route/service layer while delegating `calendar_notify_config` reads/writes to `calendar_notify_dao`.
+- Good: `webhook.py` keeps token validation, event parsing, and event-bus publishing in the route while delegating client-list reads to `client_dao` and local playback IP persistence to `webhook_playback_dao`.
+- Good: `report_service.py` keeps poster rendering and media image fetching in the service while delegating playback aggregate SQL to `report_queries`.
+- Good: `insight.py` keeps Emby library scanning and cache filtering in the route while delegating ignore-list persistence to `insight_dao`.
+- Good: `system_tools.py` keeps weather/log/restart HTTP behavior in the route while delegating database health checks and playback recency SQL to DAO/query modules.
 - Bad: a router imports `query_db`, `SYSTEM_DB_PATH`, or `sqlite3` only to run route-local SQL.
 
 ### 6. Tests Required

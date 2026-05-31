@@ -1,14 +1,12 @@
 from fastapi import APIRouter, Request, HTTPException
 from app.core.config import cfg
-from app.core.database import query_db
+from app.dao.client_dao import list_client_blacklist_names, list_client_whitelist_user_ids
+from app.dao.webhook_playback_dao import save_webhook_playback_ip_data
 # 🔥 引入事件总线
 from app.core.event_bus import bus
-# 🔥 引入共享 IP 归属地工具
-from app.utils.ip_location import get_location, get_isp
 import requests
 import json
 import logging
-import os
 import secrets
 import ipaddress
 
@@ -27,63 +25,7 @@ def _get_webhook_token(request: Request):
 def _save_playback_ip_data(data, user_id, user_name, item, ip):
     """保存播放 IP 信息到本地数据库"""
     try:
-        import sqlite3
-        # 支持 Pro 版的配置目录（/workspace/config）
-        if os.path.exists("/workspace"):
-            data_dir = "/workspace/data"
-        else:
-            data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
-        os.makedirs(data_dir, exist_ok=True)
-        local_db_path = os.path.join(data_dir, "playback.db")
-        conn = sqlite3.connect(local_db_path)
-        c = conn.cursor()
-
-        # 确保表结构和新增列存在
-        c.execute('''CREATE TABLE IF NOT EXISTS PlaybackActivity (
-            Id INTEGER PRIMARY KEY AUTOINCREMENT,
-            UserId TEXT,
-            UserName TEXT,
-            ItemId TEXT,
-            ItemName TEXT,
-            PlayDuration INTEGER,
-            DateCreated DATETIME DEFAULT CURRENT_TIMESTAMP,
-            Client TEXT,
-            DeviceName TEXT,
-            RemoteEndPoint TEXT,
-            ItemType TEXT,
-            Location TEXT,
-            ISP TEXT
-        )''')
-
-        # 添加新列（如果不存在）
-        try: c.execute("ALTER TABLE PlaybackActivity ADD COLUMN RemoteEndPoint TEXT")
-        except Exception: pass
-        try: c.execute("ALTER TABLE PlaybackActivity ADD COLUMN ItemType TEXT")
-        except Exception: pass
-        try: c.execute("ALTER TABLE PlaybackActivity ADD COLUMN Location TEXT")
-        except Exception: pass
-        try: c.execute("ALTER TABLE PlaybackActivity ADD COLUMN ISP TEXT")
-        except Exception: pass
-
-        # 🔥 使用共享模块获取归属地和运营商
-        location = get_location(ip)
-        isp = get_isp(ip)
-        # 准备数据
-        item_id = item.get('Id', '')
-        item_name = item.get('Name', '未知内容')
-        session = data.get('Session') or data
-        client = session.get('Client') or data.get('Client', '')
-        device = session.get('DeviceName') or data.get('DeviceName', '')
-
-        # 插入记录
-        now_str = data.get('Date', '')
-        c.execute("""
-            INSERT INTO PlaybackActivity
-            (UserId, UserName, ItemId, ItemName, PlayDuration, DateCreated, Client, DeviceName, RemoteEndPoint, Location, ISP)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (user_id, user_name, item_id, item_name, 0, now_str or 'now', client, device, ip, location, isp))
-        conn.commit()
-        conn.close()
+        save_webhook_playback_ip_data(data, user_id, user_name, item, ip)
     except Exception as e:
         logger.error(f"[Webhook] 保存 IP 信息失败: {e}")
 
@@ -106,13 +48,13 @@ def intercept_illegal_client(data: dict):
     key = cfg.get("emby_api_key")
     
     try:
-        blacklist_rows = query_db("SELECT app_name FROM client_blacklist")
+        blacklist_rows = list_client_blacklist_names()
         if not blacklist_rows: return False
             
         blacklist = [r['app_name'].lower() for r in blacklist_rows]
         if client_lower in blacklist:
             # 🔥 检查是否为白名单用户
-            whitelist_rows = query_db("SELECT user_id FROM client_whitelist")
+            whitelist_rows = list_client_whitelist_user_ids()
             whitelist_user_ids = set(r['user_id'] for r in whitelist_rows) if whitelist_rows else set()
             if user_id and user_id in whitelist_user_ids:
                 logger.info(f"[白名单跳过] 用户 {user.get('Name', user_id)} 在白名单中，允许使用 {client}")
