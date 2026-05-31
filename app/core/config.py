@@ -303,8 +303,8 @@ class ConfigManager:
         user_blocked_routes = []
         if user_id:
             try:
-                from app.core.database import query_db
-                row = query_db("SELECT allow_routes, block_routes FROM users_meta WHERE user_id = ?", (user_id,), one=True)
+                from app.infra.db.system_store import system_store
+                row = system_store.fetch_one("SELECT allow_routes, block_routes FROM users_meta WHERE user_id = ?", (user_id,))
                 # 转换为字典,处理 sqlite3.Row
                 if row:
                     row_dict = dict(row) if hasattr(row, 'keys') else {k: row[i] for i, k in enumerate(row.keys())}

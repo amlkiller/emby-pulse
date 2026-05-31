@@ -1,13 +1,15 @@
-"""
-Database Session Management
-Replaces SessionMiddleware, no SECRET_KEY needed, more secure
-"""
 import secrets
 import time
-import json
-import sqlite3
 from typing import Optional, Any, Dict
-from app.core.config import SYSTEM_DB_PATH
+
+from app.dao.session_dao import (
+    cleanup_expired_sessions as dao_cleanup_expired_sessions,
+    create_session as dao_create_session,
+    delete_session as dao_delete_session,
+    ensure_session_table,
+    get_session as dao_get_session,
+    update_session as dao_update_session,
+)
 
 SESSION_TABLE = "sessions"
 SESSION_COOKIE_NAME = "session_id"
@@ -15,59 +17,25 @@ SESSION_MAX_AGE = 24 * 3600  # 24小时（空闲超时）
 SESSION_ABSOLUTE_MAX_AGE = 7 * 24 * 3600  # 7天（绝对超时）
 
 
-def _get_system_conn():
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
 def init_session_table():
-    conn = _get_system_conn()
-    cursor = conn.cursor()
-    cursor.execute(f"""
-    CREATE TABLE IF NOT EXISTS {SESSION_TABLE} (
-        session_id TEXT PRIMARY KEY,
-        data TEXT NOT NULL DEFAULT '{{}}',
-        created_at REAL NOT NULL,
-        expires_at REAL NOT NULL
-    )
-    """)
-    try:
-        cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_sessions_expires ON {SESSION_TABLE}(expires_at)")
-    except:
-        pass
-    conn.commit()
-    conn.close()
+    ensure_session_table()
 
 
 def create_session(data: Dict[str, Any] = None) -> str:
     session_id = secrets.token_urlsafe(32)
     now = time.time()
     expires_at = now + SESSION_MAX_AGE
-    data_json = json.dumps(data or {}, ensure_ascii=False)
-    conn = _get_system_conn()
-    cursor = conn.cursor()
-    cursor.execute(f"""
-    INSERT INTO {SESSION_TABLE} (session_id, data, created_at, expires_at)
-    VALUES (?, ?, ?, ?)
-    """, (session_id, data_json, now, expires_at))
-    conn.commit()
-    conn.close()
+    dao_create_session(session_id, data or {}, now, expires_at)
     return session_id
 
 
 def get_session(session_id: str) -> Optional[Dict[str, Any]]:
     now = time.time()
-    conn = _get_system_conn()
-    cursor = conn.cursor()
-    cursor.execute(f"""
-    SELECT data, created_at FROM {SESSION_TABLE}
-    WHERE session_id = ? AND expires_at > ? AND created_at > ?
-    """, (session_id, now, now - SESSION_ABSOLUTE_MAX_AGE))
-    row = cursor.fetchone()
-    conn.close()
+    row = dao_get_session(session_id, now, now - SESSION_ABSOLUTE_MAX_AGE)
     if row and row["data"]:
         try:
+            import json
+
             return json.loads(row["data"])
         except:
             return {}
@@ -75,34 +43,17 @@ def get_session(session_id: str) -> Optional[Dict[str, Any]]:
 
 
 def update_session(session_id: str, data: Dict[str, Any]) -> bool:
-    data_json = json.dumps(data, ensure_ascii=False)
-    conn = _get_system_conn()
-    cursor = conn.cursor()
-    cursor.execute(f"""
-    UPDATE {SESSION_TABLE} SET data = ? WHERE session_id = ?
-    """, (data_json, session_id))
-    conn.commit()
-    conn.close()
+    dao_update_session(session_id, data)
     return True
 
 
 def delete_session(session_id: str):
-    conn = _get_system_conn()
-    cursor = conn.cursor()
-    cursor.execute(f"DELETE FROM {SESSION_TABLE} WHERE session_id = ?", (session_id,))
-    conn.commit()
-    conn.close()
+    dao_delete_session(session_id)
 
 
 def cleanup_expired_sessions():
     now = time.time()
-    conn = _get_system_conn()
-    cursor = conn.cursor()
-    cursor.execute(f"DELETE FROM {SESSION_TABLE} WHERE expires_at < ?", (now,))
-    deleted = cursor.rowcount
-    conn.commit()
-    conn.close()
-    return deleted
+    return dao_cleanup_expired_sessions(now)
 
 
 class SessionDict:

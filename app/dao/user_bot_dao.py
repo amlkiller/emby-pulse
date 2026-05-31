@@ -265,6 +265,11 @@ def list_bot_users():
     return [{"tg_user_id": row["tg_user_id"], "tg_name": row["tg_name"]} for row in rows]
 
 
+def get_bot_user_name(tg_user_id):
+    row = system_store.fetch_one("SELECT tg_name FROM tg_bot_users WHERE tg_user_id = ?", (str(tg_user_id),))
+    return row["tg_name"] if row and row["tg_name"] else None
+
+
 def bind_user(tg_user_id, emby_user_id, emby_username, init_password: str = "", tg_username: str = "", tg_display_name: str = "") -> None:
     with system_store.connect() as conn:
         cursor = conn.cursor()

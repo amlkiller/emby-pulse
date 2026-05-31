@@ -169,6 +169,20 @@ class PlaybackStore:
         elif "duplicate column" not in err_msg:
             print(f"[SQLite 引擎] 💥 数据库操作失败: {exc}")
 
+    def inspect_local_schema(self):
+        if not os.path.exists(self.db_path):
+            return {"db_exists": False, "tables": [], "columns": {}}
+
+        with sqlite3.connect(self.db_path, timeout=5) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            tables = [row[0] for row in cursor.fetchall()]
+            columns = {}
+            for table in tables:
+                cursor.execute(f"PRAGMA table_info({table})")
+                columns[table] = [row[1] for row in cursor.fetchall()]
+            return {"db_exists": True, "tables": tables, "columns": columns}
+
 
 playback_store = PlaybackStore()
 

@@ -1,38 +1,16 @@
-"""
-审计日志系统 - 记录敏感操作
-"""
-import sqlite3
-import json
 import time
 import logging
-from datetime import datetime
 from typing import Optional, Dict, Any
-from app.core.config import SYSTEM_DB_PATH
+
+from app.dao.audit_logger_dao import (
+    cleanup_audit_logs_before,
+    ensure_audit_table,
+    get_audit_stats_since,
+    insert_audit_log,
+    list_audit_logs,
+)
 
 logger = logging.getLogger("uvicorn")
-
-# 审计日志表结构
-AUDIT_TABLE_SQL = """
-CREATE TABLE IF NOT EXISTS audit_logs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    timestamp REAL NOT NULL,
-    datetime TEXT NOT NULL,
-    user_id TEXT,
-    user_name TEXT,
-    action TEXT NOT NULL,
-    resource_type TEXT,
-    resource_id TEXT,
-    ip_address TEXT,
-    user_agent TEXT,
-    details TEXT,
-    status TEXT DEFAULT 'success',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_logs(timestamp);
-CREATE INDEX IF NOT EXISTS idx_audit_user_id ON audit_logs(user_id);
-CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs(action);
-"""
 
 # 需要审计的敏感操作
 AUDIT_ACTIONS = {
@@ -91,17 +69,7 @@ AUDIT_ACTIONS = {
 def init_audit_table():
     """初始化审计日志表"""
     try:
-        # 确保数据库目录存在
-        import os
-        db_dir = os.path.dirname(SYSTEM_DB_PATH)
-        if db_dir and not os.path.exists(db_dir):
-            os.makedirs(db_dir, exist_ok=True)
-            logger.info(f"[审计日志] 创建数据库目录: {db_dir}")
-        
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.executescript(AUDIT_TABLE_SQL)
-        conn.commit()
-        conn.close()
+        ensure_audit_table()
         logger.info("🔒 [审计日志] 审计日志表已初始化")
     except Exception as e:
         logger.error(f"[审计日志] 初始化失败: {e}")
@@ -133,18 +101,7 @@ def log_audit(
         status: 状态（success/failed）
     """
     try:
-        now = time.time()
-        datetime_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        details_json = json.dumps(details, ensure_ascii=False) if details else None
-        
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.execute("""
-            INSERT INTO audit_logs 
-            (timestamp, datetime, user_id, user_name, action, resource_type, resource_id, ip_address, user_agent, details, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (now, datetime_str, user_id, user_name, action, resource_type, resource_id, ip_address, user_agent, details_json, status))
-        conn.commit()
-        conn.close()
+        insert_audit_log(action, user_id, user_name, resource_type, resource_id, ip_address, user_agent, details, status)
         
         # 同时输出到日志（方便实时监控）
         action_desc = AUDIT_ACTIONS.get(action, action)
@@ -185,42 +142,7 @@ def get_audit_logs(
         审计日志列表
     """
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.row_factory = sqlite3.Row
-        
-        where_clauses = []
-        params = []
-        
-        if user_id:
-            where_clauses.append("user_id = ?")
-            params.append(user_id)
-        
-        if action:
-            where_clauses.append("action = ?")
-            params.append(action)
-        
-        if start_time:
-            where_clauses.append("timestamp >= ?")
-            params.append(start_time)
-        
-        if end_time:
-            where_clauses.append("timestamp <= ?")
-            params.append(end_time)
-        
-        where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
-        
-        sql = f"""
-            SELECT * FROM audit_logs 
-            WHERE {where_sql}
-            ORDER BY timestamp DESC
-            LIMIT ? OFFSET ?
-        """
-        params.extend([limit, offset])
-        
-        rows = conn.execute(sql, params).fetchall()
-        conn.close()
-        
-        return [dict(row) for row in rows]
+        return list_audit_logs(user_id, action, start_time, end_time, limit, offset)
         
     except Exception as e:
         logger.error(f"[审计日志] 查询失败: {e}")
@@ -238,53 +160,8 @@ def get_audit_stats(days: int = 7) -> dict:
         统计数据
     """
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        
         start_time = time.time() - days * 86400
-        
-        # 按操作类型统计
-        action_stats = conn.execute("""
-            SELECT action, COUNT(*) as count
-            FROM audit_logs
-            WHERE timestamp >= ?
-            GROUP BY action
-            ORDER BY count DESC
-        """, (start_time,)).fetchall()
-        
-        # 按用户统计
-        user_stats = conn.execute("""
-            SELECT user_name, COUNT(*) as count
-            FROM audit_logs
-            WHERE timestamp >= ? AND user_name IS NOT NULL
-            GROUP BY user_name
-            ORDER BY count DESC
-            LIMIT 10
-        """, (start_time,)).fetchall()
-        
-        # 失败操作统计
-        failed_stats = conn.execute("""
-            SELECT action, COUNT(*) as count
-            FROM audit_logs
-            WHERE timestamp >= ? AND status = 'failed'
-            GROUP BY action
-            ORDER BY count DESC
-        """, (start_time,)).fetchall()
-        
-        # 总数
-        total = conn.execute("""
-            SELECT COUNT(*) as count
-            FROM audit_logs
-            WHERE timestamp >= ?
-        """, (start_time,)).fetchone()[0]
-        
-        conn.close()
-        
-        return {
-            "total": total,
-            "by_action": [{"action": row[0], "count": row[1]} for row in action_stats],
-            "by_user": [{"user": row[0], "count": row[1]} for row in user_stats],
-            "failed": [{"action": row[0], "count": row[1]} for row in failed_stats],
-        }
+        return get_audit_stats_since(start_time)
         
     except Exception as e:
         logger.error(f"[审计日志] 统计失败: {e}")
@@ -300,12 +177,7 @@ def cleanup_old_audit_logs(days: int = 90):
     """
     try:
         cutoff_time = time.time() - days * 86400
-        
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        result = conn.execute("DELETE FROM audit_logs WHERE timestamp < ?", (cutoff_time,))
-        deleted = result.rowcount
-        conn.commit()
-        conn.close()
+        deleted = cleanup_audit_logs_before(cutoff_time)
         
         if deleted > 0:
             logger.info(f"[审计日志] 已清理 {deleted} 条旧记录（{days}天前）")

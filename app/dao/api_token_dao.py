@@ -49,3 +49,10 @@ def mark_api_token_used(token_hash: str) -> None:
         """,
         (token_hash,),
     )
+
+
+def get_api_token_by_hash(token_hash: str):
+    return system_store.fetch_one(
+        "SELECT expires_at FROM api_tokens WHERE token = ?",
+        (token_hash,),
+    )

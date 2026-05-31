@@ -7,7 +7,6 @@ import time
 import requests
 import datetime
 import secrets
-import sqlite3
 import json
 import logging
 import re
@@ -15,7 +14,6 @@ import random
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from app.core.config import cfg
-from app.core.database import DB_PATH, SYSTEM_DB_PATH, query_db
 from app.dao import invitation_dao, media_request_dao, point_dao, user_bot_dao, user_dao
 from app.queries import stats_queries
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
@@ -1679,83 +1677,37 @@ def _handle_pk_accept_callback(chat_id, tg_user_id, invite_id, cq_id, msg_id):
         return
     
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        config = {r[0]: r[1] for r in c.execute("SELECT key, value FROM point_config").fetchall()}
-        
-        # 获取邀请（包含 TG 名称和消息ID）
-        invite = c.execute(
-            "SELECT id, challenger_id, challenger_name, challenger_tg_name, target_id, target_name, target_tg_name, points, chat_id, expires_at, message_id, command_message_id FROM pk_invitations WHERE id = ? AND status = 'pending'",
-            (invite_id,)
-        ).fetchone()
-        
+        invite = point_dao.get_pending_pk_invitation(invite_id)
         if not invite:
-            conn.close()
             _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": "邀请不存在或已处理", "show_alert": True})
             _edit(chat_id, msg_id, "❌ PK邀请已不存在或已处理")
             return
         
         # 检查是否是目标用户
-        if invite[4] != binding['emby_user_id']:
-            conn.close()
+        if invite["target_id"] != binding['emby_user_id']:
             _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": "这不是发给你的PK邀请", "show_alert": True})
             return
         
         # 检查是否过期
-        from datetime import datetime
         try:
-            expires_at = datetime.fromisoformat(invite[9])
-            if datetime.now() > expires_at:
-                c.execute("UPDATE pk_invitations SET status = 'expired' WHERE id = ?", (invite_id,))
-                conn.commit()
-                conn.close()
+            expires_at = datetime.datetime.fromisoformat(invite["expires_at"])
+            if datetime.datetime.now() > expires_at:
+                point_dao.mark_pk_invitation_expired(invite_id)
                 _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": "PK邀请已过期", "show_alert": True})
                 _edit(chat_id, msg_id, "❌ PK邀请已过期")
                 return
         except:
             pass
         
-        challenger_id = invite[1]
-        challenger_name = invite[2]
-        challenger_tg_name = invite[3] or challenger_name
-        target_id = invite[4]
-        target_name = invite[5]
-        target_tg_name = invite[6] or target_name
-        points = invite[7]
-        original_chat_id = invite[8]
-        invite_msg_id = invite[10]  # 邀请消息ID
-        command_msg_id = invite[11]  # 命令消息ID
-        
-        # 🔥 重新检查积分范围（防止配置被修改后绕过）
-        min_points = int(config.get('user_pk_min_points', 10))
-        max_points = int(config.get('user_pk_max_points', 500))
-        if points < min_points or points > max_points:
-            c.execute("UPDATE pk_invitations SET status = 'cancelled' WHERE id = ?", (invite_id,))
-            conn.commit()
-            conn.close()
-            _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": f"积分范围已变更，PK取消（需在 {min_points}-{max_points} 之间）", "show_alert": True})
-            _edit(chat_id, msg_id, f"❌ 积分范围已变更，PK取消（需在 {min_points}-{max_points} 之间）")
-            return
-        
-        # 获取双方积分
-        challenger_points_row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (challenger_id,)).fetchone()
-        challenger_points = challenger_points_row[0] if challenger_points_row else 0
-        
-        target_points_row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (target_id,)).fetchone()
-        target_points = target_points_row[0] if target_points_row else 0
-        
-        # 再次检查双方积分
-        if challenger_points < points or target_points < points:
-            c.execute("UPDATE pk_invitations SET status = 'cancelled' WHERE id = ?", (invite_id,))
-            conn.commit()
-            conn.close()
-            _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": "双方积分不足，PK取消", "show_alert": True})
-            _edit(chat_id, msg_id, "❌ 双方积分不足，PK取消")
-            return
-        
-        # 🔥 更新邀请状态为进行中
-        c.execute("UPDATE pk_invitations SET status = 'processing' WHERE id = ?", (invite_id,))
-        conn.commit()
+        challenger_id = invite["challenger_id"]
+        challenger_name = invite["challenger_name"]
+        challenger_tg_name = invite["challenger_tg_name"] or challenger_name
+        target_id = invite["target_id"]
+        target_name = invite["target_name"]
+        target_tg_name = invite["target_tg_name"] or target_name
+        points = invite["points"]
+        invite_msg_id = invite["message_id"]  # 邀请消息ID
+        command_msg_id = invite["command_message_id"]  # 命令消息ID
         
         # 🔥 发送骰子动画
         _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": "🎲 掷骰子中..."})
@@ -1777,26 +1729,21 @@ def _handle_pk_accept_callback(chat_id, tg_user_id, invite_id, cq_id, msg_id):
         # 获取骰子结果（1-6）
         challenger_roll = dice1_resp.get("result", {}).get("dice", {}).get("value", 1) if dice1_resp and dice1_resp.get("ok") else 1
         target_roll = dice2_resp.get("result", {}).get("dice", {}).get("value", 1) if dice2_resp and dice2_resp.get("ok") else 1
-        
-        # 获取手续费率
-        tax_rate = int(config.get('user_pk_tax', 5))
-        
-        # 判断胜负
-        if challenger_roll > target_roll:
-            winner_id = challenger_id
-            winner_name = challenger_tg_name
-            loser_id = target_id
-            loser_name = target_tg_name
-        elif target_roll > challenger_roll:
-            winner_id = target_id
-            winner_name = target_tg_name
-            loser_id = challenger_id
-            loser_name = challenger_tg_name
-        else:
-            # 平局
-            c.execute("UPDATE pk_invitations SET status = 'completed' WHERE id = ?", (invite_id,))
-            conn.commit()
-            conn.close()
+
+        result = point_dao.accept_pk_invitation(
+            invite_id,
+            binding['emby_user_id'],
+            challenger_roll=challenger_roll,
+            target_roll=target_roll,
+            cancel_on_insufficient=True,
+        )
+        if result.get("status") != "success":
+            message = result.get("message", "PK处理失败")
+            _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": message, "show_alert": True})
+            _edit(chat_id, msg_id, f"❌ {message}")
+            return
+
+        if result.get("tie"):
             _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": "平局！积分退还"})
             result_msg = f"⚖️ <b>平局！</b>\n\n{challenger_tg_name}({challenger_roll}点) vs {target_tg_name}({target_roll}点)\n\n积分退还，不扣手续费"
             _send(chat_id, result_msg)
@@ -1805,53 +1752,10 @@ def _handle_pk_accept_callback(chat_id, tg_user_id, invite_id, cq_id, msg_id):
             time.sleep(5)
             _tg_api("deleteMessage", {"chat_id": chat_id, "message_id": msg_id})
             return
-        
-        # 计算积分转移
-        win_amount = points
-        tax = int(win_amount * tax_rate / 100)
-        actual_win = win_amount - tax
-        
-        # 🔥 再次检查积分是否足够（防止并发问题）
-        challenger_points_now = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (challenger_id,)).fetchone()
-        target_points_now = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (target_id,)).fetchone()
-        challenger_balance = challenger_points_now[0] if challenger_points_now else 0
-        target_balance = target_points_now[0] if target_points_now else 0
-        
-        # 🔥 检查输家是否有足够积分
-        loser_balance = challenger_balance if loser_id == challenger_id else target_balance
-        if loser_balance < points:
-            c.execute("UPDATE pk_invitations SET status = 'cancelled' WHERE id = ?", (invite_id,))
-            conn.commit()
-            conn.close()
-            _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": "积分不足，PK取消", "show_alert": True})
-            _send(chat_id, f"❌ 积分不足，PK取消（输家积分：{loser_balance}，需要：{points}）")
-            return
-        
-        # 更新积分
-        c.execute("UPDATE users_meta SET points = points + ? WHERE user_id = ?", (actual_win, winner_id))
-        c.execute("UPDATE users_meta SET points = points - ? WHERE user_id = ?", (points, loser_id))
-        
-        # 记录日志
-        c.execute(
-            "INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, (SELECT points FROM users_meta WHERE user_id = ?))",
-            (winner_id, winner_name, f"PK战胜 {loser_name}", actual_win, winner_id)
-        )
-        c.execute(
-            "INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, (SELECT points FROM users_meta WHERE user_id = ?))",
-            (loser_id, loser_name, f"PK败给 {winner_name}", -points, loser_id)
-        )
-        
-        # 记录PK日志
-        c.execute(
-            "INSERT INTO pk_logs (challenger_id, challenger_name, target_id, target_name, points, challenger_roll, target_roll, winner_id, winner_name, tax) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (challenger_id, challenger_name, target_id, target_name, points, challenger_roll, target_roll, winner_id, winner_name, tax)
-        )
-        
-        # 更新邀请状态
-        c.execute("UPDATE pk_invitations SET status = 'completed' WHERE id = ?", (invite_id,))
-        
-        conn.commit()
-        conn.close()
+
+        winner_name = result.get("winner_name") or ""
+        actual_win = result.get("win_amount", 0)
+        tax_rate = result.get("tax_rate", 0)
         
         # 发送结果
         _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": f"{winner_name}获胜！"})
@@ -2075,130 +1979,27 @@ def cmd_pk_accept(chat_id, tg_user_id, text, is_group=False):
         return _send(chat_id, "❌ 请先私聊机器人绑定账号")
     
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        config = {r[0]: r[1] for r in c.execute("SELECT key, value FROM point_config").fetchall()}
-        
-        # 清理过期邀请
-        c.execute("UPDATE pk_invitations SET status = 'expired' WHERE expires_at < datetime('now', 'localtime') AND status = 'pending'")
-        
-        # 获取发给当前用户的最新待处理邀请
-        invite = c.execute(
-            "SELECT id, challenger_id, challenger_name, target_id, target_name, points, chat_id FROM pk_invitations WHERE target_id = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 1",
-            (binding['emby_user_id'],)
-        ).fetchone()
+        invite = point_dao.get_latest_pending_pk_invitation_for_target(binding['emby_user_id'])
         
         if not invite:
-            conn.close()
             return _send(chat_id, "❌ 没有待处理的PK邀请")
         
-        invite_id = invite[0]
-        challenger_id = invite[1]
-        challenger_name = invite[2]
-        target_id = invite[3]
-        target_name = invite[4]
-        points = invite[5]
-        original_chat_id = invite[6]
-        
-        # 🔥 重新检查积分范围（防止配置被修改后绕过）
-        min_points = int(config.get('user_pk_min_points', 10))
-        max_points = int(config.get('user_pk_max_points', 500))
-        if points < min_points or points > max_points:
-            c.execute("UPDATE pk_invitations SET status = 'cancelled' WHERE id = ?", (invite_id,))
-            conn.commit()
-            conn.close()
-            return _send(chat_id, f"❌ 积分范围已变更，PK取消（需在 {min_points}-{max_points} 之间）")
-        
-        # 获取双方积分
-        challenger_points_row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (challenger_id,)).fetchone()
-        challenger_points = challenger_points_row[0] if challenger_points_row else 0
-        
-        target_points_row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (target_id,)).fetchone()
-        target_points = target_points_row[0] if target_points_row else 0
-        
-        # 再次检查双方积分
-        if challenger_points < points or target_points < points:
-            c.execute("UPDATE pk_invitations SET status = 'cancelled' WHERE id = ?", (invite_id,))
-            conn.commit()
-            conn.close()
-            return _send(chat_id, "❌ 双方积分不足，PK取消")
-        
-        # 掷骰子
-        import random
-        challenger_roll = random.randint(1, 100)
-        target_roll = random.randint(1, 100)
-        
-        # 获取手续费率
-        tax_rate = int(config.get('user_pk_tax', 5))
-        
-        # 判断胜负
-        if challenger_roll > target_roll:
-            winner_id = challenger_id
-            winner_name = challenger_name
-            loser_id = target_id
-            loser_name = target_name
-        elif target_roll > challenger_roll:
-            winner_id = target_id
-            winner_name = target_name
-            loser_id = challenger_id
-            loser_name = challenger_name
-        else:
-            # 平局
-            c.execute("UPDATE pk_invitations SET status = 'completed' WHERE id = ?", (invite_id,))
-            conn.commit()
-            conn.close()
-            # 通知双方
-            _send(original_chat_id, f"⚖️ <b>平局！</b>\n\n{challenger_name}({challenger_roll}点) vs {target_name}({target_roll}点)\n\n积分退还，不扣手续费")
-            return _send(chat_id, f"⚖️ <b>平局！</b>\n\n{challenger_name}({challenger_roll}点) vs {target_name}({target_roll}点)\n\n积分退还，不扣手续费")
-        
-        # 计算积分转移
-        win_amount = points
-        tax = int(win_amount * tax_rate / 100)
-        actual_win = win_amount - tax
-        
-        # 🔥 再次检查积分是否足够（防止并发问题）
-        challenger_points_now = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (challenger_id,)).fetchone()
-        target_points_now = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (target_id,)).fetchone()
-        challenger_balance = challenger_points_now[0] if challenger_points_now else 0
-        target_balance = target_points_now[0] if target_points_now else 0
-        
-        # 🔥 检查输家是否有足够积分
-        loser_balance = challenger_balance if loser_id == challenger_id else target_balance
-        if loser_balance < points:
-            c.execute("UPDATE pk_invitations SET status = 'cancelled' WHERE id = ?", (invite_id,))
-            conn.commit()
-            conn.close()
-            return _send(chat_id, f"❌ 积分不足，PK取消（输家积分：{loser_balance}，需要：{points}）")
-        
-        # 更新积分
-        c.execute("UPDATE users_meta SET points = points + ? WHERE user_id = ?", (actual_win, winner_id))
-        c.execute("UPDATE users_meta SET points = points - ? WHERE user_id = ?", (points, loser_id))
-        
-        # 记录日志
-        c.execute(
-            "INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, (SELECT points FROM users_meta WHERE user_id = ?))",
-            (winner_id, winner_name, f"PK战胜 {loser_name}", actual_win, winner_id)
-        )
-        c.execute(
-            "INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, (SELECT points FROM users_meta WHERE user_id = ?))",
-            (loser_id, loser_name, f"PK败给 {winner_name}", -points, loser_id)
-        )
-        
-        # 记录PK日志
-        c.execute(
-            "INSERT INTO pk_logs (challenger_id, challenger_name, target_id, target_name, points, challenger_roll, target_roll, winner_id, winner_name, tax) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (challenger_id, challenger_name, target_id, target_name, points, challenger_roll, target_roll, winner_id, winner_name, tax)
-        )
-        
-        # 更新邀请状态
-        c.execute("UPDATE pk_invitations SET status = 'completed' WHERE id = ?", (invite_id,))
-        
-        conn.commit()
-        conn.close()
+        result = point_dao.accept_pk_invitation(invite["id"], binding['emby_user_id'])
+        if result.get("status") != "success":
+            return _send(chat_id, f"❌ {result.get('message', '接受PK失败')}")
         
         # 通知双方
-        result_msg = f"🎲 <b>PK结果</b>\n\n{challenger_name}({challenger_roll}点) vs {target_name}({target_roll}点)\n\n🎉 <b>{winner_name}</b> 获胜！\n💰 获得 <b>{actual_win}</b> 积分（扣{tax_rate}%手续费）"
-        _send(original_chat_id, result_msg)
+        challenger_name = result["challenger_name"]
+        target_name = result["target_name"]
+        challenger_roll = result["challenger_roll"]
+        target_roll = result["target_roll"]
+        original_chat_id = result["chat_id"]
+        if result.get("tie"):
+            result_msg = f"⚖️ <b>平局！</b>\n\n{challenger_name}({challenger_roll}点) vs {target_name}({target_roll}点)\n\n积分退还，不扣手续费"
+        else:
+            result_msg = f"🎲 <b>PK结果</b>\n\n{challenger_name}({challenger_roll}点) vs {target_name}({target_roll}点)\n\n🎉 <b>{result['winner_name']}</b> 获胜！\n💰 获得 <b>{result['win_amount']}</b> 积分（扣{result['tax_rate']}%手续费）"
+        if original_chat_id:
+            _send(original_chat_id, result_msg)
         return _send(chat_id, result_msg)
         
     except Exception as e:
@@ -2258,10 +2059,6 @@ def cmd_transfer(chat_id, tg_user_id, text, is_group=False, entities=None):
         
         if not target:
             return _send(chat_id, "❌ 请指定要转赠的用户")
-        
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        conn.execute("BEGIN IMMEDIATE")
 
         # 🔥 优先从 entities 获取被 @ 用户的真实 TG ID
         mentioned_user_id = None
@@ -2272,121 +2069,48 @@ def cmd_transfer(chat_id, tg_user_id, text, is_group=False, entities=None):
                     if ent.get("type") == "text_mention" and ent.get("user"):
                         mentioned_user_id = str(ent["user"].get("id", ""))
                         break
-                    # mention 需要从文本中提取用户名
                     elif ent.get("type") == "mention":
                         offset = ent.get("offset", 0)
                         length = ent.get("length", 0)
                         mentioned_username = text[offset:offset+length].lstrip('@')
-                        # 通过用户名查找绑定的用户
-                        c.execute("SELECT tg_user_id FROM tg_user_bindings WHERE tg_username = ?", (mentioned_username,))
-                        row = c.fetchone()
-                        if row:
-                            mentioned_user_id = row[0]
+                        mentioned_user_id = user_bot_dao.get_tg_user_id_by_username(mentioned_username)
                         break
         
-        # 通过 TG 用户ID或用户名查找绑定的 Emby 用户
-        to_user_id = None
-        to_user_name = None
-        
         if mentioned_user_id:
-            # 通过被 @ 用户的 TG ID 查找
-            c.execute("SELECT emby_user_id, emby_username FROM tg_user_bindings WHERE tg_user_id = ?", (mentioned_user_id,))
-            row = c.fetchone()
-            if row:
-                to_user_id = row[0]
-                to_user_name = row[1]
-        
+            target = mentioned_user_id
+
+        target_binding = user_bot_dao.get_binding_by_tg_user_or_username(target)
+        to_user_id = target_binding["emby_user_id"] if target_binding else None
+        to_user_name = target_binding["emby_username"] if target_binding else None
+        display_name = target_binding["tg_display_name"] if target_binding else None
+
         if not to_user_id:
-            # 尝试通过 TG 用户名或 Emby 用户名查找
-            c.execute("SELECT emby_user_id, emby_username FROM tg_user_bindings WHERE tg_user_id = ? OR tg_username = ?", (target, target))
-            row = c.fetchone()
-            
-            if not row:
-                # 尝试通过 Emby 用户名查找
-                try:
-                    from app.core.media_adapter import media_api
-                    emby_users = media_api.get("/Users", timeout=5).json()
-                    user_map = {u['Name']: u['Id'] for u in emby_users}
-                    to_user_id = user_map.get(target)
-                    to_user_name = target
-                except:
-                    pass
-            else:
-                to_user_id = row[0]
-                to_user_name = row[1]
-        
+            try:
+                emby_users = media_api.get("/Users", timeout=5).json()
+                user_map = {u['Name']: u['Id'] for u in emby_users}
+                to_user_id = user_map.get(target)
+                to_user_name = target
+            except Exception:
+                pass
+
         if not to_user_id:
-            conn.close()
             return _send(chat_id, f"❌ 未找到用户：{target}\n\n💡 请确认对方已绑定机器人，或直接使用 Emby 用户名")
-        
-        # 获取配置
-        config = {r[0]: r[1] for r in c.execute("SELECT key, value FROM point_config").fetchall()}
-        
-        # 检查是否启用转赠
-        if int(config.get('enable_transfer', 0)) == 0:
-            conn.close()
-            return _send(chat_id, "❌ 积分转赠功能未开启")
-        
-        # 检查金额范围
-        min_amount = int(config.get('transfer_min', 10))
-        max_amount = int(config.get('transfer_max', 1000))
-        if amount < min_amount or amount > max_amount:
-            conn.close()
-            return _send(chat_id, f"❌ 转赠金额需在 {min_amount}-{max_amount} 之间")
-        
-        # 不能转给自己
-        if to_user_id == binding['emby_user_id']:
-            conn.close()
-            return _send(chat_id, "❌ 不能转赠给自己")
-        
-        # 获取发送者积分
-        row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (binding['emby_user_id'],)).fetchone()
-        from_points = row[0] if row else 0
-        
-        if from_points < amount:
-            conn.close()
-            return _send(chat_id, f"❌ 积分不足！当前积分: {from_points}")
-        
-        # 计算手续费
-        fee_rate = int(config.get('transfer_fee_rate', 10))
-        fee = int(amount * fee_rate / 100)
-        actual_amount = amount - fee
-        
-        # 获取目标用户积分
-        to_row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (to_user_id,)).fetchone()
-        to_points = (to_row[0] or 0) + actual_amount if to_row else actual_amount
-        
-        # 获取目标用户的 TG 用户名和显示名称
-        to_tg_row = c.execute("SELECT tg_username, tg_display_name FROM tg_user_bindings WHERE emby_user_id = ?", (to_user_id,)).fetchone()
-        to_tg_username = to_tg_row[0] if to_tg_row and to_tg_row[0] else None
-        to_tg_display_name = to_tg_row[1] if to_tg_row and to_tg_row[1] else None
-        logger.info(f"[转赠] 目标用户 emby_user_id={to_user_id}, tg_username={to_tg_username}, tg_display_name={to_tg_display_name}, emby_name={to_user_name}")
-        
-        # 更新积分（原子操作）
-        c.execute("UPDATE users_meta SET points = points - ? WHERE user_id = ?", (amount, binding['emby_user_id']))
-        if to_row:
-            c.execute("UPDATE users_meta SET points = points + ? WHERE user_id = ?", (actual_amount, to_user_id))
-        else:
-            c.execute("INSERT INTO users_meta (user_id, points) VALUES (?, ?)", (to_user_id, actual_amount))
 
-        new_from_points = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (binding['emby_user_id'],)).fetchone()[0]
-        new_to_points = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (to_user_id,)).fetchone()[0]
+        result = point_dao.transfer_points(
+            binding['emby_user_id'],
+            binding['emby_username'],
+            to_user_id,
+            to_user_name,
+            amount,
+            target_exists=True,
+        )
+        if result.get("status") != "success":
+            return _send(chat_id, f"❌ {result.get('message', '转赠失败')}")
 
-        # 记录日志
-        c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-                 (binding['emby_user_id'], binding['emby_username'], f"转赠给 {to_user_name} (手续费{fee})", -amount, new_from_points))
-        c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-                 (to_user_id, to_user_name, f"收到 {binding['emby_username']} 转赠", actual_amount, new_to_points))
-        
-        conn.commit(); conn.close()
-        
-        # 显示优先级：TG显示名称 > @username > Emby用户名
-        if to_tg_display_name:
-            display_name = to_tg_display_name
-        elif to_tg_username:
-            display_name = f"@{to_tg_username}"
-        else:
-            display_name = to_user_name
+        new_from_points = result["balance"]
+        actual_amount = result["actual_amount"]
+        fee = result["fee"]
+        display_name = display_name or to_user_name
         
         result = _send(chat_id, f"✅ 转赠成功！\n\n💰 已转赠 <b>{actual_amount}</b> 积分给 <b>{display_name}</b>\n💸 手续费：{fee} 积分\n📊 余额：{new_from_points}")
         
@@ -2490,41 +2214,22 @@ def cmd_pk(chat_id, tg_user_id, text, is_group=False, tg_name="", user_msg_id=No
         
         if amount <= 0:
             return _send(chat_id, "❌ 积分必须大于0")
-        
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        conn.execute("BEGIN IMMEDIATE")
-
-        # 获取配置
-        config = {r[0]: r[1] for r in c.execute("SELECT key, value FROM point_config").fetchall()}
-
-        # 检查是否启用 PK
+        config = point_dao.get_point_config()
         if int(config.get('enable_pk', 0)) == 0:
-            conn.close()
             return _send(chat_id, "❌ PK功能未开启")
-        
-        # 检查积分范围
+
         min_pk = int(config.get('pk_min', 10))
         max_pk = int(config.get('pk_max', 500))
         if amount < min_pk or amount > max_pk:
-            conn.close()
             return _send(chat_id, f"❌ PK积分需在 {min_pk}-{max_pk} 之间")
-        
-        # 检查每日次数限制
+
         pk_max_per_day = int(config.get('pk_max_per_day', 10))
-        today = datetime.datetime.now().strftime('%Y-%m-%d')
-        today_count = c.execute("SELECT COUNT(*) FROM point_logs WHERE user_id = ? AND action LIKE 'PK%' AND date(created_at) = ?",
-                               (binding['emby_user_id'], today)).fetchone()[0]
+        today_count = point_dao.count_today_point_logs(binding['emby_user_id'], action_like='PK%')
         if today_count >= pk_max_per_day:
-            conn.close()
             return _send(chat_id, f"❌ 今天PK次数已达上限 ({pk_max_per_day}次)\n\n💡 明天再来吧！")
-        
-        # 获取用户积分
-        row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (binding['emby_user_id'],)).fetchone()
-        current_points = row[0] if row else 0
-        
+
+        current_points = point_dao.get_user_points_balance(binding['emby_user_id'])
         if current_points < amount:
-            conn.close()
             return _send(chat_id, f"❌ 积分不足！当前积分: {current_points}")
         
         # 🔥 群聊中 @ 发起者
@@ -2538,7 +2243,6 @@ def cmd_pk(chat_id, tg_user_id, text, is_group=False, tg_name="", user_msg_id=No
         # 发送用户的骰子（使用 Telegram 骰子动画）
         user_dice_msg = _tg_api("sendDice", {"chat_id": chat_id, "emoji": "🎲"})
         if not user_dice_msg:
-            conn.close()
             return _send(chat_id, "❌ 发送骰子失败，请稍后重试")
         user_dice_msg_id = user_dice_msg.get("result", {}).get("message_id")
         user_dice = user_dice_msg.get("result", {}).get("dice", {}).get("value", random.randint(1, 6))
@@ -2549,28 +2253,26 @@ def cmd_pk(chat_id, tg_user_id, text, is_group=False, tg_name="", user_msg_id=No
         # 发送机器人的骰子
         bot_dice_msg = _tg_api("sendDice", {"chat_id": chat_id, "emoji": "🎲"})
         if not bot_dice_msg:
-            conn.close()
             return _send(chat_id, "❌ 发送骰子失败，请稍后重试")
         bot_dice_msg_id = bot_dice_msg.get("result", {}).get("message_id")
         bot_dice = bot_dice_msg.get("result", {}).get("dice", {}).get("value", random.randint(1, 6))
         
         # 判断胜负
         if user_dice > bot_dice:
-            # 用户赢
-            c.execute("UPDATE users_meta SET points = points + ? WHERE user_id = ?", (amount, binding['emby_user_id']))
+            point_result = point_dao.apply_game_point_change(binding['emby_user_id'], binding['emby_username'], f"PK赢了 (骰子{user_dice}vs{bot_dice})", amount)
             log_action = f"PK赢了 (骰子{user_dice}vs{bot_dice})"
             log_amount = amount
         elif user_dice < bot_dice:
-            # 用户输
-            c.execute("UPDATE users_meta SET points = points - ? WHERE user_id = ?", (amount, binding['emby_user_id']))
+            point_result = point_dao.apply_game_point_change(binding['emby_user_id'], binding['emby_username'], f"PK输了 (骰子{user_dice}vs{bot_dice})", -amount, require_min_points=amount)
             log_action = f"PK输了 (骰子{user_dice}vs{bot_dice})"
             log_amount = -amount
         else:
-            # 平局
-            log_action = f"PK平局 (骰子{user_dice}vs{bot_dice})"
-            log_amount = 0
+            point_result = point_dao.apply_game_point_change(binding['emby_user_id'], binding['emby_username'], f"PK平局 (骰子{user_dice}vs{bot_dice})", 0)
 
-        new_points = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (binding['emby_user_id'],)).fetchone()[0]
+        if point_result.get("status") != "success":
+            return _send(chat_id, f"❌ {point_result.get('message', 'PK处理失败')}")
+
+        new_points = point_result["points"]
 
         if log_amount > 0:
             result_text = f"🎉 <b>{user_at} 赢了！</b>\n\n🎲 掷出 <b>{user_dice}</b> 点，机器人掷出 <b>{bot_dice}</b> 点\n💰 获得 <b>+{amount}</b> 积分\n📊 余额：<b>{new_points}</b> 积分"
@@ -2580,11 +2282,6 @@ def cmd_pk(chat_id, tg_user_id, text, is_group=False, tg_name="", user_msg_id=No
             result_text = f"🤝 <b>平局！</b>\n\n🎲 {user_at} 掷出 <b>{user_dice}</b> 点，机器人掷出 <b>{bot_dice}</b> 点\n💰 积分不变\n📊 余额：<b>{new_points}</b> 积分"
         
         # 记录日志
-        c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-                 (binding['emby_user_id'], binding['emby_username'], log_action, log_amount, new_points))
-        
-        conn.commit(); conn.close()
-        
         result = _send(chat_id, result_text)
         
         # 群聊中15秒后删除所有消息
@@ -2688,14 +2385,8 @@ def cmd_lottery(chat_id, tg_user_id, text, is_group=False, user_msg_id=None):
     parts = text.split()
     logger.info(f"[彩票] parts={parts}")
     
-    # 获取配置
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    c = conn.cursor()
-    config = {r[0]: r[1] for r in c.execute("SELECT key, value FROM point_config").fetchall()}
-    
-    # 检查是否启用
+    config = point_dao.get_point_config()
     if int(config.get('enable_lottery', 0)) == 0:
-        conn.close()
         return _send(chat_id, "❌ 彩票功能未开启")
     
     lottery_cost = int(config.get('lottery_cost', 10))
@@ -2708,27 +2399,24 @@ def cmd_lottery(chat_id, tg_user_id, text, is_group=False, user_msg_id=None):
     # 查看我的彩票
     if len(parts) == 1 or parts[1] in ['my', '我的']:
         # 获取所有未过期的彩票（最近7天）
-        tickets = c.execute("""SELECT numbers, cost, draw_date, created_at FROM lottery_tickets 
-                             WHERE user_id = ? AND draw_date >= date('now', '-7 days') 
-                             ORDER BY draw_date DESC, created_at DESC""",
-                           (binding['emby_user_id'],)).fetchall()
+        tickets = point_dao.list_user_lottery_tickets(binding['emby_user_id'])
         
         if not tickets:
-            conn.close()
             return _send(chat_id, f"🎫 <b>我的彩票</b>\n\n最近没有购买彩票\n\n💡 发送 /lottery 1234 购买")
         
         msg = f"🎫 <b>我的彩票</b>\n\n"
         current_date = None
         for t in tickets:
-            numbers, cost, draw_date, created_at = t
+            numbers = t["numbers"]
+            cost = t["cost"]
+            draw_date = t["draw_date"]
             
             # 检查该日期是否已开奖
-            result_row = c.execute("SELECT winning_numbers FROM lottery_results WHERE draw_date = ? AND winning_numbers != ''", (draw_date,)).fetchone()
+            result_row = point_dao.get_lottery_winning_numbers(draw_date)
             
-            if result_row:
-                winning_numbers = result_row[0]
-                # 检查是否中了幸运奖
-                lucky_row = c.execute("SELECT 1 FROM lottery_winners WHERE user_id = ? AND draw_date = ? AND prize_level = 5", (binding['emby_user_id'], draw_date)).fetchone()
+            if result_row and result_row["winning_numbers"]:
+                winning_numbers = result_row["winning_numbers"]
+                lucky_row = None
                 if lucky_row:
                     status = "🍀 幸运奖"
                 else:
@@ -2758,24 +2446,22 @@ def cmd_lottery(chat_id, tg_user_id, text, is_group=False, user_msg_id=None):
             
             msg += f"  {numbers} | {status}\n"
         
-        conn.close()
         return _send(chat_id, msg)
     
     # 查看开奖结果
     if parts[1] in ['result', '结果', '开奖']:
         # 只查询已开奖的记录（winning_numbers 不为空）
-        result = c.execute("SELECT draw_date, winning_numbers, total_pool FROM lottery_results WHERE winning_numbers != '' ORDER BY draw_date DESC LIMIT 1").fetchone()
+        result = point_dao.get_latest_lottery_result()
         
         if not result:
-            conn.close()
             return _send(chat_id, "🎫 <b>开奖结果</b>\n\n暂无开奖记录")
         
-        draw_date, winning_numbers, total_pool = result
+        draw_date = result["draw_date"]
+        winning_numbers = result["winning_numbers"]
+        total_pool = result["total_pool"]
         
         # 查询中奖者
-        winners = c.execute("SELECT username, prize_level, prize_amount FROM lottery_winners WHERE draw_date = ? ORDER BY prize_level",
-                           (draw_date,)).fetchall()
-        conn.close()
+        winners = point_dao.list_lottery_winners_for_date(draw_date)
         
         msg = f"🎫 <b>开奖结果</b> ({draw_date})\n\n"
         msg += f"🎲 中奖号码: <b>{winning_numbers}</b>\n"
@@ -2785,7 +2471,7 @@ def cmd_lottery(chat_id, tg_user_id, text, is_group=False, user_msg_id=None):
             msg += "🏆 中奖名单:\n"
             level_names = {1: "一等奖", 2: "二等奖", 3: "三等奖", 4: "安慰奖"}
             for w in winners:
-                msg += f"• {w[0]} - {level_names.get(w[1], '未知')} {w[2]} 积分\n"
+                msg += f"• {w['username']} - {level_names.get(w['prize_level'], '未知')} {w['prize_amount']} 积分\n"
         else:
             msg += "😢 本期无人中奖，奖池累积到下期"
         
@@ -2794,9 +2480,9 @@ def cmd_lottery(chat_id, tg_user_id, text, is_group=False, user_msg_id=None):
     # 查看当前奖池
     if parts[1] in ['pool', '奖池']:
         # 检查今天是否已开奖
-        today_drawn = c.execute("SELECT winning_numbers FROM lottery_results WHERE draw_date = ? AND winning_numbers != ''", (today,)).fetchone()
+        today_drawn = point_dao.get_lottery_winning_numbers(today)
         
-        if today_drawn:
+        if today_drawn and today_drawn["winning_numbers"]:
             # 今天已开奖，显示明天的奖池
             target_date = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
             draw_status = "✅ 已开奖"
@@ -2806,20 +2492,15 @@ def cmd_lottery(chat_id, tg_user_id, text, is_group=False, user_msg_id=None):
             draw_status = "⏳ 未开奖"
             next_draw = f"今天 {draw_hour}:00"
         
-        # 获取目标日期奖池
-        target_pool = c.execute("SELECT total_pool FROM lottery_results WHERE draw_date = ?", (target_date,)).fetchone()
-        target_pool = target_pool[0] if target_pool else 0
-        
-        # 获取目标日期购票数
-        target_tickets = c.execute("SELECT COUNT(*) FROM lottery_tickets WHERE draw_date = ?", (target_date,)).fetchone()[0]
+        pool_info = point_dao.get_lottery_pool_info(binding['emby_user_id'], today, target_date)
+        target_pool = pool_info["today_pool"]
+        target_tickets = pool_info["today_tickets"]
         
         # 获取奖池分配比例
         ratio_1 = int(config.get('lottery_pool_ratio_1', 50))
         ratio_2 = int(config.get('lottery_pool_ratio_2', 20))
         ratio_3 = int(config.get('lottery_pool_ratio_3', 10))
         ratio_4 = int(config.get('lottery_pool_ratio_4', 5))
-        
-        conn.close()
         
         msg = f"🎰 <b>当前奖池</b> ({target_date})\n\n"
         msg += f"💰 奖池总额: <b>{target_pool}</b> 积分\n"
@@ -2858,8 +2539,8 @@ def cmd_lottery(chat_id, tg_user_id, text, is_group=False, user_msg_id=None):
     logger.info(f"[彩票] 开始检查购买数量和积分")
     
     # 检查今天是否已开奖
-    today_drawn = c.execute("SELECT winning_numbers FROM lottery_results WHERE draw_date = ? AND winning_numbers != ''", (today,)).fetchone()
-    if today_drawn:
+    today_drawn = point_dao.get_lottery_winning_numbers(today)
+    if today_drawn and today_drawn["winning_numbers"]:
         # 今天已开奖，购票计入明天
         tomorrow = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
         draw_date_for_ticket = tomorrow
@@ -2869,55 +2550,40 @@ def cmd_lottery(chat_id, tg_user_id, text, is_group=False, user_msg_id=None):
         draw_date_display = f"今天 {draw_hour}:00"
     
     # 检查该开奖日期已购买数量
-    today_count = c.execute("SELECT COUNT(*) FROM lottery_tickets WHERE user_id = ? AND draw_date = ?",
-                           (binding['emby_user_id'], draw_date_for_ticket)).fetchone()[0]
+    today_count = len(point_dao.list_lottery_ticket_numbers(binding['emby_user_id'], draw_date_for_ticket))
     logger.info(f"[彩票] {draw_date_for_ticket} 已购买: {today_count}, 限购: {lottery_max}")
     
     if today_count + len(numbers_list) > lottery_max:
-        conn.close()
         return _send(chat_id, f"❌ 每人每天最多购买 {lottery_max} 张彩票\n\n今天已购买: {today_count} 张")
     
     # 检查积分
     total_cost = len(numbers_list) * lottery_cost
     logger.info(f"[彩票] 彩票价格: {lottery_cost}, 数量: {len(numbers_list)}, 总花费: {total_cost}")
-    row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (binding['emby_user_id'],)).fetchone()
-    current_points = row[0] if row else 0
+    current_points = point_dao.get_user_points_balance(binding['emby_user_id'])
     logger.info(f"[彩票] 积分: {current_points}, 需要: {total_cost}")
     
     if current_points < total_cost:
-        conn.close()
         logger.warning(f"[彩票] 积分不足")
         return _send(chat_id, f"❌ 积分不足！需要 {total_cost} 积分，当前: {current_points}")
     
     logger.info(f"[彩票] 积分检查通过，开始扣除积分")
 
     try:
-        conn.execute("BEGIN IMMEDIATE")
-        # 扣除积分（原子操作）
-        c.execute("UPDATE users_meta SET points = points - ? WHERE user_id = ?", (total_cost, binding['emby_user_id']))
-        new_points = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (binding['emby_user_id'],)).fetchone()[0]
-        logger.info(f"[彩票] 积分已扣除: {current_points} -> {new_points}")
-        
-        # 记录彩票
-        for num in numbers_list:
-            c.execute("INSERT INTO lottery_tickets (user_id, username, numbers, cost, draw_date) VALUES (?, ?, ?, ?, ?)",
-                     (binding['emby_user_id'], binding['emby_username'], num, lottery_cost, draw_date_for_ticket))
-        logger.info(f"[彩票] 彩票已记录，开奖日期: {draw_date_for_ticket}")
-        
-        # 更新奖池（计入对应日期）
-        c.execute("INSERT OR IGNORE INTO lottery_results (draw_date, winning_numbers, total_pool) VALUES (?, '', 0)", (draw_date_for_ticket,))
-        c.execute("UPDATE lottery_results SET total_pool = total_pool + ? WHERE draw_date = ?", (total_cost, draw_date_for_ticket))
-        logger.info(f"[彩票] 奖池已更新")
-        
-        # 记录日志
-        c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-                 (binding['emby_user_id'], binding['emby_username'], f"购买彩票 {len(numbers_list)}张", -total_cost, new_points))
-        
-        conn.commit(); conn.close()
+        result = point_dao.buy_lottery_tickets(
+            binding['emby_user_id'],
+            binding['emby_username'],
+            len(numbers_list),
+            lottery_cost,
+            lottery_max,
+            draw_date_for_ticket,
+            numbers_list,
+        )
+        if result.get("status") != "success":
+            return _send(chat_id, f"❌ {result.get('message', '购买失败')}")
+        new_points = result["new_points"]
         logger.info(f"[彩票] 购买成功，发送消息")
     except Exception as e:
         logger.error(f"[彩票] 数据库操作失败: {e}")
-        conn.close()
         return _send(chat_id, f"❌ 购买失败：{str(e)}")
     
     msg = f"🎫 <b>购买成功！</b>\n\n"
@@ -2953,13 +2619,10 @@ def _cmd_scratch_impl(chat_id, tg_user_id, text, is_group=False, tg_name="", use
     if not binding:
         return _send(chat_id, "❌ 请先私聊机器人绑定账号")
     
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    c = conn.cursor()
-    config = {r[0]: r[1] for r in c.execute("SELECT key, value FROM point_config").fetchall()}
+    config = point_dao.get_point_config()
     
     # 检查是否启用
     if int(config.get('enable_scratch', 0)) == 0:
-        conn.close()
         return _send(chat_id, "❌ 刮刮乐功能未开启")
     
     scratch_cost = int(config.get('scratch_cost', 100))
@@ -2968,16 +2631,19 @@ def _cmd_scratch_impl(chat_id, tg_user_id, text, is_group=False, tg_name="", use
     
     # 查看当前刮刮乐
     if len(parts) == 1 or parts[1] in ['info', '当前']:
-        card = c.execute("SELECT id, total_slots, filled_slots, price, status FROM scratch_cards WHERE status = 'active' ORDER BY created_at DESC LIMIT 1").fetchone()
+        card = point_dao.get_active_scratch_card()
         
         if not card:
-            conn.close()
             return _send(chat_id, "🎰 <b>刮刮乐</b>\n\n当前没有进行中的刮刮乐\n\n💡 发送 /scratch 开始 创建新刮刮乐")
         
-        card_id, total_slots, filled_slots, price, status = card
+        card_id = card["id"]
+        total_slots = card["total_slots"]
+        filled_slots = card["filled_slots"]
+        price = card["price"]
+        status = card["status"]
         
         # 获取格子状态
-        slots = c.execute("SELECT slot_number, is_scratched, username FROM scratch_card_slots WHERE card_id = ? ORDER BY slot_number", (card_id,)).fetchall()
+        slots = point_dao.get_scratch_card_slots(card_id)
         
         # 🔥 显示可交互的按钮（已刮的显示✅，未刮的显示数字）
         msg = f"🎰 <b>刮刮乐 #{card_id}</b>\n\n"
@@ -2997,21 +2663,10 @@ def _cmd_scratch_impl(chat_id, tg_user_id, text, is_group=False, tg_name="", use
         for i in range(0, len(buttons), 3):
             keyboard.append(buttons[i:i+3])
         
-        conn.close()
         return _send(chat_id, msg, reply_markup={"inline_keyboard": keyboard})
     
     # 创建刮刮乐
     if parts[1] in ['start', '开始', 'create', '创建']:
-        # 🔥 使用事务锁防止并发创建
-        conn.execute("BEGIN EXCLUSIVE")
-        
-        # 检查是否已有活跃的刮刮乐
-        existing = c.execute("SELECT id FROM scratch_cards WHERE status = 'active'").fetchone()
-        if existing:
-            conn.rollback()
-            conn.close()
-            return _send(chat_id, "❌ 已有进行中的刮刮乐，请先刮完再创建新的")
-        
         # 检查仅管理员限制
         if int(config.get('scratch_admin_only', 0)) == 1:
             try:
@@ -3020,8 +2675,6 @@ def _cmd_scratch_impl(chat_id, tg_user_id, text, is_group=False, tg_name="", use
             except:
                 is_admin = False
             if not is_admin:
-                conn.rollback()
-                conn.close()
                 return _send(chat_id, "❌ 仅管理员可发起刮刮乐")
         
         total_slots = int(config.get('scratch_slots', 9))
@@ -3046,18 +2699,17 @@ def _cmd_scratch_impl(chat_id, tg_user_id, text, is_group=False, tg_name="", use
         
         random.shuffle(prizes)
         
-        # 创建刮刮乐
         display_name = tg_name or binding['emby_username']
-        c.execute("INSERT INTO scratch_cards (total_slots, price, created_by, chat_id) VALUES (?, ?, ?, ?)",
-                 (total_slots, price, display_name, str(chat_id)))
-        card_id = c.lastrowid
-        
-        # 创建格子
-        for i, prize in enumerate(prizes, 1):
-            c.execute("INSERT INTO scratch_card_slots (card_id, slot_number, prize_amount) VALUES (?, ?, ?)",
-                     (card_id, i, prize))
-        
-        conn.commit()
+        create_result = point_dao.create_scratch_card(
+            total_slots=total_slots,
+            price=price,
+            created_by=display_name,
+            chat_id=chat_id,
+            prizes=prizes,
+        )
+        if create_result.get("status") != "success":
+            return _send(chat_id, f"❌ {create_result.get('message', '创建刮刮乐失败')}")
+        card_id = create_result["card_id"]
         
         # 构建消息
         msg = f"🎰 <b>刮刮乐开始！</b>\n\n"
@@ -3079,17 +2731,11 @@ def _cmd_scratch_impl(chat_id, tg_user_id, text, is_group=False, tg_name="", use
         for i in range(0, len(buttons), 3):
             keyboard.append(buttons[i:i+3])
         
-        conn.close()
-        
         result = _send(chat_id, msg, reply_markup={"inline_keyboard": keyboard})
         
         # 保存消息ID
         if result and result.get('result', {}).get('message_id'):
-            msg_id = result['result']['message_id']
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            conn.execute("UPDATE scratch_cards SET message_id = ? WHERE id = ?", (msg_id, card_id))
-            conn.commit()
-            conn.close()
+            point_dao.save_scratch_card_message_id(card_id, result['result']['message_id'])
         
         # 群聊中只删除用户命令消息（不删除刮刮乐消息，等刮完后再删）
         if is_group and user_msg_id:
@@ -3097,7 +2743,6 @@ def _cmd_scratch_impl(chat_id, tg_user_id, text, is_group=False, tg_name="", use
         
         return result
     
-    conn.close()
     return _send(chat_id, "💡 使用方法:\n/scratch - 查看当前刮刮乐\n/scratch 开始 - 创建新刮刮乐")
 
 
@@ -3107,80 +2752,32 @@ def _handle_scratch(chat_id, tg_user_id, card_id, slot_number, tg_name=""):
     if not binding:
         return _send(chat_id, "❌ 请先私聊机器人绑定账号")
     
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    c = conn.cursor()
-    
     try:
-        # 🔥 使用事务锁防止并发问题
-        conn.execute("BEGIN EXCLUSIVE")
-        
-        # 检查刮刮乐是否存在
-        card = c.execute("SELECT id, total_slots, filled_slots, price, status, chat_id, message_id FROM scratch_cards WHERE id = ?", (card_id,)).fetchone()
+        card = point_dao.get_scratch_card(card_id)
         if not card:
-            conn.rollback()
-            conn.close()
             return _send(chat_id, "❌ 刮刮乐不存在")
         
-        _, total_slots, filled_slots, price, status, orig_chat_id, orig_msg_id = card
-        
-        if status != 'active':
-            conn.rollback()
-            conn.close()
+        if card["status"] != "active":
             return _send(chat_id, "❌ 刮刮乐已结束")
-        
-        # 检查格子是否已被刮
-        slot = c.execute("SELECT id, is_scratched, prize_amount FROM scratch_card_slots WHERE card_id = ? AND slot_number = ?", (card_id, slot_number)).fetchone()
-        if not slot:
-            conn.rollback()
-            conn.close()
-            return _send(chat_id, "❌ 格子不存在")
-        
-        if slot[1]:  # 已刮
-            conn.rollback()
-            conn.close()
-            return _send(chat_id, "❌ 这个格子已经被刮过了")
-        
-        # 检查这个人是否已经刮过
-        already_scratched = c.execute("SELECT id FROM scratch_card_slots WHERE card_id = ? AND user_id = ? AND is_scratched = 1", 
-                                     (card_id, binding['emby_user_id'])).fetchone()
-        if already_scratched:
-            conn.rollback()
-            conn.close()
-            return _send(chat_id, "❌ 你已经刮过这个刮刮乐了，每人只能刮一次！")
-        
-        # 检查积分
-        row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (binding['emby_user_id'],)).fetchone()
-        current_points = row[0] if row else 0
-        
-        if current_points < price:
-            conn.rollback()
-            conn.close()
-            return _send(chat_id, f"❌ 积分不足！需要 {price} 积分，当前: {current_points}")
-        
-        # 扣除积分（原子操作）
-        c.execute("UPDATE users_meta SET points = points - ? WHERE user_id = ?", (price, binding['emby_user_id']))
-        new_points = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (binding['emby_user_id'],)).fetchone()[0]
-        
-        # 标记格子为已刮
-        prize_amount = slot[2]
+
         display_name = tg_name or binding['emby_username']
-        c.execute("UPDATE scratch_card_slots SET is_scratched = 1, user_id = ?, username = ?, scratched_at = CURRENT_TIMESTAMP WHERE id = ?",
-                 (binding['emby_user_id'], display_name, slot[0]))
-        
-        # 更新已刮数量
-        new_filled = filled_slots + 1
-        c.execute("UPDATE scratch_cards SET filled_slots = ? WHERE id = ?", (new_filled, card_id))
-        
-        # 记录日志
-        c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-                 (binding['emby_user_id'], binding['emby_username'], f"刮刮乐 #{card_id} 格子{slot_number}", -price, new_points))
-        
-        # 🔥 判断是否全部刮完
+        update_result = point_dao.update_scratch_card_slot(
+            card_id,
+            slot_number,
+            binding['emby_user_id'],
+            binding['emby_username'],
+            card["price"],
+            display_name,
+        )
+        if update_result.get("status") != "success":
+            return _send(chat_id, f"❌ {update_result.get('message', '刮奖失败')}")
+
+        new_points = update_result["new_points"]
+        new_filled = update_result["new_filled"]
+        total_slots = update_result["total_slots"]
+        orig_chat_id = update_result["chat_id"]
+        orig_msg_id = update_result["message_id"]
         is_last_one = new_filled >= total_slots
-        # 不在这里更新状态，让 _scratch_draw_result 来处理
-        
-        conn.commit()
-        conn.close()
         
         # 编辑原消息，更新按钮状态
         if orig_msg_id and orig_chat_id:
@@ -3195,22 +2792,15 @@ def _handle_scratch(chat_id, tg_user_id, card_id, slot_number, tg_name=""):
         
     except Exception as e:
         logger.error(f"[刮刮乐] 刮奖失败: {e}")
-        try: conn.rollback()
-        except Exception: pass
-        conn.close()
         _send(chat_id, f"❌ 刮奖失败：{str(e)}")
 
 
 def _update_scratch_message(chat_id, msg_id, card_id):
     """更新刮刮乐消息的按钮状态"""
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        # 获取刮刮乐状态
-        card = conn.execute("SELECT status FROM scratch_cards WHERE id = ?", (card_id,)).fetchone()
-        status = card[0] if card else 'completed'
-        
-        slots = conn.execute("SELECT slot_number, is_scratched, username FROM scratch_card_slots WHERE card_id = ? ORDER BY slot_number", (card_id,)).fetchall()
-        conn.close()
+        card = point_dao.get_scratch_card(card_id)
+        status = card["status"] if card else "completed"
+        slots = point_dao.get_scratch_card_slots(card_id)
         
         # 构建按钮（已刮的显示 ✅，未刮的显示数字）
         buttons = []
@@ -3235,48 +2825,21 @@ def _update_scratch_message(chat_id, msg_id, card_id):
 
 def _scratch_draw_result(chat_id, card_id):
     """刮刮乐开奖"""
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    c = conn.cursor()
-    
     try:
-        # 🔥 使用事务锁，检查状态
-        conn.execute("BEGIN EXCLUSIVE")
-        
-        # 检查是否已经开奖
-        card = c.execute("SELECT status FROM scratch_cards WHERE id = ?", (card_id,)).fetchone()
-        if not card or card[0] != 'active':
-            conn.rollback()
-            conn.close()
-            logger.info(f"[刮刮乐] #{card_id} 已经开奖或不存在，跳过")
-            return
-        
-        # 更新状态
-        c.execute("UPDATE scratch_cards SET status = 'completed' WHERE id = ?", (card_id,))
-        conn.commit()
-        
-        # 获取所有刮奖记录
-        slots = c.execute("SELECT slot_number, prize_amount, user_id, username FROM scratch_card_slots WHERE card_id = ? AND is_scratched = 1 ORDER BY slot_number", (card_id,)).fetchall()
-        
+        slots = point_dao.complete_scratch_card(card_id)
         if not slots:
-            conn.close()
-            logger.warning(f"[刮刮乐] #{card_id} 没有人刮奖")
+            logger.info(f"[刮刮乐] #{card_id} 已经开奖或不存在，跳过")
             return
         
         summary = f"🎊 <b>刮刮乐 #{card_id} 开奖！</b>\n\n"
         summary += f"📋 中奖明细:\n"
         total_prize = 0
         
-        for num, prize, user_id, uname in slots:
-            # 发放奖励
-            if user_id:
-                row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (user_id,)).fetchone()
-                if row:
-                    c.execute("UPDATE users_meta SET points = points + ? WHERE user_id = ?", (prize, user_id))
-                    new_points = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (user_id,)).fetchone()[0]
-                    # 更新日志
-                    display_name = uname or f"用户{user_id}"
-                    c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-                             (user_id, display_name, f"刮刮乐 #{card_id} 中奖", prize, new_points))
+        for slot in slots:
+            num = slot["slot_number"]
+            prize = slot["prize_amount"]
+            user_id = slot["user_id"]
+            uname = slot["username"]
             
             if prize >= 666:
                 emoji = "🏆"
@@ -3292,25 +2855,19 @@ def _scratch_draw_result(chat_id, card_id):
         
         summary += f"\n💰 总发放: {total_prize} 积分"
         
-        conn.commit()
-        
         # 🔥 刮刮乐结束，删除刮刮乐消息（群聊）
-        card_info = c.execute("SELECT chat_id, message_id FROM scratch_cards WHERE id = ?", (card_id,)).fetchone()
+        card_info = point_dao.get_scratch_card_origin(card_id)
         if card_info:
-            orig_chat_id, orig_msg_id = card_info
+            orig_chat_id = card_info["chat_id"]
+            orig_msg_id = card_info["message_id"]
             if orig_chat_id and orig_msg_id:
                 # 延迟15秒删除，让玩家看到结果
                 _delete_messages_later(int(orig_chat_id), [orig_msg_id], 15)
-        
-        conn.close()
         
         _send(chat_id, summary)
         
     except Exception as e:
         logger.error(f"[刮刮乐] 开奖失败: {e}")
-        try: conn.rollback()
-        except Exception: pass
-        conn.close()
 
 
 def cmd_shop(chat_id, tg_user_id, msg_id=None):
@@ -3327,12 +2884,9 @@ def cmd_shop(chat_id, tg_user_id, msg_id=None):
         return
     
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        row = conn.execute("SELECT points FROM users_meta WHERE user_id = ?", (binding['emby_user_id'],)).fetchone()
-        pts = row[0] if row and row[0] else 0
-        items_row = conn.execute("SELECT value FROM point_config WHERE key = 'store_items'").fetchone()
-        conn.close()
-        items = json.loads(items_row[0]) if items_row and items_row[0] else []
+        points_info = point_dao.get_user_points_info(binding['emby_user_id'])
+        pts = points_info.get("points", 0)
+        items = points_info.get("store_items", [])
         if not items:
             _reply(chat_id, "🏪 积分商城暂无商品",
                    reply_markup={"inline_keyboard": [[{"text": "🔙 主菜单", "callback_data": "ub_back_menu"}]]},
@@ -3376,84 +2930,30 @@ def cmd_redeem_callback(chat_id, tg_user_id, item_id, cq_id):
     uid = binding['emby_user_id']
     uname = binding['emby_username']
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)  # 🔥 修复：使用系统数据库
-        c = conn.cursor()
-        items_row = c.execute("SELECT value FROM point_config WHERE key = 'store_items'").fetchone()
-        items = json.loads(items_row[0]) if items_row else []
-        target = next((x for x in items if x.get("id") == item_id), None)
-        if not target:
-            conn.close()
-            _send(chat_id, "❌ 商品不存在")
-            return
-        cost = int(target.get('cost', 0))
-        row = c.execute("SELECT points, expire_date FROM users_meta WHERE user_id = ?", (uid,)).fetchone()
-        pts = row[0] if row else 0
-        exp = row[1] if row else None
-        
-        # 🔥 先检查永久账号（在扣积分之前）
-        if target.get("type") in ["renew", "random_renew"]:
-            is_permanent = not exp or exp == "" or "2099" in exp or "3000" in exp or "永久" in exp
-            if is_permanent:
-                conn.close()
-                _send(chat_id, "❌ 你的账号为永久有效，无需续期！")
-                return
-        
-        if pts < cost:
-            conn.close()
-            _send(chat_id, f"❌ 余额不足！需要 {cost} 积分，当前 {pts}")
+        redeem_result = point_dao.redeem_store_item(uid, uname, item_id)
+        if redeem_result.get("status") != "success":
+            _send(chat_id, f"❌ {redeem_result.get('message', '兑换失败')}")
             return
 
-        new_pts = pts - cost
-        c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (new_pts, uid))
+        target_name = redeem_result["item_name"]
+        target_type = redeem_result["item_type"]
+        cost = redeem_result["cost"]
+        new_pts = redeem_result["balance"]
         result_msg = ""
-        actual_days = 0
+        actual_days = redeem_result.get("actual_days", 0)
         
-        if target.get("type") == "renew":
-            today = datetime.date.today()
-            try:
-                exp_date = datetime.datetime.strptime(exp, "%Y-%m-%d").date() if exp else today
-                if exp_date < today: exp_date = today
-            except: exp_date = today
-            days = int(target.get("val", 30))
-            new_exp = (exp_date + datetime.timedelta(days=days)).strftime("%Y-%m-%d")
-            c.execute("UPDATE users_meta SET expire_date = ? WHERE user_id = ?", (new_exp, uid))
+        if target_type == "renew":
+            new_exp = redeem_result["new_exp_str"]
             try: media_api.post(f"/Users/{uid}/Policy", json={"IsDisabled": False}, timeout=3)
             except Exception: pass
             result_msg = f"📅 账号已续期至 {new_exp}"
             
-        elif target.get("type") == "random_renew":
-            # 🎲 随机定价延期（永久账号已在前面统一检查）
-            
-            base_days = int(target.get("base_days", 30))
-            random_min = int(target.get("random_min", -10))
-            random_max = int(target.get("random_max", 60))
-            
-            # 计算随机天数（简化的概率调节）
-            luck_mode = target.get("luck_mode", "normal")
-            luck_value = int(target.get("luck_value", 50))
-            
-            if luck_mode == "lucky":
-                import random as rand_module
-                times = max(1, int(luck_value / 25))
-                random_bonus = max(rand_module.randint(random_min, random_max) for _ in range(times))
-            elif luck_mode == "unlucky":
-                import random as rand_module
-                times = max(1, int(luck_value / 25))
-                random_bonus = min(rand_module.randint(random_min, random_max) for _ in range(times))
-            else:
-                random_bonus = random.randint(random_min, random_max)
-            
-            actual_days = base_days + random_bonus
-            actual_days = max(1, actual_days)
-            
-            today = datetime.date.today()
-            try:
-                exp_date = datetime.datetime.strptime(exp, "%Y-%m-%d").date() if exp else today
-                if exp_date < today: exp_date = today
-            except: exp_date = today
-            
-            new_exp = (exp_date + datetime.timedelta(days=actual_days)).strftime("%Y-%m-%d")
-            c.execute("UPDATE users_meta SET expire_date = ? WHERE user_id = ?", (new_exp, uid))
+        elif target_type == "random_renew":
+            base_days = redeem_result["base_days"]
+            random_min = redeem_result["random_min"]
+            random_max = redeem_result["random_max"]
+            random_bonus = redeem_result["random_bonus"]
+            new_exp = redeem_result["new_exp_str"]
             try: media_api.post(f"/Users/{uid}/Policy", json={"IsDisabled": False}, timeout=3)
             except Exception: pass
             
@@ -3484,28 +2984,16 @@ def cmd_redeem_callback(chat_id, tg_user_id, item_id, cq_id):
         else:
             result_msg = "⚠️ 此商品需人工发货，请联系管理员"
 
-        # 记录日志
-        if target.get("type") == "random_renew":
-            bonus_text = f"+{actual_days - base_days}" if (actual_days - base_days) >= 0 else str(actual_days - base_days)
-            log_desc = f"🎲商城兑换: {target['name']} (基础{base_days}天{bonus_text}={actual_days}天)"
-        else:
-            log_desc = f"商城兑换: {target['name']}"
-        
-        c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-                  (uid, uname, log_desc, -cost, new_pts))
-        conn.commit()
-        conn.close()
-        
-        _send(chat_id, f"✅ <b>兑换成功！</b>\n\n🛒 {target['name']}\n💰 花费 {cost} 积分，余额 {new_pts}\n{result_msg}")
+        _send(chat_id, f"✅ <b>兑换成功！</b>\n\n🛒 {target_name}\n💰 花费 {cost} 积分，余额 {new_pts}\n{result_msg}")
 
         try:
             from app.services.bot_service import bot
             from app.core.database import add_sys_notification
-            notify_msg = f"🎁 <b>积分商城兑换</b>\n\n👤 {uname}\n🛒 {target['name']}\n💰 {cost} 积分\n📱 来源：TG 用户机器人"
-            if target.get("type") == "random_renew":
+            notify_msg = f"🎁 <b>积分商城兑换</b>\n\n👤 {uname}\n🛒 {target_name}\n💰 {cost} 积分\n📱 来源：TG 用户机器人"
+            if target_type == "random_renew":
                 notify_msg += f"\n🎲 随机结果：{actual_days}天"
             bot.send_message("sys_notify", notify_msg, platform="all")
-            add_sys_notification("points", f"商城订单: {target['name']}", f"用户 {uname} 通过TG机器人兑换", "/points")
+            add_sys_notification("points", f"商城订单: {target_name}", f"用户 {uname} 通过TG机器人兑换", "/points")
         except Exception: pass
     except Exception as e:
         logger.error(f"[兑换] 执行失败: {e}")
@@ -3620,77 +3108,26 @@ def _submit_request(chat_id, tg_user_id, media_type, tmdb_id, season):
         poster_path = detail.get("poster_path", "")
         poster = f"https://image.tmdb.org/t/p/w500{poster_path}" if poster_path else ""
 
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        
-        # 🔥 求片积分配置
-        enable_cost_row = c.execute("SELECT value FROM point_config WHERE key = 'enable_req_cost'").fetchone()
-        global_enable_cost = (enable_cost_row[0] == "1") if enable_cost_row else False
-        
-        # 🔥 获取用户求片权限
-        c.execute("SELECT req_free, req_free_count FROM users_meta WHERE user_id = ?", (uid,))
-        user_req_row = c.fetchone()
-        user_req_free = user_req_row[0] if user_req_row else 0  # 0=跟随全局, 1=免费, 2=付费
-        user_req_free_count = user_req_row[1] if user_req_row else -1  # -1=无限次
-        
-        # 🔥 判断用户是否需要付费
-        # user_req_free: 0=跟随全局, 1=免费, 2=付费
-        need_cost = False
-        if user_req_free == 1:
-            # 用户设置为免费
-            need_cost = False
-            # 检查免费次数
-            if user_req_free_count == 0:
-                conn.close()
-                _send(chat_id, "❌ 您的免费求片次数已用完，请联系管理员。")
-                return
-        elif user_req_free == 2:
-            # 用户设置为付费
-            need_cost = True
-        else:
-            # 跟随全局设置
-            need_cost = global_enable_cost
-        
-        req_cost = 0
-        current_pts = 0
-        
-        if need_cost:
-            cost_row = c.execute("SELECT value FROM point_config WHERE key = 'req_cost'").fetchone()
-            req_cost = int(cost_row[0]) if cost_row else 50
-            pt_row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (uid,)).fetchone()
-            current_pts = pt_row[0] if pt_row else 0
-            if current_pts < req_cost:
-                conn.close()
-                _send(chat_id, f"❌ 积分不足！求片需消耗 {req_cost} 积分，当前仅有 {current_pts} 积分。")
-                return
-
-        existing = c.execute("SELECT status FROM media_requests WHERE tmdb_id = ? AND season = ?", (int(tmdb_id), season)).fetchone()
-        if existing:
-            conn.close()
-            status_map = {0: "处理中", 1: "下载中", 2: "已完成", 3: "已拒绝", 4: "待手动处理"}
-            _send(chat_id, f"❌ 该资源工单已存在，当前状态：{status_map.get(existing[0], '未知')}")
+        submit_result = media_request_dao.submit_single_media_request(
+            uid,
+            uname,
+            int(tmdb_id),
+            media_type,
+            title,
+            year,
+            poster,
+            season,
+        )
+        if not submit_result.get("ok"):
+            _send(chat_id, f"❌ {submit_result.get('message', '求片提交失败')}")
             return
-
-        # 🔥 扣费逻辑
-        if need_cost and req_cost > 0:
-            new_pts = current_pts - req_cost
-            c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (new_pts, uid))
-            c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-                      (uid, uname, f"提交求片心愿: {title}", -req_cost, new_pts))
-        
-        # 🔥 免费用户扣减次数（非无限次的情况）
-        if user_req_free == 1 and user_req_free_count > 0:
-            c.execute("UPDATE users_meta SET req_free_count = req_free_count - 1 WHERE user_id = ?", (uid,))
-
-        c.execute("INSERT OR IGNORE INTO media_requests (tmdb_id, media_type, title, year, poster_path, status, season) VALUES (?, ?, ?, ?, ?, 0, ?)",
-                  (int(tmdb_id), media_type, title, year, poster, season))
-        c.execute("INSERT OR IGNORE INTO request_users (tmdb_id, user_id, username, season) VALUES (?, ?, ?, ?)",
-                  (int(tmdb_id), uid, uname, season))
-        conn.commit()
-        conn.close()
 
         season_str = f" 第 {season} 季" if media_type == "tv" and season > 0 else ""
         # 🔥 显示扣费或免费信息
+        need_cost = submit_result.get("need_cost", False)
+        req_cost = submit_result.get("request_cost", 0)
+        user_req_free = submit_result.get("user_req_free", 0)
+        user_req_free_count = submit_result.get("user_req_free_count", -1)
         if need_cost and req_cost > 0:
             cost_msg = f"\n💰 消耗 {req_cost} 积分"
         elif user_req_free == 1:
@@ -4680,30 +4117,24 @@ def do_lottery_draw():
     """执行彩票开奖（由定时任务调用）"""
     try:
         today = datetime.datetime.now().strftime('%Y-%m-%d')
-        
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        
-        # 检查今天是否已开奖
-        result = c.execute("SELECT winning_numbers FROM lottery_results WHERE draw_date = ?", (today,)).fetchone()
-        if result and result[0]:
-            logger.info(f"[彩票] 今天已开奖: {result[0]}")
-            conn.close()
+        draw_context = point_dao.get_lottery_draw_context(today)
+        if draw_context["already_drawn"]:
+            logger.info(f"[彩票] 今天已开奖: {draw_context['winning_numbers']}")
             return
         
         # 生成中奖号码
         winning_numbers = ''.join([str(random.randint(0, 9)) for _ in range(4)])
-        
-        # 获取奖池
-        pool_row = c.execute("SELECT total_pool FROM lottery_results WHERE draw_date = ?", (today,)).fetchone()
-        total_pool = pool_row[0] if pool_row else 0
-        
-        # 获取所有今天的彩票（排除已删除的账号）
-        raw_tickets = c.execute("SELECT id, user_id, username, numbers FROM lottery_tickets WHERE draw_date = ?", (today,)).fetchall()
-        
+
+        total_pool = draw_context["total_pool"]
+        raw_tickets = draw_context["tickets"]
+
         # 过滤已删除的账号
         tickets = []
-        for ticket_id, user_id, username, numbers in raw_tickets:
+        for ticket in raw_tickets:
+            ticket_id = ticket["id"]
+            user_id = ticket["user_id"]
+            username = ticket["username"]
+            numbers = ticket["numbers"]
             try:
                 user_info = media_api.get(f"/Users/{user_id}", timeout=3)
                 if user_info.status_code == 200:
@@ -4715,7 +4146,6 @@ def do_lottery_draw():
         
         if not tickets:
             logger.info(f"[彩票] 今天没有彩票，跳过开奖")
-            conn.close()
             return
         
         # 计算中奖
@@ -4737,7 +4167,7 @@ def do_lottery_draw():
                     winners[4].append((ticket_id, user_id, username))
         
         # 🔥 奖池分配比例（从配置读取）
-        config = {r[0]: r[1] for r in c.execute("SELECT key, value FROM point_config").fetchall()}
+        config = point_dao.get_point_config()
         prize_pool_ratios = {
             1: int(config.get('lottery_pool_ratio_1', 50)) / 100,  # 一等奖
             2: int(config.get('lottery_pool_ratio_2', 20)) / 100,  # 二等奖
@@ -4758,6 +4188,14 @@ def do_lottery_draw():
         if lucky_count > 0:
             prize_pools[5] = int(total_pool * lucky_ratio)  # 幸运奖用 key=5
         
+        winners_by_level = {
+            level: [
+                {"ticket_id": ticket_id, "user_id": user_id, "username": username, "prize_amount": prize_pools[level] // len(winner_list) if prize_pools[level] > 0 else 0}
+                for ticket_id, user_id, username in winner_list
+            ]
+            for level, winner_list in winners.items()
+        }
+
         for level, winner_list in winners.items():
             if not winner_list or prize_pools[level] <= 0:
                 continue
@@ -4766,25 +4204,8 @@ def do_lottery_draw():
             prize_per_person = prize_pools[level] // len(winner_list)
             if prize_per_person <= 0:
                 prize_per_person = 1  # 最低1积分
-            
-            for ticket_id, user_id, username in winner_list:
-                # 更新用户积分
-                row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (user_id,)).fetchone()
-                current_points = (row[0] or 0) + prize_per_person if row else prize_per_person
-                
-                if row:
-                    c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (current_points, user_id))
-                else:
-                    c.execute("INSERT INTO users_meta (user_id, points) VALUES (?, ?)", (user_id, current_points))
-                
-                # 记录中奖
-                c.execute("INSERT INTO lottery_winners (user_id, username, ticket_id, prize_level, prize_amount, draw_date) VALUES (?, ?, ?, ?, ?, ?)",
-                         (user_id, username, ticket_id, level, prize_per_person, today))
-                
-                # 记录日志
-                level_names = {1: "一等奖", 2: "二等奖", 3: "三等奖", 4: "安慰奖"}
-                c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-                         (user_id, username, f"彩票{level_names[level]}", prize_per_person, current_points))
+            for winner in winners_by_level[level]:
+                winner["prize_amount"] = prize_per_person
         
         # 🔥 幸运奖抽取（从所有购买彩票的人中随机抽取）
         lucky_winners = []
@@ -4805,52 +4226,27 @@ def do_lottery_draw():
                     prize_per_lucky = 1
                 
                 for user_id, (ticket_id, username) in lucky_selected:
-                    # 更新积分
-                    row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (user_id,)).fetchone()
-                    current_points = (row[0] or 0) + prize_per_lucky if row else prize_per_lucky
-                    if row:
-                        c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (current_points, user_id))
-                    else:
-                        c.execute("INSERT INTO users_meta (user_id, points) VALUES (?, ?)", (user_id, current_points))
-                    
-                    # 记录中奖
-                    c.execute("INSERT INTO lottery_winners (user_id, username, ticket_id, prize_level, prize_amount, draw_date) VALUES (?, ?, ?, ?, ?, ?)",
-                             (user_id, username, ticket_id, 5, prize_per_lucky, today))
-                    c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-                             (user_id, username, "彩票幸运奖", prize_per_lucky, current_points))
-                    
-                    lucky_winners.append((user_id, username, prize_per_lucky))
+                    lucky_winners.append({"ticket_id": ticket_id, "user_id": user_id, "username": username, "prize_amount": prize_per_lucky})
                     logger.info(f"[彩票] 幸运奖: {username} 获得 {prize_per_lucky} 积分")
-        
-        # 更新开奖结果
-        c.execute("UPDATE lottery_results SET winning_numbers = ? WHERE draw_date = ?", (winning_numbers, today))
-        
-        # 🔥 计算剩余奖池并累积到下期
-        # 已分配的奖金（实际发放的）
+
+        # 计算剩余奖池并累积到下期
         total_distributed = 0
         for level, winner_list in winners.items():
             if winner_list and level in prize_pools and prize_pools[level] > 0:
-                # 实际分配 = 奖池金额（即使无人中奖，该奖项的奖池也算未分配）
                 total_distributed += prize_pools[level]
-        # 幸运奖也算已分配
         if lucky_winners and prize_pools.get(5, 0) > 0:
             total_distributed += prize_pools[5]
-        
-        # 剩余奖池 = 总奖池 - 已分配
+
         remaining_pool = total_pool - total_distributed
         if remaining_pool < 0:
             remaining_pool = 0
-        
-        if remaining_pool > 0:
-            # 累积到明天
-            tomorrow = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
-            c.execute("INSERT OR IGNORE INTO lottery_results (draw_date, winning_numbers, total_pool) VALUES (?, '', 0)", (tomorrow,))
-            c.execute("UPDATE lottery_results SET total_pool = total_pool + ? WHERE draw_date = ?", (remaining_pool, tomorrow))
-            logger.info(f"[彩票] 剩余奖池 {remaining_pool} 已累积到 {tomorrow}")
-        
-        conn.commit(); conn.close()
-        
-        logger.info(f"[彩票] 开奖完成: {winning_numbers}, 奖池: {total_pool}, 中奖人数: {sum(len(w) for w in winners.values())}")
+
+        save_result = point_dao.save_lottery_draw_result(today, winning_numbers, winners_by_level, lucky_winners, remaining_pool)
+        if save_result.get("status") != "success":
+            logger.info(f"[彩票] 开奖已跳过: {save_result}")
+            return
+
+        logger.info(f"[彩票] 开奖完成: {winning_numbers}, 奖池: {total_pool}, 中奖人数: {sum(len(w) for w in winners_by_level.values())}")
         
         # 🔥 发送开奖结果到群
         # 获取允许彩票的群
@@ -4865,45 +4261,39 @@ def do_lottery_draw():
             msg += f"🎲 中奖号码: <b>{winning_numbers}</b>\n"
             msg += f"💰 奖池: {total_pool} 积分\n\n"
             
-            total_winners = sum(len(w) for w in winners.values()) + len(lucky_winners)
+            total_winners = sum(len(w) for w in winners_by_level.values()) + len(lucky_winners)
             if total_winners > 0:
                 msg += "🏆 中奖名单:\n"
                 level_names = {1: "一等奖", 2: "二等奖", 3: "三等奖", 4: "安慰奖"}
-                for level, winner_list in winners.items():
+                for level, winner_list in winners_by_level.items():
                     if winner_list:
                         # 计算每人奖金
                         prize_per_person = prize_pools[level] // len(winner_list) if prize_pools[level] > 0 else 0
-                        for _, user_id, emby_username in winner_list:
+                        for winner in winner_list:
+                            user_id = winner["user_id"]
+                            emby_username = winner["username"]
                             # 获取TG名称
                             binding = _get_binding_by_emby_id(user_id)
                             display = ''
                             if binding and binding.get('tg_user_id'):
-                                # 从tg_bot_users表获取显示名称
-                                try:
-                                    conn_tg = sqlite3.connect(SYSTEM_DB_PATH)
-                                    tg_row = conn_tg.execute("SELECT tg_name FROM tg_bot_users WHERE tg_user_id = ?", (binding['tg_user_id'],)).fetchone()
-                                    conn_tg.close()
-                                    if tg_row and tg_row[0]:
-                                        display = f"<a href='tg://user?id={binding['tg_user_id']}'>{tg_row[0]}</a>"
-                                except:
-                                    pass
+                                tg_name = user_bot_dao.get_bot_user_name(binding['tg_user_id'])
+                                if tg_name:
+                                    display = f"<a href='tg://user?id={binding['tg_user_id']}'>{tg_name}</a>"
                             # fallback: 显示 emby 用户名
                             if not display:
                                 display = emby_username or f"用户{user_id}"
-                            msg += f"• {display} - {level_names[level]} (+{prize_per_person}积分)\n"
+                            msg += f"• {display} - {level_names[level]} (+{winner['prize_amount']}积分)\n"
                 if lucky_winners:
-                    for user_id, emby_username, amount in lucky_winners:
+                    for winner in lucky_winners:
+                        user_id = winner["user_id"]
+                        emby_username = winner["username"]
+                        amount = winner["prize_amount"]
                         binding = _get_binding_by_emby_id(user_id)
                         display = ''
                         if binding and binding.get('tg_user_id'):
-                            try:
-                                conn_tg = sqlite3.connect(SYSTEM_DB_PATH)
-                                tg_row = conn_tg.execute("SELECT tg_name FROM tg_bot_users WHERE tg_user_id = ?", (binding['tg_user_id'],)).fetchone()
-                                conn_tg.close()
-                                if tg_row and tg_row[0]:
-                                    display = f"<a href='tg://user?id={binding['tg_user_id']}'>{tg_row[0]}</a>"
-                            except:
-                                pass
+                            tg_name = user_bot_dao.get_bot_user_name(binding['tg_user_id'])
+                            if tg_name:
+                                display = f"<a href='tg://user?id={binding['tg_user_id']}'>{tg_name}</a>"
                         # fallback: 显示 emby 用户名
                         if not display:
                             display = emby_username or f"用户{user_id}"

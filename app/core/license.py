@@ -1,8 +1,6 @@
 import os
 import uuid
-import sqlite3
-import datetime
-from app.core.database import SYSTEM_DB_PATH
+from app.core.config import SYSTEM_DB_PATH
 
 def get_machine_id():
     """获取或生成当前设备的唯一指纹 (防 Docker 重启丢失)"""

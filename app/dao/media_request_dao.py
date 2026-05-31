@@ -209,6 +209,90 @@ def submit_new_media_request(user_id, username, tmdb_id, media_type, title, year
             raise
 
 
+def submit_single_media_request(
+    user_id,
+    username,
+    tmdb_id,
+    media_type,
+    title,
+    year,
+    poster_path,
+    season,
+):
+    with system_store.connect() as conn:
+        cursor = conn.cursor()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+
+            config = get_point_config_map(["enable_req_cost", "req_cost"])
+            global_enable_cost = config.get("enable_req_cost") == "1"
+
+            cursor.execute("SELECT req_free, req_free_count, points FROM users_meta WHERE user_id = ?", (user_id,))
+            user_row = cursor.fetchone()
+            user_req_free = user_row[0] if user_row else 0
+            user_req_free_count = user_row[1] if user_row else -1
+
+            need_cost = False
+            if user_req_free == 1:
+                need_cost = False
+                if user_req_free_count == 0:
+                    conn.rollback()
+                    return {"ok": False, "message": "您的免费求片次数已用完，请联系管理员。"}
+            elif user_req_free == 2:
+                need_cost = True
+            else:
+                need_cost = global_enable_cost
+
+            request_cost = 0
+            current_points = user_row[2] if user_row else 0
+            if need_cost:
+                request_cost = _get_int_config(config, "req_cost", 50)
+                if current_points < request_cost:
+                    conn.rollback()
+                    return {
+                        "ok": False,
+                        "message": f"积分不足！求片需消耗 {request_cost} 积分，当前仅有 {current_points} 积分。",
+                    }
+
+            cursor.execute("SELECT status FROM media_requests WHERE tmdb_id = ? AND season = ?", (tmdb_id, season))
+            existing = cursor.fetchone()
+            if existing:
+                conn.rollback()
+                status_map = {0: "处理中", 1: "下载中", 2: "已完成", 3: "已拒绝", 4: "待手动处理"}
+                return {"ok": False, "message": f"该资源工单已存在，当前状态：{status_map.get(existing[0], '未知')}"}
+
+            if need_cost and request_cost > 0:
+                new_points = current_points - request_cost
+                cursor.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (new_points, user_id))
+                cursor.execute(
+                    "INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
+                    (user_id, username, f"提交求片心愿: {title}", -request_cost, new_points),
+                )
+
+            if user_req_free == 1 and user_req_free_count > 0:
+                cursor.execute("UPDATE users_meta SET req_free_count = req_free_count - 1 WHERE user_id = ?", (user_id,))
+
+            cursor.execute(
+                "INSERT OR IGNORE INTO media_requests (tmdb_id, media_type, title, year, poster_path, status, season) VALUES (?, ?, ?, ?, ?, 0, ?)",
+                (tmdb_id, media_type, title, year, poster_path, season),
+            )
+            cursor.execute(
+                "INSERT OR IGNORE INTO request_users (tmdb_id, user_id, username, season) VALUES (?, ?, ?, ?)",
+                (tmdb_id, user_id, username, season),
+            )
+            conn.commit()
+            return {
+                "ok": True,
+                "need_cost": need_cost,
+                "request_cost": request_cost,
+                "user_req_free": user_req_free,
+                "user_req_free_count": user_req_free_count,
+            }
+        except Exception:
+            conn.rollback()
+            raise
+
+
 def list_my_requests(user_id: str):
     return system_store.fetch_all(
         """

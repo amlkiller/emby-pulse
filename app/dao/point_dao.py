@@ -658,6 +658,164 @@ def create_pk_invitation(
             raise
 
 
+def accept_pk_invitation(
+    invite_id,
+    target_id: str,
+    challenger_roll: int = None,
+    target_roll: int = None,
+    cancel_on_insufficient: bool = False,
+) -> dict:
+    with system_store.connect() as conn:
+        cursor = conn.cursor()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            config = {row[0]: row[1] for row in cursor.execute("SELECT key, value FROM point_config").fetchall()}
+
+            invite = cursor.execute(
+                """
+                SELECT id, challenger_id, challenger_name, challenger_tg_name, target_id, target_name, target_tg_name,
+                       points, chat_id, message_id, command_message_id, expires_at
+                FROM pk_invitations
+                WHERE id = ? AND status = 'pending'
+                """,
+                (invite_id,),
+            ).fetchone()
+            if not invite:
+                conn.rollback()
+                return {"status": "error", "message": "邀请不存在或已过期"}
+
+            (
+                pk_invite_id,
+                challenger_id,
+                challenger_name,
+                challenger_tg_name,
+                invite_target_id,
+                target_name,
+                target_tg_name,
+                points,
+                chat_id,
+                message_id,
+                command_message_id,
+                expires_at_value,
+            ) = invite
+            context = {
+                "invite_id": pk_invite_id,
+                "challenger_id": challenger_id,
+                "challenger_name": challenger_name,
+                "challenger_tg_name": challenger_tg_name,
+                "target_id": invite_target_id,
+                "target_name": target_name,
+                "target_tg_name": target_tg_name,
+                "points": points,
+                "chat_id": chat_id,
+                "message_id": message_id,
+                "command_message_id": command_message_id,
+            }
+
+            if invite_target_id != target_id:
+                conn.rollback()
+                return {"status": "error", "message": "这不是发给你的PK邀请"}
+
+            expires_at = datetime.datetime.fromisoformat(expires_at_value)
+            if datetime.datetime.now() > expires_at:
+                cursor.execute("UPDATE pk_invitations SET status = 'expired' WHERE id = ?", (invite_id,))
+                conn.commit()
+                return dict(context, status="error", message="PK邀请已过期")
+
+            min_points = int(config.get("user_pk_min_points", 10))
+            max_points = int(config.get("user_pk_max_points", 500))
+            if points < min_points or points > max_points:
+                cursor.execute("UPDATE pk_invitations SET status = 'cancelled' WHERE id = ?", (invite_id,))
+                conn.commit()
+                return dict(context, status="error", message=f"积分范围已变更，PK取消（需在 {min_points}-{max_points} 之间）")
+
+            tax_rate = int(config.get("user_pk_tax", 5))
+            challenger_points_row = cursor.execute("SELECT points FROM users_meta WHERE user_id = ?", (challenger_id,)).fetchone()
+            challenger_points = challenger_points_row[0] if challenger_points_row else 0
+            target_points_row = cursor.execute("SELECT points FROM users_meta WHERE user_id = ?", (invite_target_id,)).fetchone()
+            target_points = target_points_row[0] if target_points_row else 0
+
+            if challenger_points < points or target_points < points:
+                if cancel_on_insufficient:
+                    cursor.execute("UPDATE pk_invitations SET status = 'cancelled' WHERE id = ?", (invite_id,))
+                    conn.commit()
+                    return dict(context, status="error", message="双方积分不足，PK取消")
+                conn.rollback()
+                return dict(context, status="error", message="双方积分不足，PK取消")
+
+            if challenger_roll is None:
+                challenger_roll = random.randint(1, 100)
+            if target_roll is None:
+                target_roll = random.randint(1, 100)
+
+            if challenger_roll > target_roll:
+                winner_id = challenger_id
+                winner_name = challenger_name
+                loser_id = invite_target_id
+                loser_name = target_name
+            elif target_roll > challenger_roll:
+                winner_id = invite_target_id
+                winner_name = target_name
+                loser_id = challenger_id
+                loser_name = challenger_name
+            else:
+                cursor.execute("UPDATE pk_invitations SET status = 'completed' WHERE id = ?", (invite_id,))
+                conn.commit()
+                return dict(
+                    context,
+                    status="success",
+                    message=f"平局！{challenger_name}({challenger_roll}点) vs {target_name}({target_roll}点)，积分退还",
+                    challenger_roll=challenger_roll,
+                    target_roll=target_roll,
+                    tie=True,
+                )
+
+            win_amount = points
+            tax = int(win_amount * tax_rate / 100)
+            actual_win = win_amount - tax
+            challenger_points_now = cursor.execute("SELECT points FROM users_meta WHERE user_id = ?", (challenger_id,)).fetchone()
+            target_points_now = cursor.execute("SELECT points FROM users_meta WHERE user_id = ?", (invite_target_id,)).fetchone()
+            challenger_balance = challenger_points_now[0] if challenger_points_now else 0
+            target_balance = target_points_now[0] if target_points_now else 0
+
+            loser_balance = challenger_balance if loser_id == challenger_id else target_balance
+            if loser_balance < points:
+                cursor.execute("UPDATE pk_invitations SET status = 'cancelled' WHERE id = ?", (invite_id,))
+                conn.commit()
+                return dict(context, status="error", message=f"积分不足，PK取消（输家积分：{loser_balance}，需要：{points}）")
+
+            cursor.execute("UPDATE users_meta SET points = points + ? WHERE user_id = ?", (actual_win, winner_id))
+            cursor.execute("UPDATE users_meta SET points = points - ? WHERE user_id = ?", (points, loser_id))
+            cursor.execute(
+                "INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, (SELECT points FROM users_meta WHERE user_id = ?))",
+                (winner_id, winner_name, f"PK战胜 {loser_name}", actual_win, winner_id),
+            )
+            cursor.execute(
+                "INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, (SELECT points FROM users_meta WHERE user_id = ?))",
+                (loser_id, loser_name, f"PK败给 {winner_name}", -points, loser_id),
+            )
+            cursor.execute(
+                "INSERT INTO pk_logs (challenger_id, challenger_name, target_id, target_name, points, challenger_roll, target_roll, winner_id, winner_name, tax) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (challenger_id, challenger_name, invite_target_id, target_name, points, challenger_roll, target_roll, winner_id, winner_name, tax),
+            )
+            cursor.execute("UPDATE pk_invitations SET status = 'completed' WHERE id = ?", (invite_id,))
+            conn.commit()
+            return dict(
+                context,
+                status="success",
+                message=f"🎉 {winner_name}({max(challenger_roll, target_roll)}点) 战胜 {loser_name}({min(challenger_roll, target_roll)}点)，获得 {actual_win} 积分（扣{tax_rate}%手续费）",
+                challenger_roll=challenger_roll,
+                target_roll=target_roll,
+                winner_name=winner_name,
+                win_amount=actual_win,
+                tax=tax,
+                tax_rate=tax_rate,
+            )
+        except Exception:
+            conn.rollback()
+            raise
+
+
 def save_red_packet_message_id(packet_id: int, message_id) -> None:
     system_store.execute(
         "UPDATE point_red_packets SET message_id = ? WHERE id = ?",
@@ -1222,6 +1380,7 @@ def apply_game_point_change(
     action: str,
     amount: int,
     require_min_points: int = None,
+    log_amount: int = None,
 ) -> dict:
     with system_store.connect() as conn:
         cursor = conn.cursor()
@@ -1241,7 +1400,7 @@ def apply_game_point_change(
 
             cursor.execute(
                 "INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-                (user_id, username, action, amount, new_points),
+                (user_id, username, action, amount if log_amount is None else log_amount, new_points),
             )
             conn.commit()
             return {"status": "success", "points": new_points}
@@ -1285,6 +1444,201 @@ def buy_scratch_card(user_id: str, username: str, cost: int) -> dict:
             raise
 
 
+def get_active_scratch_card():
+    return system_store.fetch_one(
+        """
+        SELECT id, total_slots, filled_slots, price, status, created_by, chat_id, message_id
+        FROM scratch_cards
+        WHERE status = 'active'
+        ORDER BY created_at DESC
+        LIMIT 1
+        """
+    )
+
+
+def get_scratch_card_slots(card_id: int) -> list:
+    return system_store.fetch_all(
+        "SELECT slot_number, is_scratched, username FROM scratch_card_slots WHERE card_id = ? ORDER BY slot_number",
+        (card_id,),
+    )
+
+
+def create_scratch_card(total_slots: int = 9, price: int = 100, created_by: str = "", chat_id=None, prizes: list = None) -> dict:
+    prizes = prizes or []
+    if not prizes:
+        return {"status": "error", "message": "奖品配置不能为空"}
+
+    with system_store.connect() as conn:
+        cursor = conn.cursor()
+        try:
+            conn.execute("BEGIN EXCLUSIVE")
+            existing = cursor.execute("SELECT id FROM scratch_cards WHERE status = 'active'").fetchone()
+            if existing:
+                conn.rollback()
+                return {"status": "error", "message": "已有进行中的刮刮乐，请先刮完再创建新的"}
+
+            cursor.execute(
+                "INSERT INTO scratch_cards (total_slots, price, created_by, chat_id) VALUES (?, ?, ?, ?)",
+                (total_slots, price, created_by, str(chat_id)),
+            )
+            new_card_id = cursor.lastrowid
+            for i, prize in enumerate(prizes, 1):
+                cursor.execute(
+                    "INSERT INTO scratch_card_slots (card_id, slot_number, prize_amount) VALUES (?, ?, ?)",
+                    (new_card_id, i, prize),
+                )
+            conn.commit()
+            return {"status": "success", "card_id": new_card_id}
+        except Exception:
+            conn.rollback()
+            raise
+
+
+def save_scratch_card_message_id(card_id: int, message_id) -> None:
+    system_store.execute("UPDATE scratch_cards SET message_id = ? WHERE id = ?", (message_id, card_id))
+
+
+def get_scratch_card(card_id: int):
+    return system_store.fetch_one(
+        "SELECT id, total_slots, filled_slots, price, status, chat_id, message_id FROM scratch_cards WHERE id = ?",
+        (card_id,),
+    )
+
+
+def get_scratch_card_slot(card_id: int, slot_number: int):
+    return system_store.fetch_one(
+        "SELECT id, is_scratched, prize_amount FROM scratch_card_slots WHERE card_id = ? AND slot_number = ?",
+        (card_id, slot_number),
+    )
+
+
+def has_user_scratched_card(card_id: int, user_id: str):
+    return system_store.fetch_one(
+        "SELECT id FROM scratch_card_slots WHERE card_id = ? AND user_id = ? AND is_scratched = 1",
+        (card_id, user_id),
+    )
+
+
+def update_scratch_card_slot(card_id: int, slot_number: int, user_id: str, username: str, price: int, display_name: str) -> dict:
+    with system_store.connect() as conn:
+        cursor = conn.cursor()
+        try:
+            conn.execute("BEGIN EXCLUSIVE")
+            card = cursor.execute(
+                "SELECT total_slots, filled_slots, status, chat_id, message_id FROM scratch_cards WHERE id = ?",
+                (card_id,),
+            ).fetchone()
+            if not card:
+                conn.rollback()
+                return {"status": "error", "message": "刮刮乐不存在"}
+            total_slots, filled_slots, status, chat_id, message_id = card
+            if status != "active":
+                conn.rollback()
+                return {"status": "error", "message": "刮刮乐已结束"}
+
+            slot = cursor.execute(
+                "SELECT id, is_scratched FROM scratch_card_slots WHERE card_id = ? AND slot_number = ?",
+                (card_id, slot_number),
+            ).fetchone()
+            if not slot:
+                conn.rollback()
+                return {"status": "error", "message": "格子不存在"}
+            if slot[1]:
+                conn.rollback()
+                return {"status": "error", "message": "这个格子已经被刮过了"}
+
+            already_scratched = cursor.execute(
+                "SELECT id FROM scratch_card_slots WHERE card_id = ? AND user_id = ? AND is_scratched = 1",
+                (card_id, user_id),
+            ).fetchone()
+            if already_scratched:
+                conn.rollback()
+                return {"status": "error", "message": "你已经刮过这个刮刮乐了，每人只能刮一次！"}
+
+            current_points_row = cursor.execute("SELECT points FROM users_meta WHERE user_id = ?", (user_id,)).fetchone()
+            current_points = current_points_row[0] if current_points_row else 0
+            if current_points < price:
+                conn.rollback()
+                return {"status": "error", "message": f"积分不足！需要 {price} 积分，当前: {current_points}"}
+
+            new_points = current_points - price
+            if current_points_row:
+                cursor.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (new_points, user_id))
+            else:
+                cursor.execute("INSERT INTO users_meta (user_id, points) VALUES (?, ?)", (user_id, new_points))
+
+            cursor.execute(
+                "UPDATE scratch_card_slots SET is_scratched = 1, user_id = ?, username = ?, scratched_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (user_id, display_name, slot[0]),
+            )
+            new_filled = filled_slots + 1
+            cursor.execute("UPDATE scratch_cards SET filled_slots = ? WHERE id = ?", (new_filled, card_id))
+            cursor.execute(
+                "INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
+                (user_id, username, f"刮刮乐 #{card_id} 格子{slot_number}", -price, new_points),
+            )
+            conn.commit()
+            return {
+                "status": "success",
+                "new_points": new_points,
+                "new_filled": new_filled,
+                "total_slots": total_slots,
+                "chat_id": chat_id,
+                "message_id": message_id,
+            }
+        except Exception:
+            conn.rollback()
+            raise
+
+
+def complete_scratch_card(card_id: int) -> list:
+    with system_store.connect() as conn:
+        cursor = conn.cursor()
+        try:
+            conn.execute("BEGIN EXCLUSIVE")
+            card = cursor.execute("SELECT status FROM scratch_cards WHERE id = ?", (card_id,)).fetchone()
+            if not card or card[0] != "active":
+                conn.rollback()
+                return []
+            cursor.execute("UPDATE scratch_cards SET status = 'completed' WHERE id = ?", (card_id,))
+            slots = cursor.execute(
+                "SELECT slot_number, prize_amount, user_id, username FROM scratch_card_slots WHERE card_id = ? AND is_scratched = 1 ORDER BY slot_number",
+                (card_id,),
+            ).fetchall()
+            for slot in slots:
+                slot_number, prize_amount, user_id, username = slot
+                if not user_id:
+                    continue
+                user_row = cursor.execute("SELECT points FROM users_meta WHERE user_id = ?", (user_id,)).fetchone()
+                current_points = (user_row[0] or 0) + prize_amount if user_row else prize_amount
+                if user_row:
+                    cursor.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (current_points, user_id))
+                else:
+                    cursor.execute("INSERT INTO users_meta (user_id, points) VALUES (?, ?)", (user_id, current_points))
+                display_name = username or f"用户{user_id}"
+                cursor.execute(
+                    "INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
+                    (user_id, display_name, f"刮刮乐 #{card_id} 中奖", prize_amount, current_points),
+                )
+            conn.commit()
+            return [
+                {
+                    "slot_number": slot[0],
+                    "prize_amount": slot[1],
+                    "user_id": slot[2],
+                    "username": slot[3],
+                }
+                for slot in slots
+            ]
+        except Exception:
+            conn.rollback()
+            raise
+
+
+def get_scratch_card_origin(card_id: int):
+    return system_store.fetch_one("SELECT chat_id, message_id FROM scratch_cards WHERE id = ?", (card_id,))
+
+
 def reveal_scratch_reward(user_id: str, username: str, reward: int) -> dict:
     with system_store.connect() as conn:
         cursor = conn.cursor()
@@ -1307,6 +1661,335 @@ def reveal_scratch_reward(user_id: str, username: str, reward: int) -> dict:
         except Exception:
             conn.rollback()
             raise
+
+
+def list_lottery_ticket_numbers(user_id: str, draw_date: str) -> list:
+    rows = system_store.fetch_all(
+        "SELECT numbers FROM lottery_tickets WHERE user_id = ? AND draw_date = ?",
+        (user_id, draw_date),
+    )
+    return [row["numbers"] for row in rows]
+
+
+def list_user_lottery_tickets(user_id: str, days: int = 7) -> list:
+    days = max(int(days), 1)
+    return system_store.fetch_all(
+        f"""
+        SELECT numbers, cost, draw_date, created_at
+        FROM lottery_tickets
+        WHERE user_id = ? AND draw_date >= date('now', '-{days} days')
+        ORDER BY draw_date DESC, created_at DESC
+        """,
+        (user_id,),
+    )
+
+
+def get_latest_lottery_result():
+    return system_store.fetch_one(
+        """
+        SELECT draw_date, winning_numbers, total_pool
+        FROM lottery_results
+        WHERE winning_numbers != ''
+        ORDER BY draw_date DESC
+        LIMIT 1
+        """
+    )
+
+
+def list_lottery_winners_for_date(draw_date: str) -> list:
+    return system_store.fetch_all(
+        """
+        SELECT user_id, username, prize_level, prize_amount
+        FROM lottery_winners
+        WHERE draw_date = ?
+        ORDER BY prize_level
+        """,
+        (draw_date,),
+    )
+
+
+def get_lottery_draw_context(draw_date: str) -> dict:
+    with system_store.connect() as conn:
+        cursor = conn.cursor()
+        result = cursor.execute("SELECT winning_numbers FROM lottery_results WHERE draw_date = ?", (draw_date,)).fetchone()
+        pool_row = cursor.execute("SELECT total_pool FROM lottery_results WHERE draw_date = ?", (draw_date,)).fetchone()
+        tickets = cursor.execute(
+            "SELECT id, user_id, username, numbers FROM lottery_tickets WHERE draw_date = ?",
+            (draw_date,),
+        ).fetchall()
+        return {
+            "already_drawn": bool(result and result[0]),
+            "winning_numbers": result[0] if result and result[0] else "",
+            "total_pool": pool_row[0] if pool_row else 0,
+            "tickets": [
+                {"id": row[0], "user_id": row[1], "username": row[2], "numbers": row[3]}
+                for row in tickets
+            ],
+        }
+
+
+def save_lottery_draw_result(draw_date: str, winning_numbers: str, winners_by_level: dict, lucky_winners: list, remaining_pool: int) -> dict:
+    tomorrow = (datetime.datetime.strptime(draw_date, "%Y-%m-%d") + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+    with system_store.connect() as conn:
+        cursor = conn.cursor()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            result = cursor.execute("SELECT winning_numbers, total_pool FROM lottery_results WHERE draw_date = ?", (draw_date,)).fetchone()
+            if result and result[0]:
+                conn.rollback()
+                return {"status": "skipped", "winning_numbers": result[0], "total_pool": result[1] or 0}
+
+            total_pool = result[1] if result else 0
+            level_names = {1: "一等奖", 2: "二等奖", 3: "三等奖", 4: "安慰奖"}
+
+            for level, winner_list in winners_by_level.items():
+                for winner in winner_list:
+                    user_id = winner["user_id"]
+                    username = winner["username"]
+                    prize_amount = winner["prize_amount"]
+                    ticket_id = winner["ticket_id"]
+                    row = cursor.execute("SELECT points FROM users_meta WHERE user_id = ?", (user_id,)).fetchone()
+                    current_points = (row[0] or 0) + prize_amount if row else prize_amount
+                    if row:
+                        cursor.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (current_points, user_id))
+                    else:
+                        cursor.execute("INSERT INTO users_meta (user_id, points) VALUES (?, ?)", (user_id, current_points))
+                    cursor.execute(
+                        "INSERT INTO lottery_winners (user_id, username, ticket_id, prize_level, prize_amount, draw_date) VALUES (?, ?, ?, ?, ?, ?)",
+                        (user_id, username, ticket_id, level, prize_amount, draw_date),
+                    )
+                    cursor.execute(
+                        "INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
+                        (user_id, username, f"彩票{level_names[level]}", prize_amount, current_points),
+                    )
+
+            for winner in lucky_winners:
+                user_id = winner["user_id"]
+                username = winner["username"]
+                prize_amount = winner["prize_amount"]
+                ticket_id = winner["ticket_id"]
+                row = cursor.execute("SELECT points FROM users_meta WHERE user_id = ?", (user_id,)).fetchone()
+                current_points = (row[0] or 0) + prize_amount if row else prize_amount
+                if row:
+                    cursor.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (current_points, user_id))
+                else:
+                    cursor.execute("INSERT INTO users_meta (user_id, points) VALUES (?, ?)", (user_id, current_points))
+                cursor.execute(
+                    "INSERT INTO lottery_winners (user_id, username, ticket_id, prize_level, prize_amount, draw_date) VALUES (?, ?, ?, ?, ?, ?)",
+                    (user_id, username, ticket_id, 5, prize_amount, draw_date),
+                )
+                cursor.execute(
+                    "INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
+                    (user_id, username, "彩票幸运奖", prize_amount, current_points),
+                )
+
+            cursor.execute("UPDATE lottery_results SET winning_numbers = ? WHERE draw_date = ?", (winning_numbers, draw_date))
+            if remaining_pool > 0:
+                cursor.execute(
+                    "INSERT OR IGNORE INTO lottery_results (draw_date, winning_numbers, total_pool) VALUES (?, '', 0)",
+                    (tomorrow,),
+                )
+                cursor.execute(
+                    "UPDATE lottery_results SET total_pool = total_pool + ? WHERE draw_date = ?",
+                    (remaining_pool, tomorrow),
+                )
+
+            conn.commit()
+            return {"status": "success", "winning_numbers": winning_numbers, "total_pool": total_pool}
+        except Exception:
+            conn.rollback()
+            raise
+
+
+def buy_lottery_tickets(user_id: str, username: str, count: int, cost: int, max_per_day: int, draw_date: str, tickets: list) -> dict:
+    with system_store.connect() as conn:
+        cursor = conn.cursor()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            ticket_count = len(tickets)
+            today_count = cursor.execute(
+                "SELECT COUNT(*) FROM lottery_tickets WHERE user_id = ? AND draw_date = ?",
+                (user_id, draw_date),
+            ).fetchone()[0]
+            if today_count + ticket_count > max_per_day:
+                conn.rollback()
+                return {"status": "error", "message": f"今日最多购买 {max_per_day} 张"}
+
+            row = cursor.execute("SELECT points FROM users_meta WHERE user_id = ?", (user_id,)).fetchone()
+            current_points = row[0] if row else 0
+            total_cost = cost * ticket_count
+            if current_points < total_cost:
+                conn.rollback()
+                return {"status": "error", "message": "积分不足"}
+
+            new_points = current_points - total_cost
+            if row:
+                cursor.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (new_points, user_id))
+            else:
+                cursor.execute("INSERT INTO users_meta (user_id, points) VALUES (?, ?)", (user_id, new_points))
+
+            created_at = datetime.datetime.now().isoformat()
+            for ticket_number in tickets:
+                cursor.execute(
+                    "INSERT INTO lottery_tickets (user_id, username, numbers, cost, draw_date, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                    (user_id, username, ticket_number, cost, draw_date, created_at),
+                )
+
+            cursor.execute(
+                "INSERT OR IGNORE INTO lottery_results (draw_date, winning_numbers, total_pool) VALUES (?, '', 0)",
+                (draw_date,),
+            )
+            cursor.execute(
+                "UPDATE lottery_results SET total_pool = total_pool + ? WHERE draw_date = ?",
+                (total_cost, draw_date),
+            )
+
+            cursor.execute(
+                "INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
+                (user_id, username, "购买彩票", -total_cost, new_points),
+            )
+            conn.commit()
+            return {"status": "success", "today_tickets": today_count + ticket_count, "new_points": new_points}
+        except Exception:
+            conn.rollback()
+            raise
+
+
+def get_lottery_pool_info(user_id, today: str, target_date: str) -> dict:
+    with system_store.connect() as conn:
+        cursor = conn.cursor()
+        today_drawn = cursor.execute(
+            "SELECT winning_numbers FROM lottery_results WHERE draw_date = ? AND winning_numbers != ''",
+            (today,),
+        ).fetchone()
+        cursor.execute("INSERT OR IGNORE INTO lottery_results (draw_date, winning_numbers, total_pool) VALUES (?, '', 0)", (target_date,))
+        conn.commit()
+
+        target_pool_row = cursor.execute("SELECT total_pool FROM lottery_results WHERE draw_date = ?", (target_date,)).fetchone()
+        target_pool = target_pool_row[0] if target_pool_row else 0
+        target_tickets = cursor.execute("SELECT COUNT(*) FROM lottery_tickets WHERE draw_date = ?", (target_date,)).fetchone()[0]
+
+        user_today_tickets = 0
+        if user_id:
+            user_today_tickets = cursor.execute(
+                "SELECT COUNT(*) FROM lottery_tickets WHERE user_id = ? AND draw_date = ?",
+                (user_id, target_date),
+            ).fetchone()[0]
+
+        today_winning = cursor.execute(
+            "SELECT winning_numbers FROM lottery_results WHERE draw_date = ? AND winning_numbers != ''",
+            (today,),
+        ).fetchone()
+        today_winning_number = today_winning[0] if today_winning else None
+
+        my_winning = []
+        my_prize_total = 0
+        if user_id and today_winning_number:
+            my_tickets = cursor.execute(
+                "SELECT numbers FROM lottery_tickets WHERE user_id = ? AND draw_date = ?",
+                (user_id, today),
+            ).fetchall()
+            my_winning = [ticket[0] for ticket in my_tickets if ticket[0] == today_winning_number]
+            if my_winning:
+                today_pool_row = cursor.execute("SELECT total_pool FROM lottery_results WHERE draw_date = ?", (today,)).fetchone()
+                today_pool = today_pool_row[0] if today_pool_row else 0
+                winner_count = cursor.execute("SELECT COUNT(*) FROM lottery_winners WHERE draw_date = ?", (today,)).fetchone()[0]
+                winner_count = max(winner_count, 1)
+                my_prize_total = len(my_winning) * (today_pool // winner_count)
+
+        return {
+            "today_drawn": today_drawn is not None,
+            "today_pool": target_pool,
+            "today_tickets": target_tickets,
+            "user_today_tickets": user_today_tickets,
+            "today_winning_number": today_winning_number,
+            "my_winning_tickets": my_winning,
+            "my_prize_total": my_prize_total,
+        }
+
+
+def list_lottery_results(user_id=None) -> list:
+    with system_store.connect() as conn:
+        cursor = conn.cursor()
+        results = cursor.execute(
+            """
+            SELECT draw_date, winning_numbers, total_pool
+            FROM lottery_results
+            WHERE winning_numbers != ''
+            ORDER BY draw_date DESC
+            LIMIT 7
+            """
+        ).fetchall()
+
+        formatted_results = []
+        for row in results:
+            draw_date = row[0]
+            winning_number = row[1]
+            pool = row[2]
+
+            winner_count = cursor.execute(
+                "SELECT COUNT(*) FROM lottery_winners WHERE draw_date = ?",
+                (draw_date,),
+            ).fetchone()[0]
+
+            winners_list = []
+            if winner_count > 0:
+                winners_data = cursor.execute(
+                    """
+                    SELECT w.user_id, w.username, w.prize_level, w.prize_amount
+                    FROM lottery_winners w
+                    WHERE w.draw_date = ?
+                    ORDER BY w.prize_amount DESC
+                    """,
+                    (draw_date,),
+                ).fetchall()
+                for winner in winners_data:
+                    winner_user_id = winner[0]
+                    username = winner[1] or ""
+                    if user_id and winner_user_id == user_id:
+                        masked_username = username
+                    elif len(username) > 3:
+                        masked_username = username[:3] + "***"
+                    else:
+                        masked_username = username[:1] + "***" if username else "***"
+                    winners_list.append(
+                        {
+                            "username": masked_username,
+                            "prize_level": winner[2],
+                            "prize_amount": winner[3],
+                        }
+                    )
+
+            my_won = False
+            my_prize = 0
+            my_winning_tickets = []
+            if user_id:
+                my_tickets = cursor.execute(
+                    "SELECT numbers FROM lottery_tickets WHERE user_id = ? AND draw_date = ?",
+                    (user_id, draw_date),
+                ).fetchall()
+                for ticket in my_tickets:
+                    ticket_number = ticket[0]
+                    if ticket_number == winning_number:
+                        my_won = True
+                        my_winning_tickets.append(ticket_number)
+                if my_won and winner_count > 0:
+                    my_prize = len(my_winning_tickets) * (pool // winner_count)
+
+            formatted_results.append(
+                {
+                    "date": draw_date,
+                    "winning_number": winning_number,
+                    "pool": pool,
+                    "winners": winner_count,
+                    "winners_list": winners_list,
+                    "my_won": my_won,
+                    "my_prize": my_prize,
+                    "my_winning_tickets": my_winning_tickets,
+                }
+            )
+
+        return formatted_results
 
 
 def perform_user_checkin(user_id: str, username: str) -> dict:

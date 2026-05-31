@@ -6,10 +6,10 @@ import jwt
 import os
 import secrets as _secrets
 import logging
-import time
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from app.core.config import SECRET_KEY
+from app.dao.api_token_dao import get_api_token_by_hash
 
 logger = logging.getLogger("uvicorn")
 
@@ -109,18 +109,9 @@ def verify_api_token(token: str) -> Optional[Dict[str, Any]]:
     # 查数据库确认 token 未被撤销且未过期
     try:
         import hashlib
-        import sqlite3
-        from app.core.database import SYSTEM_DB_PATH
 
         token_hash = hashlib.sha256(token.encode()).hexdigest()
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        c.execute(
-            "SELECT expires_at FROM api_tokens WHERE token = ?",
-            (token_hash,),
-        )
-        row = c.fetchone()
-        conn.close()
+        row = get_api_token_by_hash(token_hash)
 
         if not row:
             return None  # token 已被删除/撤销
