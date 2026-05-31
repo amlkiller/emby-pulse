@@ -10,7 +10,7 @@
 
 - Trigger: database infrastructure refactor that starts removing `query_db()` from representative modules.
 - Applies to new backend code that reads/writes EmbyPulse system data or playback reporting data.
-- First-stage sample modules include `app/routers/history.py`, `app/routers/api_tokens.py`, `app/routers/notifications.py`, `app/routers/notify_rules.py`, `app/routers/pro.py`, `app/routers/notify_admin.py`, `app/routers/pwa.py`, `app/routers/audit.py`, `app/routers/risk.py`, `app/routers/clients.py`, `app/routers/calendar_notify.py`, `app/routers/webhook.py`, `app/services/report_service.py`, `app/routers/insight.py`, `app/routers/system_tools.py`, `app/services/risk_service.py`, `app/services/calendar_service.py`, `app/routers/views.py`, `app/routers/tasks.py`, `app/routers/dedupe.py`, `app/routers/system.py`, `app/routers/db_tools.py`, `app/routers/gaps.py`, and `app/routers/bot.py`.
+- First-stage sample modules include `app/routers/history.py`, `app/routers/api_tokens.py`, `app/routers/notifications.py`, `app/routers/notify_rules.py`, `app/routers/pro.py`, `app/routers/notify_admin.py`, `app/routers/pwa.py`, `app/routers/audit.py`, `app/routers/risk.py`, `app/routers/clients.py`, `app/routers/calendar_notify.py`, `app/routers/webhook.py`, `app/services/report_service.py`, `app/routers/insight.py`, `app/routers/system_tools.py`, `app/services/risk_service.py`, `app/services/calendar_service.py`, `app/routers/views.py`, `app/routers/tasks.py`, `app/routers/dedupe.py`, `app/routers/system.py`, `app/routers/db_tools.py`, `app/routers/gaps.py`, `app/routers/bot.py`, and `app/routers/stats.py`.
 
 ### 2. Signatures
 
@@ -122,6 +122,8 @@
 - `app.queries.report_queries.sum_report_duration(where_sql: str, params) -> int`
 - `app.queries.report_queries.list_report_top_items(where_sql: str, params, limit: int = 8) -> list[DataRow]`
 - `app.queries.report_queries.list_report_ranked_items(where_sql: str, exclude_sql: str, exclude_types, limit: int) -> list[DataRow]`
+- `app.queries.stats_queries.build_stats_base_filter(user_id_filter) -> tuple[str, list]`
+- `app.queries.stats_queries.query_stats(sql: str, params=(), one: bool = False) -> list[DataRow] | DataRow | None`
 - `app.queries.system_tool_queries.get_latest_playback_date() -> str | None`
 - `app.queries.system_tool_queries.diagnose_playback_database() -> dict`
 - `app.infra.db.migration_service.full_health_check() -> dict`
@@ -175,6 +177,7 @@
 - Good: `db_tools.py` keeps admin permission checks, audit logging, and restore path validation in the route while delegating database health, migration, backup, restore, and deep-check operations to `migration_service`.
 - Good: `gaps.py` keeps Emby/TMDB scanning, download handoff, and in-memory scan-state updates in the route while delegating gap tables, config, and scan cache persistence to `gap_dao`.
 - Good: `bot.py` keeps bot settings validation, Telegram/WeCom HTTP calls, and admin response assembly in the route while delegating user-bot admin tables, registration logs, TG bindings, lottery, and scratch-card persistence to `bot_admin_dao`.
+- Good: `stats.py` keeps chart aggregation, media-server enrichment, and permission filtering in the route while delegating playback SQL execution and base user filters to `stats_queries`.
 - Bad: a router imports `query_db`, `SYSTEM_DB_PATH`, or `sqlite3` only to run route-local SQL.
 
 ### 6. Tests Required

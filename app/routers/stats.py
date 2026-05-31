@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request
 from typing import Optional
 from app.core.config import cfg
-from app.core.database import query_db, get_base_filter, get_playback_column_name
+from app.queries.stats_queries import build_stats_base_filter, get_playback_column_name, query_stats
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
 # 🔥 引入核心适配器
 from app.core.media_adapter import media_api
@@ -170,11 +170,11 @@ def api_dashboard(request: Request, user_id: Optional[str] = None):
         return cached
     
     try:
-        where, params = get_base_filter(user_id)
-        plays = query_db(f"SELECT COUNT(*) as c FROM PlaybackActivity {where}", params)[0]['c']
+        where, params = build_stats_base_filter(user_id)
+        plays = query_stats(f"SELECT COUNT(*) as c FROM PlaybackActivity {where}", params)[0]['c']
         # 🔥 时区修复
-        users = query_db(f"SELECT COUNT(DISTINCT UserId) as c FROM PlaybackActivity {where} AND DateCreated > date('now', 'localtime', '-30 days')", params)[0]['c']
-        dur = query_db(f"SELECT SUM(PlayDuration) as c FROM PlaybackActivity {where}", params)[0]['c'] or 0
+        users = query_stats(f"SELECT COUNT(DISTINCT UserId) as c FROM PlaybackActivity {where} AND DateCreated > date('now', 'localtime', '-30 days')", params)[0]['c']
+        dur = query_stats(f"SELECT SUM(PlayDuration) as c FROM PlaybackActivity {where}", params)[0]['c'] or 0
         base = {"total_plays": plays, "active_users": users, "total_duration": dur}
         lib = {"movie": 0, "series": 0, "episode": 0}
         
@@ -251,8 +251,8 @@ def api_recent_activity(request: Request, user_id: Optional[str] = None):
             user_id = admin_user.get("id")
 
     try:
-        where, params = get_base_filter(user_id)
-        results = query_db(f"SELECT DateCreated, UserId, ItemId, ItemName, ItemType FROM PlaybackActivity {where} ORDER BY DateCreated DESC LIMIT 50", params)
+        where, params = build_stats_base_filter(user_id)
+        results = query_stats(f"SELECT DateCreated, UserId, ItemId, ItemName, ItemType FROM PlaybackActivity {where} ORDER BY DateCreated DESC LIMIT 50", params)
         if not results: return {"status": "success", "data": []}
         user_map = get_user_map_local()
         
@@ -472,7 +472,7 @@ def api_top_movies(request: Request = None, user_id: Optional[str] = None, categ
         period: 时间维度，'today'/'week'/'month'/'quarter'/'year'/'all'
     """
     try:
-        where, params = get_base_filter(user_id)
+        where, params = build_stats_base_filter(user_id)
         
         # 🔥 时间维度筛选 - 使用 SQLite 原生日期函数确保时区一致
         if period == 'today':
@@ -504,7 +504,7 @@ def api_top_movies(request: Request = None, user_id: Optional[str] = None, categ
         
         sql = f"SELECT ItemName, ItemId, ItemType, PlayDuration FROM PlaybackActivity {where} LIMIT 5000"
         logger.debug(f"[api_top_movies] SQL: {sql}, params: {params}")
-        rows = query_db(sql, params)
+        rows = query_stats(sql, params)
         logger.debug(f"[api_top_movies] 查询结果数量: {len(rows) if rows else 0}")
         
         aggregated = {}
@@ -552,14 +552,14 @@ def api_user_details(request: Request, user_id: Optional[str] = None):
             user_id = admin_user.get("id")
     
     try:
-        where, params = get_base_filter(user_id)
+        where, params = build_stats_base_filter(user_id)
         client_col = get_playback_column_name()
         
         # 🔥 动态检测可用列
         available_cols = ["DateCreated", "ItemName", "ItemId", "PlayDuration", "UserId"]
         try:
             test_sql = "SELECT * FROM PlaybackActivity LIMIT 1"
-            test_res = query_db(test_sql, [])
+            test_res = query_stats(test_sql, [])
             if test_res and len(test_res) > 0:
                 first_row = test_res[0]
                 if hasattr(first_row, 'keys'):
@@ -583,7 +583,7 @@ def api_user_details(request: Request, user_id: Optional[str] = None):
             SELECT {', '.join(select_fields)} FROM PlaybackActivity {where} 
             ORDER BY DateCreated DESC
         """
-        all_rows = query_db(all_data_sql, params)
+        all_rows = query_stats(all_data_sql, params)
         
         # 从内存中聚合数据
         h_data = {str(i).zfill(2): 0 for i in range(24)}
@@ -731,7 +731,7 @@ def api_chart_stats(request: Request, user_id: Optional[str] = None, dimension: 
             user_id = admin_user.get("id")
     
     try:
-        where, params = get_base_filter(user_id)
+        where, params = build_stats_base_filter(user_id)
         # 🔥 时区修复
         if dimension == 'week': 
             sql = f"SELECT strftime('%Y-%W', substr(replace(DateCreated, 'T', ' '), 1, 19)) as Label, SUM(PlayDuration) as Duration FROM PlaybackActivity {where} AND DateCreated > date('now', 'localtime', '-120 days') GROUP BY Label ORDER BY Label"
@@ -740,7 +740,7 @@ def api_chart_stats(request: Request, user_id: Optional[str] = None, dimension: 
         else: 
             sql = f"SELECT substr(replace(DateCreated, 'T', ' '), 1, 10) as Label, SUM(PlayDuration) as Duration FROM PlaybackActivity {where} AND DateCreated > date('now', 'localtime', '-30 days') GROUP BY Label ORDER BY Label"
             
-        results = query_db(sql, params)
+        results = query_stats(sql, params)
         data = {}
         if results:
             for r in results: data[r['Label']] = int(r['Duration'] or 0)
@@ -765,16 +765,16 @@ def api_poster_data(request: Request, user_id: Optional[str] = None, period: str
             user_id = admin_user.get("id")
 
     try:
-        where_base, params = get_base_filter(user_id)
+        where_base, params = build_stats_base_filter(user_id)
         date_filter = ""
         # 🔥 时区修复
         if period == 'week': date_filter = " AND DateCreated > date('now', 'localtime', '-7 days')"
         elif period == 'month': date_filter = " AND DateCreated > date('now', 'localtime', '-30 days')"
             
-        server_res = query_db(f"SELECT COUNT(*) as Plays FROM PlaybackActivity {get_base_filter('all')[0]} {date_filter}", get_base_filter('all')[1])
+        server_res = query_stats(f"SELECT COUNT(*) as Plays FROM PlaybackActivity {build_stats_base_filter('all')[0]} {date_filter}", build_stats_base_filter('all')[1])
         server_plays = server_res[0]['Plays'] if server_res else 0
 
-        summary = query_db(
+        summary = query_stats(
             f"SELECT COUNT(*) as plays, COALESCE(SUM(PlayDuration), 0) as duration FROM PlaybackActivity {where_base + date_filter}",
             params,
             one=True,
@@ -782,7 +782,7 @@ def api_poster_data(request: Request, user_id: Optional[str] = None, period: str
         total_plays = int(summary['plays'] if summary else 0)
         total_duration = int(summary['duration'] if summary else 0)
 
-        daily_rows = query_db(
+        daily_rows = query_stats(
             f"""SELECT substr(replace(DateCreated, 'T', ' '), 1, 10) as day,
                        COALESCE(SUM(PlayDuration), 0) as duration
                 FROM PlaybackActivity {where_base + date_filter}
@@ -792,7 +792,7 @@ def api_poster_data(request: Request, user_id: Optional[str] = None, period: str
         daily_duration = {r['day']: int(r['duration'] or 0) for r in daily_rows if r['day']}
 
         late_night_record = None
-        late_row = query_db(
+        late_row = query_stats(
             f"""SELECT DateCreated, ItemName, ItemType
                 FROM PlaybackActivity {where_base + date_filter}
                 AND CAST(substr(replace(DateCreated, 'T', ' '), 12, 2) AS INTEGER) BETWEEN 1 AND 5
@@ -811,7 +811,7 @@ def api_poster_data(request: Request, user_id: Optional[str] = None, period: str
                     "name": get_clean_name(late_row.get('ItemName'), late_row.get('ItemType', ''))
                 }
 
-        top_rows = query_db(
+        top_rows = query_stats(
             f"""SELECT ItemName, ItemId, ItemType, COUNT(*) as Count, COALESCE(SUM(PlayDuration), 0) as Duration
                 FROM PlaybackActivity {where_base + date_filter}
                 GROUP BY ItemName
@@ -913,7 +913,7 @@ def api_top_users_list(request: Request, period: str = 'all'):
     if not is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     try:
-        where_base, params = get_base_filter('all')
+        where_base, params = build_stats_base_filter('all')
         date_filter = ""
         
         # 🔥 使用统一的时间计算模块
@@ -935,7 +935,7 @@ def api_top_users_list(request: Request, period: str = 'all'):
             date_filter = " AND DateCreated >= date('now', 'localtime', 'start of year')"
 
         sql = f"SELECT UserId, COUNT(*) as Plays, SUM(PlayDuration) as TotalTime FROM PlaybackActivity {where_base} {date_filter} GROUP BY UserId ORDER BY TotalTime DESC LIMIT 10"
-        res = query_db(sql, params)
+        res = query_stats(sql, params)
         if not res: return {"status": "success", "data": []}
         user_map = get_user_map_local()
         hidden = cfg.get("hidden_users") or []
@@ -974,11 +974,11 @@ def api_badges(request: Request, user_id: Optional[str] = None):
             user_id = admin_user.get("id")
     
     try:
-        where, params = get_base_filter(user_id)
+        where, params = build_stats_base_filter(user_id)
         
         # 🚀 性能优化：一次查询获取所有需要的数据
         client_col = get_playback_column_name()
-        raw_data = query_db(f"SELECT DateCreated, PlayDuration, COALESCE({client_col}, DeviceName) as Client, ItemId, ItemName, ItemType FROM PlaybackActivity {where}", params)
+        raw_data = query_stats(f"SELECT DateCreated, PlayDuration, COALESCE({client_col}, DeviceName) as Client, ItemId, ItemName, ItemType FROM PlaybackActivity {where}", params)
         if not raw_data: raw_data = []
 
         night_c, weekend_c, fish_c, morning_c = 0, 0, 0, 0
@@ -1074,11 +1074,11 @@ def api_monthly_stats(request: Request, user_id: Optional[str] = None):
             user_id = admin_user.get("id")
 
     try:
-        where_base, params = get_base_filter(user_id)
+        where_base, params = build_stats_base_filter(user_id)
         # 🔥 时区修复
         where = where_base + " AND DateCreated > date('now', 'localtime', '-12 months')"
         sql = f"SELECT substr(replace(DateCreated, 'T', ' '), 1, 7) as Month, SUM(PlayDuration) as Duration FROM PlaybackActivity {where} GROUP BY Month ORDER BY Month"
-        results = query_db(sql, params); data = {}
+        results = query_stats(sql, params); data = {}
         if results: 
             for r in results: data[r['Month']] = int(r['Duration'] or 0)
         return {"status": "success", "data": data}
@@ -1159,10 +1159,10 @@ def _mark_dashboard_access(cache_key: str, now: float = None):
 async def _fetch_dashboard_core(user_id: str) -> dict:
     """核心仪表盘数据（播放统计、媒体库储量）- 快速"""
     try:
-        where, params = get_base_filter(user_id)
-        plays = query_db(f"SELECT COUNT(*) as c FROM PlaybackActivity {where}", params)[0]['c']
-        users = query_db(f"SELECT COUNT(DISTINCT UserId) as c FROM PlaybackActivity {where} AND DateCreated > date('now', 'localtime', '-30 days')", params)[0]['c']
-        dur = query_db(f"SELECT SUM(PlayDuration) as c FROM PlaybackActivity {where}", params)[0]['c'] or 0
+        where, params = build_stats_base_filter(user_id)
+        plays = query_stats(f"SELECT COUNT(*) as c FROM PlaybackActivity {where}", params)[0]['c']
+        users = query_stats(f"SELECT COUNT(DISTINCT UserId) as c FROM PlaybackActivity {where} AND DateCreated > date('now', 'localtime', '-30 days')", params)[0]['c']
+        dur = query_stats(f"SELECT SUM(PlayDuration) as c FROM PlaybackActivity {where}", params)[0]['c'] or 0
 
         lib = {"movie": 0, "series": 0, "episode": 0}
         try:
@@ -1222,9 +1222,9 @@ async def _fetch_libraries() -> list:
 async def _fetch_top_users() -> list:
     """白金观影榜 - 快速（本地数据库）"""
     try:
-        where_base, params_top = get_base_filter('all')
+        where_base, params_top = build_stats_base_filter('all')
         sql = f"SELECT UserId, COUNT(*) as Plays, SUM(PlayDuration) as TotalTime FROM PlaybackActivity {where_base} GROUP BY UserId ORDER BY TotalTime DESC LIMIT 10"
-        res_top = query_db(sql, params_top)
+        res_top = query_stats(sql, params_top)
         user_map = get_user_map_local()
         hidden = cfg.get("hidden_users") or []
         hidden_str = [str(h) for h in hidden]
@@ -1245,9 +1245,9 @@ async def _fetch_top_users() -> list:
 async def _fetch_trend(user_id: str) -> dict:
     """趋势图数据 - 快速（本地数据库）"""
     try:
-        where_trend, params_trend = get_base_filter(user_id)
+        where_trend, params_trend = build_stats_base_filter(user_id)
         sql_trend = f"SELECT substr(replace(DateCreated, 'T', ' '), 1, 10) as Label, SUM(PlayDuration) as Duration FROM PlaybackActivity {where_trend} AND DateCreated > date('now', 'localtime', '-30 days') GROUP BY Label ORDER BY Label"
-        results_trend = query_db(sql_trend, params_trend)
+        results_trend = query_stats(sql_trend, params_trend)
         trend_data = {}
         if results_trend:
             for r in results_trend:
@@ -1676,7 +1676,7 @@ def api_item_detail(request: Request, item_id: str, item_name: Optional[str] = N
                     ORDER BY DateCreated DESC
                     LIMIT 500
                 """
-                rows = query_db(sql_by_name, [f"%{clean_name}%"])
+                rows = query_stats(sql_by_name, [f"%{clean_name}%"])
             else:
                 sql_by_name = """
                     SELECT
@@ -1686,7 +1686,7 @@ def api_item_detail(request: Request, item_id: str, item_name: Optional[str] = N
                     ORDER BY DateCreated DESC
                     LIMIT 500
                 """
-                rows = query_db(sql_by_name, [f"%{clean_name}%", current_user_id])
+                rows = query_stats(sql_by_name, [f"%{clean_name}%", current_user_id])
             logger.info(f"[item_detail] 按剧名查询结果: {len(rows) if rows else 0} 条")
         else:
             # 🔥 电影等其他类型，按 ItemId 查询
@@ -1699,7 +1699,7 @@ def api_item_detail(request: Request, item_id: str, item_name: Optional[str] = N
                     ORDER BY DateCreated DESC
                     LIMIT 100
                 """
-                rows = query_db(sql_by_id, [item_id])
+                rows = query_stats(sql_by_id, [item_id])
             else:
                 sql_by_id = """
                     SELECT
@@ -1709,7 +1709,7 @@ def api_item_detail(request: Request, item_id: str, item_name: Optional[str] = N
                     ORDER BY DateCreated DESC
                     LIMIT 100
                 """
-                rows = query_db(sql_by_id, [item_id, current_user_id])
+                rows = query_stats(sql_by_id, [item_id, current_user_id])
             logger.info(f"[item_detail] 按 ItemId 查询结果: {len(rows) if rows else 0} 条")
         
         if not rows:
