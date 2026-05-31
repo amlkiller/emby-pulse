@@ -435,6 +435,13 @@ def mark_pk_invitation_expired(invite_id) -> None:
     system_store.execute("UPDATE pk_invitations SET status = 'expired' WHERE id = ?", (invite_id,))
 
 
+def save_red_packet_message_id(packet_id: int, message_id) -> None:
+    system_store.execute(
+        "UPDATE point_red_packets SET message_id = ? WHERE id = ?",
+        (str(message_id), packet_id),
+    )
+
+
 def transfer_points(
     from_user_id: str,
     from_user_name: str,

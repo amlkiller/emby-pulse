@@ -2503,17 +2503,11 @@ def cmd_redpacket(chat_id, tg_user_id, text, is_group=False, tg_name="", user_ms
     try:
         total_amount = int(parts[1])
         total_count = int(parts[2])
-        
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        conn.execute("BEGIN IMMEDIATE")
-        config = {r[0]: r[1] for r in c.execute("SELECT key, value FROM point_config").fetchall()}
 
-        # 检查是否启用红包
+        config = point_dao.get_point_config()
         if int(config.get('enable_red_packet', 0)) == 0:
-            conn.close()
             return _send(chat_id, "❌ 积分红包功能未开启")
-        
+
         # 检查是否仅管理员可发
         if int(config.get('red_packet_admin_only', 1)) == 1:
             # 检查是否是管理员 - 从 Emby API 获取用户信息
@@ -2523,40 +2517,20 @@ def cmd_redpacket(chat_id, tg_user_id, text, is_group=False, tg_name="", user_ms
             except:
                 is_admin = False
             if not is_admin:
-                conn.close()
                 return _send(chat_id, "❌ 仅管理员可发红包")
-        
+
         # 检查红包数量
         if total_count < 1 or total_count > 100:
-            conn.close()
             return _send(chat_id, "❌ 红包数量需在 1-100 之间")
-        
-        # 检查积分
-        row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (binding['emby_user_id'],)).fetchone()
-        current_points = row[0] if row else 0
-        
-        if current_points < total_amount:
-            conn.close()
-            return _send(chat_id, f"❌ 积分不足！当前积分: {current_points}")
-        
-        # 计算过期时间
-        expire_hours = int(config.get('red_packet_expire_hours', 24))
-        expires_at = datetime.datetime.now() + datetime.timedelta(hours=expire_hours)
-        
-        # 扣除积分（原子操作）
-        c.execute("UPDATE users_meta SET points = points - ? WHERE user_id = ?", (total_amount, binding['emby_user_id']))
-        new_points = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (binding['emby_user_id'],)).fetchone()[0]
-        
-        # 创建红包
+
         creator_display = tg_name or binding['emby_username']
-        c.execute("INSERT INTO point_red_packets (total_amount, remain_amount, total_count, remain_count, creator_id, creator_name, chat_id, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                 (total_amount, total_amount, total_count, total_count, binding['emby_user_id'], creator_display, str(chat_id), expires_at))
-        packet_id = c.lastrowid
-        
-        c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-                 (binding['emby_user_id'], binding['emby_username'], f"发放红包 #{packet_id}", -total_amount, new_points))
-        
-        conn.commit(); conn.close()
+        red_packet_result = point_dao.create_red_packet(total_amount, total_count, str(chat_id), binding['emby_user_id'], creator_display)
+        if red_packet_result.get("status") != "success":
+            return _send(chat_id, f"❌ {red_packet_result.get('message', '发红包失败')}")
+
+        packet_id = red_packet_result.get("packet_id")
+        new_points = red_packet_result.get("balance", 0)
+        expire_hours = int(config.get('red_packet_expire_hours', 24))
         
         result = _send(chat_id, f"🧧 <b>积分红包</b>\n\n"
                             f"🆔 红包ID：<b>#{packet_id}</b>\n"
@@ -2569,10 +2543,7 @@ def cmd_redpacket(chat_id, tg_user_id, text, is_group=False, tg_name="", user_ms
             msg_id = result.get("result", {}).get("message_id")
             if msg_id:
                 try:
-                    conn = sqlite3.connect(SYSTEM_DB_PATH)
-                    conn.execute("UPDATE point_red_packets SET message_id = ? WHERE id = ?", (str(msg_id), packet_id))
-                    conn.commit()
-                    conn.close()
+                    point_dao.save_red_packet_message_id(packet_id, msg_id)
                 except Exception as e:
                     logger.warning(f"[红包] 记录红包消息ID失败: {e}")
         
