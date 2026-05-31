@@ -102,6 +102,9 @@
 - `app.dao.user_dao.save_user_expire_preserve(user_id: str, expire_date, created_at: str) -> None`
 - `app.dao.user_dao.save_user_policy_meta(user_id: str, max_concurrent, is_vip, created_at: str) -> None`
 - `app.dao.user_dao.save_user_routes_preserve(user_id: str, allow_routes: str, block_routes: str, created_at: str) -> None`
+- `app.dao.user_dao.save_manage_user_meta(...) -> None`
+- `app.dao.user_dao.create_user_meta(...) -> None`
+- `app.dao.user_dao.sync_user_library_permissions(user_id: str, enable_all_folders: bool, enabled_folders) -> list | None`
 - `app.dao.user_dao.get_user_library_settings(user_id: str) -> DataRow | None`
 - `app.dao.user_dao.get_user_admin_enabled_folders(user_id: str) -> DataRow | None`
 - `app.dao.user_dao.save_user_admin_enabled_folders(user_id: str, admin_enabled_folders: str) -> None`

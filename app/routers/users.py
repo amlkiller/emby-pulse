@@ -2,7 +2,6 @@ from fastapi import APIRouter, Request, Response, UploadFile, File, Form, Depend
 from pydantic import BaseModel
 from typing import Optional, List
 from app.core.config import cfg
-from app.core.database import query_db, SYSTEM_DB_PATH
 from app.dao import audit_dao
 from app.dao import invitation_dao
 from app.dao import user_dao
@@ -17,7 +16,6 @@ import datetime
 import secrets
 import base64
 import logging
-import sqlite3
 import time
 from app.core.security_utils import safe_error_message
 from app.core.rate_limiter import get_client_ip
@@ -989,38 +987,9 @@ def api_manage_user_library(data: UserUpdateModelEx, request: Request):
 
             # 同步更新 admin_enabled_folders，但保留用户的 hidden_libraries
             try:
-                conn = sqlite3.connect(SYSTEM_DB_PATH)
-                c = conn.cursor()
-                c.execute("PRAGMA table_info(users_meta)")
-                cols = [col[1] for col in c.fetchall()]
-                if "admin_enabled_folders" not in cols:
-                    c.execute("ALTER TABLE users_meta ADD COLUMN admin_enabled_folders TEXT")
-                if "hidden_libraries" not in cols:
-                    c.execute("ALTER TABLE users_meta ADD COLUMN hidden_libraries TEXT")
-
-                # 获取用户当前的 hidden_libraries
-                c.execute("SELECT hidden_libraries FROM users_meta WHERE user_id = ?", (data.user_id,))
-                row = c.fetchone()
-                user_hidden_str = row[0] if row and row[0] else ''
-                user_hidden_folders = set(g.strip() for g in user_hidden_str.split(',') if g.strip()) if user_hidden_str else set()
-
-                if new_enable_all:
-                    c.execute("UPDATE users_meta SET admin_enabled_folders = NULL WHERE user_id = ?", (data.user_id,))
-                else:
-                    admin_folders_str = ','.join(new_enabled_folders) if new_enabled_folders else ''
-                    c.execute("UPDATE users_meta SET admin_enabled_folders = ? WHERE user_id = ?", (admin_folders_str, data.user_id))
-
-                    # 过滤掉不在管理员允许列表中的隐藏媒体库
-                    valid_hidden = user_hidden_folders & new_enabled_folders
-                    hidden_str = ','.join(valid_hidden) if valid_hidden else ''
-                    c.execute("UPDATE users_meta SET hidden_libraries = ? WHERE user_id = ?", (hidden_str, data.user_id))
-
-                    # 更新 Emby 的 EnabledFolders，排除用户隐藏的
-                    final_enabled = [f for f in new_enabled_folders if f not in valid_hidden]
+                final_enabled = user_dao.sync_user_library_permissions(data.user_id, new_enable_all, new_enabled_folders)
+                if final_enabled is not None:
                     p['EnabledFolders'] = final_enabled
-
-                conn.commit()
-                conn.close()
             except Exception: pass
 
             # 更新 Emby Policy
@@ -1040,7 +1009,7 @@ def api_manage_user_update(data: UserUpdateModelEx, request: Request):
     # 🔥 清除用户缓存
     invalidate_emby_users_cache()
     try:
-        exist = query_db("SELECT * FROM users_meta WHERE user_id = ?", (data.user_id,), one=True)
+        exist = user_dao.get_user_meta(data.user_id)
         # 获取旧的 Emby Policy 用于对比变更
         old_policy = {}
         old_user_res = media_api.get(f"/Users/{data.user_id}", timeout=5)
@@ -1058,26 +1027,19 @@ def api_manage_user_update(data: UserUpdateModelEx, request: Request):
         v_req_free_count = data.req_free_count if data.req_free_count is not None else -1
         v_tags = data.tags if data.tags is not None else ""
 
-        if exist:
-            # 🔥 构建动态更新语句,只更新有值的字段
-            update_fields = ["expire_date = ?", "max_concurrent = ?", "is_vip = ?", "remark = ?", "req_free = ?", "req_free_count = ?", "tags = ?"]
-            update_values = [v_exp, v_max, v_vip, v_remark, v_req_free, v_req_free_count, v_tags]
-
-            # 🔥 线路权限:只有与原值不同时才更新
-            old_allow = exist.get('allow_routes', '') or ''
-            old_block = exist.get('block_routes', '') or ''
-            if v_allow_routes != old_allow:
-                update_fields.append("allow_routes = ?")
-                update_values.append(v_allow_routes if v_allow_routes else '')
-            if v_block_routes != old_block:
-                update_fields.append("block_routes = ?")
-                update_values.append(v_block_routes if v_block_routes else '')
-
-            update_values.append(data.user_id)
-            query_db(f"UPDATE users_meta SET {', '.join(update_fields)} WHERE user_id = ?", update_values)
-        else:
-            query_db("INSERT INTO users_meta (user_id, expire_date, max_concurrent, is_vip, remark, allow_routes, block_routes, req_free, req_free_count, tags, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                     (data.user_id, v_exp, v_max, v_vip, v_remark, v_allow_routes, v_block_routes, v_req_free, v_req_free_count, v_tags, datetime.datetime.now().isoformat()))
+        user_dao.save_manage_user_meta(
+            data.user_id,
+            v_exp,
+            v_max,
+            v_vip,
+            v_remark,
+            v_allow_routes,
+            v_block_routes,
+            v_req_free,
+            v_req_free_count,
+            v_tags,
+            datetime.datetime.now().isoformat(),
+        )
 
         if data.password:
             media_api.post(f"/Users/{data.user_id}/Password", json={"Id": data.user_id, "NewPw": data.password})
@@ -1094,41 +1056,13 @@ def api_manage_user_update(data: UserUpdateModelEx, request: Request):
                     # 🔥 应用模板时同步更新 admin_enabled_folders，但保留用户的 hidden_libraries
                     if data.copy_library:
                         try:
-                            conn = sqlite3.connect(SYSTEM_DB_PATH)
-                            c = conn.cursor()
-                            # 确保字段存在
-                            c.execute("PRAGMA table_info(users_meta)")
-                            cols = [col[1] for col in c.fetchall()]
-                            if "admin_enabled_folders" not in cols:
-                                c.execute("ALTER TABLE users_meta ADD COLUMN admin_enabled_folders TEXT")
-                            if "hidden_libraries" not in cols:
-                                c.execute("ALTER TABLE users_meta ADD COLUMN hidden_libraries TEXT")
-
-                            # 获取用户当前的 hidden_libraries
-                            c.execute("SELECT hidden_libraries FROM users_meta WHERE user_id = ?", (data.user_id,))
-                            row = c.fetchone()
-                            user_hidden_str = row[0] if row and row[0] else ''
-                            user_hidden_folders = set(g.strip() for g in user_hidden_str.split(',') if g.strip()) if user_hidden_str else set()
-
-                            # 保存模板的媒体库权限
-                            if p.get('EnableAllFolders', True):
-                                c.execute("UPDATE users_meta SET admin_enabled_folders = NULL WHERE user_id = ?", (data.user_id,))
-                            else:
-                                admin_folders_str = ','.join(p.get('EnabledFolders', []))
-                                c.execute("UPDATE users_meta SET admin_enabled_folders = ? WHERE user_id = ?", (admin_folders_str, data.user_id))
-
-                                # 🔥 过滤掉不在模板允许列表中的隐藏媒体库
-                                admin_folders_set = set(p.get('EnabledFolders', []))
-                                valid_hidden = user_hidden_folders & admin_folders_set
-                                hidden_str = ','.join(valid_hidden) if valid_hidden else ''
-                                c.execute("UPDATE users_meta SET hidden_libraries = ? WHERE user_id = ?", (hidden_str, data.user_id))
-
-                                # 🔥 更新 Emby 的 EnabledFolders，排除用户隐藏的
-                                final_enabled = [f for f in p.get('EnabledFolders', []) if f not in valid_hidden]
+                            final_enabled = user_dao.sync_user_library_permissions(
+                                data.user_id,
+                                p.get('EnableAllFolders', True),
+                                p.get('EnabledFolders', []),
+                            )
+                            if final_enabled is not None:
                                 p['EnabledFolders'] = final_enabled
-
-                            conn.commit()
-                            conn.close()
                         except Exception: pass
 
             if data.is_disabled is not None:
@@ -1153,42 +1087,9 @@ def api_manage_user_update(data: UserUpdateModelEx, request: Request):
                     p['EnabledFolders'] = list(new_enabled_folders) if not new_enable_all else []
                     # 🔥 同步更新 admin_enabled_folders，但保留用户的 hidden_libraries
                     try:
-                        conn = sqlite3.connect(SYSTEM_DB_PATH)
-                        c = conn.cursor()
-                        # 确保字段存在
-                        c.execute("PRAGMA table_info(users_meta)")
-                        cols = [col[1] for col in c.fetchall()]
-                        if "admin_enabled_folders" not in cols:
-                            c.execute("ALTER TABLE users_meta ADD COLUMN admin_enabled_folders TEXT")
-                        if "hidden_libraries" not in cols:
-                            c.execute("ALTER TABLE users_meta ADD COLUMN hidden_libraries TEXT")
-
-                        # 获取用户当前的 hidden_libraries
-                        c.execute("SELECT hidden_libraries FROM users_meta WHERE user_id = ?", (data.user_id,))
-                        row = c.fetchone()
-                        user_hidden_str = row[0] if row and row[0] else ''
-                        user_hidden_folders = set(g.strip() for g in user_hidden_str.split(',') if g.strip()) if user_hidden_str else set()
-
-                        # 保存管理员设置的媒体库权限
-                        if new_enable_all:
-                            # 允许全部，清空限制
-                            c.execute("UPDATE users_meta SET admin_enabled_folders = NULL WHERE user_id = ?", (data.user_id,))
-                        else:
-                            # 限制特定媒体库
-                            admin_folders_str = ','.join(new_enabled_folders) if new_enabled_folders else ''
-                            c.execute("UPDATE users_meta SET admin_enabled_folders = ? WHERE user_id = ?", (admin_folders_str, data.user_id))
-
-                            # 🔥 过滤掉不在管理员允许列表中的隐藏媒体库
-                            valid_hidden = user_hidden_folders & new_enabled_folders
-                            hidden_str = ','.join(valid_hidden) if valid_hidden else ''
-                            c.execute("UPDATE users_meta SET hidden_libraries = ? WHERE user_id = ?", (hidden_str, data.user_id))
-
-                            # 🔥 更新 Emby 的 EnabledFolders，排除用户隐藏的
-                            final_enabled = [f for f in new_enabled_folders if f not in valid_hidden]
+                        final_enabled = user_dao.sync_user_library_permissions(data.user_id, new_enable_all, new_enabled_folders)
+                        if final_enabled is not None:
                             p['EnabledFolders'] = final_enabled
-
-                        conn.commit()
-                        conn.close()
                     except Exception: pass
             if data.excluded_sub_folders is not None: p['ExcludedSubFolders'] = data.excluded_sub_folders
             if data.enable_downloading is not None: p['EnableContentDownloading'] = data.enable_downloading; p['EnableSyncTranscoding'] = data.enable_downloading
@@ -1361,8 +1262,18 @@ def api_manage_user_new(data: NewUserModelEx, request: Request):
         v_block_routes = data.block_routes if data.block_routes else ""
         v_req_free = data.req_free if data.req_free else 0
         v_req_free_count = data.req_free_count if data.req_free_count is not None else -1
-        query_db("INSERT INTO users_meta (user_id, expire_date, max_concurrent, is_vip, remark, allow_routes, block_routes, req_free, req_free_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (new_id, v_exp, v_max, v_vip, v_remark, v_allow_routes, v_block_routes, v_req_free, v_req_free_count, datetime.datetime.now().isoformat()))
+        user_dao.create_user_meta(
+            new_id,
+            v_exp,
+            v_max,
+            v_vip,
+            v_remark,
+            v_allow_routes,
+            v_block_routes,
+            v_req_free,
+            v_req_free_count,
+            datetime.datetime.now().isoformat(),
+        )
 
         # 记录审计日志
         admin_user = request.session.get("user", {})
@@ -1865,7 +1776,7 @@ def api_create_tag(data: TagCreateModel, request: Request):
     try:
         tag_id = user_dao.create_user_tag(data.name.strip(), data.color)
         return {"status": "success", "data": {"id": tag_id, "name": data.name.strip(), "color": data.color}}
-    except sqlite3.IntegrityError:
+    except ValueError:
         return {"status": "error", "message": "标签已存在"}
     except Exception as e:
         return {"status": "error", "message": safe_error_message(e)}
