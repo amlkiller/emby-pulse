@@ -431,6 +431,22 @@ def list_expired_pending_pk_invites_with_messages():
     )
 
 
+def get_pending_pk_invitation(invite_id):
+    return system_store.fetch_one(
+        """
+        SELECT id, challenger_id, challenger_name, challenger_tg_name, target_id, target_name, target_tg_name,
+               chat_id, message_id, command_message_id
+        FROM pk_invitations
+        WHERE id = ? AND status = 'pending'
+        """,
+        (invite_id,),
+    )
+
+
+def set_pk_invitation_status(invite_id, status: str) -> None:
+    system_store.execute("UPDATE pk_invitations SET status = ? WHERE id = ?", (status, invite_id))
+
+
 def mark_pk_invitation_expired(invite_id) -> None:
     system_store.execute("UPDATE pk_invitations SET status = 'expired' WHERE id = ?", (invite_id,))
 

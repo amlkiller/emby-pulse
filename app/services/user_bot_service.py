@@ -1894,38 +1894,25 @@ def _handle_pk_reject_callback(chat_id, tg_user_id, invite_id, cq_id, msg_id):
         return
     
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        
-        # 获取邀请（包含 TG 名称）
-        invite = c.execute(
-            "SELECT id, challenger_id, challenger_name, challenger_tg_name, target_id, target_name, target_tg_name, chat_id, message_id, command_message_id FROM pk_invitations WHERE id = ? AND status = 'pending'",
-            (invite_id,)
-        ).fetchone()
-        
+        invite = point_dao.get_pending_pk_invitation(invite_id)
         if not invite:
-            conn.close()
             _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": "邀请不存在或已处理", "show_alert": True})
             _edit(chat_id, msg_id, "❌ PK邀请已不存在或已处理")
             return
         
         # 检查是否是目标用户
-        if invite[4] != binding['emby_user_id']:
-            conn.close()
+        if invite["target_id"] != binding['emby_user_id']:
             _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": "这不是发给你的PK邀请", "show_alert": True})
             return
         
-        challenger_name = invite[2]
-        challenger_tg_name = invite[3] or challenger_name
-        target_tg_name = invite[6] or invite[5]
-        original_chat_id = invite[7]
-        invite_msg_id = invite[8]
-        command_msg_id = invite[9]
+        challenger_name = invite["challenger_name"]
+        challenger_tg_name = invite["challenger_tg_name"] or challenger_name
+        target_tg_name = invite["target_tg_name"] or invite["target_name"]
+        original_chat_id = invite["chat_id"]
+        invite_msg_id = invite["message_id"]
+        command_msg_id = invite["command_message_id"]
         
-        # 更新状态
-        c.execute("UPDATE pk_invitations SET status = 'rejected' WHERE id = ?", (invite_id,))
-        conn.commit()
-        conn.close()
+        point_dao.set_pk_invitation_status(invite_id, "rejected")
         
         # 发送结果
         _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": "已拒绝PK邀请"})

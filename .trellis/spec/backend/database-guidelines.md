@@ -248,6 +248,8 @@
 - `app.dao.point_dao.list_point_rank(limit: int = 10) -> list[DataRow]`
 - `app.dao.point_dao.get_lottery_winning_numbers(draw_date: str) -> DataRow | None`
 - `app.dao.point_dao.list_expired_pending_pk_invites_with_messages() -> list[DataRow]`
+- `app.dao.point_dao.get_pending_pk_invitation(invite_id) -> DataRow | None`
+- `app.dao.point_dao.set_pk_invitation_status(invite_id, status: str) -> None`
 - `app.dao.point_dao.mark_pk_invitation_expired(invite_id) -> None`
 - `app.dao.point_dao.create_red_packet(total_amount: int, total_count: int, chat_id, creator_id: str, creator_name: str) -> dict`
 - `app.dao.point_dao.grab_red_packet(packet_id: int, user_id: str, user_name: str, allow_creator: bool = True) -> dict`
@@ -329,6 +331,7 @@
 - Good: `user_bot_service.py` keeps Telegram command parsing and response formatting in the service while delegating TG binding lookups and point robbery transactions to DAO boundaries.
 - Good: `user_bot_service.py` keeps Telegram response assembly while delegating red-packet creation and message-id persistence to `point_dao`.
 - Good: `user_bot_service.py` keeps Telegram response assembly and final-red-packet notification delivery while delegating red-packet grab transactions to `point_dao`.
+- Good: `user_bot_service.py` keeps Telegram callback responses and message cleanup in the service while delegating PK invitation reads/status writes to `point_dao`.
 - Good: `points.py` keeps admin/session checks, Emby user enrichment, pagination payload assembly, and later game workflows in the route while delegating point config, point schema bootstrap, point balances, batch updates, point log reads, red-packet log reads, point ranking reads, and daily check-in transactions to `point_dao`.
 - Good: `points.py` keeps Emby user existence/name lookup in the route while delegating transfer fee calculation, balance mutation, transfer logs, and transfer transaction handling to `point_dao`.
 - Good: `points.py` keeps Emby policy re-enable, sys notification writes, and response shaping in the route while delegating store-item lookup, point deduction, expiry update, purchase limit checks, and point-log writes to `point_dao`.
