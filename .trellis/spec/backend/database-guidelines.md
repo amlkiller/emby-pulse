@@ -10,7 +10,7 @@
 
 - Trigger: database infrastructure refactor that starts removing `query_db()` from representative modules.
 - Applies to new backend code that reads/writes EmbyPulse system data or playback reporting data.
-- First-stage sample modules include `app/routers/history.py`, `app/routers/api_tokens.py`, `app/routers/notifications.py`, `app/routers/notify_rules.py`, `app/routers/pro.py`, `app/routers/notify_admin.py`, `app/routers/pwa.py`, `app/routers/audit.py`, `app/routers/risk.py`, `app/routers/clients.py`, `app/routers/calendar_notify.py`, `app/routers/webhook.py`, `app/services/report_service.py`, `app/routers/insight.py`, `app/routers/system_tools.py`, `app/services/risk_service.py`, `app/services/calendar_service.py`, `app/routers/views.py`, `app/routers/tasks.py`, `app/routers/dedupe.py`, `app/routers/system.py`, `app/routers/db_tools.py`, `app/routers/gaps.py`, `app/routers/bot.py`, `app/routers/stats.py`, `app/routers/auth.py`, and `app/routers/messages.py`.
+- First-stage sample modules include `app/routers/history.py`, `app/routers/api_tokens.py`, `app/routers/notifications.py`, `app/routers/notify_rules.py`, `app/routers/pro.py`, `app/routers/notify_admin.py`, `app/routers/pwa.py`, `app/routers/audit.py`, `app/routers/risk.py`, `app/routers/clients.py`, `app/routers/calendar_notify.py`, `app/routers/webhook.py`, `app/services/report_service.py`, `app/routers/insight.py`, `app/routers/system_tools.py`, `app/services/risk_service.py`, `app/services/calendar_service.py`, `app/routers/views.py`, `app/routers/tasks.py`, `app/routers/dedupe.py`, `app/routers/system.py`, `app/routers/db_tools.py`, `app/routers/gaps.py`, `app/routers/bot.py`, `app/routers/stats.py`, `app/routers/auth.py`, `app/routers/messages.py`, and `app/routers/media_request.py`.
 
 ### 2. Signatures
 
@@ -135,6 +135,16 @@
 - `app.dao.message_dao.list_announcements(active_only: bool = False) -> list[DataRow]`
 - `app.dao.message_dao.update_announcement_fields(announcement_id: int, updates: dict) -> None`
 - `app.dao.message_dao.send_broadcast_messages(user_entries, admin_id: str, admin_name: str, content: str) -> tuple[int, list]`
+- `app.dao.media_request_dao.ensure_media_request_schema() -> None`
+- `app.dao.media_request_dao.submit_new_media_request(...) -> dict`
+- `app.dao.media_request_dao.list_my_requests(user_id: str) -> list[DataRow]`
+- `app.dao.media_request_dao.list_all_requests() -> list[DataRow]`
+- `app.dao.media_request_dao.update_media_request_status(tmdb_id, season, status, reject_reason=None) -> None`
+- `app.dao.media_request_dao.get_pending_notify_data() -> tuple[int, list[DataRow], int, list[DataRow]]`
+- `app.dao.media_request_dao.submit_update_request_record(...) -> dict`
+- `app.dao.media_request_dao.submit_batch_update_request_records(...) -> dict`
+- `app.dao.media_request_dao.claim_registration_invitation(code: str, used_by: str) -> tuple[DataRow | None, str | None]`
+- `app.dao.media_request_dao.save_registered_user_meta(...) -> None`
 - `app.infra.db.local_playback_store.insert_webhook_playback_ip_record(...) -> None`
 - `app.infra.db.perf_stats.get_query_perf_stats() -> dict`
 - `app.queries.client_queries.count_playback_clients_by_app() -> list[DataRow]`
@@ -202,6 +212,7 @@
 - Good: `stats.py` keeps chart aggregation, media-server enrichment, and permission filtering in the route while delegating playback SQL execution and base user filters to `stats_queries`.
 - Good: `auth.py` keeps password hashing, local/Emby login decisions, TOTP validation, session updates, and audit logging in the route while delegating login failure and `local_users` persistence to `auth_dao`.
 - Good: `messages.py` keeps permission checks, Emby user lookups, content sanitization, bot notification delivery, and response assembly in the route while delegating message, mute, notification-block, announcement, and related user lookup tables to `message_dao`.
+- Good: `media_request.py` keeps request validation, Emby/TMDB/MoviePilot calls, cache assembly, notification delivery, and response shaping in the route while delegating request, feedback, update, invitation, point, gap-cache, and user metadata persistence to `media_request_dao`.
 - Bad: a router imports `query_db`, `SYSTEM_DB_PATH`, or `sqlite3` only to run route-local SQL.
 
 ### 6. Tests Required

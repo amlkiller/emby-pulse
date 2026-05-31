@@ -106,23 +106,9 @@ def test_request_login_rejects_passwordless_emby_users(monkeypatch, is_admin):
                 }
             ]
 
-    class FakeCursor:
-        def execute(self, *args, **kwargs):
-            return self
-
-        def fetchone(self):
-            return None
-
-    class FakeConn:
-        def cursor(self):
-            return FakeCursor()
-
-        def close(self):
-            return None
-
     monkeypatch.setattr(media_request.cfg, "get", lambda key, default=None: "http://emby.local" if key == "emby_host" else default)
     monkeypatch.setattr(media_request.media_api, "get", lambda *args, **kwargs: FakeMediaResponse())
-    monkeypatch.setattr(media_request.sqlite3, "connect", lambda *args, **kwargs: FakeConn())
+    monkeypatch.setattr(media_request, "get_user_status_meta", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         media_request.requests,
         "post",

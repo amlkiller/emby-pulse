@@ -1,9 +1,8 @@
-import sqlite3
 import requests
 import json
 import time
 import re
-from datetime import datetime, date
+from datetime import date
 from fastapi import APIRouter, Request, Depends, BackgroundTasks
 from fastapi.responses import JSONResponse
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
@@ -13,7 +12,38 @@ from typing import Optional, List
 import threading
 
 from app.core.config import cfg, REPORT_COVER_URL
-from app.core.database import DB_PATH, SYSTEM_DB_PATH, query_db, add_sys_notification
+from app.core.database import add_sys_notification
+from app.dao.media_request_dao import (
+    claim_registration_invitation,
+    create_media_feedback,
+    decode_gap_cache,
+    delete_media_request,
+    ensure_media_request_schema,
+    find_poster_for_feedback,
+    get_media_request,
+    get_pending_notify_data,
+    get_update_cost_config,
+    get_update_request_search_info,
+    get_user_expire_date,
+    get_user_password_hash,
+    get_user_series_db_context,
+    get_user_status_meta,
+    list_all_feedback,
+    list_all_requests,
+    list_my_feedback,
+    list_my_requests,
+    list_request_status_notify_items,
+    list_tg_bindings,
+    restore_invitation_code,
+    save_registered_user_meta,
+    submit_batch_update_request_records,
+    submit_new_media_request,
+    submit_update_request_record,
+    update_feedback_status,
+    update_feedback_status_batch,
+    update_media_request_status,
+    update_user_password_hash,
+)
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
 # 🔥 补回丢失的这一行：引入基础数据模型
 from app.schemas.models import MediaRequestSubmitModel as BaseSubmitModel
@@ -121,97 +151,9 @@ def get_tmdb_season_info(tmdb_id: int, season: int) -> tuple:
         return 0, []
 
 def ensure_db_schema():
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    c = conn.cursor()
-    c.execute("PRAGMA table_info(media_requests)")
-    cols = c.fetchall()
-    if cols:
-        pk_cols = [col[1] for col in cols if col[5] > 0]
-        if 'season' not in pk_cols:
-            c.execute("ALTER TABLE media_requests RENAME TO media_requests_old")
-            c.execute("""
-                CREATE TABLE media_requests (
-                    tmdb_id INTEGER, media_type TEXT, title TEXT, year TEXT, poster_path TEXT,
-                    status INTEGER DEFAULT 0, season INTEGER DEFAULT 0, reject_reason TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    PRIMARY KEY (tmdb_id, season)
-                )
-            """)
-            c.execute("INSERT OR IGNORE INTO media_requests (tmdb_id, media_type, title, year, poster_path, status, 0, reject_reason, created_at) SELECT tmdb_id, media_type, title, year, poster_path, status, 0, reject_reason, created_at FROM media_requests_old")
-            c.execute("DROP TABLE media_requests_old")
-
-    # 🔥 新增：episodes 字段（追新功能，存储请求的集数，如 '6,7,8'）
-    c.execute("PRAGMA table_info(media_requests)")
-    req_cols = [col[1] for col in c.fetchall()]
-    if 'episodes' not in req_cols:
-        try:
-            c.execute("ALTER TABLE media_requests ADD COLUMN episodes TEXT DEFAULT ''")
-        except:
-            pass
-    # 🔥 新增：request_type 字段（区分求片/追新）
-    if 'request_type' not in req_cols:
-        try:
-            c.execute("ALTER TABLE media_requests ADD COLUMN request_type TEXT DEFAULT 'new'")
-        except:
-            pass
-    # 🔥 新增：series_id 字段（追新时存储 Emby 剧集 ID）
-    if 'series_id' not in req_cols:
-        try:
-            c.execute("ALTER TABLE media_requests ADD COLUMN series_id TEXT DEFAULT ''")
-        except:
-            pass
-
-    c.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='request_users'")
-    u_sql = c.fetchone()
-    if u_sql:
-        sql_str = u_sql[0].lower().replace(" ", "")
-        if "unique(tmdb_id,user_id,season)" not in sql_str:
-            c.execute("ALTER TABLE request_users RENAME TO request_users_old")
-            c.execute("""
-                CREATE TABLE request_users (
-                    tmdb_id INTEGER, user_id TEXT, username TEXT, season INTEGER DEFAULT 0, 
-                    requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(tmdb_id, user_id, season)
-                )
-            """)
-            c.execute("INSERT OR IGNORE INTO request_users (tmdb_id, user_id, username, season) SELECT tmdb_id, user_id, COALESCE(username, '系统用户'), COALESCE(season, 0) FROM request_users_old")
-            c.execute("DROP TABLE request_users_old")
-
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS media_feedback (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            item_name TEXT,
-            user_id TEXT,
-            username TEXT,
-            issue_type TEXT,
-            description TEXT,
-            status INTEGER DEFAULT 0,
-            poster_path TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    
-    c.execute("PRAGMA table_info(media_feedback)")
-    feed_cols = [col[1] for col in c.fetchall()]
-    if 'poster_path' not in feed_cols:
-        try: c.execute("ALTER TABLE media_feedback ADD COLUMN poster_path TEXT")
-        except Exception: pass
-
-    conn.commit()
-    conn.close()
+    ensure_media_request_schema()
 
 ensure_db_schema()
-
-def execute_sql(query, params=()):
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    c = conn.cursor()
-    try:
-        c.execute(query, params)
-        conn.commit()
-        return True, ""
-    except Exception as e:
-        conn.rollback()
-        return False, safe_error_message(e)
-    finally: conn.close()
 
 def get_emby_admin(host, key):
     try:
@@ -313,12 +255,9 @@ def request_system_login(data: RequestLoginModel, request: Request):
     admin_disabled = 0
     expire_date = None
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        row = c.execute("SELECT admin_disabled, expire_date FROM users_meta WHERE user_id = ?", (user_id,)).fetchone()
-        conn.close()
+        row = get_user_status_meta(user_id)
         if row:
-            admin_disabled, expire_date = row[0], row[1]
+            admin_disabled, expire_date = row["admin_disabled"], row["expire_date"]
     except Exception as e:
         print(f"[用户社区登录] 检查用户状态失败: {e}")
     
@@ -346,12 +285,9 @@ def request_system_login(data: RequestLoginModel, request: Request):
             # 🔒 安全修复：已禁用账号不修改 Emby IsDisabled 状态，使用本地哈希验证
             stored_hash = None
             try:
-                conn = sqlite3.connect(SYSTEM_DB_PATH)
-                c = conn.cursor()
-                row = c.execute("SELECT emby_pw_hash FROM users_meta WHERE user_id = ?", (user_id,)).fetchone()
-                conn.close()
-                if row and row[0]:
-                    stored_hash = row[0]
+                row = get_user_password_hash(user_id)
+                if row and row["emby_pw_hash"]:
+                    stored_hash = row["emby_pw_hash"]
             except:
                 pass
 
@@ -380,10 +316,7 @@ def request_system_login(data: RequestLoginModel, request: Request):
         try:
             import bcrypt
             pw_hash = bcrypt.hashpw(data.password.encode('utf-8'), bcrypt.gensalt(rounds=12)).decode('utf-8')
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            conn.execute("UPDATE users_meta SET emby_pw_hash = ? WHERE user_id = ?", (pw_hash, user_id))
-            conn.commit()
-            conn.close()
+            update_user_password_hash(user_id, pw_hash)
         except:
             pass
 
@@ -408,12 +341,9 @@ def check_auth(request: Request):
         
         # 检查是否被封禁（实时检查，防止被封后仍能使用）
         try:
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            c = conn.cursor()
-            row = c.execute("SELECT admin_disabled, expire_date FROM users_meta WHERE user_id = ?", (user_id,)).fetchone()
-            conn.close()
+            row = get_user_status_meta(user_id)
             
-            if row and row[0] == 1:
+            if row and row["admin_disabled"] == 1:
                 # 被管理员封禁，强制登出
                 request.session.pop("req_user", None)
                 return {"status": "error", "message": "您的账号已被禁用，如需启用请联系管理员", "disabled": True}
@@ -424,9 +354,9 @@ def check_auth(request: Request):
         is_expired = False
         if user_id:
             try:
-                row = query_db("SELECT expire_date FROM users_meta WHERE user_id = ?", (user_id,))
-                if row and row[0]['expire_date']:
-                    expire_date = row[0]['expire_date']
+                row = get_user_expire_date(user_id)
+                if row and row["expire_date"]:
+                    expire_date = row["expire_date"]
                     from datetime import date
                     try:
                         exp_date = date.fromisoformat(expire_date)
@@ -686,98 +616,9 @@ async def submit_media_request(request: Request):
         if media_type == "movie" and not seasons:
             seasons = [0]
 
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        conn.execute("BEGIN IMMEDIATE")
-
-        # 🔥 求片积分配置
-        c.execute("SELECT value FROM point_config WHERE key = 'enable_req_cost'")
-        enable_cost_row = c.fetchone()
-        global_enable_cost = (enable_cost_row[0] == "1") if enable_cost_row else False
-        
-        # 🔥 获取用户求片权限
-        c.execute("SELECT req_free, req_free_count FROM users_meta WHERE user_id = ?", (uid,))
-        user_req_row = c.fetchone()
-        user_req_free = user_req_row[0] if user_req_row else 0  # 0=跟随全局, 1=免费, 2=付费
-        user_req_free_count = user_req_row[1] if user_req_row else -1  # -1=无限次
-        
-        # 🔥 判断用户是否需要付费
-        # user_req_free: 0=跟随全局, 1=免费, 2=付费
-        need_cost = False
-        if user_req_free == 1:
-            # 用户设置为免费
-            need_cost = False
-            # 检查免费次数
-            if user_req_free_count == 0:
-                conn.rollback(); conn.close()
-                return {"status": "error", "message": "您的免费求片次数已用完，请联系管理员。"}
-        elif user_req_free == 2:
-            # 用户设置为付费
-            need_cost = True
-        else:
-            # 跟随全局设置
-            need_cost = global_enable_cost
-        
-        req_cost = 0; current_points = 0; actual_cost = 0
-        
-        if need_cost:
-            c.execute("SELECT value FROM point_config WHERE key = 'req_cost'")
-            cost_val = c.fetchone()
-            base_cost = int(cost_val[0]) if cost_val else 50
-            
-            # 🔥 获取收费模式
-            c.execute("SELECT value FROM point_config WHERE key = 'req_cost_mode'")
-            mode_val = c.fetchone()
-            cost_mode = mode_val[0] if mode_val else "per_request"  # 默认按次收费
-            
-            # 🔥 根据模式计算实际扣分
-            if cost_mode == "per_request":
-                # 按次收费：每次请求扣固定积分
-                actual_cost = base_cost
-            elif cost_mode == "per_season":
-                # 按季收费：每季扣一次
-                actual_cost = base_cost * len(seasons)
-            else:
-                # 默认按次收费
-                actual_cost = base_cost
-            
-            req_cost = actual_cost
-            
-            c.execute("SELECT points FROM users_meta WHERE user_id = ?", (uid,))
-            pt_row = c.fetchone()
-            current_points = pt_row[0] if pt_row else 0
-            
-            if current_points < actual_cost and actual_cost > 0:
-                conn.rollback(); conn.close()
-                mode_hint = {"per_request": "每次", "per_season": "每季"}
-                count_hint = len(seasons) if cost_mode == 'per_season' else 1
-                return {"status": "error", "message": f"积分不足！求片需消耗 {actual_cost} 积分（{mode_hint.get(cost_mode, '单次')}{base_cost}积分×{count_hint}），当前仅有 {current_points} 积分。请前往首页签到。"}
-
-        # 对每个季执行插入
-        for season in seasons:
-            c.execute("SELECT status FROM media_requests WHERE tmdb_id = ? AND season = ?", (tmdb_id, season))
-            existing = c.fetchone()
-            if not existing:
-                c.execute("INSERT OR IGNORE INTO media_requests (tmdb_id, media_type, title, year, poster_path, status, season, request_type) VALUES (?, ?, ?, ?, ?, 0, ?, 'new')",
-                          (tmdb_id, media_type, title, year, poster_path, season))
-                c.execute("INSERT OR IGNORE INTO request_users (tmdb_id, user_id, username, season) VALUES (?, ?, ?, ?)",
-                          (tmdb_id, uid, uname, season))
-
-        # 🔥 扣费逻辑
-        if need_cost and req_cost > 0:
-            new_points = current_points - req_cost
-            c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (new_points, uid))
-            # 🔥 改进日志描述，显示季数和扣分模式
-            season_info = f"({len(seasons)}季)" if media_type == "tv" and len(seasons) > 1 else ""
-            c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-                      (uid, uname, f"求片心愿: {title}{season_info}", -req_cost, new_points))
-        
-        # 🔥 免费用户扣减次数（非无限次的情况）
-        if user_req_free == 1 and user_req_free_count > 0:
-            c.execute("UPDATE users_meta SET req_free_count = req_free_count - 1 WHERE user_id = ?", (uid,))
-
-        conn.commit()
-        conn.close()
+        result = submit_new_media_request(uid, uname, tmdb_id, media_type, title, year, poster_path, seasons)
+        if not result.get("ok"):
+            return {"status": "error", "message": result.get("message", "提交失败")}
 
         try:
             season_str = f" 第 {','.join(str(s) for s in seasons)} 季" if media_type == "tv" and any(s > 0 for s in seasons) else ""
@@ -844,16 +685,7 @@ def get_my_requests(request: Request):
     user = request.session.get("req_user")
     if not user: return {"status": "error", "message": "未登录"}
     uid = str(user.get("Id", ""))
-    conn = sqlite3.connect(SYSTEM_DB_PATH); c = conn.cursor()
-    # 🔥 增加 episodes, request_type 字段
-    query = """SELECT m.tmdb_id, m.title, m.year, m.poster_path, m.status, m.season, m.media_type, 
-               r.requested_at, m.reject_reason, m.episodes, m.request_type
-               FROM request_users r JOIN media_requests m 
-               ON r.tmdb_id = m.tmdb_id AND r.season = m.season 
-               WHERE r.user_id = ? ORDER BY r.requested_at DESC"""
-    c.execute(query, (uid,))
-    rows = c.fetchall()
-    conn.close()
+    rows = list_my_requests(uid)
     
     results = []
     for r in rows:
@@ -874,19 +706,7 @@ def get_my_requests(request: Request):
 @router.get("/api/manage/requests")
 def get_all_requests(request: Request):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    conn = sqlite3.connect(SYSTEM_DB_PATH); c = conn.cursor()
-    # 🔥 增加 episodes, request_type, series_id 字段
-    query = """SELECT m.tmdb_id, m.media_type, m.title, m.year, m.poster_path, m.status, m.season, 
-               m.created_at, COUNT(r.user_id) as cnt, 
-               GROUP_CONCAT(COALESCE(r.username, '系统用户'), ', ') as users, m.reject_reason,
-               m.episodes, m.request_type, m.series_id
-               FROM media_requests m 
-               LEFT JOIN request_users r ON m.tmdb_id = r.tmdb_id AND m.season = r.season 
-               GROUP BY m.tmdb_id, m.season 
-               ORDER BY m.status ASC, m.created_at DESC"""
-    c.execute(query)
-    rows = c.fetchall()
-    conn.close()
+    rows = list_all_requests()
     
     # 🔥 收集需要获取 TMDB 封面的 tmdb_id
     tmdb_ids_to_fetch = []
@@ -986,10 +806,7 @@ def batch_manage_action(data: BulkAdminActionModel, request: Request):
     for item in data.items:
         tid = item['tmdb_id']; sn = item['season']
         if data.action == "approve":
-            conn = sqlite3.connect(SYSTEM_DB_PATH); conn.row_factory = sqlite3.Row; c = conn.cursor()
-            c.execute("SELECT * FROM media_requests WHERE tmdb_id = ? AND season = ?", (tid, sn))
-            row = c.fetchone()
-            conn.close()
+            row = get_media_request(tid, sn)
             
             mp_url = cfg.get("moviepilot_url"); mp_token = cfg.get("moviepilot_token")
             if mp_url and mp_token and row:
@@ -997,21 +814,20 @@ def batch_manage_action(data: BulkAdminActionModel, request: Request):
                 if row["media_type"] == "tv": payload["season"] = sn
                 try: requests.post(f"{mp_url.rstrip('/')}/api/v1/subscribe/", json=payload, headers={"X-API-KEY": mp_token.strip().strip("'\"")}, timeout=10)
                 except Exception: pass
-            execute_sql("UPDATE media_requests SET status = 1 WHERE tmdb_id = ? AND season = ?", (tid, sn))
+            update_media_request_status(tid, sn, 1)
             
         elif data.action == "manual":
-            execute_sql("UPDATE media_requests SET status = 4 WHERE tmdb_id = ? AND season = ?", (tid, sn))
+            update_media_request_status(tid, sn, 4)
             
         elif data.action == "reject":
-            execute_sql("UPDATE media_requests SET status = 3, reject_reason = ? WHERE tmdb_id = ? AND season = ?", (data.reject_reason, tid, sn))
+            update_media_request_status(tid, sn, 3, data.reject_reason)
         elif data.action == "finish":
-            execute_sql("UPDATE media_requests SET status = 2 WHERE tmdb_id = ? AND season = ?", (tid, sn))
+            update_media_request_status(tid, sn, 2)
         elif data.action == "hdhive_done":
             # 影巢转存完成后，状态设为待入库(7)
-            execute_sql("UPDATE media_requests SET status = 7 WHERE tmdb_id = ? AND season = ?", (tid, sn))
+            update_media_request_status(tid, sn, 7)
         elif data.action == "delete":
-            execute_sql("DELETE FROM media_requests WHERE tmdb_id = ? AND season = ?", (tid, sn))
-            execute_sql("DELETE FROM request_users WHERE tmdb_id = ? AND season = ?", (tid, sn))
+            delete_media_request(tid, sn)
     
     # 🔥 批量通知用户（审批通过、入库完成、拒绝、手动接单、影巢转存完成）
     if data.action in ["approve", "finish", "reject", "manual", "hdhive_done"]:
@@ -1022,40 +838,8 @@ def batch_manage_action(data: BulkAdminActionModel, request: Request):
             
             if rule and rule.get('enabled') and 'tg_bot' in rule.get('channels', []):
                 # 🔥 批量查询所有工单信息和用户绑定关系
-                conn = sqlite3.connect(SYSTEM_DB_PATH)
-                conn.row_factory = sqlite3.Row
-                c = conn.cursor()
-                
-                # 查询所有工单信息
-                for item in data.items:
-                    tid = item['tmdb_id']; sn = item['season']
-                    c.execute("SELECT title, year, media_type, season, episodes, poster_path FROM media_requests WHERE tmdb_id = ? AND season = ?", (tid, sn))
-                    req_row = c.fetchone()
-                    c.execute("SELECT user_id, username FROM request_users WHERE tmdb_id = ? AND season = ?", (tid, sn))
-                    user_rows = c.fetchall()
-                    
-                    if req_row and user_rows:
-                        notify_items.append({
-                            "tmdb_id": tid,
-                            "season": sn,
-                            "request": req_row,
-                            "users": user_rows
-                        })
-                
-                # 🔥 批量查询所有用户的 TG 绑定关系
-                user_ids = []
-                for ni in notify_items:
-                    for u in ni['users']:
-                        user_ids.append(u['user_id'])
-                
-                tg_bindings = {}
-                if user_ids:
-                    placeholders = ','.join(['?'] * len(user_ids))
-                    c.execute(f"SELECT emby_user_id, tg_user_id FROM tg_user_bindings WHERE emby_user_id IN ({placeholders})", user_ids)
-                    for row in c.fetchall():
-                        tg_bindings[row['emby_user_id']] = row['tg_user_id']
-                
-                conn.close()
+                notify_items, user_ids = list_request_status_notify_items(data.items)
+                tg_bindings = list_tg_bindings(user_ids)
                 logger.info(f"[状态变更通知] 共 {len(notify_items)} 个工单需要通知，TG绑定数: {len(tg_bindings)}")
                 
                 # 🔥 发送通知
@@ -1143,29 +927,7 @@ def manage_request_action(data: AdminActionModel, request: Request):
 def get_pending_notify(request: Request):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH); conn.row_factory = sqlite3.Row; c = conn.cursor()
-        
-        c.execute("SELECT COUNT(*) as cnt FROM media_requests WHERE status = 0")
-        req_count = (c.fetchone() or {'cnt': 0})['cnt']
-        c.execute("SELECT m.tmdb_id, m.media_type, m.title, m.poster_path, m.season, datetime(m.created_at, 'localtime') as created_at, GROUP_CONCAT(COALESCE(r.username, '未知用户'), ', ') as users FROM media_requests m LEFT JOIN request_users r ON m.tmdb_id = r.tmdb_id AND m.season = r.season WHERE m.status = 0 GROUP BY m.tmdb_id, m.season ORDER BY m.created_at DESC LIMIT 5")
-        req_rows = c.fetchall()
-
-        c.execute("SELECT COUNT(*) as cnt FROM media_feedback WHERE status = 0")
-        feed_count = (c.fetchone() or {'cnt': 0})['cnt']
-        
-        c.execute("""
-            SELECT f.id, f.item_name, f.username, f.issue_type, datetime(f.created_at, 'localtime') as created_at,
-                   COALESCE(
-                       NULLIF(f.poster_path, ''), 
-                       (SELECT poster_path FROM media_requests m WHERE m.title = f.item_name LIMIT 1),
-                       (SELECT poster_path FROM media_requests m WHERE f.item_name LIKE m.title || '%' LIMIT 1)
-                   ) as poster
-            FROM media_feedback f 
-            WHERE f.status = 0 ORDER BY f.created_at DESC LIMIT 5
-        """)
-        feed_rows = c.fetchall()
-        
-        conn.close()
+        req_count, req_rows, feed_count, feed_rows = get_pending_notify_data()
         
         items = []
         for r in req_rows:
@@ -1210,19 +972,12 @@ def submit_feedback(data: FeedbackSubmitModel, request: Request):
         actual_poster = f"{base_url}{actual_poster}"
         
     if not actual_poster or 'undefined' in actual_poster:
-        conn = sqlite3.connect(SYSTEM_DB_PATH); c = conn.cursor()
-        c.execute("SELECT poster_path FROM media_requests WHERE ? LIKE title || '%' LIMIT 1", (data.item_name,))
-        r = c.fetchone()
-        if r and r[0]: actual_poster = r[0]
-        conn.close()
+        r = find_poster_for_feedback(data.item_name)
+        if r and r["poster_path"]: actual_poster = r["poster_path"]
         
     if not actual_poster or 'undefined' in actual_poster: actual_poster = ""
 
-    conn = sqlite3.connect(SYSTEM_DB_PATH); c = conn.cursor()
-    c.execute("INSERT INTO media_feedback (item_name, user_id, username, issue_type, description, poster_path) VALUES (?, ?, ?, ?, ?, ?)",
-              (data.item_name, uid, uname, data.issue_type, data.description, actual_poster))
-    feed_id = c.lastrowid
-    conn.commit(); conn.close()
+    feed_id = create_media_feedback(data.item_name, uid, uname, data.issue_type, data.description, actual_poster)
     
     msg = (f"🚨 <b>新资源报错提醒</b>\n\n"
            f"👤 <b>用户</b>：{uname}\n"
@@ -1279,18 +1034,14 @@ def get_my_feedback(request: Request):
     user = request.session.get("req_user")
     if not user: return {"status": "error", "message": "未登录"}
     uid = str(user.get("Id", ""))
-    conn = sqlite3.connect(SYSTEM_DB_PATH); c = conn.cursor()
-    c.execute("SELECT id, item_name, issue_type, description, status, datetime(created_at, 'localtime') as created_at FROM media_feedback WHERE user_id = ? ORDER BY created_at DESC", (uid,))
-    rows = c.fetchall(); conn.close()
+    rows = list_my_feedback(uid)
     results = [{"id": r[0], "item_name": r[1], "issue_type": r[2], "description": r[3], "status": r[4], "created_at": r[5]} for r in rows]
     return {"status": "success", "data": results}
 
 @router.get("/api/manage/feedback")
 def get_all_feedback(request: Request):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    conn = sqlite3.connect(SYSTEM_DB_PATH); c = conn.cursor()
-    c.execute("SELECT id, item_name, username, issue_type, description, status, datetime(created_at, 'localtime') as created_at FROM media_feedback ORDER BY status ASC, created_at DESC")
-    rows = c.fetchall(); conn.close()
+    rows = list_all_feedback()
     results = [{"id": r[0], "item_name": r[1], "username": r[2], "issue_type": r[3], "description": r[4], "status": r[5], "created_at": r[6]} for r in rows]
     return {"status": "success", "data": results}
 
@@ -1299,10 +1050,7 @@ def manage_feedback_action(data: FeedbackActionModel, request: Request):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     status_map = {"fix": 1, "done": 2, "reject": 3, "delete": -1}
     st = status_map.get(data.action, 0)
-    conn = sqlite3.connect(SYSTEM_DB_PATH); c = conn.cursor()
-    if st == -1: c.execute("DELETE FROM media_feedback WHERE id = ?", (data.id,))
-    else: c.execute("UPDATE media_feedback SET status = ? WHERE id = ?", (st, data.id))
-    conn.commit(); conn.close()
+    update_feedback_status(data.id, st)
     return {"status": "success", "message": "已更新工单状态"}
 
 @router.post("/api/manage/feedback/batch")
@@ -1310,11 +1058,7 @@ def batch_feedback_action(data: BulkFeedbackActionModel, request: Request):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     status_map = {"fix": 1, "done": 2, "reject": 3, "delete": -1}
     st = status_map.get(data.action, 0)
-    conn = sqlite3.connect(SYSTEM_DB_PATH); c = conn.cursor()
-    for fid in data.items:
-        if st == -1: c.execute("DELETE FROM media_feedback WHERE id = ?", (fid,))
-        else: c.execute("UPDATE media_feedback SET status = ? WHERE id = ?", (st, fid))
-    conn.commit(); conn.close()
+    update_feedback_status_batch(data.items, st)
     return {"status": "success", "message": "批量操作已完成"}
 
 @router.get("/api/requests/safe_top")
@@ -1686,22 +1430,12 @@ def get_user_series(request: Request):
     
     try:
         # 🚀 优化：从缺集管理缓存读取数据，大幅提速
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        
-        # 1. 读取缓存
-        c.execute("SELECT result_json, updated_at FROM gap_scan_cache WHERE id = 1")
-        cache_row = c.fetchone()
-        
-        # 2. 获取缓存间隔配置
-        c.execute("SELECT value FROM gap_config WHERE key = 'cache_interval_hours'")
-        interval_row = c.fetchone()
-        cache_interval_hours = int(interval_row[0]) if interval_row else 6
+        cache_row, cache_interval_hours, update_requests = get_user_series_db_context()
         
         # 3. 检查缓存是否过期
         cache_expired = False
         if cache_row:
-            updated_at = cache_row[1] or ""
+            updated_at = cache_row["updated_at"] or ""
             try:
                 from datetime import datetime, timedelta
                 cache_time = datetime.strptime(updated_at, "%Y-%m-%d %H:%M:%S")
@@ -1724,38 +1458,14 @@ def get_user_series(request: Request):
             if series_id:
                 user_series_ids.add(series_id)
         
-        # 6. 获取用户已提交的追新请求状态 - 🔥 修复：用 tmdb_id + season 查询
-        c.execute("SELECT tmdb_id, season, episodes, status FROM media_requests WHERE request_type = 'update'")
-        update_requests = {}
-        for row in c.fetchall():
-            key = f"{row[0]}_{row[1]}"  # tmdb_id + season
-            update_requests[key] = {
-                "episodes": row[2] or "",
-                "status": row[3]
-            }
-        conn.close()
-        
         # 🚀 7. 从缓存匹配用户观看的剧集
         results = []
-        gap_cache = []
-        if cache_row and cache_row[0]:
-            try:
-                gap_cache = json.loads(cache_row[0])
-            except:
-                gap_cache = []
+        gap_cache = decode_gap_cache(cache_row)
         
         # 如果缓存为空或过期，提示用户刷新
         if not gap_cache:
             # 获取追新积分配置
-            conn2 = sqlite3.connect(SYSTEM_DB_PATH)
-            c2 = conn2.cursor()
-            c2.execute("SELECT value FROM point_config WHERE key = 'enable_update_cost'")
-            enable_cost_row = c2.fetchone()
-            enable_update_cost = (enable_cost_row[0] == "1") if enable_cost_row else False
-            c2.execute("SELECT value FROM point_config WHERE key = 'update_cost'")
-            cost_row = c2.fetchone()
-            update_cost = int(cost_row[0]) if cost_row else 20
-            conn2.close()
+            update_config = get_update_cost_config()
             
             return {
                 "status": "success",
@@ -1767,8 +1477,8 @@ def get_user_series(request: Request):
                     "interval_hours": cache_interval_hours
                 },
                 "update_cost_info": {
-                    "enabled": enable_update_cost,
-                    "cost": update_cost
+                    "enabled": update_config["enabled"],
+                    "cost": update_config["cost"]
                 }
             }
         
@@ -1835,19 +1545,7 @@ def get_user_series(request: Request):
                 })
         
         # 9. 获取追新积分配置
-        conn2 = sqlite3.connect(SYSTEM_DB_PATH)
-        c2 = conn2.cursor()
-        c2.execute("SELECT value FROM point_config WHERE key = 'enable_update_cost'")
-        enable_cost_row = c2.fetchone()
-        enable_update_cost = (enable_cost_row[0] == "1") if enable_cost_row else False
-        c2.execute("SELECT value FROM point_config WHERE key = 'update_cost'")
-        cost_row = c2.fetchone()
-        update_cost = int(cost_row[0]) if cost_row else 20
-        # 🔥 获取收费模式
-        c2.execute("SELECT value FROM point_config WHERE key = 'update_cost_mode'")
-        mode_row = c2.fetchone()
-        update_cost_mode = mode_row[0] if mode_row else "per_series"
-        conn2.close()
+        update_config = get_update_cost_config()
         
         return {
             "status": "success",
@@ -1855,14 +1553,14 @@ def get_user_series(request: Request):
             "cache_info": {
                 "exists": bool(cache_row),
                 "expired": cache_expired,
-                "updated_at": cache_row[1] if cache_row else "",
+                "updated_at": cache_row["updated_at"] if cache_row else "",
                 "interval_hours": cache_interval_hours
             },
             "update_cost_info": {
-                "enabled": enable_update_cost,
-                "cost": update_cost,
-                "mode": update_cost_mode,
-                "base_cost": update_cost
+                "enabled": update_config["enabled"],
+                "cost": update_config["cost"],
+                "mode": update_config["mode"],
+                "base_cost": update_config["cost"]
             }
         }
     
@@ -1937,175 +1635,10 @@ async def submit_update_request(request: Request):
         if unaired_requested:
             return {"status": "error", "message": f"以下集数尚未播出，无法追更：E{','.join(str(e) for e in unaired_requested)}"}
         
-        episodes_str = ",".join(str(e) for e in sorted(episodes))
-        
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        conn.execute("BEGIN IMMEDIATE")
-
-        # 🔥 先检查是否已有追新请求（用于积分计算）
-        c.execute("SELECT COUNT(*) FROM media_requests WHERE tmdb_id = ? AND request_type = 'update'", (tmdb_id,))
-        existing_update_count = c.fetchone()[0]
-        c.execute("SELECT COUNT(*) FROM media_requests WHERE tmdb_id = ? AND season = ? AND request_type = 'update'", (tmdb_id, season))
-        existing_season_update_count = c.fetchone()[0]
-        
-        # 🔥 修复：查询时不限定 request_type，因为 UNIQUE 约束是 (tmdb_id, season)
-        c.execute("SELECT tmdb_id, season, status, episodes, request_type FROM media_requests WHERE tmdb_id = ? AND season = ?", (tmdb_id, season))
-        existing = c.fetchone()
-        
-        if existing:
-            existing_tmdb_id = existing[0]
-            existing_season = existing[1]
-            existing_status = existing[2]
-            existing_episodes = existing[3] or ""
-            existing_request_type = existing[4] or "new"
-            
-            # 🔥 修复：求片已完成(status=2)或已拒绝(status=3)时，允许转为追新请求
-            # 因为剧集已入库或已取消，用户可以追新缺失集数
-            if existing_request_type == "new":
-                if existing_status == 2:  # 求片已完成 - 剧集已入库，允许追新
-                    # 直接转为追新请求
-                    c.execute("UPDATE media_requests SET request_type = 'update', status = 0, episodes = ?, reject_reason = NULL WHERE tmdb_id = ? AND season = ?",
-                              (episodes_str, tmdb_id, season))
-                    # 🔥 插入请求用户关联
-                    c.execute("INSERT OR IGNORE INTO request_users (tmdb_id, user_id, username, season) VALUES (?, ?, ?, ?)",
-                              (tmdb_id, uid, uname, season))
-                    # 继续执行积分扣除逻辑
-                elif existing_status == 3:  # 求片已拒绝 - 允许追新
-                    c.execute("UPDATE media_requests SET request_type = 'update', status = 0, episodes = ?, reject_reason = NULL WHERE tmdb_id = ? AND season = ?",
-                              (episodes_str, tmdb_id, season))
-                    # 🔥 插入请求用户关联
-                    c.execute("INSERT OR IGNORE INTO request_users (tmdb_id, user_id, username, season) VALUES (?, ?, ?, ?)",
-                              (tmdb_id, uid, uname, season))
-                else:  # 求片进行中(0,1,4,7) - 提示用户
-                    conn.close()
-                    return {"status": "error", "message": f"该剧第{season}季正在求片中（{getRequestStatusTextSync(existing_status)}），请等待完成后再追新，或联系管理员取消求片请求"}
-            
-            # 🔥 追新请求的处理逻辑
-            elif existing_request_type == "update":
-                # 禁止重复追更：如果请求的集数已在追更列表中（待审批、下载中、手动接单、待入库），则拒绝
-                if existing_status in [0, 1, 4, 7]:  # 待审批、下载中、手动接单、待入库
-                    existing_list = [int(e) for e in existing_episodes.split(",") if e.strip().isdigit()]
-                    duplicate_eps = [e for e in episodes if e in existing_list]
-                    if duplicate_eps:
-                        conn.close()
-                        return {"status": "error", "message": f"以下集数已在追更列表中：E{','.join(str(e) for e in duplicate_eps)}"}
-                    # 没有重复的集数，合并新集数
-                    merged = sorted(set(existing_list + episodes))
-                    episodes_str = ",".join(str(e) for e in merged)
-                    c.execute("UPDATE media_requests SET episodes = ? WHERE tmdb_id = ? AND season = ?",
-                              (episodes_str, tmdb_id, season))
-                    # 🔥 插入请求用户关联
-                    c.execute("INSERT OR IGNORE INTO request_users (tmdb_id, user_id, username, season) VALUES (?, ?, ?, ?)",
-                              (tmdb_id, uid, uname, season))
-                elif existing_status == 2:  # 追新已完成 - 允许追新更多集数
-                    existing_list = [int(e) for e in existing_episodes.split(",") if e.strip().isdigit()]
-                    new_episodes = [e for e in episodes if e not in existing_list]
-                    if not new_episodes:
-                        conn.close()
-                        return {"status": "error", "message": "这些集数已经入库了"}
-                    merged = sorted(set(existing_list + new_episodes))
-                    episodes_str = ",".join(str(e) for e in merged)
-                    c.execute("UPDATE media_requests SET status = 0, episodes = ?, reject_reason = NULL WHERE tmdb_id = ? AND season = ?",
-                              (episodes_str, tmdb_id, season))
-                    # 🔥 插入请求用户关联
-                    c.execute("INSERT OR IGNORE INTO request_users (tmdb_id, user_id, username, season) VALUES (?, ?, ?, ?)",
-                              (tmdb_id, uid, uname, season))
-                elif existing_status == 3:  # 追新已拒绝 - 允许重新提交
-                    c.execute("UPDATE media_requests SET status = 0, episodes = ?, reject_reason = NULL WHERE tmdb_id = ? AND season = ?",
-                              (episodes_str, tmdb_id, season))
-                    # 🔥 插入请求用户关联
-                    c.execute("INSERT OR IGNORE INTO request_users (tmdb_id, user_id, username, season) VALUES (?, ?, ?, ?)",
-                              (tmdb_id, uid, uname, season))
-                else:
-                    # 其他未知状态，也用 UPDATE
-                    c.execute("UPDATE media_requests SET status = 0, episodes = ?, request_type = 'update' WHERE tmdb_id = ? AND season = ?",
-                              (episodes_str, tmdb_id, season))
-                    # 🔥 插入请求用户关联
-                    c.execute("INSERT OR IGNORE INTO request_users (tmdb_id, user_id, username, season) VALUES (?, ?, ?, ?)",
-                              (tmdb_id, uid, uname, season))
-        else:
-            # 🔥 新请求：直接插入
-            c.execute("""INSERT INTO media_requests 
-                        (tmdb_id, media_type, title, year, poster_path, status, season, episodes, request_type, series_id)
-                        VALUES (?, 'tv', ?, ?, ?, 0, ?, ?, 'update', ?)""",
-                      (tmdb_id, title, year, poster_path, season, episodes_str, series_id))
-            # 🔥 插入请求用户关联
-            c.execute("INSERT OR IGNORE INTO request_users (tmdb_id, user_id, username, season) VALUES (?, ?, ?, ?)",
-                      (tmdb_id, uid, uname, season))
-        
-        # 积分检查（追新专用配置）
-        c.execute("SELECT value FROM point_config WHERE key = 'enable_update_cost'")
-        enable_cost_row = c.fetchone()
-        enable_cost = (enable_cost_row[0] == "1") if enable_cost_row else False
-        
-        update_cost = 0
-        current_points = 0
-        actual_cost = 0  # 🔥 实际扣分
-        
-        # 🔥 调试日志
-        print(f"[追新积分] tmdb_id={tmdb_id}, season={season}, enable_cost={enable_cost}, existing_update_count={existing_update_count}, existing_season_update_count={existing_season_update_count}")
-        
-        if enable_cost:
-            # 🔥 获取收费模式和基础积分
-            c.execute("SELECT value FROM point_config WHERE key = 'update_cost'")
-            cost_val = c.fetchone()
-            base_cost = int(cost_val[0]) if cost_val else 20  # 默认20积分
-            
-            c.execute("SELECT value FROM point_config WHERE key = 'update_cost_mode'")
-            mode_val = c.fetchone()
-            cost_mode = mode_val[0] if mode_val else "per_series"  # 默认按剧收费
-            
-            # 🔥 调试日志
-            print(f"[追新积分] base_cost={base_cost}, cost_mode={cost_mode}, existing_update_count={existing_update_count}")
-            
-            # 🔥 根据模式计算实际扣分（使用预先获取的计数）
-            if cost_mode == "per_series":
-                # 🔥 按剧收费：每次追新请求扣一次
-                actual_cost = base_cost
-                print(f"[追新积分] 按剧收费：每次请求扣分 {actual_cost}")
-            elif cost_mode == "per_season":
-                # 🔥 按季收费：每次追新请求扣一次（每次请求只涉及一个季）
-                actual_cost = base_cost
-                print(f"[追新积分] 按季收费：每次请求扣分 {actual_cost}")
-            elif cost_mode == "per_episode":
-                # 🔥 按集收费：按集数扣分（但需要排除已追新的集数）
-                if existing and existing[4] == "update":  # 已有追新请求
-                    existing_eps = [int(e) for e in (existing[3] or "").split(",") if e.strip().isdigit()]
-                    new_eps = [e for e in episodes if e not in existing_eps]
-                    actual_cost = base_cost * len(new_eps)
-                    print(f"[追新积分] 按集收费：新增 {len(new_eps)} 集，扣分 {actual_cost}")
-                else:
-                    actual_cost = base_cost * len(episodes)
-                    print(f"[追新积分] 按集收费：首次追新 {len(episodes)} 集，扣分 {actual_cost}")
-            else:
-                actual_cost = base_cost
-            
-            update_cost = actual_cost
-            
-            c.execute("SELECT points FROM users_meta WHERE user_id = ?", (uid,))
-            pt_row = c.fetchone()
-            current_points = pt_row[0] if pt_row else 0
-            
-            if current_points < actual_cost and actual_cost > 0:
-                conn.rollback(); conn.close()
-                mode_hint = {"per_series": "每剧", "per_season": "每季", "per_episode": "每集"}
-                count_hint = len(episodes) if cost_mode == 'per_episode' else 1
-                return {"status": "error", "message": f"积分不足！追新需消耗 {actual_cost} 积分（{mode_hint.get(cost_mode, '单次')}{base_cost}积分×{count_hint}），当前仅有 {current_points} 积分"}
-        
-        # 扣除积分
-        print(f"[追新积分] 执行扣分检查: enable_cost={enable_cost}, update_cost={update_cost}")
-        if enable_cost and update_cost > 0:
-            new_points = current_points - update_cost
-            c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (new_points, uid))
-            c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-                      (uid, uname, f"追新请求: {title} S{season}E{episodes_str}", -update_cost, new_points))
-            print(f"[追新积分] 扣分成功: {current_points} -> {new_points}, 扣除 {update_cost}")
-        else:
-            print(f"[追新积分] 未扣分: enable_cost={enable_cost}, update_cost={update_cost}")
-        
-        conn.commit()
-        conn.close()
+        result = submit_update_request_record(uid, uname, series_id, tmdb_id, title, year, poster_path, season, episodes)
+        if not result.get("ok"):
+            return {"status": "error", "message": result.get("message", "提交失败")}
+        episodes_str = result["episodes_str"]
         
         # 发送通知
         try:
@@ -2193,113 +1726,14 @@ async def submit_update_request_batch(request: Request):
         if not requests_list:
             return {"status": "error", "message": "没有追新请求"}
         
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        conn.execute("BEGIN IMMEDIATE")
-
-        # 🔥 获取积分配置
-        c.execute("SELECT value FROM point_config WHERE key = 'enable_update_cost'")
-        enable_cost_row = c.fetchone()
-        enable_cost = (enable_cost_row[0] == "1") if enable_cost_row else False
-        
-        c.execute("SELECT value FROM point_config WHERE key = 'update_cost'")
-        cost_val = c.fetchone()
-        base_cost = int(cost_val[0]) if cost_val else 20
-        
-        c.execute("SELECT value FROM point_config WHERE key = 'update_cost_mode'")
-        mode_val = c.fetchone()
-        cost_mode = mode_val[0] if mode_val else "per_series"
-        
-        # 🔥 计算总扣分
-        total_cost = 0
-        total_seasons = len(requests_list)
-        total_episodes = sum(len(req.get("episodes", [])) for req in requests_list)
-        
-        if cost_mode == "per_series":
-            total_cost = base_cost  # 按剧收费：一次请求只扣一次
-        elif cost_mode == "per_season":
-            total_cost = base_cost * total_seasons  # 按季收费：按季数扣分
-        elif cost_mode == "per_episode":
-            total_cost = base_cost * total_episodes  # 按集收费：按总集数扣分
-        
+        result = submit_batch_update_request_records(uid, uname, requests_list, series_name, tmdb_id)
+        if not result.get("ok"):
+            return {"status": "error", "message": result.get("message", "提交失败")}
+        total_seasons = result["total_seasons"]
+        total_episodes = result["total_episodes"]
+        total_cost = result["total_cost"]
+        cost_mode = result["cost_mode"]
         print(f"[追新批量] 模式={cost_mode}, 季数={total_seasons}, 集数={total_episodes}, 扣分={total_cost}")
-        
-        # 🔥 检查积分
-        current_points = 0
-        if enable_cost and total_cost > 0:
-            c.execute("SELECT points FROM users_meta WHERE user_id = ?", (uid,))
-            pt_row = c.fetchone()
-            current_points = pt_row[0] if pt_row else 0
-            
-            if current_points < total_cost:
-                conn.rollback(); conn.close()
-                return {"status": "error", "message": f"积分不足！需消耗 {total_cost} 积分，当前仅有 {current_points} 积分"}
-        
-        # 🔥 批量插入请求
-        for req in requests_list:
-            req_tmdb_id = int(req.get("tmdb_id") or tmdb_id)
-            req_season = int(req.get("season") or 0)
-            req_episodes = req.get("episodes", [])
-            req_title = req.get("title", series_name)
-            req_year = req.get("year", "")
-            req_poster_path = req.get("poster_path", "")
-            req_series_id = req.get("series_id", "")
-            
-            if not req_tmdb_id or not req_season or not req_episodes:
-                continue
-            
-            req_episodes = [int(e) for e in req_episodes if int(e) > 0]
-            if not req_episodes:
-                continue
-            
-            episodes_str = ",".join(str(e) for e in sorted(req_episodes))
-            
-            # 检查是否已有该季的追新请求
-            c.execute("SELECT tmdb_id, season, status, episodes, request_type FROM media_requests WHERE tmdb_id = ? AND season = ?", 
-                      (req_tmdb_id, req_season))
-            existing = c.fetchone()
-            
-            if existing:
-                existing_status = existing[2]
-                existing_episodes = existing[3] or ""
-                existing_request_type = existing[4] or "new"
-                
-                if existing_request_type == "update" and existing_status in [0, 1, 4, 7]:
-                    # 合并集数
-                    existing_list = [int(e) for e in existing_episodes.split(",") if e.strip().isdigit()]
-                    new_eps = [e for e in req_episodes if e not in existing_list]
-                    if new_eps:
-                        merged = sorted(set(existing_list + new_eps))
-                        episodes_str = ",".join(str(e) for e in merged)
-                        c.execute("UPDATE media_requests SET episodes = ? WHERE tmdb_id = ? AND season = ?",
-                                  (episodes_str, req_tmdb_id, req_season))
-                        c.execute("INSERT OR IGNORE INTO request_users (tmdb_id, user_id, username, season) VALUES (?, ?, ?, ?)",
-                                  (req_tmdb_id, uid, uname, req_season))
-                elif existing_request_type == "new" and existing_status in [2, 3]:
-                    # 求片已完成/已拒绝，转为追新
-                    c.execute("UPDATE media_requests SET request_type = 'update', status = 0, episodes = ?, reject_reason = NULL WHERE tmdb_id = ? AND season = ?",
-                              (episodes_str, req_tmdb_id, req_season))
-                    c.execute("INSERT OR IGNORE INTO request_users (tmdb_id, user_id, username, season) VALUES (?, ?, ?, ?)",
-                              (req_tmdb_id, uid, uname, req_season))
-            else:
-                # 新请求
-                c.execute("""INSERT INTO media_requests 
-                            (tmdb_id, media_type, title, year, poster_path, status, season, episodes, request_type, series_id)
-                            VALUES (?, 'tv', ?, ?, ?, 0, ?, ?, 'update', ?)""",
-                          (req_tmdb_id, req_title, req_year, req_poster_path, req_season, episodes_str, req_series_id))
-                c.execute("INSERT OR IGNORE INTO request_users (tmdb_id, user_id, username, season) VALUES (?, ?, ?, ?)",
-                          (req_tmdb_id, uid, uname, req_season))
-        
-        # 🔥 扣除积分（一次性）
-        if enable_cost and total_cost > 0:
-            new_points = current_points - total_cost
-            c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (new_points, uid))
-            c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-                      (uid, uname, f"批量追新: {series_name} ({total_seasons}季, {total_episodes}集)", -total_cost, new_points))
-            print(f"[追新批量] 扣分成功: {current_points} -> {new_points}")
-        
-        conn.commit()
-        conn.close()
         
         # 发送通知
         try:
@@ -2370,14 +1804,10 @@ def search_episodes_for_update(payload: dict, request: Request):
         return {"status": "error", "message": "参数不完整"}
     
     # 获取剧集名称 - 优先从数据库获取追新请求的标题
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT title, series_id FROM media_requests WHERE tmdb_id = ? AND season = ? AND request_type = 'update'", (tmdb_id, season))
-    row = c.fetchone()
-    conn.close()
+    row = get_update_request_search_info(tmdb_id, season)
     
-    series_name = row[0] if row else "未知剧集"
-    series_id = row[1] if row else ""
+    series_name = row["title"] if row else "未知剧集"
+    series_id = row["series_id"] if row else ""
     
     # 调用缺集搜索 API - 传递完整参数
     try:
@@ -2453,8 +1883,7 @@ def download_episodes_for_update(payload: dict, request: Request):
         if result.get("status") == "success":
             episodes_str = ",".join(str(e) for e in episodes)
             # 更新所有匹配的追新工单
-            execute_sql("UPDATE media_requests SET status = 1 WHERE tmdb_id = ? AND season = ?",
-                       (tmdb_id, season))
+            update_media_request_status(tmdb_id, season, 1)
         
         return result
     except Exception as e:
@@ -2472,13 +1901,7 @@ class UserRegisterModel(BaseModel):
 def _restore_invitation_code(code):
     """Emby 用户创建失败时回滚邀请码消费计数"""
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.execute(
-            "UPDATE invitations SET used_count = MAX(used_count - 1, 0), used_by = NULL, used_at = NULL WHERE code = ?",
-            (code,)
-        )
-        conn.commit()
-        conn.close()
+        restore_invitation_code(code)
     except Exception:
         pass
 
@@ -2519,43 +1942,9 @@ async def user_community_register(data: UserRegisterModel, request: Request):
             return {"status": "error", "message": safe_error_message(e, "检查用户名失败")}
 
         # 3. 所有校验通过后，原子抢占邀请码（防 TOCTOU 竞态）
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.row_factory = sqlite3.Row
-        try:
-            conn.execute("BEGIN IMMEDIATE")
-            cur = conn.execute(
-                """UPDATE invitations
-                   SET used_count = used_count + 1,
-                       used_at = datetime('now','localtime'),
-                       used_by = ?
-                   WHERE code = ? AND status != 1 AND used_count < max_uses
-                   AND (type IS NULL OR type = 'register')""",
-                (safe_name, data.code)
-            )
-            if cur.rowcount == 0:
-                conn.rollback()
-                exists = conn.execute(
-                    "SELECT 1 FROM invitations WHERE code = ?", (data.code,)
-                ).fetchone()
-                conn.close()
-                if not exists:
-                    return {"status": "error", "message": "邀请码无效"}
-                return {"status": "error", "message": "邀请码已失效或已达到使用上限"}
-
-            invite = conn.execute(
-                "SELECT * FROM invitations WHERE code = ?", (data.code,)
-            ).fetchone()
-
-            used_count = invite['used_count'] if invite['used_count'] else 0
-            max_uses = invite['max_uses'] if invite['max_uses'] else 1
-            if used_count >= max_uses:
-                conn.execute("UPDATE invitations SET status = 1 WHERE code = ?", (data.code,))
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            conn.close()
+        invite, invite_error = claim_registration_invitation(data.code, safe_name)
+        if invite_error:
+            return {"status": "error", "message": invite_error}
 
         days = invite['days'] if invite['days'] else 30
         template_user_id = invite['template_user_id'] if invite['template_user_id'] else None
@@ -2619,22 +2008,7 @@ async def user_community_register(data: UserRegisterModel, request: Request):
                 else:
                     block_routes = routes
             
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            # 🔥 确保 admin_enabled_folders 字段存在
-            c = conn.cursor()
-            c.execute("PRAGMA table_info(users_meta)")
-            cols = [col[1] for col in c.fetchall()]
-            if "admin_enabled_folders" not in cols:
-                c.execute("ALTER TABLE users_meta ADD COLUMN admin_enabled_folders TEXT")
-            
-            admin_folders_str = ','.join(admin_enabled_folders) if admin_enabled_folders else None
-            conn.execute("""
-                INSERT OR REPLACE INTO users_meta 
-                (user_id, expire_date, allow_routes, block_routes, req_free, req_free_count, admin_enabled_folders, created_at) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now','localtime'))
-            """, (uid, expire_date, allow_routes, block_routes, req_free, req_free_count, admin_folders_str))
-            conn.commit()
-            conn.close()
+            save_registered_user_meta(uid, expire_date, allow_routes, block_routes, req_free, req_free_count, admin_enabled_folders)
 
             # 清除用户列表缓存
             try:
