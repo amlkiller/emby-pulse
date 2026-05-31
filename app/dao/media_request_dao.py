@@ -222,6 +222,20 @@ def list_my_requests(user_id: str):
     )
 
 
+def list_user_recent_requests(user_id: str, limit: int = 10):
+    return system_store.fetch_all(
+        """
+        SELECT mr.title, mr.year, mr.status, mr.season, mr.media_type
+        FROM media_requests mr
+        INNER JOIN request_users ru ON mr.tmdb_id = ru.tmdb_id AND mr.season = ru.season
+        WHERE ru.user_id = ?
+        ORDER BY mr.rowid DESC
+        LIMIT ?
+        """,
+        (user_id, limit),
+    )
+
+
 def list_all_requests():
     return system_store.fetch_all(
         """

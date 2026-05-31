@@ -58,6 +58,10 @@ def list_users_with_expire_date():
     return system_store.fetch_all("SELECT user_id, expire_date FROM users_meta WHERE expire_date IS NOT NULL AND expire_date != ''")
 
 
+def get_user_points_expire(user_id: str):
+    return system_store.fetch_one("SELECT points, expire_date FROM users_meta WHERE user_id = ?", (user_id,))
+
+
 def list_user_tags():
     return system_store.fetch_all("SELECT id, name, color FROM user_tags ORDER BY name")
 

@@ -16,7 +16,8 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from app.core.config import cfg
 from app.core.database import DB_PATH, SYSTEM_DB_PATH, query_db
-from app.dao import user_bot_dao
+from app.dao import media_request_dao, user_bot_dao, user_dao
+from app.queries import stats_queries
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
 from app.core.media_adapter import media_api
 from app.core.security import validate_password_strength  # 🔒 统一密码强度校验
@@ -4222,7 +4223,7 @@ def cmd_myrequests(chat_id, tg_user_id, msg_id=None):
     
     uid = binding['emby_user_id']
     try:
-        rows = query_db("SELECT mr.title, mr.year, mr.status, mr.season, mr.media_type FROM media_requests mr INNER JOIN request_users ru ON mr.tmdb_id = ru.tmdb_id AND mr.season = ru.season WHERE ru.user_id = ? ORDER BY mr.rowid DESC LIMIT 10", (uid,))
+        rows = media_request_dao.list_user_recent_requests(uid)
         if not rows:
             _reply(chat_id, "📋 <b>我的求片</b>\n\n暂无求片记录",
                   reply_markup={"inline_keyboard": [[{"text": "🎬 去求片", "callback_data": "ub_menu_request"}, {"text": "🔙 主菜单", "callback_data": "ub_back_menu"}]]}, msg_id=msg_id)
@@ -4256,17 +4257,12 @@ def cmd_profile(chat_id, tg_user_id, msg_id=None):
     uid = binding['emby_user_id']
     uname = binding['emby_username']
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        meta = conn.execute("SELECT points, expire_date FROM users_meta WHERE user_id = ?", (uid,)).fetchone()
-        conn.close()
+        meta = user_dao.get_user_points_expire(uid)
 
         # 获取最后一次播放记录（从播放数据库查询）
         last_play_display = "暂无播放记录"
         try:
-            last_play = query_db(
-                "SELECT ItemName, PlayDuration, DateCreated FROM PlaybackActivity WHERE UserId = ? ORDER BY DateCreated DESC LIMIT 1",
-                (uid,), one=True
-            )
+            last_play = stats_queries.get_user_last_play(uid)
             if last_play:
                 item_name = last_play.get('ItemName') or last_play[0]
                 play_duration = last_play.get('PlayDuration') or last_play[1]
@@ -4278,8 +4274,8 @@ def cmd_profile(chat_id, tg_user_id, msg_id=None):
         except Exception as e:
             logger.warning(f"获取播放记录失败: {e}")
             last_play_display = "暂无播放记录"
-        pts = meta[0] if meta and meta[0] else 0
-        expire = meta[1] if meta and meta[1] else "未设置"
+        pts = meta["points"] if meta and meta["points"] else 0
+        expire = meta["expire_date"] if meta and meta["expire_date"] else "未设置"
 
         # 从 Emby 获取账号状态
         status_str = "正常"
