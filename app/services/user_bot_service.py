@@ -16,6 +16,7 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from app.core.config import cfg
 from app.core.database import DB_PATH, SYSTEM_DB_PATH, query_db
+from app.dao import user_bot_dao
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
 from app.core.media_adapter import media_api
 from app.core.security import validate_password_strength  # 🔒 统一密码强度校验
@@ -225,52 +226,7 @@ def _send_open_reg_closed_notify(reason=""):
 
 def _ensure_user_bot_tables():
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.execute("""CREATE TABLE IF NOT EXISTS tg_user_bindings (
-            tg_user_id TEXT PRIMARY KEY,
-            emby_user_id TEXT,
-            emby_username TEXT,
-            tg_username TEXT,
-            tg_display_name TEXT,
-            init_password TEXT DEFAULT '',
-            bound_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )""")
-        try: conn.execute("ALTER TABLE tg_user_bindings ADD COLUMN init_password TEXT DEFAULT ''")
-        except Exception: pass
-        try: conn.execute("ALTER TABLE tg_user_bindings ADD COLUMN tg_username TEXT")
-        except Exception: pass
-        try: conn.execute("ALTER TABLE tg_user_bindings ADD COLUMN tg_display_name TEXT")
-        except Exception: pass
-        conn.execute("""CREATE TABLE IF NOT EXISTS tg_user_blacklist (
-            tg_user_id TEXT PRIMARY KEY,
-            reason TEXT DEFAULT '',
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )""")
-        # 🤖 开放注册日志表
-        conn.execute("""CREATE TABLE IF NOT EXISTS tg_reg_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tg_user_id TEXT,
-            emby_username TEXT,
-            emby_user_id TEXT,
-            reg_type TEXT DEFAULT 'open',
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )""")
-        # 🤖 用户机器人用户表（记录所有 /start 过的用户）
-        conn.execute("""CREATE TABLE IF NOT EXISTS tg_bot_users (
-            tg_user_id TEXT PRIMARY KEY,
-            tg_name TEXT DEFAULT '',
-            first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
-            last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
-        )""")
-        # 🔥 频道绑定表（将频道ID绑定到用户）
-        conn.execute("""CREATE TABLE IF NOT EXISTS tg_channel_bindings (
-            channel_id TEXT PRIMARY KEY,
-            tg_user_id TEXT,
-            channel_title TEXT DEFAULT '',
-            bound_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )""")
-        conn.commit()
-        conn.close()
+        user_bot_dao.ensure_user_bot_tables()
     except Exception as e:
         logger.error(f"用户机器人表初始化失败: {e}")
 
@@ -536,10 +492,7 @@ def _send_open_reg_closed_notify(reason=""):
 
 def _unbind_user(tg_user_id):
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.execute("DELETE FROM tg_user_bindings WHERE tg_user_id = ?", (str(tg_user_id),))
-        conn.commit()
-        conn.close()
+        user_bot_dao.delete_user_binding(tg_user_id)
         # 清除缓存（加锁）
         with _cache_lock:
             _binding_cache.pop(str(tg_user_id), None)
@@ -551,15 +504,9 @@ def _get_binding_by_emby_id(emby_user_id):
     """通过 emby_user_id 获取绑定关系"""
     try:
         emby_id_str = str(emby_user_id).strip()
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        # 尝试精确匹配
-        row = conn.execute("SELECT tg_user_id, emby_username, init_password, tg_username, tg_display_name FROM tg_user_bindings WHERE emby_user_id = ?", (emby_id_str,)).fetchone()
-        if not row:
-            # 尝试模糊匹配（处理可能的格式差异）
-            row = conn.execute("SELECT tg_user_id, emby_username, init_password, tg_username, tg_display_name FROM tg_user_bindings WHERE CAST(emby_user_id AS TEXT) = ?", (emby_id_str,)).fetchone()
-        conn.close()
-        if row:
-            return {"tg_user_id": row[0], "emby_username": row[1], "init_password": row[2] or "", "tg_username": row[3] or "", "tg_name": row[4] or ""}
+        binding = user_bot_dao.get_binding_by_emby_id(emby_id_str)
+        if binding:
+            return binding
         logger.warning(f"[绑定] 未找到 emby_user_id={emby_id_str} 的 TG 绑定")
         return None
     except Exception as e:
@@ -579,10 +526,7 @@ def _get_binding(tg_user_id):
     
     # 缓存未命中，查询数据库
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        row = conn.execute("SELECT emby_user_id, emby_username, init_password, tg_username, tg_display_name FROM tg_user_bindings WHERE tg_user_id = ?", (cache_key,)).fetchone()
-        conn.close()
-        result = {"emby_user_id": row[0], "emby_username": row[1], "init_password": row[2] or "", "tg_username": row[3] or "", "tg_name": row[4] or ""} if row else None
+        result = user_bot_dao.get_binding(cache_key)
         
         # 更新缓存（加锁写入）
         with _cache_lock:
@@ -595,12 +539,10 @@ def _get_binding(tg_user_id):
 def _get_channel_binding(channel_id):
     """获取频道绑定关系（频道ID -> 用户ID -> Emby账号）"""
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        row = conn.execute("SELECT tg_user_id, channel_title FROM tg_channel_bindings WHERE channel_id = ?", (str(channel_id),)).fetchone()
-        conn.close()
+        row = user_bot_dao.get_channel_binding(channel_id)
         if row:
-            tg_user_id = row[0]
-            channel_title = row[1]
+            tg_user_id = row["tg_user_id"]
+            channel_title = row["channel_title"]
             # 获取该用户的绑定
             user_binding = _get_binding(tg_user_id)
             if user_binding:
@@ -613,11 +555,7 @@ def _get_channel_binding(channel_id):
 def _bind_channel(channel_id, tg_user_id, channel_title=""):
     """绑定频道到用户"""
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.execute("""INSERT OR REPLACE INTO tg_channel_bindings (channel_id, tg_user_id, channel_title, bound_at)
-                        VALUES (?, ?, ?, datetime('now','localtime'))""", (str(channel_id), str(tg_user_id), channel_title))
-        conn.commit()
-        conn.close()
+        user_bot_dao.bind_channel(channel_id, tg_user_id, channel_title)
         return True
     except Exception as e:
         logger.error(f"绑定频道失败: {e}")
@@ -627,10 +565,7 @@ def _bind_channel(channel_id, tg_user_id, channel_title=""):
 def _unbind_channel(channel_id):
     """解绑频道"""
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.execute("DELETE FROM tg_channel_bindings WHERE channel_id = ?", (str(channel_id),))
-        conn.commit()
-        conn.close()
+        user_bot_dao.unbind_channel(channel_id)
         return True
     except:
         return False
@@ -639,10 +574,7 @@ def _unbind_channel(channel_id):
 def _get_all_bindings():
     """获取所有绑定关系"""
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        rows = conn.execute("SELECT tg_user_id, emby_user_id, emby_username FROM tg_user_bindings").fetchall()
-        conn.close()
-        return [{"tg_user_id": r[0], "emby_user_id": r[1], "emby_username": r[2]} for r in rows]
+        return user_bot_dao.list_bindings()
     except:
         return []
 
@@ -650,15 +582,7 @@ def _get_all_bindings():
 def _record_bot_user(tg_user_id, tg_name=""):
     """记录/更新机器人用户（所有 /start 过的用户）"""
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.execute("""INSERT INTO tg_bot_users (tg_user_id, tg_name, first_seen, last_seen) 
-                        VALUES (?, ?, datetime('now','localtime'), datetime('now','localtime'))
-                        ON CONFLICT(tg_user_id) DO UPDATE SET 
-                        tg_name = excluded.tg_name,
-                        last_seen = datetime('now','localtime')""",
-                     (str(tg_user_id), tg_name))
-        conn.commit()
-        conn.close()
+        user_bot_dao.record_bot_user(tg_user_id, tg_name)
     except Exception as e:
         logger.error(f"记录机器人用户失败: {e}")
 
@@ -666,10 +590,7 @@ def _record_bot_user(tg_user_id, tg_name=""):
 def _get_all_bot_users():
     """获取所有启动过机器人的用户"""
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        rows = conn.execute("SELECT tg_user_id, tg_name FROM tg_bot_users").fetchall()
-        conn.close()
-        return [{"tg_user_id": r[0], "tg_name": r[1]} for r in rows]
+        return user_bot_dao.list_bot_users()
     except:
         return []
 
@@ -681,14 +602,7 @@ def _bind_user(tg_user_id, emby_user_id, emby_username, init_password="", tg_use
     - 绑定前会清理该 Emby 账号的旧绑定关系
     """
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        # 先清理该 Emby 账号的所有旧绑定（确保一个 Emby 账号只对应一个 TG 用户）
-        conn.execute("DELETE FROM tg_user_bindings WHERE emby_user_id = ?", (emby_user_id,))
-        # 然后插入或替换当前绑定
-        conn.execute("INSERT OR REPLACE INTO tg_user_bindings (tg_user_id, tg_username, tg_display_name, emby_user_id, emby_username, init_password) VALUES (?, ?, ?, ?, ?, ?)",
-                     (str(tg_user_id), tg_username, tg_display_name, emby_user_id, emby_username, init_password))
-        conn.commit()
-        conn.close()
+        user_bot_dao.bind_user(tg_user_id, emby_user_id, emby_username, init_password, tg_username, tg_display_name)
         # 更新缓存（加锁）
         with _cache_lock:
             _binding_cache[str(tg_user_id)] = {
@@ -717,10 +631,7 @@ def _is_blacklisted(tg_user_id):
             return cached["blacklisted"]
     
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        row = conn.execute("SELECT 1 FROM tg_user_blacklist WHERE tg_user_id = ?", (cache_key,)).fetchone()
-        conn.close()
-        result = bool(row)
+        result = user_bot_dao.is_blacklisted(cache_key)
         with _cache_lock:
             _blacklist_cache[cache_key] = {"blacklisted": result, "cached_at": time.time()}
         return result
@@ -730,10 +641,7 @@ def _is_blacklisted(tg_user_id):
 
 def _add_to_blacklist(tg_user_id, reason=""):
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.execute("INSERT OR REPLACE INTO tg_user_blacklist (tg_user_id, reason) VALUES (?, ?)", (str(tg_user_id), reason))
-        conn.commit()
-        conn.close()
+        user_bot_dao.add_to_blacklist(tg_user_id, reason)
     except Exception: pass
 
 

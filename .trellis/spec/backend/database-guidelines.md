@@ -10,7 +10,7 @@
 
 - Trigger: database infrastructure refactor that starts removing `query_db()` from representative modules.
 - Applies to new backend code that reads/writes EmbyPulse system data or playback reporting data.
-- First-stage sample modules include `app/routers/history.py`, `app/routers/api_tokens.py`, `app/routers/notifications.py`, `app/routers/notify_rules.py`, `app/routers/pro.py`, `app/routers/notify_admin.py`, `app/routers/pwa.py`, `app/routers/audit.py`, `app/routers/risk.py`, `app/routers/clients.py`, `app/routers/calendar_notify.py`, `app/routers/webhook.py`, `app/services/report_service.py`, `app/routers/insight.py`, `app/routers/system_tools.py`, `app/services/risk_service.py`, `app/services/calendar_service.py`, `app/routers/views.py`, `app/routers/tasks.py`, `app/routers/dedupe.py`, `app/routers/system.py`, `app/routers/db_tools.py`, `app/routers/gaps.py`, `app/routers/bot.py`, `app/routers/stats.py`, `app/routers/auth.py`, `app/routers/messages.py`, `app/routers/media_request.py`, the low-risk config/account/log slice of `app/routers/points.py`, and the user audit-log slice of `app/routers/users.py`.
+- First-stage sample modules include `app/routers/history.py`, `app/routers/api_tokens.py`, `app/routers/notifications.py`, `app/routers/notify_rules.py`, `app/routers/pro.py`, `app/routers/notify_admin.py`, `app/routers/pwa.py`, `app/routers/audit.py`, `app/routers/risk.py`, `app/routers/clients.py`, `app/routers/calendar_notify.py`, `app/routers/webhook.py`, `app/services/report_service.py`, `app/routers/insight.py`, `app/routers/system_tools.py`, `app/services/risk_service.py`, `app/services/calendar_service.py`, `app/routers/views.py`, `app/routers/tasks.py`, `app/routers/dedupe.py`, `app/routers/system.py`, `app/routers/db_tools.py`, `app/routers/gaps.py`, `app/routers/bot.py`, `app/routers/stats.py`, `app/routers/auth.py`, `app/routers/messages.py`, `app/routers/media_request.py`, the low-risk config/account/log slice of `app/routers/points.py`, the user audit-log slice of `app/routers/users.py`, and the user-bot binding slice of `app/services/user_bot_service.py`.
 
 ### 2. Signatures
 
@@ -93,6 +93,19 @@
 - `app.dao.user_dao.delete_user_tag_by_name(tag_name: str) -> bool`
 - `app.dao.user_dao.save_user_tags(user_id: str, tags: str, created_at: str) -> None`
 - `app.dao.user_dao.get_user_tags(user_id: str) -> str`
+- `app.dao.user_bot_dao.ensure_user_bot_tables() -> None`
+- `app.dao.user_bot_dao.delete_user_binding(tg_user_id) -> None`
+- `app.dao.user_bot_dao.get_binding_by_emby_id(emby_user_id) -> dict | None`
+- `app.dao.user_bot_dao.get_binding(tg_user_id) -> dict | None`
+- `app.dao.user_bot_dao.get_channel_binding(channel_id) -> DataRow | None`
+- `app.dao.user_bot_dao.bind_channel(channel_id, tg_user_id, channel_title: str = "") -> None`
+- `app.dao.user_bot_dao.unbind_channel(channel_id) -> None`
+- `app.dao.user_bot_dao.list_bindings() -> list[dict]`
+- `app.dao.user_bot_dao.record_bot_user(tg_user_id, tg_name: str = "") -> None`
+- `app.dao.user_bot_dao.list_bot_users() -> list[dict]`
+- `app.dao.user_bot_dao.bind_user(tg_user_id, emby_user_id, emby_username, init_password: str = "", tg_username: str = "", tg_display_name: str = "") -> None`
+- `app.dao.user_bot_dao.is_blacklisted(tg_user_id) -> bool`
+- `app.dao.user_bot_dao.add_to_blacklist(tg_user_id, reason: str = "") -> None`
 - `app.dao.dedupe_dao.init_dedupe_tables(logger=None) -> None`
 - `app.dao.dedupe_dao.list_dedupe_whitelist_group_keys() -> list[str]`
 - `app.dao.dedupe_dao.DedupeResultWriter`
@@ -247,6 +260,7 @@
 - Good: `messages.py` keeps permission checks, Emby user lookups, content sanitization, bot notification delivery, and response assembly in the route while delegating message, mute, notification-block, announcement, and related user lookup tables to `message_dao`.
 - Good: `media_request.py` keeps request validation, Emby/TMDB/MoviePilot calls, cache assembly, notification delivery, and response shaping in the route while delegating request, feedback, update, invitation, point, gap-cache, and user metadata persistence to `media_request_dao`.
 - Good: `points.py` keeps admin/session checks, Emby user enrichment, pagination payload assembly, and later game workflows in the route while delegating point config, point schema bootstrap, point balances, batch updates, point log reads, red-packet log reads, point ranking reads, and daily check-in transactions to `point_dao`.
+- Good: `user_bot_service.py` keeps Telegram API calls, in-memory caches, registration queueing, and bot command flow in the service while delegating binding, channel-binding, blacklist, bot-user, and base table bootstrap SQL to `user_bot_dao`.
 - Bad: a router imports `query_db`, `SYSTEM_DB_PATH`, or `sqlite3` only to run route-local SQL.
 
 ### 6. Tests Required

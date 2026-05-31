@@ -1,0 +1,197 @@
+from app.infra.db.system_store import system_store
+
+
+def ensure_user_bot_tables() -> None:
+    with system_store.connect() as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tg_user_bindings (
+                tg_user_id TEXT PRIMARY KEY,
+                emby_user_id TEXT,
+                emby_username TEXT,
+                tg_username TEXT,
+                tg_display_name TEXT,
+                init_password TEXT DEFAULT '',
+                bound_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        try:
+            conn.execute("ALTER TABLE tg_user_bindings ADD COLUMN init_password TEXT DEFAULT ''")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE tg_user_bindings ADD COLUMN tg_username TEXT")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE tg_user_bindings ADD COLUMN tg_display_name TEXT")
+        except Exception:
+            pass
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tg_user_blacklist (
+                tg_user_id TEXT PRIMARY KEY,
+                reason TEXT DEFAULT '',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tg_reg_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tg_user_id TEXT,
+                emby_username TEXT,
+                emby_user_id TEXT,
+                reg_type TEXT DEFAULT 'open',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tg_bot_users (
+                tg_user_id TEXT PRIMARY KEY,
+                tg_name TEXT DEFAULT '',
+                first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+                last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tg_channel_bindings (
+                channel_id TEXT PRIMARY KEY,
+                tg_user_id TEXT,
+                channel_title TEXT DEFAULT '',
+                bound_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        conn.commit()
+
+
+def delete_user_binding(tg_user_id) -> None:
+    system_store.execute("DELETE FROM tg_user_bindings WHERE tg_user_id = ?", (str(tg_user_id),))
+
+
+def get_binding_by_emby_id(emby_user_id):
+    emby_id_str = str(emby_user_id).strip()
+    row = system_store.fetch_one(
+        """
+        SELECT tg_user_id, emby_username, init_password, tg_username, tg_display_name
+        FROM tg_user_bindings
+        WHERE emby_user_id = ?
+        """,
+        (emby_id_str,),
+    )
+    if not row:
+        row = system_store.fetch_one(
+            """
+            SELECT tg_user_id, emby_username, init_password, tg_username, tg_display_name
+            FROM tg_user_bindings
+            WHERE CAST(emby_user_id AS TEXT) = ?
+            """,
+            (emby_id_str,),
+        )
+    if not row:
+        return None
+    return {
+        "tg_user_id": row["tg_user_id"],
+        "emby_username": row["emby_username"],
+        "init_password": row["init_password"] or "",
+        "tg_username": row["tg_username"] or "",
+        "tg_name": row["tg_display_name"] or "",
+    }
+
+
+def get_binding(tg_user_id):
+    row = system_store.fetch_one(
+        """
+        SELECT emby_user_id, emby_username, init_password, tg_username, tg_display_name
+        FROM tg_user_bindings
+        WHERE tg_user_id = ?
+        """,
+        (str(tg_user_id),),
+    )
+    if not row:
+        return None
+    return {
+        "emby_user_id": row["emby_user_id"],
+        "emby_username": row["emby_username"],
+        "init_password": row["init_password"] or "",
+        "tg_username": row["tg_username"] or "",
+        "tg_name": row["tg_display_name"] or "",
+    }
+
+
+def get_channel_binding(channel_id):
+    return system_store.fetch_one(
+        "SELECT tg_user_id, channel_title FROM tg_channel_bindings WHERE channel_id = ?",
+        (str(channel_id),),
+    )
+
+
+def bind_channel(channel_id, tg_user_id, channel_title: str = "") -> None:
+    system_store.execute(
+        """
+        INSERT OR REPLACE INTO tg_channel_bindings (channel_id, tg_user_id, channel_title, bound_at)
+        VALUES (?, ?, ?, datetime('now','localtime'))
+        """,
+        (str(channel_id), str(tg_user_id), channel_title),
+    )
+
+
+def unbind_channel(channel_id) -> None:
+    system_store.execute("DELETE FROM tg_channel_bindings WHERE channel_id = ?", (str(channel_id),))
+
+
+def list_bindings():
+    rows = system_store.fetch_all("SELECT tg_user_id, emby_user_id, emby_username FROM tg_user_bindings")
+    return [{"tg_user_id": row["tg_user_id"], "emby_user_id": row["emby_user_id"], "emby_username": row["emby_username"]} for row in rows]
+
+
+def record_bot_user(tg_user_id, tg_name: str = "") -> None:
+    system_store.execute(
+        """
+        INSERT INTO tg_bot_users (tg_user_id, tg_name, first_seen, last_seen)
+        VALUES (?, ?, datetime('now','localtime'), datetime('now','localtime'))
+        ON CONFLICT(tg_user_id) DO UPDATE SET
+        tg_name = excluded.tg_name,
+        last_seen = datetime('now','localtime')
+        """,
+        (str(tg_user_id), tg_name),
+    )
+
+
+def list_bot_users():
+    rows = system_store.fetch_all("SELECT tg_user_id, tg_name FROM tg_bot_users")
+    return [{"tg_user_id": row["tg_user_id"], "tg_name": row["tg_name"]} for row in rows]
+
+
+def bind_user(tg_user_id, emby_user_id, emby_username, init_password: str = "", tg_username: str = "", tg_display_name: str = "") -> None:
+    with system_store.connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM tg_user_bindings WHERE emby_user_id = ?", (emby_user_id,))
+        cursor.execute(
+            """
+            INSERT OR REPLACE INTO tg_user_bindings
+            (tg_user_id, tg_username, tg_display_name, emby_user_id, emby_username, init_password)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (str(tg_user_id), tg_username, tg_display_name, emby_user_id, emby_username, init_password),
+        )
+        conn.commit()
+
+
+def is_blacklisted(tg_user_id) -> bool:
+    row = system_store.fetch_one("SELECT 1 FROM tg_user_blacklist WHERE tg_user_id = ?", (str(tg_user_id),))
+    return bool(row)
+
+
+def add_to_blacklist(tg_user_id, reason: str = "") -> None:
+    system_store.execute(
+        "INSERT OR REPLACE INTO tg_user_blacklist (tg_user_id, reason) VALUES (?, ?)",
+        (str(tg_user_id), reason),
+    )
