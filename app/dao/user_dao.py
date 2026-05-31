@@ -62,6 +62,28 @@ def get_user_points_expire(user_id: str):
     return system_store.fetch_one("SELECT points, expire_date FROM users_meta WHERE user_id = ?", (user_id,))
 
 
+def get_user_routes(user_id: str):
+    return system_store.fetch_one("SELECT allow_routes, block_routes FROM users_meta WHERE user_id = ?", (user_id,))
+
+
+def save_user_expire(user_id: str, expire_date: str) -> None:
+    system_store.execute(
+        "INSERT OR REPLACE INTO users_meta (user_id, expire_date, created_at) VALUES (?, ?, datetime('now','localtime'))",
+        (user_id, expire_date),
+    )
+
+
+def save_user_expire_routes(user_id: str, expire_date: str, allow_routes: str, block_routes: str) -> None:
+    system_store.execute(
+        """
+        INSERT OR REPLACE INTO users_meta
+        (user_id, expire_date, allow_routes, block_routes, created_at)
+        VALUES (?, ?, ?, ?, datetime('now','localtime'))
+        """,
+        (user_id, expire_date, allow_routes, block_routes),
+    )
+
+
 def list_user_tags():
     return system_store.fetch_all("SELECT id, name, color FROM user_tags ORDER BY name")
 

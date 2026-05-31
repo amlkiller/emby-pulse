@@ -91,6 +91,9 @@
 - `app.dao.user_dao.get_user_req_permission(user_id: str) -> dict`
 - `app.dao.user_dao.list_users_with_expire_date() -> list[DataRow]`
 - `app.dao.user_dao.get_user_points_expire(user_id: str) -> DataRow | None`
+- `app.dao.user_dao.get_user_routes(user_id: str) -> DataRow | None`
+- `app.dao.user_dao.save_user_expire(user_id: str, expire_date: str) -> None`
+- `app.dao.user_dao.save_user_expire_routes(user_id: str, expire_date: str, allow_routes: str, block_routes: str) -> None`
 - `app.dao.user_dao.list_user_tags() -> list[DataRow]`
 - `app.dao.user_dao.create_user_tag(name: str, color: str) -> int`
 - `app.dao.user_dao.delete_user_tag(tag_id: int) -> None`
@@ -287,7 +290,7 @@
 - Good: `messages.py` keeps permission checks, Emby user lookups, content sanitization, bot notification delivery, and response assembly in the route while delegating message, mute, notification-block, announcement, and related user lookup tables to `message_dao`.
 - Good: `media_request.py` keeps request validation, Emby/TMDB/MoviePilot calls, cache assembly, notification delivery, and response shaping in the route while delegating request, feedback, update, invitation, point, gap-cache, and user metadata persistence to `media_request_dao`.
 - Good: `points.py` keeps admin/session checks, Emby user enrichment, pagination payload assembly, and later game workflows in the route while delegating point config, point schema bootstrap, point balances, batch updates, point log reads, red-packet log reads, point ranking reads, and daily check-in transactions to `point_dao`.
-- Good: `user_bot_service.py` keeps Telegram API calls, Emby account creation, in-memory caches, registration queueing, profile/request rendering, and bot command flow in the service while delegating invitation checks, binding, channel-binding, blacklist, bot-user, registration logs, profile/request reads, playback read queries, and base table bootstrap SQL to DAO/query boundaries.
+- Good: `user_bot_service.py` keeps Telegram API calls, Emby account creation, in-memory caches, registration queueing, profile/request rendering, and bot command flow in the service while delegating invitation checks, binding, channel-binding, blacklist, bot-user, registration logs, registration metadata, profile/request reads, playback read queries, and base table bootstrap SQL to DAO/query boundaries.
 - Bad: a router imports `query_db`, `SYSTEM_DB_PATH`, or `sqlite3` only to run route-local SQL.
 
 ### 6. Tests Required

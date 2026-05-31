@@ -1137,22 +1137,20 @@ def _do_register(chat_id, tg_user_id, custom_name, tg_username="", tg_display_na
                 block_routes = cfg.get("user_bot_block_routes", "")
 
                 if allow_routes or block_routes:
-                    query_db("INSERT OR REPLACE INTO users_meta (user_id, expire_date, allow_routes, block_routes, created_at) VALUES (?, ?, ?, ?, datetime('now','localtime'))",
-                             (uid, expire, allow_routes, block_routes))
+                    user_dao.save_user_expire_routes(uid, expire, allow_routes, block_routes)
                 else:
                     template_routes = None
                     if template_id:
                         try:
-                            template_meta = query_db("SELECT allow_routes, block_routes FROM users_meta WHERE user_id = ?", (template_id,), one=True)
+                            template_meta = user_dao.get_user_routes(template_id)
                             if template_meta and (template_meta.get('allow_routes') or template_meta.get('block_routes')):
                                 template_routes = template_meta
                         except Exception: pass
 
                     if template_routes:
-                        query_db("INSERT OR REPLACE INTO users_meta (user_id, expire_date, allow_routes, block_routes, created_at) VALUES (?, ?, ?, ?, datetime('now','localtime'))",
-                                 (uid, expire, template_routes.get('allow_routes', ''), template_routes.get('block_routes', '')))
+                        user_dao.save_user_expire_routes(uid, expire, template_routes.get('allow_routes', ''), template_routes.get('block_routes', ''))
                     else:
-                        query_db("INSERT OR REPLACE INTO users_meta (user_id, expire_date, created_at) VALUES (?, ?, datetime('now','localtime'))", (uid, expire))
+                        user_dao.save_user_expire(uid, expire)
 
                 _bind_user(tg_user_id, uid, safe_name, init_password=password, tg_username=tg_username or tg_display_name, tg_display_name=tg_display_name or str(tg_user_id))
 
