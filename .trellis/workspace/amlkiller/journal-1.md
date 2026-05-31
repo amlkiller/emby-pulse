@@ -1,0 +1,9 @@
+# Journal - amlkiller (Part 1)
+
+> AI development session journal
+> Started: 2026-05-29
+
+---
+
+2026-05-31: Started backend modular refactor. Split `app/main.py` into `app/bootstrap/*` modules for runtime prep, database init, logging, middleware, route registration, and user portal isolation. Verified with `uv run --with-requirements requirements.txt` syntax/import checks and `pytest` (68 passed). Updated backend directory-structure and error-handling specs to reflect the new bootstrap boundary.
+
