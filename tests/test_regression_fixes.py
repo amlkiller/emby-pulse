@@ -12,23 +12,7 @@ if _repo_root not in sys.path:
 def test_notify_rule_default_is_enabled_when_missing(monkeypatch):
     from app.routers import notify_admin
 
-    class FakeCursor:
-        def execute(self, *args, **kwargs):
-            return None
-
-        def fetchone(self):
-            return None
-
-    class FakeConn:
-        row_factory = None
-
-        def cursor(self):
-            return FakeCursor()
-
-        def close(self):
-            return None
-
-    monkeypatch.setattr(notify_admin.sqlite3, "connect", lambda *args, **kwargs: FakeConn())
+    monkeypatch.setattr(notify_admin, "get_notify_rule_row", lambda notify_type: None)
 
     rule = notify_admin.get_notify_rule("request_new")
 
@@ -42,28 +26,16 @@ def test_notify_rule_respects_saved_disabled_rule(monkeypatch):
     class FakeRow(dict):
         pass
 
-    class FakeCursor:
-        def execute(self, *args, **kwargs):
-            return None
-
-        def fetchone(self):
-            return FakeRow({
-                "notify_type": "request_new",
-                "notify_name": "工单提交",
-                "enabled": 0,
-                "channels": '["web"]',
-            })
-
-    class FakeConn:
-        row_factory = None
-
-        def cursor(self):
-            return FakeCursor()
-
-        def close(self):
-            return None
-
-    monkeypatch.setattr(notify_admin.sqlite3, "connect", lambda *args, **kwargs: FakeConn())
+    monkeypatch.setattr(
+        notify_admin,
+        "get_notify_rule_row",
+        lambda notify_type: FakeRow({
+            "notify_type": "request_new",
+            "notify_name": "工单提交",
+            "enabled": 0,
+            "channels": '["web"]',
+        }),
+    )
 
     rule = notify_admin.get_notify_rule("request_new")
 

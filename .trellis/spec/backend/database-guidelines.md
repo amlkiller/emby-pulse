@@ -10,7 +10,7 @@
 
 - Trigger: database infrastructure refactor that starts removing `query_db()` from representative modules.
 - Applies to new backend code that reads/writes EmbyPulse system data or playback reporting data.
-- First-stage sample modules include `app/routers/history.py`, `app/routers/api_tokens.py`, and `app/routers/notifications.py`.
+- First-stage sample modules include `app/routers/history.py`, `app/routers/api_tokens.py`, `app/routers/notifications.py`, `app/routers/notify_rules.py`, `app/routers/pro.py`, and `app/routers/notify_admin.py`.
 
 ### 2. Signatures
 
@@ -19,6 +19,11 @@
 - `app.infra.db.system_store.system_store.execute(sql: str, params=()) -> int`
 - `app.infra.db.playback_store.playback_store.query(sql: str, params=(), one: bool = False) -> list[DataRow] | DataRow | None`
 - `app.infra.db.playback_store.get_playback_column_name() -> str`
+- `app.dao.notify_rule_dao.list_bot_notify_mutes() -> list[DataRow]`
+- `app.dao.notify_rule_dao.replace_bot_notify_mutes(playback_users, login_users) -> None`
+- `app.dao.pro_license_dao.replace_license(license_key: str, machine_id: str, status: str = "pro") -> None`
+- `app.dao.pro_license_dao.get_license_status() -> DataRow | None`
+- `app.dao.notify_admin_dao.save_notify_rules(rules: dict) -> None`
 - Scenario modules live in `app/queries/*_queries.py` and `app/dao/*_dao.py` during the transition.
 
 ### 3. Contracts
@@ -41,6 +46,8 @@
 - Good: `api_tokens.py` calls `api_token_dao.create_api_token_record(...)` and keeps HTTP response shape unchanged.
 - Base: `history.py` calls `history_queries.count_history(...)` and still returns the same pagination payload.
 - Good: `notifications.py` calls `notification_dao.list_notifications(...)` and preserves the `{"success", "unread_count", "items"}` response shape.
+- Good: `notify_rules.py` calls `notify_rule_dao.replace_bot_notify_mutes(...)` and preserves the `{"playback": [], "login": []}` payload shape.
+- Good: `pro.py` calls `pro_license_dao.replace_license(...)` and keeps system notification write failures non-blocking for activation.
 - Bad: a router imports `query_db`, `SYSTEM_DB_PATH`, or `sqlite3` only to run route-local SQL.
 
 ### 6. Tests Required

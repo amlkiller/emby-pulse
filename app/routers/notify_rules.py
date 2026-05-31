@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Request
-from app.core.database import query_db
+from app.dao.notify_rule_dao import (
+    ensure_bot_notify_mutes_table,
+    list_bot_notify_mutes,
+    replace_bot_notify_mutes,
+)
 from app.core.config import cfg
-import sqlite3
-from app.core.database import DB_PATH, SYSTEM_DB_PATH
 import requests
 from app.routers.auth import is_admin_user
 from app.core.security_utils import safe_error_message
@@ -12,16 +14,7 @@ router = APIRouter(prefix="/api/notify_rules", tags=["Notification Rules"])
 def _ensure_bot_notify_mutes_table():
     """确保 bot_notify_mutes 表存在"""
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        c.execute('''CREATE TABLE IF NOT EXISTS bot_notify_mutes (
-            user_id TEXT,
-            event_type TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (user_id, event_type)
-        )''')
-        conn.commit()
-        conn.close()
+        ensure_bot_notify_mutes_table()
     except Exception as e:
         print(f"[降噪管理] 创建表失败: {e}")
 
@@ -50,7 +43,7 @@ async def get_mutes(request: Request):
         return {"success": False, "data": {}, "error": "需要管理员权限"}
     
     try:
-        rows = query_db("SELECT user_id, event_type FROM bot_notify_mutes")
+        rows = list_bot_notify_mutes()
         mutes = {"playback": [], "login": []}
         if rows:
             for r in rows:
@@ -71,17 +64,7 @@ async def save_mutes(req: Request):
     login_users = data.get("login", [])
 
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        c.execute("DELETE FROM bot_notify_mutes")
-        
-        for uid in playback_users:
-            c.execute("INSERT INTO bot_notify_mutes (user_id, event_type) VALUES (?, ?)", (uid, "playback"))
-        for uid in login_users:
-            c.execute("INSERT INTO bot_notify_mutes (user_id, event_type) VALUES (?, ?)", (uid, "login"))
-            
-        conn.commit()
-        conn.close()
+        replace_bot_notify_mutes(playback_users, login_users)
         return {"success": True, "msg": "降噪规则保存成功！新规即刻生效。"}
     except Exception as e:
         return {"success": False, "msg": safe_error_message(e)}

@@ -1,13 +1,16 @@
 # 通知管理路由
 from fastapi import APIRouter, Request
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from app.core.database import query_db, SYSTEM_DB_PATH
+from app.dao.notify_admin_dao import (
+    ensure_notify_rules_table as ensure_notify_rules_table_data,
+    get_notify_rule_row,
+    list_notify_rule_rows,
+    save_notify_rules,
+)
 from app.core.config import cfg
-import sqlite3
 import json
-import os
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates", autoescape=True)
@@ -15,22 +18,7 @@ from app.main import APP_VERSION
 
 def ensure_notify_rules_table():
     """确保 notify_rules 表存在"""
-    if not os.path.exists(SYSTEM_DB_PATH):
-        return
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS notify_rules (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        notify_type TEXT UNIQUE NOT NULL,
-        notify_name TEXT NOT NULL,
-        channels TEXT DEFAULT '[]',
-        enabled INTEGER DEFAULT 1,
-        config TEXT DEFAULT '{}',
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )''')
-    conn.commit()
-    conn.close()
+    ensure_notify_rules_table_data()
 
 # 启动时确保表存在
 ensure_notify_rules_table()
@@ -39,12 +27,7 @@ ensure_notify_rules_table()
 def get_notify_rule(notify_type: str) -> dict:
     """获取单个通知类型的规则配置，供其他模块调用"""
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.row_factory = sqlite3.Row
-        c = conn.cursor()
-        c.execute("SELECT * FROM notify_rules WHERE notify_type = ?", (notify_type,))
-        row = c.fetchone()
-        conn.close()
+        row = get_notify_rule_row(notify_type)
         
         if row:
             rule = dict(row)
@@ -155,12 +138,7 @@ def api_get_notify_rules(request: Request):
     
     rules_dict = {}
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.row_factory = sqlite3.Row
-        c = conn.cursor()
-        c.execute("SELECT * FROM notify_rules")
-        rows = c.fetchall()
-        conn.close()
+        rows = list_notify_rule_rows()
         
         for r in rows:
             rule = dict(r)
@@ -198,24 +176,7 @@ def api_save_notify_rules(request: Request, data: dict):
     rules = data.get("rules", {})
     
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        
-        for notify_type, rule in rules.items():
-            channels_json = json.dumps(rule.get("channels", []))
-            config_json = json.dumps(rule.get("config", {}))
-            # 🔥 布尔值转换为整数
-            enabled = 1 if rule.get("enabled", False) else 0
-            notify_name = rule.get("notify_name", notify_type)
-            
-            c.execute("""
-                INSERT OR REPLACE INTO notify_rules 
-                (notify_type, notify_name, channels, enabled, config, updated_at) 
-                VALUES (?, ?, ?, ?, ?, datetime('now', 'localtime'))
-            """, (notify_type, notify_name, channels_json, enabled, config_json))
-        
-        conn.commit()
-        conn.close()
+        save_notify_rules(rules)
         return {"status": "success", "message": "保存成功"}
     except Exception as e:
         return {"status": "error", "message": "保存规则失败"}
