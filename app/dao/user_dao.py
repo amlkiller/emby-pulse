@@ -51,6 +51,74 @@ def set_user_admin_disabled(user_id: str, disabled: bool) -> None:
     )
 
 
+def save_user_admin_disabled(user_id: str, disabled: bool, created_at: str) -> None:
+    with system_store.connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute("INSERT OR IGNORE INTO users_meta (user_id, created_at) VALUES (?, ?)", (user_id, created_at))
+        cursor.execute("UPDATE users_meta SET admin_disabled = ? WHERE user_id = ?", (1 if disabled else 0, user_id))
+        conn.commit()
+
+
+def delete_user_meta(user_id: str) -> None:
+    system_store.execute("DELETE FROM users_meta WHERE user_id = ?", (user_id,))
+
+
+def delete_temp_account_by_emby_user(user_id: str) -> None:
+    system_store.execute("DELETE FROM temp_accounts WHERE emby_user_id = ?", (user_id,))
+
+
+def get_user_policy_meta(user_id: str):
+    return system_store.fetch_one("SELECT max_concurrent, is_vip FROM users_meta WHERE user_id = ?", (user_id,))
+
+
+def save_user_expire_preserve(user_id: str, expire_date, created_at: str) -> None:
+    with system_store.connect() as conn:
+        cursor = conn.cursor()
+        row = cursor.execute("SELECT 1 FROM users_meta WHERE user_id = ?", (user_id,)).fetchone()
+        if row:
+            cursor.execute("UPDATE users_meta SET expire_date = ? WHERE user_id = ?", (expire_date, user_id))
+        else:
+            cursor.execute(
+                "INSERT INTO users_meta (user_id, expire_date, created_at) VALUES (?, ?, ?)",
+                (user_id, expire_date, created_at),
+            )
+        conn.commit()
+
+
+def save_user_policy_meta(user_id: str, max_concurrent, is_vip, created_at: str) -> None:
+    with system_store.connect() as conn:
+        cursor = conn.cursor()
+        row = cursor.execute("SELECT 1 FROM users_meta WHERE user_id = ?", (user_id,)).fetchone()
+        if row:
+            cursor.execute(
+                "UPDATE users_meta SET max_concurrent = ?, is_vip = ? WHERE user_id = ?",
+                (max_concurrent, is_vip, user_id),
+            )
+        else:
+            cursor.execute(
+                "INSERT INTO users_meta (user_id, max_concurrent, is_vip, created_at) VALUES (?, ?, ?, ?)",
+                (user_id, max_concurrent, is_vip, created_at),
+            )
+        conn.commit()
+
+
+def save_user_routes_preserve(user_id: str, allow_routes: str, block_routes: str, created_at: str) -> None:
+    with system_store.connect() as conn:
+        cursor = conn.cursor()
+        row = cursor.execute("SELECT 1 FROM users_meta WHERE user_id = ?", (user_id,)).fetchone()
+        if row:
+            cursor.execute(
+                "UPDATE users_meta SET allow_routes = ?, block_routes = ? WHERE user_id = ?",
+                (allow_routes, block_routes, user_id),
+            )
+        else:
+            cursor.execute(
+                "INSERT INTO users_meta (user_id, allow_routes, block_routes, created_at) VALUES (?, ?, ?, ?)",
+                (user_id, allow_routes, block_routes, created_at),
+            )
+        conn.commit()
+
+
 def get_user_library_settings(user_id: str):
     ensure_users_meta_column("admin_enabled_folders", "admin_enabled_folders TEXT")
     ensure_users_meta_column("hidden_libraries", "hidden_libraries TEXT DEFAULT ''")

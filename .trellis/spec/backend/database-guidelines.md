@@ -95,6 +95,13 @@
 - `app.dao.user_dao.list_all_user_meta() -> list[DataRow]`
 - `app.dao.user_dao.get_user_meta(user_id: str) -> DataRow | None`
 - `app.dao.user_dao.set_user_admin_disabled(user_id: str, disabled: bool) -> None`
+- `app.dao.user_dao.save_user_admin_disabled(user_id: str, disabled: bool, created_at: str) -> None`
+- `app.dao.user_dao.delete_user_meta(user_id: str) -> None`
+- `app.dao.user_dao.delete_temp_account_by_emby_user(user_id: str) -> None`
+- `app.dao.user_dao.get_user_policy_meta(user_id: str) -> DataRow | None`
+- `app.dao.user_dao.save_user_expire_preserve(user_id: str, expire_date, created_at: str) -> None`
+- `app.dao.user_dao.save_user_policy_meta(user_id: str, max_concurrent, is_vip, created_at: str) -> None`
+- `app.dao.user_dao.save_user_routes_preserve(user_id: str, allow_routes: str, block_routes: str, created_at: str) -> None`
 - `app.dao.user_dao.get_user_library_settings(user_id: str) -> DataRow | None`
 - `app.dao.user_dao.get_user_admin_enabled_folders(user_id: str) -> DataRow | None`
 - `app.dao.user_dao.save_user_admin_enabled_folders(user_id: str, admin_enabled_folders: str) -> None`

@@ -1136,16 +1136,7 @@ def api_manage_user_update(data: UserUpdateModelEx, request: Request):
                 if not data.is_disabled: p['LoginAttemptsBeforeLockout'] = -1
                 # 设置 admin_disabled 标记
                 try:
-                    conn = sqlite3.connect(SYSTEM_DB_PATH)
-                    c = conn.cursor()
-                    if data.is_disabled:
-                        # 管理员禁用,设置 admin_disabled = 1
-                        c.execute("UPDATE users_meta SET admin_disabled = 1 WHERE user_id = ?", (data.user_id,))
-                    else:
-                        # 管理员启用,清除 admin_disabled 标记
-                        c.execute("UPDATE users_meta SET admin_disabled = 0 WHERE user_id = ?", (data.user_id,))
-                    conn.commit()
-                    conn.close()
+                    user_dao.set_user_admin_disabled(data.user_id, data.is_disabled)
                 except Exception: pass
             if data.enable_all_folders is not None:
                 # 🔥 检测媒体库权限是否真的有变化
@@ -1443,13 +1434,10 @@ def api_manage_user_delete(user_id: str, request: Request):
             pass
 
         if media_api.delete(f"/Users/{user_id}").status_code in [200, 204]:
-            query_db("DELETE FROM users_meta WHERE user_id = ?", (user_id,))
+            user_dao.delete_user_meta(user_id)
             # 同步删除临时账号记录
             try:
-                conn = sqlite3.connect(SYSTEM_DB_PATH)
-                conn.execute("DELETE FROM temp_accounts WHERE emby_user_id = ?", (user_id,))
-                conn.commit()
-                conn.close()
+                user_dao.delete_temp_account_by_emby_user(user_id)
             except:
                 pass
 
@@ -1518,7 +1506,7 @@ def api_manage_users_batch(data: BatchActionModelLocal, request: Request):
             src_res = media_api.get(f"/Users/{data.value}", timeout=5)
             if src_res.status_code == 200:
                 src_policy = src_res.json().get('Policy', {})
-                t_meta = query_db("SELECT max_concurrent, is_vip FROM users_meta WHERE user_id = ?", (data.value,), one=True)
+                t_meta = user_dao.get_user_policy_meta(data.value)
                 src_max_concurrent = t_meta['max_concurrent'] if t_meta else None
                 src_is_vip = t_meta['is_vip'] if t_meta and t_meta['is_vip'] else 0
             else:
@@ -1541,13 +1529,10 @@ def api_manage_users_batch(data: BatchActionModelLocal, request: Request):
                     pass
 
                 media_api.delete(f"/Users/{uid}")
-                query_db("DELETE FROM users_meta WHERE user_id = ?", (uid,))
+                user_dao.delete_user_meta(uid)
                 # 同步删除临时账号记录
                 try:
-                    conn = sqlite3.connect(SYSTEM_DB_PATH)
-                    conn.execute("DELETE FROM temp_accounts WHERE emby_user_id = ?", (uid,))
-                    conn.commit()
-                    conn.close()
+                    user_dao.delete_temp_account_by_emby_user(uid)
                 except:
                     pass
                 deleted_count += 1
@@ -1566,17 +1551,7 @@ def api_manage_users_batch(data: BatchActionModelLocal, request: Request):
                     media_api.post(f"/Users/{uid}/Policy", json=p)
                     # 设置 admin_disabled 标记
                     try:
-                        conn = sqlite3.connect(SYSTEM_DB_PATH)
-                        c = conn.cursor()
-                        if data.action == "disable":
-                            # 管理员禁用,设置 admin_disabled = 1
-                            c.execute("INSERT OR IGNORE INTO users_meta (user_id, created_at) VALUES (?, ?)", (uid, datetime.datetime.now().isoformat()))
-                            c.execute("UPDATE users_meta SET admin_disabled = 1 WHERE user_id = ?", (uid,))
-                        else:
-                            # 管理员启用,清除 admin_disabled 标记
-                            c.execute("UPDATE users_meta SET admin_disabled = 0 WHERE user_id = ?", (uid,))
-                        conn.commit()
-                        conn.close()
+                        user_dao.save_user_admin_disabled(uid, data.action == "disable", datetime.datetime.now().isoformat())
                     except Exception: pass
             elif data.action == "renew":
                 # 获取用户名
@@ -1591,7 +1566,7 @@ def api_manage_users_batch(data: BatchActionModelLocal, request: Request):
                 new_date = None
                 if data.value.startswith('+'):
                     days_to_add = int(data.value[1:])
-                    row = query_db("SELECT expire_date FROM users_meta WHERE user_id = ?", (uid,), one=True)
+                    row = user_dao.get_user_meta(uid)
                     current_expire = row['expire_date'] if row and row['expire_date'] else None
                     if current_expire:
                         try:
@@ -1602,9 +1577,7 @@ def api_manage_users_batch(data: BatchActionModelLocal, request: Request):
                     new_date = (base_date + datetime.timedelta(days=days_to_add)).strftime("%Y-%m-%d")
                 else: new_date = data.value if data.value else None
 
-                exist = query_db("SELECT 1 FROM users_meta WHERE user_id = ?", (uid,), one=True)
-                if exist: query_db("UPDATE users_meta SET expire_date = ? WHERE user_id = ?", (new_date, uid))
-                else: query_db("INSERT INTO users_meta (user_id, expire_date, created_at) VALUES (?, ?, ?)", (uid, new_date, datetime.datetime.now().isoformat()))
+                user_dao.save_user_expire_preserve(uid, new_date, datetime.datetime.now().isoformat())
             elif data.action == "apply_template":
                 p_res = media_api.get(f"/Users/{uid}", timeout=5)
                 if p_res.status_code == 200:
@@ -1616,9 +1589,7 @@ def api_manage_users_batch(data: BatchActionModelLocal, request: Request):
                     p = clone_policy(p, src_policy, data.copy_library, data.copy_policy, data.copy_parental)
 
                     if data.copy_policy:
-                        exist = query_db("SELECT 1 FROM users_meta WHERE user_id = ?", (uid,), one=True)
-                        if exist: query_db("UPDATE users_meta SET max_concurrent = ?, is_vip = ? WHERE user_id = ?", (src_max_concurrent, src_is_vip, uid))
-                        else: query_db("INSERT INTO users_meta (user_id, max_concurrent, is_vip, created_at) VALUES (?, ?, ?, ?)", (uid, src_max_concurrent, src_is_vip, datetime.datetime.now().isoformat()))
+                        user_dao.save_user_policy_meta(uid, src_max_concurrent, src_is_vip, datetime.datetime.now().isoformat())
 
                     media_api.post(f"/Users/{uid}/Policy", json=p)
             elif data.action == "set_routes":
@@ -1635,13 +1606,7 @@ def api_manage_users_batch(data: BatchActionModelLocal, request: Request):
                             operated_names.append(user_name)
                 except Exception: pass
 
-                exist = query_db("SELECT 1 FROM users_meta WHERE user_id = ?", (uid,), one=True)
-                if exist:
-                    query_db("UPDATE users_meta SET allow_routes = ?, block_routes = ? WHERE user_id = ?",
-                             (allow_routes, block_routes, uid))
-                else:
-                    query_db("INSERT INTO users_meta (user_id, allow_routes, block_routes, created_at) VALUES (?, ?, ?, ?)",
-                             (uid, allow_routes, block_routes, datetime.datetime.now().isoformat()))
+                user_dao.save_user_routes_preserve(uid, allow_routes, block_routes, datetime.datetime.now().isoformat())
             elif data.action == "set_req_free":
                 # 批量设置求片权限
                 req_free = data.req_free if data.req_free is not None else 0
@@ -1656,13 +1621,7 @@ def api_manage_users_batch(data: BatchActionModelLocal, request: Request):
                             operated_names.append(user_name)
                 except Exception: pass
 
-                exist = query_db("SELECT 1 FROM users_meta WHERE user_id = ?", (uid,), one=True)
-                if exist:
-                    query_db("UPDATE users_meta SET req_free = ?, req_free_count = ? WHERE user_id = ?",
-                             (req_free, req_free_count, uid))
-                else:
-                    query_db("INSERT INTO users_meta (user_id, req_free, req_free_count, created_at) VALUES (?, ?, ?, ?)",
-                             (uid, req_free, req_free_count, datetime.datetime.now().isoformat()))
+                user_dao.save_user_req_permission(uid, req_free, req_free_count, datetime.datetime.now().isoformat())
 
         # 记录审计日志
         ip_address = get_client_ip(request)
