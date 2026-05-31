@@ -7,7 +7,6 @@ import logging
 import threading
 import datetime
 import requests
-import sqlite3
 import secrets
 import string
 import json
@@ -15,7 +14,20 @@ from fastapi import Request
 from app.plugins.base import PluginBase
 from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
 from app.core.config import cfg
-from app.core.database import query_db, DB_PATH, SYSTEM_DB_PATH
+from app.dao.temp_account_dao import (
+    create_temp_account_with_meta,
+    delete_temp_account_record,
+    ensure_temp_account_tables,
+    get_temp_account,
+    get_temp_account_identity,
+    list_temp_account_password_history,
+    list_temp_accounts,
+    list_temp_accounts_for_password_update,
+    set_temp_account_enabled,
+    temp_account_username_exists,
+    update_temp_account_config,
+    update_temp_account_password,
+)
 
 logger = logging.getLogger("uvicorn")
 
@@ -40,72 +52,7 @@ class TempAccountPlugin(PluginBase):
     def _init_db(self):
         """初始化数据库表"""
         try:
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            c = conn.cursor()
-            
-            # 临时账号表
-            c.execute("""
-                CREATE TABLE IF NOT EXISTS temp_accounts (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    username TEXT NOT NULL UNIQUE,
-                    emby_user_id TEXT,
-                    current_password TEXT NOT NULL,
-                    template_user_id TEXT,
-                    allow_routes TEXT DEFAULT '',
-                    block_routes TEXT DEFAULT '',
-                    req_free INTEGER DEFAULT 0,
-                    req_free_count INTEGER DEFAULT -1,
-                    auto_update_enabled INTEGER DEFAULT 1,
-                    update_interval_hours INTEGER DEFAULT 24,
-                    update_interval_minutes INTEGER DEFAULT 0,
-                    last_password_update TEXT,
-                    next_password_update TEXT,
-                    notify_tg INTEGER DEFAULT 1,
-                    notify_wecom INTEGER DEFAULT 0,
-                    enabled INTEGER DEFAULT 1,
-                    created_at TEXT NOT NULL,
-                    remark TEXT DEFAULT '临时账号',
-                    tags TEXT DEFAULT ''
-                )
-            """)
-            
-            # 数据库迁移：添加缺失的列
-            try:
-                c.execute("ALTER TABLE temp_accounts ADD COLUMN allow_routes TEXT DEFAULT ''")
-            except:
-                pass
-            try:
-                c.execute("ALTER TABLE temp_accounts ADD COLUMN block_routes TEXT DEFAULT ''")
-            except:
-                pass
-            try:
-                c.execute("ALTER TABLE temp_accounts ADD COLUMN tags TEXT DEFAULT ''")
-            except:
-                pass
-            try:
-                c.execute("ALTER TABLE temp_accounts ADD COLUMN req_free INTEGER DEFAULT 0")
-            except:
-                pass
-            try:
-                c.execute("ALTER TABLE temp_accounts ADD COLUMN req_free_count INTEGER DEFAULT -1")
-            except:
-                pass
-            
-            # 密码更新历史表
-            c.execute("""
-                CREATE TABLE IF NOT EXISTS temp_account_password_history (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    account_id INTEGER NOT NULL,
-                    old_password TEXT,
-                    new_password TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    notify_sent INTEGER DEFAULT 0,
-                    FOREIGN KEY (account_id) REFERENCES temp_accounts(id)
-                )
-            """)
-            
-            conn.commit()
-            conn.close()
+            ensure_temp_account_tables()
             logger.info("[临时账号] 数据库表初始化完成")
         except Exception as e:
             logger.error(f"[临时账号] 初始化数据库失败: {e}")
@@ -136,13 +83,7 @@ class TempAccountPlugin(PluginBase):
             if not is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             try:
-                conn = sqlite3.connect(SYSTEM_DB_PATH)
-                conn.row_factory = sqlite3.Row
-                rows = conn.execute("""
-                    SELECT * FROM temp_accounts ORDER BY created_at DESC
-                """).fetchall()
-                conn.close()
-                
+                rows = list_temp_accounts()
                 accounts = []
                 for row in rows:
                     # 根据 allow_routes/block_routes 推导 route_mode
@@ -281,15 +222,8 @@ class TempAccountPlugin(PluginBase):
             if not is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             try:
-                # 获取账号信息
-                conn = sqlite3.connect(SYSTEM_DB_PATH)
-                conn.row_factory = sqlite3.Row
-                row = conn.execute(
-                    "SELECT * FROM temp_accounts WHERE id = ?", (account_id,)
-                ).fetchone()
-                
+                row = get_temp_account(account_id)
                 if not row:
-                    conn.close()
                     return {"status": "error", "message": "账号不存在"}
                 
                 emby_user_id = row["emby_user_id"]
@@ -299,11 +233,7 @@ class TempAccountPlugin(PluginBase):
                 if emby_user_id:
                     self._delete_emby_user(emby_user_id)
                 
-                # 删除数据库记录
-                conn.execute("DELETE FROM temp_accounts WHERE id = ?", (account_id,))
-                conn.execute("DELETE FROM temp_account_password_history WHERE account_id = ?", (account_id,))
-                conn.commit()
-                conn.close()
+                delete_temp_account_record(account_id)
                 
                 self.log(f"删除临时账号: {username}")
                 return {"status": "success", "message": "删除成功"}
@@ -338,14 +268,8 @@ class TempAccountPlugin(PluginBase):
                 data = await request.json()
                 enabled = data.get("enabled", 1)
                 
-                conn = sqlite3.connect(SYSTEM_DB_PATH)
-                conn.row_factory = sqlite3.Row
-                row = conn.execute(
-                    "SELECT emby_user_id, username FROM temp_accounts WHERE id = ?", (account_id,)
-                ).fetchone()
-                
+                row = get_temp_account_identity(account_id)
                 if not row:
-                    conn.close()
                     return {"status": "error", "message": "账号不存在"}
                 
                 emby_user_id = row["emby_user_id"]
@@ -355,13 +279,7 @@ class TempAccountPlugin(PluginBase):
                 if emby_user_id:
                     self._set_emby_user_enabled(emby_user_id, enabled)
                 
-                # 更新数据库
-                conn.execute(
-                    "UPDATE temp_accounts SET enabled = ? WHERE id = ?",
-                    (enabled, account_id)
-                )
-                conn.commit()
-                conn.close()
+                set_temp_account_enabled(account_id, enabled)
                 
                 action = "启用" if enabled else "禁用"
                 self.log(f"{action}临时账号: {username}")
@@ -379,15 +297,8 @@ class TempAccountPlugin(PluginBase):
                 return {"status": "error", "message": "需要管理员权限"}
             try:
                 data = await request.json()
-                
-                conn = sqlite3.connect(SYSTEM_DB_PATH)
-                conn.row_factory = sqlite3.Row
-                row = conn.execute(
-                    "SELECT * FROM temp_accounts WHERE id = ?", (account_id,)
-                ).fetchone()
-                
+                row = get_temp_account(account_id)
                 if not row:
-                    conn.close()
                     return {"status": "error", "message": "账号不存在"}
                 
                 emby_user_id = row["emby_user_id"]
@@ -400,51 +311,15 @@ class TempAccountPlugin(PluginBase):
                 if new_interval_hours is not None or new_interval_minutes is not None:
                     need_recalculate_next = True
                 
-                # 更新字段
-                update_fields = []
-                update_values = []
-                
-                for field in ["remark", "auto_update_enabled", "update_interval_hours", 
-                              "update_interval_minutes", "notify_tg", "notify_wecom",
-                              "allow_routes", "block_routes", "req_free", "req_free_count", "tags"]:
-                    if field in data:
-                        update_fields.append(f"{field} = ?")
-                        update_values.append(data[field])
-                
                 # 如果更新了间隔，重新计算下次更新时间
+                next_update = None
                 if need_recalculate_next:
                     hours = new_interval_hours if new_interval_hours is not None else row["update_interval_hours"]
                     minutes = new_interval_minutes if new_interval_minutes is not None else row["update_interval_minutes"]
                     now = datetime.datetime.now()
-                    next_update = now + datetime.timedelta(minutes=int(hours) * 60 + int(minutes))
-                    update_fields.append("next_password_update = ?")
-                    update_values.append(next_update.isoformat())
-                
-                if update_fields:
-                    update_values.append(account_id)
-                    conn.execute(
-                        f"UPDATE temp_accounts SET {', '.join(update_fields)} WHERE id = ?",
-                        update_values
-                    )
-                    
-                    # 同步更新 users_meta
-                    if emby_user_id:
-                        meta_fields = []
-                        meta_values = []
-                        for field in ["remark", "allow_routes", "block_routes", "req_free", "req_free_count", "tags"]:
-                            if field in data:
-                                meta_fields.append(f"{field} = ?")
-                                meta_values.append(data[field])
-                        if meta_fields:
-                            meta_values.append(emby_user_id)
-                            conn.execute(
-                                f"UPDATE users_meta SET {', '.join(meta_fields)} WHERE user_id = ?",
-                                meta_values
-                            )
-                    
-                    conn.commit()
-                
-                conn.close()
+                    next_update = (now + datetime.timedelta(minutes=int(hours) * 60 + int(minutes))).isoformat()
+
+                update_temp_account_config(account_id, data, next_update, emby_user_id)
                 return {"status": "success", "message": "更新成功"}
             except Exception as e:
                 logger.error(f"[临时账号] 更新配置失败: {e}")
@@ -458,16 +333,7 @@ class TempAccountPlugin(PluginBase):
             if not is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             try:
-                conn = sqlite3.connect(SYSTEM_DB_PATH)
-                conn.row_factory = sqlite3.Row
-                rows = conn.execute("""
-                    SELECT * FROM temp_account_password_history 
-                    WHERE account_id = ? 
-                    ORDER BY updated_at DESC 
-                    LIMIT ?
-                """, (account_id, limit)).fetchall()
-                conn.close()
-                
+                rows = list_temp_account_password_history(account_id, limit)
                 history = [dict(row) for row in rows]
                 return {"status": "success", "data": history}
             except Exception as e:
@@ -587,12 +453,7 @@ class TempAccountPlugin(PluginBase):
                 return {"success": False, "error": "Emby API 未配置"}
             
             # 检查用户名是否已存在
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            existing = conn.execute(
-                "SELECT id FROM temp_accounts WHERE username = ?", (username,)
-            ).fetchone()
-            if existing:
-                conn.close()
+            if temp_account_username_exists(username):
                 return {"success": False, "error": "用户名已存在"}
             
             # 生成密码
@@ -606,7 +467,6 @@ class TempAccountPlugin(PluginBase):
                 timeout=10
             )
             if create_res.status_code != 200:
-                conn.close()
                 error_msg = f"创建Emby用户失败: {create_res.status_code}"
                 try:
                     err_data = create_res.json()
@@ -645,47 +505,24 @@ class TempAccountPlugin(PluginBase):
             interval_minutes = update_interval_hours * 60 + update_interval_minutes
             next_update = now + datetime.timedelta(minutes=interval_minutes)
             
-            # 写入数据库
-            conn.execute("""
-                INSERT INTO temp_accounts (
-                    username, emby_user_id, current_password, template_user_id,
-                    allow_routes, block_routes, req_free, req_free_count,
-                    auto_update_enabled, update_interval_hours, update_interval_minutes,
-                    last_password_update, next_password_update,
-                    notify_tg, notify_wecom, enabled, created_at, remark, tags
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                username, emby_user_id, password, template_user_id,
-                allow_routes, block_routes, req_free, req_free_count,
-                1, update_interval_hours, update_interval_minutes,
-                now.isoformat(), next_update.isoformat(),
-                notify_tg, notify_wecom, 1, now.isoformat(), remark, tags
-            ))
-            
-            # 同步到 users_meta 表（包括标签）
-            conn.execute("""
-                INSERT OR REPLACE INTO users_meta (user_id, remark, is_vip, max_concurrent, req_free, req_free_count, allow_routes, block_routes, tags)
-                VALUES (?, ?, 0, NULL, ?, ?, ?, ?, ?)
-            """, (emby_user_id, remark, req_free, req_free_count, allow_routes, block_routes, tags))
-            
-            # 同步标签到 user_tags 表（确保标签出现在筛选列表中）
-            if tags:
-                for tag_name in tags.split(','):
-                    tag_name = tag_name.strip()
-                    if tag_name:
-                        # 检查标签是否存在
-                        existing = conn.execute(
-                            "SELECT id FROM user_tags WHERE name = ?", (tag_name,)
-                        ).fetchone()
-                        if not existing:
-                            # 创建新标签（默认蓝色）
-                            conn.execute(
-                                "INSERT INTO user_tags (name, color) VALUES (?, 'blue')",
-                                (tag_name,)
-                            )
-            
-            conn.commit()
-            conn.close()
+            create_temp_account_with_meta(
+                username,
+                emby_user_id,
+                password,
+                template_user_id,
+                allow_routes,
+                block_routes,
+                req_free,
+                req_free_count,
+                update_interval_hours,
+                update_interval_minutes,
+                notify_tg,
+                notify_wecom,
+                now.isoformat(),
+                next_update.isoformat(),
+                remark,
+                tags,
+            )
             
             self.log(f"创建临时账号: {username}")
             return {"success": True, "password": password, "emby_user_id": emby_user_id}
@@ -951,14 +788,8 @@ class TempAccountPlugin(PluginBase):
     def _refresh_account_password(self, account_id: int, manual: bool = False) -> dict:
         """刷新账号密码"""
         try:
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            conn.row_factory = sqlite3.Row
-            row = conn.execute(
-                "SELECT * FROM temp_accounts WHERE id = ?", (account_id,)
-            ).fetchone()
-            
+            row = get_temp_account(account_id)
             if not row:
-                conn.close()
                 return {"success": False, "error": "账号不存在"}
             
             emby_user_id = row["emby_user_id"]
@@ -996,7 +827,6 @@ class TempAccountPlugin(PluginBase):
                     except:
                         pass
                     logger.error(f"[临时账号] 更新Emby密码失败: {pwd_res.status_code} - {error_detail}")
-                    conn.close()
                     return {"success": False, "error": f"更新Emby密码失败: {error_detail}"}
             
             # 计算下次更新时间
@@ -1004,21 +834,13 @@ class TempAccountPlugin(PluginBase):
             interval_minutes = update_interval_hours * 60 + update_interval_minutes
             next_update = now + datetime.timedelta(minutes=interval_minutes)
             
-            # 更新数据库
-            conn.execute("""
-                UPDATE temp_accounts 
-                SET current_password = ?, last_password_update = ?, next_password_update = ?
-                WHERE id = ?
-            """, (new_password, now.isoformat(), next_update.isoformat(), account_id))
-            
-            # 记录历史
-            conn.execute("""
-                INSERT INTO temp_account_password_history (account_id, old_password, new_password, updated_at)
-                VALUES (?, ?, ?, ?)
-            """, (account_id, old_password, new_password, now.isoformat()))
-            
-            conn.commit()
-            conn.close()
+            update_temp_account_password(
+                account_id,
+                new_password,
+                now.isoformat(),
+                next_update.isoformat(),
+                old_password,
+            )
             
             # 发送通知
             notify_sent = False
@@ -1132,16 +954,10 @@ class TempAccountPlugin(PluginBase):
     def _check_password_updates(self):
         """检查需要更新密码的账号"""
         try:
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            conn.row_factory = sqlite3.Row
             now = datetime.datetime.now()
             
             # 查找需要更新的账号
-            rows = conn.execute("""
-                SELECT id, username, next_password_update 
-                FROM temp_accounts 
-                WHERE enabled = 1 AND auto_update_enabled = 1
-            """).fetchall()
+            rows = list_temp_accounts_for_password_update()
             
             for row in rows:
                 try:
@@ -1150,8 +966,6 @@ class TempAccountPlugin(PluginBase):
                         self._refresh_account_password(row["id"], manual=False)
                 except Exception as e:
                     logger.error(f"[临时账号] 更新账号 {row['username']} 失败: {e}")
-            
-            conn.close()
         except Exception as e:
             logger.error(f"[临时账号] 检查密码更新失败: {e}")
 
