@@ -10,7 +10,7 @@
 
 - Trigger: database infrastructure refactor that starts removing `query_db()` from representative modules.
 - Applies to new backend code that reads/writes EmbyPulse system data or playback reporting data.
-- First-stage sample modules include `app/routers/history.py`, `app/routers/api_tokens.py`, `app/routers/notifications.py`, `app/routers/notify_rules.py`, `app/routers/pro.py`, `app/routers/notify_admin.py`, `app/routers/pwa.py`, `app/routers/audit.py`, `app/routers/risk.py`, `app/routers/clients.py`, `app/routers/calendar_notify.py`, `app/routers/webhook.py`, `app/services/report_service.py`, `app/routers/insight.py`, `app/routers/system_tools.py`, `app/services/risk_service.py`, `app/services/calendar_service.py`, `app/routers/views.py`, `app/routers/tasks.py`, `app/routers/dedupe.py`, and `app/routers/system.py`.
+- First-stage sample modules include `app/routers/history.py`, `app/routers/api_tokens.py`, `app/routers/notifications.py`, `app/routers/notify_rules.py`, `app/routers/pro.py`, `app/routers/notify_admin.py`, `app/routers/pwa.py`, `app/routers/audit.py`, `app/routers/risk.py`, `app/routers/clients.py`, `app/routers/calendar_notify.py`, `app/routers/webhook.py`, `app/services/report_service.py`, `app/routers/insight.py`, `app/routers/system_tools.py`, `app/services/risk_service.py`, `app/services/calendar_service.py`, `app/routers/views.py`, `app/routers/tasks.py`, `app/routers/dedupe.py`, `app/routers/system.py`, and `app/routers/db_tools.py`.
 
 ### 2. Signatures
 
@@ -96,6 +96,14 @@
 - `app.queries.report_queries.list_report_ranked_items(where_sql: str, exclude_sql: str, exclude_types, limit: int) -> list[DataRow]`
 - `app.queries.system_tool_queries.get_latest_playback_date() -> str | None`
 - `app.queries.system_tool_queries.diagnose_playback_database() -> dict`
+- `app.infra.db.migration_service.full_health_check() -> dict`
+- `app.infra.db.migration_service.ensure_tables() -> dict`
+- `app.infra.db.migration_service.check_system_tables() -> dict`
+- `app.infra.db.migration_service.check_old_db_tables() -> dict`
+- `app.infra.db.migration_service.migrate_tables(mode="incremental", tables=None) -> dict`
+- `app.infra.db.migration_service.backup_system_database() -> dict | None`
+- `app.infra.db.migration_service.backup_existing_databases() -> dict`
+- `app.infra.db.migration_service.deep_check_system_database() -> dict`
 - Scenario modules live in `app/queries/*_queries.py` and `app/dao/*_dao.py` during the transition.
 
 ### 3. Contracts
@@ -136,6 +144,7 @@
 - Good: `tasks.py` keeps Emby scheduled-task polling and display-name assembly in the route while delegating task config and translation persistence to `task_dao`.
 - Good: `dedupe.py` keeps Emby scan/delete orchestration and duplicate scoring in the route while delegating dedupe result, whitelist, and config persistence to `dedupe_dao`.
 - Good: `system.py` keeps settings validation, external connectivity probes, and response assembly in the route while delegating database diagnostics, repair DDL, and dashboard layout persistence to DAO/query modules.
+- Good: `db_tools.py` keeps admin permission checks, audit logging, and restore path validation in the route while delegating database health, migration, backup, restore, and deep-check operations to `migration_service`.
 - Bad: a router imports `query_db`, `SYSTEM_DB_PATH`, or `sqlite3` only to run route-local SQL.
 
 ### 6. Tests Required
@@ -185,7 +194,7 @@ tokens = list_api_tokens(user_id)
 
 - `app.infra.db.schema_registry` is the new import point for schema metadata during migration.
 - Existing schema definitions still delegate to `app.core.db_schemas` until ownership is fully moved.
-- `app.infra.db.migration_service` is the new boundary for migration/health orchestration and currently delegates to existing implementations.
+- `app.infra.db.migration_service` is the new boundary for migration, health, backup, restore, and database-tool deep-check orchestration and currently delegates to existing implementations.
 
 ---
 

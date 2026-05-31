@@ -7,15 +7,26 @@
 from fastapi import APIRouter, Request, BackgroundTasks
 from fastapi.responses import JSONResponse
 from typing import Optional, List
-from app.core.db_manager import (
-    full_health_check, ensure_tables, backup_database, 
-    migrate_tables, get_backup_list, delete_backup, restore_backup,
-    check_system_tables, check_old_db_tables, BACKUP_DIR
+from app.infra.db.migration_service import (
+    backup_existing_databases,
+    backup_old_database,
+    backup_system_database,
+    check_old_db_tables,
+    check_system_tables,
+    deep_check_system_database,
+    delete_backup,
+    ensure_tables,
+    full_health_check,
+    get_backup_directory,
+    get_backup_list,
+    get_system_table_names,
+    migrate_tables,
+    old_database_exists,
+    old_database_path,
+    restore_backup,
 )
-from app.core.config import DB_PATH, SYSTEM_DB_PATH
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 import os
-from app.core.security_utils import safe_error_message
 from app.core.rate_limiter import get_client_ip
 
 router = APIRouter(prefix="/api/db", tags=["数据库管理"])
@@ -66,146 +77,8 @@ async def api_db_deep_check(request: Request):
     # 🔒 安全检查：必须管理员
     if not is_admin_user(request):
         return JSONResponse(status_code=403, content={"error": "需要管理员权限"})
-    
-    from app.core.db_schemas import SYSTEM_TABLES, TABLE_SCHEMAS, TABLE_ALTERS
-    import sqlite3
-    
-    results = {
-        "system_db": {
-            "exists": os.path.exists(SYSTEM_DB_PATH),
-            "path": SYSTEM_DB_PATH,
-            "size_mb": 0,
-            "tables": {},
-            "scan_log": []
-        }
-    }
-    
-    # 步骤1: 检查数据库文件
-    results["system_db"]["scan_log"].append({
-        "step": "check_file",
-        "status": "running",
-        "message": "正在检查数据库文件..."
-    })
-    
-    if not os.path.exists(SYSTEM_DB_PATH):
-        results["system_db"]["scan_log"][0]["status"] = "error"
-        results["system_db"]["scan_log"][0]["message"] = "数据库文件不存在"
-        results["missing_tables"] = list(SYSTEM_TABLES)
-        results["is_healthy"] = False
-        return results
-    
-    results["system_db"]["scan_log"][0]["status"] = "success"
-    results["system_db"]["scan_log"][0]["message"] = f"数据库文件存在: {SYSTEM_DB_PATH}"
-    results["system_db"]["size_mb"] = round(os.path.getsize(SYSTEM_DB_PATH) / (1024 * 1024), 2)
-    
-    # 步骤2: 连接数据库
-    results["system_db"]["scan_log"].append({
-        "step": "connect",
-        "status": "running",
-        "message": "正在连接数据库..."
-    })
-    
-    try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        cursor = conn.cursor()
-        
-        # 获取现有表
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
-        existing_tables = {row[0] for row in cursor.fetchall()}
-        
-        results["system_db"]["scan_log"][1]["status"] = "success"
-        results["system_db"]["scan_log"][1]["message"] = f"已连接，发现 {len(existing_tables)} 张表"
-    except Exception as e:
-        results["system_db"]["scan_log"][1]["status"] = "error"
-        results["system_db"]["scan_log"][1]["message"] = safe_error_message(e, "连接失败")
-        results["is_healthy"] = False
-        return results
-    
-    # 步骤3: 逐表检测
-    results["system_db"]["scan_log"].append({
-        "step": "scan_tables",
-        "status": "running",
-        "message": f"正在扫描 {len(SYSTEM_TABLES)} 张系统表..."
-    })
-    
-    missing_tables = []
-    missing_alters = {}
-    table_details = {}
-    
-    for i, table_name in enumerate(SYSTEM_TABLES):
-        if table_name in existing_tables:
-            # 获取表信息
-            try:
-                cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
-                count = cursor.fetchone()[0]
-                cursor.execute(f"PRAGMA table_info({table_name})")
-                columns = [row[1] for row in cursor.fetchall()]
-                
-                table_details[table_name] = {
-                    "exists": True,
-                    "rows": count,
-                    "columns": columns,
-                    "status": "ok"
-                }
-            except Exception as e:
-                table_details[table_name] = {
-                    "exists": True,
-                    "rows": 0,
-                    "columns": [],
-                    "status": "error",
-                    "error": safe_error_message(e, "查询失败")
-                }
-        else:
-            missing_tables.append(table_name)
-            table_details[table_name] = {
-                "exists": False,
-                "rows": 0,
-                "columns": [],
-                "status": "missing"
-            }
-    
-    results["system_db"]["tables"] = table_details
-    results["system_db"]["scan_log"][2]["status"] = "success"
-    results["system_db"]["scan_log"][2]["message"] = f"扫描完成: {len(SYSTEM_TABLES) - len(missing_tables)} 正常, {len(missing_tables)} 缺失"
-    
-    # 步骤4: 检测字段增量
-    results["system_db"]["scan_log"].append({
-        "step": "check_alters",
-        "status": "running",
-        "message": "正在检测表字段..."
-    })
-    
-    for table_name, alters in TABLE_ALTERS.items():
-        if table_name in existing_tables:
-            cursor.execute(f"PRAGMA table_info({table_name})")
-            existing_columns = {row[1] for row in cursor.fetchall()}
-            
-            for alter_sql in alters:
-                parts = alter_sql.split("ADD COLUMN ")
-                if len(parts) > 1:
-                    field_name = parts[1].split()[0]
-                    if field_name not in existing_columns:
-                        if table_name not in missing_alters:
-                            missing_alters[table_name] = []
-                        missing_alters[table_name].append(field_name)
-    
-    results["system_db"]["scan_log"][3]["status"] = "success"
-    results["system_db"]["scan_log"][3]["message"] = f"字段检测完成: {sum(len(v) for v in missing_alters.values())} 个缺失字段"
-    
-    conn.close()
-    
-    # 总结
-    results["missing_tables"] = missing_tables
-    results["missing_alters"] = missing_alters
-    results["is_healthy"] = len(missing_tables) == 0 and len(missing_alters) == 0
-    results["summary"] = {
-        "total_tables": len(SYSTEM_TABLES),
-        "existing_tables": len(SYSTEM_TABLES) - len(missing_tables),
-        "missing_tables": len(missing_tables),
-        "missing_columns": sum(len(v) for v in missing_alters.values())
-    }
-    
-    return results
+
+    return deep_check_system_database()
 
 
 @router.get("/migration/check")
@@ -242,9 +115,7 @@ async def api_db_repair(request: Request):
     )
     
     # 先备份
-    backup_result = None
-    if os.path.exists(SYSTEM_DB_PATH):
-        backup_result = backup_database(SYSTEM_DB_PATH)
+    backup_result = backup_system_database()
     
     # 执行修复
     repair_result = ensure_tables()
@@ -280,22 +151,14 @@ async def api_db_backup(request: Request):
         details={"message": "创建数据库备份"}
     )
     
-    results = {}
-    
-    # 备份系统数据库
-    if os.path.exists(SYSTEM_DB_PATH):
-        results["system_db"] = backup_database(SYSTEM_DB_PATH)
-    
-    # 备份旧数据库（如果存在）
-    if os.path.exists(DB_PATH):
-        results["old_db"] = backup_database(DB_PATH)
+    results = backup_existing_databases()
     
     success = any(r.get("success") for r in results.values() if r)
     
     return {
         "success": success,
         "backups": results,
-        "backup_dir": BACKUP_DIR
+        "backup_dir": get_backup_directory()
     }
 
 
@@ -310,7 +173,7 @@ async def api_list_backups(request: Request):
     
     return {
         "success": True,
-        "backup_dir": BACKUP_DIR,
+        "backup_dir": get_backup_directory(),
         "backups": get_backup_list()
     }
 
@@ -370,25 +233,23 @@ async def api_db_migrate(
     )
     
     # 检查旧数据库是否存在
-    if not os.path.exists(DB_PATH):
+    if not old_database_exists():
         return {
             "success": False,
             "error": "源数据库不存在，无法迁移",
-            "old_db_path": DB_PATH
+            "old_db_path": old_database_path()
         }
     
     # 解析要迁移的表
-    from app.core.db_schemas import SYSTEM_TABLES
+    system_tables = get_system_table_names()
     tables_list = None
     if tables:
-        tables_list = [t.strip() for t in tables.split(",") if t.strip() and t.strip() in SYSTEM_TABLES]
+        tables_list = [t.strip() for t in tables.split(",") if t.strip() and t.strip() in system_tables]
         if not tables_list:
             return {"success": False, "error": "指定的表名均不在系统表列表中"}
     
     # 先备份目标数据库
-    backup_result = None
-    if os.path.exists(SYSTEM_DB_PATH):
-        backup_result = backup_database(SYSTEM_DB_PATH)
+    backup_result = backup_system_database()
     
     # 执行迁移
     migrate_result = migrate_tables(mode=mode, tables=tables_list)
@@ -435,7 +296,7 @@ async def api_db_restore(request: Request):
     if ".." in backup_path.split("/") or ".." in backup_path.split("\\"):
         return {"success": False, "error": "无效的备份文件路径"}
     real_backup = os.path.realpath(backup_path)
-    real_backup_dir = os.path.realpath(BACKUP_DIR)
+    real_backup_dir = os.path.realpath(get_backup_directory())
     if not real_backup.startswith(real_backup_dir + os.sep) and real_backup != real_backup_dir:
         return {"success": False, "error": "无效的备份文件路径"}
     
@@ -461,8 +322,8 @@ async def api_full_check(request: Request):
     }
     
     # 1. 备份
-    if os.path.exists(SYSTEM_DB_PATH):
-        results["backup"] = backup_database(SYSTEM_DB_PATH)
+    results["backup"] = backup_system_database()
+    if results["backup"]:
         if results["backup"].get("success"):
             results["actions"].append(f"已备份: {results['backup']['backup_name']}")
     
@@ -476,7 +337,7 @@ async def api_full_check(request: Request):
             results["actions"].append(f"已添加字段: {len(results['repair']['added_columns'])} 个")
     
     # 3. 检查是否需要迁移
-    if os.path.exists(DB_PATH):
+    if old_database_exists():
         migration_check = check_old_db_tables()
         if migration_check["migratable_tables"]:
             # 自动增量迁移
