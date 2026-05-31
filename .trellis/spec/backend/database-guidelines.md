@@ -156,6 +156,7 @@
 - `app.dao.point_dao.list_user_point_logs(user_id: str, page: int = 1, page_size: int = 20) -> dict`
 - `app.dao.point_dao.list_red_packet_logs(packet_id: int) -> list[dict]`
 - `app.dao.point_dao.list_point_rank(limit: int = 10) -> list[DataRow]`
+- `app.dao.point_dao.perform_user_checkin(user_id: str, username: str) -> dict`
 - `app.infra.db.local_playback_store.insert_webhook_playback_ip_record(...) -> None`
 - `app.infra.db.perf_stats.get_query_perf_stats() -> dict`
 - `app.queries.client_queries.count_playback_clients_by_app() -> list[DataRow]`
@@ -224,7 +225,7 @@
 - Good: `auth.py` keeps password hashing, local/Emby login decisions, TOTP validation, session updates, and audit logging in the route while delegating login failure and `local_users` persistence to `auth_dao`.
 - Good: `messages.py` keeps permission checks, Emby user lookups, content sanitization, bot notification delivery, and response assembly in the route while delegating message, mute, notification-block, announcement, and related user lookup tables to `message_dao`.
 - Good: `media_request.py` keeps request validation, Emby/TMDB/MoviePilot calls, cache assembly, notification delivery, and response shaping in the route while delegating request, feedback, update, invitation, point, gap-cache, and user metadata persistence to `media_request_dao`.
-- Good: `points.py` keeps admin/session checks, Emby user enrichment, pagination payload assembly, and later game workflows in the route while delegating point config, point schema bootstrap, point balances, batch updates, point log reads, red-packet log reads, and point ranking reads to `point_dao`.
+- Good: `points.py` keeps admin/session checks, Emby user enrichment, pagination payload assembly, and later game workflows in the route while delegating point config, point schema bootstrap, point balances, batch updates, point log reads, red-packet log reads, point ranking reads, and daily check-in transactions to `point_dao`.
 - Bad: a router imports `query_db`, `SYSTEM_DB_PATH`, or `sqlite3` only to run route-local SQL.
 
 ### 6. Tests Required

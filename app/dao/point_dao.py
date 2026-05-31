@@ -1,4 +1,6 @@
 import json
+import datetime
+import random
 
 from app.infra.db.system_store import system_store
 
@@ -406,3 +408,84 @@ def list_point_rank(limit: int = 10):
         "SELECT user_id, points FROM users_meta WHERE points > 0 ORDER BY points DESC LIMIT ?",
         (limit,),
     )
+
+
+def perform_user_checkin(user_id: str, username: str) -> dict:
+    with system_store.connect() as conn:
+        cursor = conn.cursor()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            if cursor.execute(
+                "SELECT 1 FROM point_logs WHERE user_id = ? AND action LIKE '每日签到%' AND date(created_at, 'localtime') = date('now', 'localtime')",
+                (user_id,),
+            ).fetchone():
+                conn.rollback()
+                return {"status": "error", "message": "今天已经签到过了，明天再来吧！"}
+
+            config = {row[0]: row[1] for row in cursor.execute("SELECT key, value FROM point_config").fetchall()}
+            reward = random.randint(int(config.get("checkin_min", 10)), int(config.get("checkin_max", 30)))
+
+            streak_bonus = 0
+            streak_count = 0
+            if int(config.get("enable_streak_bonus", 0)) == 1:
+                today = datetime.date.today()
+                yesterday = today - datetime.timedelta(days=1)
+
+                streak_row = cursor.execute(
+                    "SELECT streak_count, last_checkin FROM point_checkin_streak WHERE user_id = ?",
+                    (user_id,),
+                ).fetchone()
+
+                if streak_row:
+                    last_checkin = streak_row[1]
+                    if last_checkin == str(yesterday):
+                        streak_count = streak_row[0] + 1
+                    elif last_checkin == str(today):
+                        streak_count = streak_row[0]
+                    elif int(config.get("streak_reset_on_miss", 1)) == 1:
+                        streak_count = 1
+                    else:
+                        streak_count = streak_row[0] + 1
+                else:
+                    streak_count = 1
+
+                if streak_count >= 7 and streak_count % 7 == 0:
+                    streak_bonus = int(config.get("streak_7_days", 100))
+                if streak_count >= 30 and streak_count % 30 == 0:
+                    streak_bonus += int(config.get("streak_30_days", 500))
+
+                cursor.execute(
+                    "INSERT OR REPLACE INTO point_checkin_streak (user_id, streak_count, last_checkin) VALUES (?, ?, ?)",
+                    (user_id, streak_count, str(today)),
+                )
+
+            total_reward = reward + streak_bonus
+
+            row = cursor.execute("SELECT points FROM users_meta WHERE user_id = ?", (user_id,)).fetchone()
+            new_points = (row[0] or 0) + total_reward if row else total_reward
+            if row:
+                cursor.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (new_points, user_id))
+            else:
+                cursor.execute("INSERT INTO users_meta (user_id, points) VALUES (?, ?)", (user_id, new_points))
+
+            action_desc = "每日签到"
+            if streak_bonus > 0:
+                action_desc += f" (连续{streak_count}天奖励+{streak_bonus})"
+
+            cursor.execute(
+                "INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
+                (user_id, username, action_desc, total_reward, new_points),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
+    return {
+        "status": "success",
+        "message": f"签到成功！抽中 {reward} 积分",
+        "reward": reward,
+        "balance": new_points,
+        "streak_count": streak_count,
+        "streak_bonus": streak_bonus,
+    }

@@ -177,82 +177,9 @@ def user_checkin(request: Request):
     user = request.session.get("req_user")
     if not user: return {"status": "error", "message": "未登录"}
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH); c = conn.cursor()
-        conn.execute("BEGIN IMMEDIATE")
-        if c.execute("SELECT 1 FROM point_logs WHERE user_id = ? AND action LIKE '每日签到%' AND date(created_at, 'localtime') = date('now', 'localtime')", (user['Id'],)).fetchone():
-            conn.rollback(); conn.close(); return {"status": "error", "message": "今天已经签到过了，明天再来吧！"}
-        
-        config = {r[0]: r[1] for r in c.execute("SELECT key, value FROM point_config").fetchall()}
-        reward = random.randint(int(config.get('checkin_min', 10)), int(config.get('checkin_max', 30)))
-        
-        # 🔥 连续签到奖励
-        streak_bonus = 0
-        streak_count = 0
-        if int(config.get('enable_streak_bonus', 0)) == 1:
-            today = datetime.date.today()
-            yesterday = today - datetime.timedelta(days=1)
-            
-            # 获取连续签到记录
-            streak_row = c.execute("SELECT streak_count, last_checkin FROM point_checkin_streak WHERE user_id = ?", (user['Id'],)).fetchone()
-            
-            if streak_row:
-                last_checkin = streak_row[1]
-                if last_checkin == str(yesterday):
-                    # 连续签到
-                    streak_count = streak_row[0] + 1
-                elif last_checkin == str(today):
-                    # 今天已签到（理论上不会走到这里）
-                    streak_count = streak_row[0]
-                else:
-                    # 断签
-                    if int(config.get('streak_reset_on_miss', 1)) == 1:
-                        streak_count = 1
-                    else:
-                        streak_count = streak_row[0] + 1
-            else:
-                streak_count = 1
-            
-            # 计算连续签到奖励
-            if streak_count >= 7 and streak_count % 7 == 0:
-                streak_bonus = int(config.get('streak_7_days', 100))
-            if streak_count >= 30 and streak_count % 30 == 0:
-                streak_bonus += int(config.get('streak_30_days', 500))
-            
-            # 更新连续签到记录
-            c.execute("INSERT OR REPLACE INTO point_checkin_streak (user_id, streak_count, last_checkin) VALUES (?, ?, ?)", 
-                     (user['Id'], streak_count, str(today)))
-        
-        total_reward = reward + streak_bonus
-        
-        row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (user['Id'],)).fetchone()
-        new_points = (row[0] or 0) + total_reward if row else total_reward
-        if row: c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (new_points, user['Id']))
-        else: c.execute("INSERT INTO users_meta (user_id, points) VALUES (?, ?)", (user['Id'], new_points))
-        
-        action_desc = f"每日签到"
-        if streak_bonus > 0:
-            action_desc += f" (连续{streak_count}天奖励+{streak_bonus})"
-        
-        c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)", 
-                 (user['Id'], user['Name'], action_desc, total_reward, new_points))
-        conn.commit(); conn.close()
-        
-        result = {
-            "status": "success", 
-            "message": f"签到成功！抽中 {reward} 积分", 
-            "reward": reward, 
-            "balance": new_points,
-            "streak_count": streak_count,
-            "streak_bonus": streak_bonus
-        }
-        return result
+        return point_dao.perform_user_checkin(user['Id'], user['Name'])
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 class RedeemModel(BaseModel): item_id: str
 
