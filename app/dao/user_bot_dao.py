@@ -156,6 +156,10 @@ def list_tg_binding_names():
     return system_store.fetch_all("SELECT emby_user_id, tg_username, tg_display_name FROM tg_user_bindings")
 
 
+def list_emby_tg_user_bindings():
+    return system_store.fetch_all("SELECT emby_user_id, tg_user_id FROM tg_user_bindings")
+
+
 def count_bindings() -> int:
     row = system_store.fetch_one("SELECT COUNT(*) as count FROM tg_user_bindings")
     return row["count"] if row else 0

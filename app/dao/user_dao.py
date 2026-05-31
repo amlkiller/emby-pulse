@@ -1,6 +1,80 @@
 from app.infra.db.system_store import system_store
 
 
+def ensure_users_meta_column(column_name: str, column_definition: str) -> None:
+    with system_store.connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(users_meta)")
+        columns = [column[1] for column in cursor.fetchall()]
+        if column_name not in columns:
+            cursor.execute(f"ALTER TABLE users_meta ADD COLUMN {column_definition}")
+            conn.commit()
+
+
+def migrate_admin_disabled(disabled_user_ids, today: str):
+    with system_store.connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(users_meta)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if "admin_disabled" in columns:
+            return None
+
+        cursor.execute("ALTER TABLE users_meta ADD COLUMN admin_disabled INTEGER DEFAULT 0")
+        migrated_count = 0
+        for user_id in disabled_user_ids:
+            row = cursor.execute("SELECT expire_date FROM users_meta WHERE user_id = ?", (user_id,)).fetchone()
+            expire_date = row[0] if row else None
+            if not expire_date or expire_date >= today:
+                cursor.execute("UPDATE users_meta SET admin_disabled = 1 WHERE user_id = ?", (user_id,))
+                migrated_count += 1
+
+        conn.commit()
+        return migrated_count
+
+
+def list_users_with_expire_date_for_check():
+    return system_store.fetch_all("SELECT user_id, expire_date FROM users_meta WHERE expire_date IS NOT NULL")
+
+
+def list_all_user_meta():
+    return system_store.fetch_all("SELECT * FROM users_meta")
+
+
+def get_user_meta(user_id: str):
+    return system_store.fetch_one("SELECT * FROM users_meta WHERE user_id = ?", (user_id,))
+
+
+def set_user_admin_disabled(user_id: str, disabled: bool) -> None:
+    system_store.execute(
+        "UPDATE users_meta SET admin_disabled = ? WHERE user_id = ?",
+        (1 if disabled else 0, user_id),
+    )
+
+
+def get_user_library_settings(user_id: str):
+    ensure_users_meta_column("admin_enabled_folders", "admin_enabled_folders TEXT")
+    ensure_users_meta_column("hidden_libraries", "hidden_libraries TEXT DEFAULT ''")
+    return system_store.fetch_one(
+        "SELECT admin_enabled_folders, hidden_libraries FROM users_meta WHERE user_id = ?",
+        (user_id,),
+    )
+
+
+def get_user_admin_enabled_folders(user_id: str):
+    ensure_users_meta_column("admin_enabled_folders", "admin_enabled_folders TEXT")
+    return system_store.fetch_one("SELECT admin_enabled_folders FROM users_meta WHERE user_id = ?", (user_id,))
+
+
+def save_user_admin_enabled_folders(user_id: str, admin_enabled_folders: str) -> None:
+    ensure_users_meta_column("admin_enabled_folders", "admin_enabled_folders TEXT")
+    system_store.execute("UPDATE users_meta SET admin_enabled_folders = ? WHERE user_id = ?", (admin_enabled_folders, user_id))
+
+
+def save_user_hidden_libraries(user_id: str, hidden_libraries: str) -> None:
+    ensure_users_meta_column("hidden_libraries", "hidden_libraries TEXT DEFAULT ''")
+    system_store.execute("UPDATE users_meta SET hidden_libraries = ? WHERE user_id = ?", (hidden_libraries, user_id))
+
+
 def set_user_pinned(user_id: str, pinned: bool, created_at: str) -> None:
     with system_store.connect() as conn:
         cursor = conn.cursor()

@@ -6,6 +6,7 @@ from app.core.database import query_db, SYSTEM_DB_PATH
 from app.dao import audit_dao
 from app.dao import invitation_dao
 from app.dao import user_dao
+from app.dao import user_bot_dao
 from app.core.media_adapter import media_api
 
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
@@ -282,21 +283,6 @@ def api_check_delete_verified(request: Request):
 def migrate_admin_disabled():
     """迁移 admin_disabled 字段,区分过期禁用和管理员禁用"""
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-
-        # 1. 检查字段是否存在
-        c.execute("PRAGMA table_info(users_meta)")
-        cols = [row[1] for row in c.fetchall()]
-        if 'admin_disabled' in cols:
-            conn.close()
-            return  # 已迁移,跳过
-
-        # 2. 添加字段
-        c.execute("ALTER TABLE users_meta ADD COLUMN admin_disabled INTEGER DEFAULT 0")
-        logging.getLogger("uvicorn").info("✅ 数据库迁移:已添加 admin_disabled 字段")
-
-        # 3. 迁移数据:获取所有被禁用的用户
         today = datetime.date.today().strftime("%Y-%m-%d")
         disabled_user_ids = set()
 
@@ -309,21 +295,10 @@ def migrate_admin_disabled():
         except Exception as e:
             logging.getLogger("uvicorn").warning(f"⚠️ 迁移时获取用户列表失败: {e}")
 
-        # 4. 标记:未过期但被禁用 → 管理员禁用 (admin_disabled = 1)
-        migrated_count = 0
-        for uid in disabled_user_ids:
-            row = c.execute("SELECT expire_date FROM users_meta WHERE user_id = ?", (uid,)).fetchone()
-            exp = row[0] if row else None
-
-            # 未过期(或无到期时间)但被禁用 = 管理员禁用
-            if not exp or exp >= today:
-                c.execute("UPDATE users_meta SET admin_disabled = 1 WHERE user_id = ?", (uid,))
-                migrated_count += 1
-            # 已过期被禁用 = 过期禁用,保持 admin_disabled = 0(默认值)
-
-        conn.commit()
-        conn.close()
-        logging.getLogger("uvicorn").info(f"✅ 数据库迁移完成:已标记 {migrated_count} 个管理员禁用用户")
+        migrated_count = user_dao.migrate_admin_disabled(disabled_user_ids, today)
+        if migrated_count is not None:
+            logging.getLogger("uvicorn").info("✅ 数据库迁移:已添加 admin_disabled 字段")
+            logging.getLogger("uvicorn").info(f"✅ 数据库迁移完成:已标记 {migrated_count} 个管理员禁用用户")
     except Exception as e:
         logging.getLogger("uvicorn").error(f"❌ 数据库迁移失败: {e}")
 
@@ -421,7 +396,7 @@ def clone_policy(target_policy: dict, src_policy: dict, copy_lib: bool, copy_pol
 def check_expired_users():
     """检查过期用户并自动禁用(标记为过期禁用,非管理员禁用)"""
     try:
-        rows = query_db("SELECT user_id, expire_date FROM users_meta WHERE expire_date IS NOT NULL")
+        rows = user_dao.list_users_with_expire_date_for_check()
         if not rows: return
         now_str = datetime.datetime.now().strftime("%Y-%m-%d")
         for row in rows:
@@ -437,11 +412,7 @@ def check_expired_users():
                             media_api.post(f"/Users/{uid}/Policy", json=policy)
                             # 标记为过期禁用(非管理员禁用)
                             try:
-                                conn = sqlite3.connect(SYSTEM_DB_PATH)
-                                c = conn.cursor()
-                                c.execute("UPDATE users_meta SET admin_disabled = 0 WHERE user_id = ?", (uid,))
-                                conn.commit()
-                                conn.close()
+                                user_dao.set_user_admin_disabled(uid, False)
                             except Exception: pass
                 except Exception as e: pass
     except Exception as e: pass
@@ -500,16 +471,14 @@ def api_manage_users(request: Request, refresh: bool = False):
         emby_users = get_emby_users_cached()
         if emby_users is None:
             return {"status": "error", "message": "媒体服务器无法连接"}
-        meta_rows = query_db("SELECT * FROM users_meta")
+        meta_rows = user_dao.list_all_user_meta()
         meta_map = {r['user_id']: dict(r) for r in meta_rows} if meta_rows else {}
 
         # 查询 TG 绑定关系 (emby_user_id -> tg_user_id)
         tg_bindings = {}
         try:
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            rows = conn.execute("SELECT emby_user_id, tg_user_id FROM tg_user_bindings").fetchall()
-            tg_bindings = {row[0]: row[1] for row in rows if row[0]}
-            conn.close()
+            rows = user_bot_dao.list_emby_tg_user_bindings()
+            tg_bindings = {row["emby_user_id"]: row["tg_user_id"] for row in rows if row["emby_user_id"]}
         except:
             pass
 
@@ -560,7 +529,7 @@ def api_get_single_user(user_id: str, request: Request):
         if res.status_code == 200:
             user_data = res.json()
             policy = user_data.get('Policy', {})
-            meta_row = query_db("SELECT * FROM users_meta WHERE user_id = ?", (user_id,), one=True)
+            meta_row = user_dao.get_user_meta(user_id)
 
             return {
                 "status": "success",
@@ -733,20 +702,9 @@ def api_get_user_libraries(request: Request):
         enabled_folders = policy.get("EnabledFolders", [])
 
         # 🔥 从本地数据库获取管理员初始设置的媒体库权限
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        # 确保 admin_enabled_folders 字段存在
-        c.execute("PRAGMA table_info(users_meta)")
-        cols = [col[1] for col in c.fetchall()]
-        if "admin_enabled_folders" not in cols:
-            c.execute("ALTER TABLE users_meta ADD COLUMN admin_enabled_folders TEXT")
-            conn.commit()
-
-        c.execute("SELECT admin_enabled_folders, hidden_libraries FROM users_meta WHERE user_id = ?", (user_id,))
-        row = c.fetchone()
-        admin_enabled_folders_str = row[0] if row and row[0] else None
-        user_hidden_str = row[1] if row and len(row) > 1 and row[1] else None
-        conn.close()
+        row = user_dao.get_user_library_settings(user_id)
+        admin_enabled_folders_str = row["admin_enabled_folders"] if row and row["admin_enabled_folders"] else None
+        user_hidden_str = row["hidden_libraries"] if row and row["hidden_libraries"] else None
 
         # 🔥 解析管理员允许的媒体库
         if admin_enabled_folders_str:
@@ -773,12 +731,7 @@ def api_get_user_libraries(request: Request):
                 # 更新 admin_enabled_folders
                 admin_enabled_folders = current_admin_allowed
                 try:
-                    conn = sqlite3.connect(SYSTEM_DB_PATH)
-                    c = conn.cursor()
-                    c.execute("UPDATE users_meta SET admin_enabled_folders = ? WHERE user_id = ?",
-                              (",".join(admin_enabled_folders), user_id))
-                    conn.commit()
-                    conn.close()
+                    user_dao.save_user_admin_enabled_folders(user_id, ",".join(admin_enabled_folders))
                 except:
                     pass
 
@@ -831,19 +784,8 @@ def api_update_hidden_libraries(data: HiddenLibrariesModel, request: Request):
         all_guids = [lib["Guid"] for lib in libs if "Guid" in lib]
 
         # 🔥 获取管理员设置的默认权限
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        # 确保 admin_enabled_folders 字段存在
-        c.execute("PRAGMA table_info(users_meta)")
-        cols = [col[1] for col in c.fetchall()]
-        if "admin_enabled_folders" not in cols:
-            c.execute("ALTER TABLE users_meta ADD COLUMN admin_enabled_folders TEXT")
-            conn.commit()
-
-        c.execute("SELECT admin_enabled_folders FROM users_meta WHERE user_id = ?", (user_id,))
-        row = c.fetchone()
-        admin_enabled_folders_str = row[0] if row and row[0] else None
-        conn.close()
+        row = user_dao.get_user_admin_enabled_folders(user_id)
+        admin_enabled_folders_str = row["admin_enabled_folders"] if row and row["admin_enabled_folders"] else None
 
         # 🔥 解析管理员允许的媒体库
         if admin_enabled_folders_str:
@@ -874,16 +816,7 @@ def api_update_hidden_libraries(data: HiddenLibrariesModel, request: Request):
 
         # 保存到本地数据库
         try:
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            c = conn.cursor()
-            c.execute("PRAGMA table_info(users_meta)")
-            cols = [col[1] for col in c.fetchall()]
-            if "hidden_libraries" not in cols:
-                c.execute("ALTER TABLE users_meta ADD COLUMN hidden_libraries TEXT DEFAULT ''")
-            c.execute("UPDATE users_meta SET hidden_libraries = ? WHERE user_id = ?",
-                      (','.join(hidden_guids), user_id))
-            conn.commit()
-            conn.close()
+            user_dao.save_user_hidden_libraries(user_id, ','.join(hidden_guids))
         except Exception as e:
             logger.warning(f"保存隐藏媒体库到本地失败: {e}")
 

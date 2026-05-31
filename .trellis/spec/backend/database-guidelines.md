@@ -90,6 +90,15 @@
 - `app.dao.task_dao.save_task_translation(original_name: str, translated_name: str) -> None`
 - `app.dao.task_dao.delete_task_translation(original_name: str) -> None`
 - `app.dao.user_dao.set_user_pinned(user_id: str, pinned: bool, created_at: str) -> None`
+- `app.dao.user_dao.migrate_admin_disabled(disabled_user_ids, today: str) -> int | None`
+- `app.dao.user_dao.list_users_with_expire_date_for_check() -> list[DataRow]`
+- `app.dao.user_dao.list_all_user_meta() -> list[DataRow]`
+- `app.dao.user_dao.get_user_meta(user_id: str) -> DataRow | None`
+- `app.dao.user_dao.set_user_admin_disabled(user_id: str, disabled: bool) -> None`
+- `app.dao.user_dao.get_user_library_settings(user_id: str) -> DataRow | None`
+- `app.dao.user_dao.get_user_admin_enabled_folders(user_id: str) -> DataRow | None`
+- `app.dao.user_dao.save_user_admin_enabled_folders(user_id: str, admin_enabled_folders: str) -> None`
+- `app.dao.user_dao.save_user_hidden_libraries(user_id: str, hidden_libraries: str) -> None`
 - `app.dao.user_dao.save_user_req_permission(user_id: str, req_free: int, req_free_count: int, created_at: str) -> None`
 - `app.dao.user_dao.get_user_req_permission(user_id: str) -> dict`
 - `app.dao.user_dao.list_users_with_expire_date() -> list[DataRow]`
@@ -112,6 +121,7 @@
 - `app.dao.user_bot_dao.unbind_channel(channel_id) -> None`
 - `app.dao.user_bot_dao.list_bindings() -> list[dict]`
 - `app.dao.user_bot_dao.list_tg_binding_names() -> list[DataRow]`
+- `app.dao.user_bot_dao.list_emby_tg_user_bindings() -> list[DataRow]`
 - `app.dao.user_bot_dao.count_bindings() -> int`
 - `app.dao.user_bot_dao.create_registration_log(tg_user_id, emby_username, emby_user_id, reg_type: str = "open") -> None`
 - `app.dao.user_bot_dao.record_bot_user(tg_user_id, tg_name: str = "") -> None`
