@@ -208,6 +208,7 @@
 - `app.dao.point_dao.list_point_rank(limit: int = 10) -> list[DataRow]`
 - `app.dao.point_dao.perform_user_checkin(user_id: str, username: str) -> dict`
 - `app.infra.db.local_playback_store.insert_webhook_playback_ip_record(...) -> None`
+- `app.infra.db.local_playback_store.insert_bot_playback_history_record(...) -> None`
 - `app.infra.db.perf_stats.get_query_perf_stats() -> dict`
 - `app.queries.client_queries.count_playback_clients_by_app() -> list[DataRow]`
 - `app.queries.client_queries.count_playback_devices(limit: int = 10) -> list[DataRow]`
@@ -274,7 +275,7 @@
 - Good: `db_tools.py` keeps admin permission checks, audit logging, and restore path validation in the route while delegating database health, migration, backup, restore, and deep-check operations to `migration_service`.
 - Good: `gaps.py` keeps Emby/TMDB scanning, download handoff, and in-memory scan-state updates in the route while delegating gap tables, config, and scan cache persistence to `gap_dao`.
 - Good: `bot.py` keeps bot settings validation, Telegram/WeCom HTTP calls, and admin response assembly in the route while delegating user-bot admin tables, registration logs, TG bindings, lottery, and scratch-card persistence to `bot_admin_dao`.
-- Good: `bot_service.py` keeps Emby availability/Policy checks, Telegram callback handling, message editing, notification dispatch, gap scan-state mutation, whois result formatting, and text rendering in the service while delegating request-admin message sync persistence, notify-rule/mute reads/bootstrap, media request/feedback status persistence, gap table/cache persistence, message reply/block persistence, playback read queries, TG binding lookup, and user expiration metadata reads to DAO/query boundaries.
+- Good: `bot_service.py` keeps Emby availability/Policy checks, Telegram callback handling, message editing, notification dispatch, gap scan-state mutation, whois result formatting, and text rendering in the service while delegating request-admin message sync persistence, notify-rule/mute reads/bootstrap, media request/feedback status persistence, gap table/cache persistence, message reply/block persistence, playback read/write access, TG binding lookup, and user expiration metadata reads to DAO/query/infra boundaries.
 - Good: `stats.py` keeps chart aggregation, media-server enrichment, and permission filtering in the route while delegating playback SQL execution and base user filters to `stats_queries`.
 - Good: `auth.py` keeps password hashing, local/Emby login decisions, TOTP validation, session updates, and audit logging in the route while delegating login failure and `local_users` persistence to `auth_dao`.
 - Good: `messages.py` keeps permission checks, Emby user lookups, content sanitization, bot notification delivery, and response assembly in the route while delegating message, mute, notification-block, announcement, and related user lookup tables to `message_dao`.

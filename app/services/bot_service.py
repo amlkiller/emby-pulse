@@ -8,15 +8,15 @@ import urllib.parse
 import json 
 import re
 import ipaddress
-import sqlite3
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from app.core.config import cfg, REPORT_COVER_URL, FALLBACK_IMAGE_URL
-from app.core.database import query_db, get_base_filter, add_sys_notification, DB_PATH, SYSTEM_DB_PATH
+from app.core.database import get_base_filter, add_sys_notification
 from app.dao import bot_service_dao, media_request_dao, message_dao, user_bot_dao
 from app.dao import gap_dao
 from app.dao import notify_admin_dao, notify_rule_dao
 from app.dao import user_dao
+from app.infra.db.local_playback_store import insert_bot_playback_history_record
 from app.queries import stats_queries
 from app.utils.proxy_helper import get_safe_proxies, get_safe_wecom_base  # 🔒 SSRF 安全代理读取
 from app.services.report_service import report_gen, HAS_PIL
@@ -1679,21 +1679,6 @@ class NotificationBot:
     def _save_playback_history(self, data, user_id, user_name, item, ip, location):
         """保存播放历史到本地数据库"""
         try:
-            import sqlite3
-            from app.core.config import DB_PATH
-            conn = sqlite3.connect(DB_PATH)
-            c = conn.cursor()
-            # 检查表是否存在新字段
-            try:
-                c.execute("SELECT RemoteEndPoint FROM PlaybackActivity LIMIT 1")
-            except sqlite3.OperationalError:
-                # 字段不存在，添加字段
-                try: c.execute("ALTER TABLE PlaybackActivity ADD COLUMN RemoteEndPoint TEXT")
-                except Exception: pass
-                try: c.execute("ALTER TABLE PlaybackActivity ADD COLUMN Location TEXT")
-                except Exception: pass
-                try: c.execute("ALTER TABLE PlaybackActivity ADD COLUMN ISP TEXT")
-                except Exception: pass
             # 🔥 使用共享模块获取运营商信息
             isp = get_isp(ip)
             # 准备数据
@@ -1703,14 +1688,7 @@ class NotificationBot:
             session = data.get('Session') or data
             client = session.get('Client') or data.get('Client', '')
             device = session.get('DeviceName') or data.get('DeviceName', '')
-            # 插入数据
-            c.execute("""
-                INSERT INTO PlaybackActivity
-                (UserId, UserName, ItemId, ItemName, ItemType, PlayDuration, Client, DeviceName, RemoteEndPoint, Location, ISP)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (user_id, user_name, item_id, item_name, item_type, 0, client, device, ip, location, isp))
-            conn.commit()
-            conn.close()
+            insert_bot_playback_history_record(user_id, user_name, item_id, item_name, item_type, client, device, ip, location, isp)
         except Exception as e:
             logger.error(f"[Playback] 保存历史记录失败: {e}")
 
