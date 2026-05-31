@@ -7,7 +7,6 @@
 import os
 import json
 import logging
-import sqlite3
 import hashlib
 import requests
 import time
@@ -20,10 +19,17 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 
+from app.dao.user_backup_dao import (
+    get_user_meta_for_backup,
+    list_point_logs_for_backup,
+    list_tg_bindings_detail_for_backup,
+    list_users_meta_for_backup,
+    replace_point_logs_for_backup,
+    upsert_user_meta_for_backup,
+)
 from app.plugins.base import PluginBase
 from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
 from app.core.config import cfg
-from app.core.database import query_db, SYSTEM_DB_PATH
 from app.core.media_adapter import media_api
 
 logger = logging.getLogger("uvicorn")
@@ -159,17 +165,15 @@ class UserBackupPlugin(PluginBase):
             emby_users = res.json()
             
             # 获取本地扩展属性
-            meta_rows = query_db("SELECT * FROM users_meta")
+            meta_rows = list_users_meta_for_backup()
             meta_map = {r['user_id']: dict(r) for r in meta_rows} if meta_rows else {}
             
             # 获取 TG 绑定关系
             tg_bindings = {}
             try:
-                conn = sqlite3.connect(SYSTEM_DB_PATH)
-                rows = conn.execute("SELECT emby_user_id, tg_user_id FROM tg_user_bindings").fetchall()
-                tg_bindings = {row[0]: row[1] for row in rows if row[0]}
-                conn.close()
-            except:
+                rows = list_tg_bindings_detail_for_backup()
+                tg_bindings = {row["emby_user_id"]: row["tg_user_id"] for row in rows if row["emby_user_id"]}
+            except Exception:
                 pass
             
             users = []
@@ -212,7 +216,7 @@ class UserBackupPlugin(PluginBase):
     def _collect_point_logs(self) -> List[Dict]:
         """收集积分变动记录"""
         try:
-            rows = query_db("SELECT * FROM point_logs ORDER BY created_at DESC LIMIT 1000")
+            rows = list_point_logs_for_backup()
             return [dict(r) for r in rows] if rows else []
         except:
             return []
@@ -220,11 +224,16 @@ class UserBackupPlugin(PluginBase):
     def _collect_tg_bindings(self) -> List[Dict]:
         """收集 TG 绑定关系"""
         try:
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            # 明确指定字段名，避免顺序问题
-            rows = conn.execute("SELECT tg_user_id, emby_user_id, emby_username, bound_at FROM tg_user_bindings").fetchall()
-            conn.close()
-            return [{"tg_user_id": r[0], "emby_user_id": r[1], "emby_username": r[2], "bound_at": r[3] if r[3] else ''} for r in rows]
+            rows = list_tg_bindings_detail_for_backup()
+            return [
+                {
+                    "tg_user_id": r["tg_user_id"],
+                    "emby_user_id": r["emby_user_id"],
+                    "emby_username": r["emby_username"],
+                    "bound_at": r["bound_at"] if r["bound_at"] else '',
+                }
+                for r in rows
+            ]
         except:
             return []
 
@@ -813,7 +822,7 @@ class UserBackupPlugin(PluginBase):
                             current_policy = res.json().get('Policy', {})
                         
                         # 获取当前 meta
-                        current_meta = query_db("SELECT * FROM users_meta WHERE user_id = ?", (uid,), one=True)
+                        current_meta = get_user_meta_for_backup(uid)
                         
                         # 更新 meta 字段
                         meta_updates = {}
@@ -959,13 +968,9 @@ class UserBackupPlugin(PluginBase):
                         # 执行更新
                         if meta_updates:
                             if current_meta:
-                                set_clause = ", ".join([f"{k} = ?" for k in meta_updates.keys()])
-                                query_db(f"UPDATE users_meta SET {set_clause} WHERE user_id = ?", 
-                                        list(meta_updates.values()) + [uid])
+                                upsert_user_meta_for_backup(uid, meta_updates, datetime.now().isoformat())
                             else:
-                                cols = "user_id, " + ", ".join(meta_updates.keys()) + ", created_at"
-                                vals = [uid] + list(meta_updates.values()) + [datetime.now().isoformat()]
-                                query_db(f"INSERT INTO users_meta ({cols}) VALUES ({', '.join(['?']*len(vals))})", vals)
+                                upsert_user_meta_for_backup(uid, meta_updates, datetime.now().isoformat())
                         
                         if policy_updates and user_exists:
                             new_policy = {**current_policy, **policy_updates}
@@ -982,19 +987,7 @@ class UserBackupPlugin(PluginBase):
                 # 恢复积分记录（仅覆盖模式）
                 if point_logs and mode == "overwrite" and "points" in fields:
                     try:
-                        conn = sqlite3.connect(SYSTEM_DB_PATH)
-                        c = conn.cursor()
-                        # 清空现有积分记录
-                        c.execute("DELETE FROM point_logs")
-                        # 插入备份的积分记录
-                        for log in point_logs:
-                            c.execute("""
-                                INSERT INTO point_logs (id, user_id, username, action, amount, balance, created_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?)
-                            """, (log['id'], log['user_id'], log['username'], log['action'], 
-                                  log['amount'], log['balance'], log['created_at']))
-                        conn.commit()
-                        conn.close()
+                        replace_point_logs_for_backup(point_logs)
                         self.log(f"✅ 恢复积分记录 {len(point_logs)} 条")
                     except Exception as e:
                         logger.warning(f"[用户备份] 恢复积分记录失败: {e}")

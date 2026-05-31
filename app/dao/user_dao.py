@@ -46,6 +46,31 @@ def get_user_meta(user_id: str):
     return system_store.fetch_one("SELECT * FROM users_meta WHERE user_id = ?", (user_id,))
 
 
+def upsert_user_meta_fields(user_id: str, fields: dict, created_at: str) -> None:
+    if not fields:
+        return
+
+    with system_store.connect() as conn:
+        cursor = conn.cursor()
+        exists = cursor.execute("SELECT 1 FROM users_meta WHERE user_id = ?", (user_id,)).fetchone()
+
+        if exists:
+            set_clause = ", ".join(f"{column} = ?" for column in fields.keys())
+            cursor.execute(
+                f"UPDATE users_meta SET {set_clause} WHERE user_id = ?",
+                list(fields.values()) + [user_id],
+            )
+        else:
+            columns = ["user_id", *fields.keys(), "created_at"]
+            placeholders = ", ".join(["?"] * len(columns))
+            cursor.execute(
+                f"INSERT INTO users_meta ({', '.join(columns)}) VALUES ({placeholders})",
+                [user_id, *fields.values(), created_at],
+            )
+
+        conn.commit()
+
+
 def set_user_admin_disabled(user_id: str, disabled: bool) -> None:
     system_store.execute(
         "UPDATE users_meta SET admin_disabled = ? WHERE user_id = ?",
