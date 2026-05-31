@@ -252,6 +252,9 @@
 - `app.dao.point_dao.set_pk_invitation_status(invite_id, status: str) -> None`
 - `app.dao.point_dao.mark_pk_invitation_expired(invite_id) -> None`
 - `app.dao.point_dao.get_latest_pending_pk_invitation_for_target(target_id: str) -> DataRow | None`
+- `app.dao.point_dao.list_pending_pk_invitations_for_target(target_id: str) -> list[dict]`
+- `app.dao.point_dao.reject_pending_pk_invitation(invite_id, target_id: str) -> dict`
+- `app.dao.point_dao.clear_pk_invitations() -> int`
 - `app.dao.point_dao.save_pk_invitation_message_id(invite_id, message_id) -> None`
 - `app.dao.point_dao.create_pk_invitation(...) -> dict`
 - `app.dao.point_dao.create_red_packet(total_amount: int, total_count: int, chat_id, creator_id: str, creator_name: str) -> dict`

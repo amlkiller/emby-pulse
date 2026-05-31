@@ -464,6 +464,64 @@ def get_latest_pending_pk_invitation_for_target(target_id: str):
     )
 
 
+def list_pending_pk_invitations_for_target(target_id: str):
+    with system_store.connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE pk_invitations SET status = 'expired' WHERE expires_at < datetime('now', 'localtime') AND status = 'pending'"
+        )
+        cursor.execute(
+            """
+            SELECT id, challenger_id, challenger_name, points, created_at, expires_at
+            FROM pk_invitations
+            WHERE target_id = ? AND status = 'pending'
+            ORDER BY created_at DESC
+            """,
+            (target_id,),
+        )
+        columns = [desc[0] for desc in cursor.description]
+        rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        conn.commit()
+        return rows
+
+
+def reject_pending_pk_invitation(invite_id, target_id: str) -> dict:
+    with system_store.connect() as conn:
+        cursor = conn.cursor()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            invite = cursor.execute(
+                """
+                SELECT id, challenger_name, target_id
+                FROM pk_invitations
+                WHERE id = ? AND status = 'pending'
+                """,
+                (invite_id,),
+            ).fetchone()
+            if not invite:
+                conn.rollback()
+                return {"status": "error", "message": "邀请不存在或已处理"}
+            if invite[2] != target_id:
+                conn.rollback()
+                return {"status": "error", "message": "这不是发给你的PK邀请"}
+
+            cursor.execute("UPDATE pk_invitations SET status = 'rejected' WHERE id = ?", (invite_id,))
+            conn.commit()
+            return {"status": "success", "challenger_name": invite[1]}
+        except Exception:
+            conn.rollback()
+            raise
+
+
+def clear_pk_invitations() -> int:
+    with system_store.connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM pk_invitations")
+        count = cursor.rowcount
+        conn.commit()
+        return count
+
+
 def save_pk_invitation_message_id(invite_id, message_id) -> None:
     system_store.execute(
         "UPDATE pk_invitations SET message_id = ? WHERE id = ?",
@@ -481,6 +539,7 @@ def create_pk_invitation(
     points: int,
     chat_id,
     command_message_id=None,
+    expired_cleanup: str = "mark",
 ) -> dict:
     with system_store.connect() as conn:
         cursor = conn.cursor()
@@ -490,25 +549,41 @@ def create_pk_invitation(
 
             if int(config.get("enable_user_pk", 0)) == 0:
                 conn.rollback()
-                return {"status": "error", "message": "用户PK功能未开启"}
+                return {"status": "error", "code": "disabled", "message": "用户PK功能未开启"}
 
             min_points = int(config.get("user_pk_min_points", 10))
             max_points = int(config.get("user_pk_max_points", 500))
             if points < min_points or points > max_points:
                 conn.rollback()
-                return {"status": "error", "message": f"下注积分需在 {min_points}-{max_points} 之间"}
+                return {
+                    "status": "error",
+                    "code": "range",
+                    "message": f"下注积分需在 {min_points}-{max_points} 之间",
+                    "min_points": min_points,
+                    "max_points": max_points,
+                }
 
             challenger_row = cursor.execute("SELECT points FROM users_meta WHERE user_id = ?", (challenger_id,)).fetchone()
             challenger_points = challenger_row[0] if challenger_row else 0
             if challenger_points < points:
                 conn.rollback()
-                return {"status": "error", "message": f"积分不足，当前积分：{challenger_points}"}
+                return {
+                    "status": "error",
+                    "code": "challenger_balance",
+                    "message": f"积分不足，当前积分：{challenger_points}",
+                    "current_points": challenger_points,
+                }
 
             target_row = cursor.execute("SELECT points FROM users_meta WHERE user_id = ?", (target_id,)).fetchone()
             target_points = target_row[0] if target_row else 0
             if target_points < points:
                 conn.rollback()
-                return {"status": "error", "message": f"对方积分不足（{target_points}），无法接受此PK"}
+                return {
+                    "status": "error",
+                    "code": "target_balance",
+                    "message": f"对方积分不足（{target_points}），无法接受此PK",
+                    "target_points": target_points,
+                }
 
             today_pk_count = cursor.execute(
                 """
@@ -522,11 +597,19 @@ def create_pk_invitation(
             max_per_day = int(config.get("user_pk_max_per_day", 5))
             if today_pk_count >= max_per_day:
                 conn.rollback()
-                return {"status": "error", "message": f"今日PK次数已达上限（{max_per_day}次）"}
+                return {
+                    "status": "error",
+                    "code": "daily_limit",
+                    "message": f"今日PK次数已达上限（{max_per_day}次）",
+                    "max_per_day": max_per_day,
+                }
 
-            cursor.execute(
-                "UPDATE pk_invitations SET status = 'expired' WHERE expires_at < datetime('now', 'localtime') AND status = 'pending'"
-            )
+            if expired_cleanup == "delete":
+                cursor.execute("DELETE FROM pk_invitations WHERE expires_at < datetime('now', 'localtime')")
+            else:
+                cursor.execute(
+                    "UPDATE pk_invitations SET status = 'expired' WHERE expires_at < datetime('now', 'localtime') AND status = 'pending'"
+                )
             pending = cursor.execute(
                 """
                 SELECT id
@@ -537,7 +620,7 @@ def create_pk_invitation(
             ).fetchone()
             if pending:
                 conn.rollback()
-                return {"status": "error", "message": "已有待处理的PK邀请，请等待对方回应"}
+                return {"status": "error", "code": "pending", "message": "已有待处理的PK邀请，请等待对方回应"}
 
             timeout_minutes = int(config.get("user_pk_timeout", 5))
             expires_at = datetime.datetime.now() + datetime.timedelta(minutes=timeout_minutes)
@@ -564,7 +647,12 @@ def create_pk_invitation(
             )
             invite_id = cursor.lastrowid
             conn.commit()
-            return {"status": "success", "invite_id": invite_id, "timeout_minutes": timeout_minutes}
+            return {
+                "status": "success",
+                "invite_id": invite_id,
+                "expires_at": expires_at.isoformat(),
+                "timeout_minutes": timeout_minutes,
+            }
         except Exception:
             conn.rollback()
             raise

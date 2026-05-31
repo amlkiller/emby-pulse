@@ -528,107 +528,48 @@ def pk_invite(data: PKInviteModel, request: Request):
         return {"status": "error", "message": "未登录"}
     
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        config = {r[0]: r[1] for r in c.execute("SELECT key, value FROM point_config").fetchall()}
-        
-        # 检查是否启用用户PK
-        if int(config.get('enable_user_pk', 0)) == 0:
-            conn.close()
-            return {"status": "error", "message": "用户PK功能未开启"}
-        
         # 不能PK自己
         if data.target_id == user['Id']:
-            conn.close()
             return {"status": "error", "message": "不能PK自己"}
-        
-        # 获取配置
-        min_points = int(config.get('user_pk_min_points', 10))
-        max_points = int(config.get('user_pk_max_points', 500))
-        max_per_day = int(config.get('user_pk_max_per_day', 5))
-        timeout_minutes = int(config.get('user_pk_timeout', 5))
-        
-        # 检查下注积分范围
-        if data.points < min_points or data.points > max_points:
-            conn.close()
-            return {"status": "error", "message": f"下注积分必须在 {min_points}-{max_points} 之间"}
-        
-        # 获取发起者积分
-        from_row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (user['Id'],)).fetchone()
-        from_points = from_row[0] if from_row else 0
-        
-        if from_points < data.points:
-            conn.close()
-            return {"status": "error", "message": f"积分不足，当前积分: {from_points}"}
-        
-        # 获取目标用户积分
-        to_row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (data.target_id,)).fetchone()
-        to_points = to_row[0] if to_row else 0
-        
-        if to_points < data.points:
-            conn.close()
-            return {"status": "error", "message": f"对方积分不足（{to_points}），无法接受此PK"}
-        
+
         # 获取目标用户名称
         try:
             emby_users = media_api.get("/Users", timeout=5).json()
             to_user_name = next((u['Name'] for u in emby_users if u['Id'] == data.target_id), None)
             if not to_user_name:
-                conn.close()
                 return {"status": "error", "message": "目标用户不存在"}
         except:
-            conn.close()
             return {"status": "error", "message": "无法验证目标用户"}
-        
-        # 检查今日PK次数
-        today_pk_count = c.execute(
-            "SELECT COUNT(*) FROM pk_logs WHERE challenger_id = ? AND date(created_at, 'localtime') = date('now', 'localtime')",
-            (user['Id'],)
-        ).fetchone()[0]
-        if today_pk_count >= max_per_day:
-            conn.close()
-            return {"status": "error", "message": f"今日PK次数已达上限（{max_per_day}次）"}
-        
-        # 清理过期邀请
-        c.execute("DELETE FROM pk_invitations WHERE expires_at < datetime('now', 'localtime')")
-        
-        # 检查是否有待处理的邀请
-        pending = c.execute(
-            "SELECT id FROM pk_invitations WHERE challenger_id = ? AND target_id = ? AND status = 'pending' AND expires_at > datetime('now', 'localtime')",
-            (user['Id'], data.target_id)
-        ).fetchone()
-        if pending:
-            conn.close()
-            return {"status": "error", "message": "已有待处理的PK邀请，请等待对方回应"}
-        
-        # 创建邀请
-        from datetime import datetime, timedelta
-        expires_at = datetime.now() + timedelta(minutes=timeout_minutes)
-        
-        c.execute(
-            "INSERT INTO pk_invitations (challenger_id, challenger_name, target_id, target_name, points, chat_id, created_at, expires_at, status) VALUES (?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), ?, 'pending')",
-            (user['Id'], user['Name'], data.target_id, to_user_name, data.points, data.chat_id, expires_at.isoformat())
+
+        invite_result = point_dao.create_pk_invitation(
+            user['Id'],
+            user['Name'],
+            user['Name'],
+            data.target_id,
+            to_user_name,
+            "",
+            data.points,
+            data.chat_id,
+            expired_cleanup="delete",
         )
-        invite_id = c.lastrowid
-        
-        conn.commit()
-        conn.close()
-        
+        if invite_result.get("status") != "success":
+            message = invite_result.get("message", "PK邀请失败")
+            if invite_result.get("code") == "range":
+                message = f"下注积分必须在 {invite_result.get('min_points')}-{invite_result.get('max_points')} 之间"
+            elif invite_result.get("code") == "challenger_balance":
+                message = f"积分不足，当前积分: {invite_result.get('current_points')}"
+            return {"status": "error", "message": message}
+
         return {
             "status": "success",
             "message": f"已向 {to_user_name} 发起PK邀请，下注 {data.points} 积分",
-            "invite_id": invite_id,
-            "expires_at": expires_at.isoformat(),
-            "timeout_minutes": timeout_minutes
+            "invite_id": invite_result["invite_id"],
+            "expires_at": invite_result["expires_at"],
+            "timeout_minutes": invite_result["timeout_minutes"]
         }
 
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 
 @router.post("/api/user/points/pk/accept")
@@ -644,7 +585,6 @@ def pk_accept(data: PKAcceptModel, request: Request):
         conn.execute("BEGIN IMMEDIATE")
         config = {r[0]: r[1] for r in c.execute("SELECT key, value FROM point_config").fetchall()}
 
-        # 获取邀请
         invite = c.execute(
             "SELECT * FROM pk_invitations WHERE id = ? AND status = 'pending'",
             (data.invite_id,)
@@ -653,64 +593,51 @@ def pk_accept(data: PKAcceptModel, request: Request):
         if not invite:
             conn.rollback(); conn.close()
             return {"status": "error", "message": "邀请不存在或已过期"}
-        
-        # 检查是否是目标用户
-        if invite[3] != user['Id']:  # target_id
+
+        if invite[3] != user['Id']:
             conn.rollback(); conn.close()
             return {"status": "error", "message": "这不是发给你的PK邀请"}
 
-        # 检查是否过期
         from datetime import datetime
-        expires_at = datetime.fromisoformat(invite[9])  # expires_at
+        expires_at = datetime.fromisoformat(invite[9])
         if datetime.now() > expires_at:
             c.execute("UPDATE pk_invitations SET status = 'expired' WHERE id = ?", (data.invite_id,))
             conn.commit()
             conn.close()
             return {"status": "error", "message": "PK邀请已过期"}
-        
-        # 🔥 重新检查积分范围（防止配置被修改后绕过）
-        points = invite[5]  # 下注积分
+
+        points = invite[5]
         min_points = int(config.get('user_pk_min_points', 10))
         max_points = int(config.get('user_pk_max_points', 500))
         if points < min_points or points > max_points:
             c.execute("UPDATE pk_invitations SET status = 'cancelled' WHERE id = ?", (data.invite_id,))
             conn.commit(); conn.close()
             return {"status": "error", "message": f"积分范围已变更，PK取消（需在 {min_points}-{max_points} 之间）"}
-        
-        # 获取配置
+
         tax_rate = int(config.get('user_pk_tax', 5))
-        
-        # 获取双方积分
         challenger_points_row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (invite[1],)).fetchone()
         challenger_points = challenger_points_row[0] if challenger_points_row else 0
-        
         target_points_row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (invite[3],)).fetchone()
         target_points = target_points_row[0] if target_points_row else 0
-        
-        points = invite[5]  # 下注积分
-        
-        # 再次检查双方积分
+
         if challenger_points < points or target_points < points:
             conn.rollback(); conn.close()
             return {"status": "error", "message": "双方积分不足，PK取消"}
-        
-        # 掷骰子
+
         challenger_roll = random.randint(1, 100)
         target_roll = random.randint(1, 100)
-        
-        # 判断胜负
+
         if challenger_roll > target_roll:
-            winner_id = invite[1]  # challenger_id
-            winner_name = invite[2]  # challenger_name
-            loser_id = invite[3]  # target_id
-            loser_name = invite[4]  # target_name
+            winner_id = invite[1]
+            winner_name = invite[2]
+            loser_id = invite[3]
+            loser_name = invite[4]
         elif target_roll > challenger_roll:
-            winner_id = invite[3]  # target_id
-            winner_name = invite[4]  # target_name
-            loser_id = invite[1]  # challenger_id
-            loser_name = invite[2]  # challenger_name
+            winner_id = invite[3]
+            winner_name = invite[4]
+            loser_id = invite[1]
+            loser_name = invite[2]
         else:
-            # 平局，不扣积分
             c.execute("UPDATE pk_invitations SET status = 'completed' WHERE id = ?", (data.invite_id,))
             conn.commit()
             conn.close()
@@ -721,31 +648,24 @@ def pk_accept(data: PKAcceptModel, request: Request):
                 "target_roll": target_roll,
                 "tie": True
             }
-        
-        # 计算积分转移（扣除手续费）
+
         win_amount = points
         tax = int(win_amount * tax_rate / 100)
         actual_win = win_amount - tax
-        
-        # 🔥 再次检查积分是否足够（防止并发问题）
         challenger_points_now = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (invite[1],)).fetchone()
         target_points_now = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (invite[3],)).fetchone()
         challenger_balance = challenger_points_now[0] if challenger_points_now else 0
         target_balance = target_points_now[0] if target_points_now else 0
-        
-        # 🔥 检查输家是否有足够积分
+
         loser_balance = challenger_balance if loser_id == invite[1] else target_balance
         if loser_balance < points:
             c.execute("UPDATE pk_invitations SET status = 'cancelled' WHERE id = ?", (data.invite_id,))
             conn.commit()
             conn.close()
             return {"status": "error", "message": f"积分不足，PK取消（输家积分：{loser_balance}，需要：{points}）"}
-        
-        # 更新积分
+
         c.execute("UPDATE users_meta SET points = points + ? WHERE user_id = ?", (actual_win, winner_id))
         c.execute("UPDATE users_meta SET points = points - ? WHERE user_id = ?", (points, loser_id))
-        
-        # 记录日志
         c.execute(
             "INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, (SELECT points FROM users_meta WHERE user_id = ?))",
             (winner_id, winner_name, f"PK战胜 {loser_name}", actual_win, winner_id)
@@ -754,16 +674,11 @@ def pk_accept(data: PKAcceptModel, request: Request):
             "INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, (SELECT points FROM users_meta WHERE user_id = ?))",
             (loser_id, loser_name, f"PK败给 {winner_name}", -points, loser_id)
         )
-        
-        # 记录PK日志
         c.execute(
             "INSERT INTO pk_logs (challenger_id, challenger_name, target_id, target_name, points, challenger_roll, target_roll, winner_id, winner_name, tax) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (invite[1], invite[2], invite[3], invite[4], points, challenger_roll, target_roll, winner_id, winner_name, tax)
         )
-        
-        # 更新邀请状态
         c.execute("UPDATE pk_invitations SET status = 'completed' WHERE id = ?", (data.invite_id,))
-        
         conn.commit()
         conn.close()
         
@@ -794,41 +709,13 @@ def pk_reject(data: PKRejectModel, request: Request):
         return {"status": "error", "message": "未登录"}
     
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        
-        # 获取邀请
-        invite = c.execute(
-            "SELECT * FROM pk_invitations WHERE id = ? AND status = 'pending'",
-            (data.invite_id,)
-        ).fetchone()
-        
-        if not invite:
-            conn.close()
-            return {"status": "error", "message": "邀请不存在或已处理"}
-        
-        # 检查是否是目标用户
-        if invite[3] != user['Id']:  # target_id
-            conn.close()
-            return {"status": "error", "message": "这不是发给你的PK邀请"}
-        
-        # 更新状态
-        c.execute("UPDATE pk_invitations SET status = 'rejected' WHERE id = ?", (data.invite_id,))
-        conn.commit()
-        conn.close()
-        
-        return {
-            "status": "success",
-            "message": f"已拒绝 {invite[2]} 的PK邀请"
-        }
+        result = point_dao.reject_pending_pk_invitation(data.invite_id, user['Id'])
+        if result.get("status") != "success":
+            return result
+        return {"status": "success", "message": f"已拒绝 {result['challenger_name']} 的PK邀请"}
 
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 
 @router.get("/api/user/points/pk/pending")
@@ -839,40 +726,10 @@ def pk_pending(request: Request):
         return {"status": "error", "message": "未登录"}
     
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        
-        # 清理过期邀请
-        c.execute("UPDATE pk_invitations SET status = 'expired' WHERE expires_at < datetime('now', 'localtime') AND status = 'pending'")
-        conn.commit()
-        
-        # 获取发给当前用户的待处理邀请
-        invites = c.execute(
-            "SELECT id, challenger_id, challenger_name, points, created_at, expires_at FROM pk_invitations WHERE target_id = ? AND status = 'pending' ORDER BY created_at DESC",
-            (user['Id'],)
-        ).fetchall()
-        conn.close()
-        
-        result = []
-        for inv in invites:
-            result.append({
-                "id": inv[0],
-                "challenger_id": inv[1],
-                "challenger_name": inv[2],
-                "points": inv[3],
-                "created_at": inv[4],
-                "expires_at": inv[5]
-            })
-        
-        return {"status": "success", "data": result}
+        return {"status": "success", "data": point_dao.list_pending_pk_invitations_for_target(user['Id'])}
 
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 
 @router.post("/api/points/pk/clear")
@@ -883,25 +740,11 @@ def clear_pk_invitations(request: Request):
         return {"status": "error", "message": "未登录"}
     
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        
-        # 清除所有PK邀请
-        c.execute("DELETE FROM pk_invitations")
-        count = c.rowcount
-        
-        conn.commit()
-        conn.close()
-        
+        count = point_dao.clear_pk_invitations()
         return {"status": "success", "count": count, "message": f"已清除 {count} 条PK邀请"}
 
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 
 # ===================== 🎰 老虎机 API =====================
