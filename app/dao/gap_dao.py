@@ -86,6 +86,14 @@ def delete_gap_record_by_series_episode(series_id, season, episode) -> None:
     )
 
 
+def delete_cleared_gap_record(series_id, season, episode) -> bool:
+    deleted = system_store.execute(
+        "DELETE FROM gap_records WHERE series_id=? AND season_number=? AND episode_number=? AND status=2",
+        (series_id, season, episode),
+    )
+    return deleted > 0
+
+
 def save_gap_record_status(series_id, series_name, season, episode, status: int) -> None:
     system_store.execute(
         "INSERT INTO gap_records (series_id, series_name, season_number, episode_number, status) VALUES (?, ?, ?, ?, ?) ON CONFLICT(series_id, season_number, episode_number) DO UPDATE SET status = ?",

@@ -14,6 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from app.core.config import cfg, REPORT_COVER_URL, FALLBACK_IMAGE_URL
 from app.core.database import query_db, get_base_filter, add_sys_notification, DB_PATH, SYSTEM_DB_PATH
 from app.dao import bot_service_dao, media_request_dao
+from app.dao import gap_dao
 from app.dao import notify_admin_dao, notify_rule_dao
 from app.dao import user_dao
 from app.utils.proxy_helper import get_safe_proxies, get_safe_wecom_base  # 🔒 SSRF 安全代理读取
@@ -637,7 +638,7 @@ class SystemDaemon:
             episode = int(item.get("IndexNumber", -1))
             if season == -1 or episode == -1: return
 
-            query_db("DELETE FROM gap_records WHERE series_id=? AND season_number=? AND episode_number=?", (series_id, season, episode))
+            gap_dao.delete_gap_record_by_series_episode(series_id, season, episode)
             try:
                 from app.routers.gaps import state_lock, scan_state
                 with state_lock:
@@ -646,10 +647,10 @@ class SystemDaemon:
                             if str(s.get("series_id")) == series_id:
                                 s["gaps"] = [ep for ep in s.get("gaps", []) if not (int(ep.get("season")) == season and int(ep.get("episode")) == episode)]
                                 if len(s["gaps"]) == 0 and s.get("tmdb_status") in ["Ended", "Canceled"]:
-                                    try: query_db("INSERT OR IGNORE INTO gap_perfect_series (series_id, tmdb_id, series_name) VALUES (?, ?, ?)", (series_id, s.get("tmdb_id"), s.get("series_name")))
+                                    try: gap_dao.add_gap_perfect_series(series_id, s.get("tmdb_id"), s.get("series_name"))
                                     except Exception: pass
                         scan_state["results"] = [s for s in scan_state["results"] if len(s.get("gaps", [])) > 0]
-                        query_db("INSERT OR REPLACE INTO gap_scan_cache (id, result_json, updated_at) VALUES (1, ?, datetime('now', 'localtime'))", (json.dumps(scan_state["results"]),))
+                        gap_dao.save_gap_scan_cache(scan_state["results"])
             except Exception: pass
         except Exception as e: pass
 
@@ -765,9 +766,7 @@ class SystemDaemon:
             for ep in episodes:
                 s_idx = ep.get('ParentIndexNumber'); e_idx = ep.get('IndexNumber')
                 if s_idx is None or e_idx is None: continue
-                res = query_db("SELECT id FROM gap_records WHERE series_id=? AND season_number=? AND episode_number=? AND status=2", (series_id, s_idx, e_idx))
-                if res:
-                    query_db("DELETE FROM gap_records WHERE id=?", (res[0]['id'],))
+                if gap_dao.delete_cleared_gap_record(series_id, s_idx, e_idx):
                     bus.publish("notify.gap_cleared", {"s_idx": s_idx, "e_idx": e_idx, "series_name": series_name})
         except Exception as e: pass
 
