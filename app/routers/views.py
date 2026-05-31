@@ -2,15 +2,19 @@ import os
 import requests
 import json
 import re
-import secrets
-import sqlite3
 import datetime
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from app.core.config import cfg
-from app.core.database import query_db, SYSTEM_DB_PATH
+from app.dao.invitation_dao import (
+    claim_registration_invitation,
+    get_invitation_by_code,
+    restore_invitation_code_usage,
+    save_registered_user_meta,
+)
+from app.dao.notification_dao import add_system_notification
 from app.core.media_adapter import media_api
 from app.core.security_utils import validate_redirect_url
 from app.core.security import validate_password_strength
@@ -426,7 +430,7 @@ async def login_page(request: Request):
 
 @router.get("/invite/{code}", response_class=HTMLResponse)
 async def invite_page(code: str, request: Request):
-    invite = query_db("SELECT * FROM invitations WHERE code = ?", (code,), one=True)
+    invite = get_invitation_by_code(code)
     valid = False; days = 0
     if invite and invite['used_count'] < invite['max_uses']: valid = True; days = invite['days']
     
@@ -456,13 +460,7 @@ class RegisterModel(BaseModel):
 def _restore_invitation_code(code):
     """Emby 用户创建失败时回滚邀请码消费计数"""
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.execute(
-            "UPDATE invitations SET used_count = MAX(used_count - 1, 0), used_by = NULL, used_at = NULL WHERE code = ?",
-            (code,)
-        )
-        conn.commit()
-        conn.close()
+        restore_invitation_code_usage(code)
     except Exception:
         pass
 
@@ -503,43 +501,9 @@ async def api_register(data: RegisterModel, request: Request):
             return {"status": "error", "message": safe_error_message(e, "检查用户名失败")}
 
         # 3. 所有校验通过后，原子抢占邀请码（防 TOCTOU 竞态）
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.row_factory = sqlite3.Row
-        try:
-            conn.execute("BEGIN IMMEDIATE")
-            cur = conn.execute(
-                """UPDATE invitations
-                   SET used_count = used_count + 1,
-                       used_at = datetime('now','localtime'),
-                       used_by = ?
-                   WHERE code = ? AND status != 1 AND used_count < max_uses
-                   AND (type IS NULL OR type = 'register')""",
-                (safe_name, data.code)
-            )
-            if cur.rowcount == 0:
-                conn.rollback()
-                exists = conn.execute(
-                    "SELECT 1 FROM invitations WHERE code = ?", (data.code,)
-                ).fetchone()
-                conn.close()
-                if not exists:
-                    return {"status": "error", "message": "邀请码无效"}
-                return {"status": "error", "message": "邀请码已失效或已达到使用上限"}
-
-            invite = conn.execute(
-                "SELECT * FROM invitations WHERE code = ?", (data.code,)
-            ).fetchone()
-
-            used_count = invite['used_count'] if invite['used_count'] else 0
-            max_uses = invite['max_uses'] if invite['max_uses'] else 1
-            if used_count >= max_uses:
-                conn.execute("UPDATE invitations SET status = 1 WHERE code = ?", (data.code,))
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            conn.close()
+        invite, claim_error = claim_registration_invitation(data.code, safe_name)
+        if claim_error:
+            return {"status": "error", "message": claim_error}
 
         days = invite['days'] if invite['days'] else 30
         template_user_id = invite['template_user_id'] if invite['template_user_id'] else None
@@ -601,14 +565,7 @@ async def api_register(data: RegisterModel, request: Request):
                 else:
                     block_routes = routes
             
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            conn.execute("""
-                INSERT OR REPLACE INTO users_meta 
-                (user_id, expire_date, allow_routes, block_routes, req_free, req_free_count, created_at) 
-                VALUES (?, ?, ?, ?, ?, ?, datetime('now','localtime'))
-            """, (uid, expire_date, allow_routes, block_routes, req_free, req_free_count))
-            conn.commit()
-            conn.close()
+            save_registered_user_meta(uid, expire_date, allow_routes, block_routes, req_free, req_free_count)
             
             # 清除用户列表缓存
             try:
@@ -620,11 +577,10 @@ async def api_register(data: RegisterModel, request: Request):
             # 7. 发送通知
             try:
                 from app.services.bot_service import bot
-                from app.core.database import add_sys_notification
                 days_display = "永久" if (days == 0 or days >= 36500) else f"{days} 天"
                 msg = f"🎟️ <b>新用户注册</b>\n\n👤 {safe_name}\n📅 有效期：{days_display}\n🔗 邀请码：{data.code}\n📱 注册渠道：管理后台"
                 bot.send_message("sys_notify", msg, platform="all")
-                add_sys_notification("user", f"新用户注册: {safe_name}", f"管理后台邀请码注册，有效期 {days_display}", "/users_manage")
+                add_system_notification("user", f"新用户注册: {safe_name}", f"管理后台邀请码注册，有效期 {days_display}", "/users_manage")
             except:
                 pass
             

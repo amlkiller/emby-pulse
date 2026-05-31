@@ -10,7 +10,7 @@
 
 - Trigger: database infrastructure refactor that starts removing `query_db()` from representative modules.
 - Applies to new backend code that reads/writes EmbyPulse system data or playback reporting data.
-- First-stage sample modules include `app/routers/history.py`, `app/routers/api_tokens.py`, `app/routers/notifications.py`, `app/routers/notify_rules.py`, `app/routers/pro.py`, `app/routers/notify_admin.py`, `app/routers/pwa.py`, `app/routers/audit.py`, `app/routers/risk.py`, `app/routers/clients.py`, `app/routers/calendar_notify.py`, `app/routers/webhook.py`, `app/services/report_service.py`, `app/routers/insight.py`, `app/routers/system_tools.py`, and `app/services/risk_service.py`.
+- First-stage sample modules include `app/routers/history.py`, `app/routers/api_tokens.py`, `app/routers/notifications.py`, `app/routers/notify_rules.py`, `app/routers/pro.py`, `app/routers/notify_admin.py`, `app/routers/pwa.py`, `app/routers/audit.py`, `app/routers/risk.py`, `app/routers/clients.py`, `app/routers/calendar_notify.py`, `app/routers/webhook.py`, `app/services/report_service.py`, `app/routers/insight.py`, `app/routers/system_tools.py`, `app/services/risk_service.py`, `app/services/calendar_service.py`, `app/routers/views.py`, and `app/routers/tasks.py`.
 
 ### 2. Signatures
 
@@ -54,6 +54,23 @@
 - `app.dao.insight_dao.list_insight_ignore_item_ids() -> list[DataRow]`
 - `app.dao.system_tool_dao.check_system_table_integrity() -> dict`
 - `app.dao.system_tool_dao.check_system_db_readwrite() -> dict`
+- `app.dao.calendar_dao.mark_calendar_episode_ready(series_id, season, episode) -> None`
+- `app.dao.calendar_dao.list_calendar_cache_rows(start_date: str, end_date: str) -> list[DataRow]`
+- `app.dao.calendar_dao.replace_calendar_cache_items(week_data) -> None`
+- `app.dao.calendar_dao.list_cached_calendar_series_ids() -> list[str]`
+- `app.dao.calendar_dao.delete_calendar_cache_for_series(series_ids) -> int`
+- `app.dao.calendar_dao.list_ended_series_tmdb_ids() -> set`
+- `app.dao.calendar_dao.save_series_status(tmdb_id, series_name, status, checked_at: str) -> None`
+- `app.dao.invitation_dao.get_invitation_by_code(code: str) -> DataRow | None`
+- `app.dao.invitation_dao.restore_invitation_code_usage(code: str) -> None`
+- `app.dao.invitation_dao.claim_registration_invitation(code: str, used_by: str) -> tuple[DataRow | None, str | None]`
+- `app.dao.invitation_dao.save_registered_user_meta(...) -> None`
+- `app.dao.task_dao.ensure_task_config_defaults() -> None`
+- `app.dao.task_dao.is_task_notify_enabled() -> bool`
+- `app.dao.task_dao.set_task_notify_enabled(enabled: bool) -> None`
+- `app.dao.task_dao.list_task_translations() -> list[DataRow]`
+- `app.dao.task_dao.save_task_translation(original_name: str, translated_name: str) -> None`
+- `app.dao.task_dao.delete_task_translation(original_name: str) -> None`
 - `app.infra.db.local_playback_store.insert_webhook_playback_ip_record(...) -> None`
 - `app.infra.db.perf_stats.get_query_perf_stats() -> dict`
 - `app.queries.client_queries.count_playback_clients_by_app() -> list[DataRow]`
@@ -99,6 +116,9 @@
 - Good: `insight.py` keeps Emby library scanning and cache filtering in the route while delegating ignore-list persistence to `insight_dao`.
 - Good: `system_tools.py` keeps weather/log/restart HTTP behavior in the route while delegating database health checks and playback recency SQL to DAO/query modules.
 - Good: `risk_service.py` keeps Emby session control, event handling, and user messaging orchestration in the service while delegating `risk_logs`, `users_meta`, and `tg_user_bindings` access to DAOs.
+- Good: `calendar_service.py` keeps Emby/TMDB API coordination and calendar aggregation in the service while delegating `tv_calendar_cache` and `tv_series_status` persistence to `calendar_dao`.
+- Good: `views.py` keeps validation, Emby user creation, and template rendering in the route while delegating invitation transactions and `users_meta` writes to `invitation_dao`.
+- Good: `tasks.py` keeps Emby scheduled-task polling and display-name assembly in the route while delegating task config and translation persistence to `task_dao`.
 - Bad: a router imports `query_db`, `SYSTEM_DB_PATH`, or `sqlite3` only to run route-local SQL.
 
 ### 6. Tests Required

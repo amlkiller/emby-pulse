@@ -1,4 +1,3 @@
-import sqlite3
 import requests
 import asyncio
 import datetime
@@ -6,7 +5,15 @@ from fastapi import APIRouter, Request
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 from pydantic import BaseModel
 from app.core.config import cfg
-from app.core.database import DB_PATH, SYSTEM_DB_PATH, query_db, add_sys_notification
+from app.dao.notification_dao import add_system_notification
+from app.dao.task_dao import (
+    delete_task_translation,
+    ensure_task_config_defaults,
+    is_task_notify_enabled,
+    list_task_translations,
+    save_task_translation,
+    set_task_notify_enabled,
+)
 from app.core.media_adapter import media_api
 from app.services.bot_service import bot
 from app.core.security_utils import safe_error_message
@@ -101,11 +108,7 @@ COMMON_TASK_DICT = {
 def init_task_config_defaults():
     """初始化任务配置默认值"""
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        c.execute("INSERT OR IGNORE INTO task_config (key, value) VALUES ('enable_notify', '1')")
-        conn.commit()
-        conn.close()
+        ensure_task_config_defaults()
     except Exception as e: pass
 
 init_task_config_defaults()
@@ -117,37 +120,18 @@ class TaskConfigModel(BaseModel):
 async def get_task_config(request: Request):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        row = c.execute("SELECT value FROM task_config WHERE key = 'enable_notify'").fetchone()
-        conn.close()
-        return {"status": "success", "enable_notify": row[0] == '1' if row else True}
+        return {"status": "success", "enable_notify": is_task_notify_enabled()}
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 @router.post("/api/tasks/config")
 async def set_task_config(data: TaskConfigModel, request: Request):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
-        val = '1' if data.enable_notify else '0'
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        c.execute("INSERT OR REPLACE INTO task_config (key, value) VALUES ('enable_notify', ?)", (val,))
-        conn.commit()
-        conn.close()
+        set_task_notify_enabled(data.enable_notify)
         return {"status": "success"}
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 
 # ==========================================
@@ -166,7 +150,7 @@ async def poll_emby_tasks():
         try:
             tasks = await asyncio.to_thread(fetch_emby_tasks)
             if tasks:
-                custom_trans_rows = query_db("SELECT original_name, translated_name FROM task_translations")
+                custom_trans_rows = list_task_translations()
                 custom_dict = {r['original_name']: r['translated_name'] for r in custom_trans_rows} if custom_trans_rows else {}
 
                 for t in tasks:
@@ -186,22 +170,18 @@ async def poll_emby_tasks():
                                 # 🔥 检查是否开启了推送开关
                                 notify_enabled = True
                                 try:
-                                    conn = sqlite3.connect(SYSTEM_DB_PATH)
-                                    c = conn.cursor()
-                                    row = c.execute("SELECT value FROM task_config WHERE key = 'enable_notify'").fetchone()
-                                    if row and row[0] == '0': notify_enabled = False
-                                    conn.close()
+                                    notify_enabled = is_task_notify_enabled()
                                 except Exception: pass
 
                                 if notify_enabled:
                                     now_str = (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).strftime("%Y-%m-%d %H:%M:%S")
                                     if status == "Completed":
-                                        try: add_sys_notification("system", f"任务完成: {display_name}", f"Emby 后台作业正常执行完毕", "/tasks")
+                                        try: add_system_notification("system", f"任务完成: {display_name}", f"Emby 后台作业正常执行完毕", "/tasks")
                                         except Exception: pass
                                         try: bot.send_message("sys_notify", f"✅ <b>任务执行完成</b>\n\n📌 <b>任务</b>: {display_name}\n⏱️ <b>时间</b>: {now_str}\n📊 <b>状态</b>: 成功", platform="all")
                                         except Exception: pass
                                     elif status == "Failed":
-                                        try: add_sys_notification("system", f"任务失败: {display_name}", f"Emby 后台作业执行异常，请检查", "/tasks")
+                                        try: add_system_notification("system", f"任务失败: {display_name}", f"Emby 后台作业执行异常，请检查", "/tasks")
                                         except Exception: pass
                                         try: bot.send_message("sys_notify", f"❌ <b>任务执行失败</b>\n\n📌 <b>任务</b>: {display_name}\n⏱️ <b>时间</b>: {now_str}\n⚠️ <b>警告</b>: 运行异常，请前往后台检查 Emby 日志", platform="all")
                                         except Exception: pass
@@ -235,9 +215,9 @@ async def translate_task(data: TranslationModel, request: Request):
     
     try:
         if trans:
-            query_db("INSERT OR REPLACE INTO task_translations (original_name, translated_name) VALUES (?, ?)", (orig, trans))
+            save_task_translation(orig, trans)
         else:
-            query_db("DELETE FROM task_translations WHERE original_name = ?", (orig,))
+            delete_task_translation(orig)
         return {"status": "success"}
     except Exception as e:
         return {"status": "error", "message": safe_error_message(e)}
@@ -253,7 +233,7 @@ async def get_tasks(request: Request):
         res = media_api.get("/ScheduledTasks", timeout=5)
         tasks = res.json()
         
-        custom_trans_rows = query_db("SELECT original_name, translated_name FROM task_translations")
+        custom_trans_rows = list_task_translations()
         custom_dict = {r['original_name']: r['translated_name'] for r in custom_trans_rows} if custom_trans_rows else {}
         
         groups = {}

@@ -3,11 +3,18 @@ import datetime
 import logging
 import threading
 import time
-import sqlite3
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from app.core.config import cfg
-from app.core.database import DB_PATH, SYSTEM_DB_PATH
+from app.dao.calendar_dao import (
+    delete_calendar_cache_for_series,
+    list_cached_calendar_series_ids,
+    list_calendar_cache_rows,
+    list_ended_series_tmdb_ids,
+    mark_calendar_episode_ready,
+    replace_calendar_cache_items,
+    save_series_status,
+)
 
 # 初始化日志记录器
 logger = logging.getLogger("uvicorn")
@@ -61,15 +68,7 @@ class CalendarService:
         直接修改本地数据库状态，实现红灯变绿灯的实时感。
         """
         try:
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            c = conn.cursor()
-            # 根据系列ID、季、集 精准更新状态为 ready
-            c.execute('''UPDATE tv_calendar_cache 
-                         SET status = 'ready' 
-                         WHERE series_id = ? AND season = ? AND episode = ?''', 
-                      (series_id, season, episode))
-            conn.commit()
-            conn.close()
+            mark_calendar_episode_ready(series_id, season, episode)
             
             # 清理内存缓存，确保下次刷新页面时读到最新状态
             with self._cache_lock:
@@ -133,18 +132,14 @@ class CalendarService:
         
         has_db_data = False
         try:
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            c = conn.cursor()
-            c.execute("SELECT status, data_json FROM tv_calendar_cache WHERE air_date >= ? AND air_date <= ?", 
-                      (start_date_str, end_date_str))
-            rows = c.fetchall()
+            rows = list_calendar_cache_rows(start_date_str, end_date_str)
             
             # 只有在非强制刷新且本地有数据时，才直接使用 DB 数据
             if rows and not force_refresh:
                 has_db_data = True
                 for row in rows:
-                    db_status = row[0]
-                    item_data = json.loads(row[1])
+                    db_status = row["status"]
+                    item_data = json.loads(row["data_json"])
                     
                     # 🔥 过滤已删除的剧集（不在 Emby 中的剧集）
                     if item_data.get("series_id") not in emby_series_ids:
@@ -159,7 +154,6 @@ class CalendarService:
                         if 0 <= day_index <= 6:
                             week_data[day_index].append(item_data)
                     except: continue
-            conn.close()
         except Exception as e:
             logger.error(f"SQLite 读取异常: {e}")
 
@@ -199,24 +193,7 @@ class CalendarService:
             
             # 🔥 数据持久化：将新抓取的数据存入 SQLite
             try:
-                conn = sqlite3.connect(SYSTEM_DB_PATH)
-                c = conn.cursor()
-                for i in range(7):
-                    for data_dict in week_data[i]:
-                        s_id = data_dict.get("series_id")
-                        sn = data_dict.get("season")
-                        en = data_dict.get("episode")
-                        air_d = data_dict.get("air_date")
-                        stat = data_dict.get("status")
-                        
-                        if s_id and sn is not None and en is not None:
-                            id_key = f"{s_id}_{sn}_{en}"
-                            c.execute('''INSERT OR REPLACE INTO tv_calendar_cache 
-                                         (id, series_id, season, episode, air_date, status, data_json) 
-                                         VALUES (?, ?, ?, ?, ?, ?, ?)''', 
-                                      (id_key, s_id, sn, en, air_d, stat, json.dumps(data_dict)))
-                conn.commit()
-                conn.close()
+                replace_calendar_cache_items(week_data)
             except Exception as e:
                 logger.error(f"SQLite 写入异常: {e}")
 
@@ -455,14 +432,10 @@ class CalendarService:
     def _clean_deleted_series_cache(self):
         """清理已删除剧集的缓存数据"""
         try:
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            c = conn.cursor()
             # 获取所有缓存的 series_id
-            c.execute("SELECT DISTINCT series_id FROM tv_calendar_cache")
-            cached_series_ids = [row[0] for row in c.fetchall()]
+            cached_series_ids = list_cached_calendar_series_ids()
             
             if not cached_series_ids:
-                conn.close()
                 return
             
             # 获取 Emby 中存在的剧集 ID
@@ -484,18 +457,13 @@ class CalendarService:
                         emby_series_ids = {i.get("Id") for i in res.json().get("Items", [])}
                 except Exception as e:
                     logger.warning(f"[日历缓存] 获取 Emby 剧集列表失败: {e}")
-                    conn.close()
                     return  # 获取失败时不清理，避免误删
             
             # 删除不在 Emby 中的剧集缓存
             deleted_ids = [sid for sid in cached_series_ids if sid not in emby_series_ids]
             if deleted_ids:
-                placeholders = ','.join(['?' for _ in deleted_ids])
-                c.execute(f"DELETE FROM tv_calendar_cache WHERE series_id IN ({placeholders})", deleted_ids)
-                conn.commit()
+                delete_calendar_cache_for_series(deleted_ids)
                 logger.info(f"🧹 [日历缓存] 清理了 {len(deleted_ids)} 个已删除剧集的缓存数据")
-            
-            conn.close()
         except Exception as e:
             logger.error(f"清理日历缓存失败: {e}")
 
@@ -520,12 +488,7 @@ class CalendarService:
     def _load_ended_series_from_db(self):
         """从数据库加载已完结剧集的 TMDB ID 列表"""
         try:
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            c = conn.cursor()
-            c.execute("SELECT tmdb_id FROM tv_series_status WHERE status = 'ended'")
-            rows = c.fetchall()
-            conn.close()
-            return {row[0] for row in rows}
+            return list_ended_series_tmdb_ids()
         except Exception as e:
             logger.error(f"加载已完结剧集列表失败: {e}")
             return set()
@@ -533,15 +496,8 @@ class CalendarService:
     def _save_series_status_to_db(self, tmdb_id, series_name, status):
         """保存剧集状态到数据库"""
         try:
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            c = conn.cursor()
             now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            c.execute('''INSERT OR REPLACE INTO tv_series_status 
-                         (tmdb_id, series_name, status, last_checked, updated_at) 
-                         VALUES (?, ?, ?, ?, ?)''', 
-                      (tmdb_id, series_name, status, now, now))
-            conn.commit()
-            conn.close()
+            save_series_status(tmdb_id, series_name, status, now)
         except Exception as e:
             logger.error(f"保存剧集状态失败: {e}")
 
