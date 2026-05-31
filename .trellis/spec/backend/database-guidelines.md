@@ -10,7 +10,7 @@
 
 - Trigger: database infrastructure refactor that starts removing `query_db()` from representative modules.
 - Applies to new backend code that reads/writes EmbyPulse system data or playback reporting data.
-- First-stage sample modules include `app/routers/history.py`, `app/routers/api_tokens.py`, `app/routers/notifications.py`, `app/routers/notify_rules.py`, `app/routers/pro.py`, `app/routers/notify_admin.py`, `app/routers/pwa.py`, `app/routers/audit.py`, and `app/routers/risk.py`.
+- First-stage sample modules include `app/routers/history.py`, `app/routers/api_tokens.py`, `app/routers/notifications.py`, `app/routers/notify_rules.py`, `app/routers/pro.py`, `app/routers/notify_admin.py`, `app/routers/pwa.py`, `app/routers/audit.py`, `app/routers/risk.py`, `app/routers/clients.py`, and `app/routers/calendar_notify.py`.
 
 ### 2. Signatures
 
@@ -27,8 +27,23 @@
 - `app.dao.pwa_dao.get_pwa_config_values() -> dict`
 - `app.dao.pwa_dao.save_pwa_config_value(key: str, value: str) -> None`
 - `app.dao.audit_dao.list_user_audit_logs_since(start_datetime: str, limit: int) -> list[DataRow]`
+- `app.dao.audit_dao.create_user_audit_log(...) -> None`
 - `app.dao.risk_dao.list_risk_logs(limit: int = 200) -> list[DataRow]`
 - `app.dao.risk_dao.count_recent_risk_actions() -> list[DataRow]`
+- `app.dao.client_dao.list_client_blacklist() -> list[DataRow]`
+- `app.dao.client_dao.list_client_blacklist_names() -> list[DataRow]`
+- `app.dao.client_dao.add_client_blacklist(app_name: str) -> None`
+- `app.dao.client_dao.delete_client_blacklist(app_name: str) -> None`
+- `app.dao.client_dao.list_client_whitelist() -> list[DataRow]`
+- `app.dao.client_dao.list_client_whitelist_user_ids() -> list[DataRow]`
+- `app.dao.client_dao.add_client_whitelist(user_id: str, user_name: str) -> None`
+- `app.dao.client_dao.delete_client_whitelist(user_id: str) -> None`
+- `app.dao.calendar_notify_dao.ensure_calendar_notify_config_table() -> None`
+- `app.dao.calendar_notify_dao.get_calendar_notify_config() -> DataRow | None`
+- `app.dao.calendar_notify_dao.save_calendar_notify_config(enabled, notify_time, channels, tg_chat_id, wecom_touser) -> None`
+- `app.dao.calendar_notify_dao.mark_calendar_notify_sent() -> None`
+- `app.queries.client_queries.count_playback_clients_by_app() -> list[DataRow]`
+- `app.queries.client_queries.count_playback_devices(limit: int = 10) -> list[DataRow]`
 - Scenario modules live in `app/queries/*_queries.py` and `app/dao/*_dao.py` during the transition.
 
 ### 3. Contracts
@@ -56,6 +71,8 @@
 - Good: `pwa.py` keeps its legacy `True`/`False` helper return behavior while delegating table creation and writes to `pwa_dao`.
 - Good: `audit.py` keeps audit log merge/normalization in the route and delegates only `user_audit_logs` SQL to `audit_dao`.
 - Good: `risk.py` keeps Emby API control and config updates in the route/service layer while delegating `risk_logs` and `users_meta` summary reads to `risk_dao`.
+- Good: `clients.py` keeps media server device control and response assembly in the route while delegating blacklist/whitelist tables to `client_dao` and playback aggregates to `client_queries`.
+- Good: `calendar_notify.py` keeps notification sending, scheduling, and channel-specific HTTP calls in the route/service layer while delegating `calendar_notify_config` reads/writes to `calendar_notify_dao`.
 - Bad: a router imports `query_db`, `SYSTEM_DB_PATH`, or `sqlite3` only to run route-local SQL.
 
 ### 6. Tests Required

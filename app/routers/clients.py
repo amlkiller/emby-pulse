@@ -1,13 +1,21 @@
-import sqlite3
-import requests
 import datetime
 import logging
 import time
-from fastapi import APIRouter, Request, Depends  # 🔥 引入 Depends
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
-from app.core.config import cfg
-from app.core.database import DB_PATH, SYSTEM_DB_PATH, query_db, get_playback_column_name
 from app.core.media_adapter import media_api
+from app.dao.audit_dao import create_user_audit_log
+from app.dao.client_dao import (
+    add_client_blacklist,
+    add_client_whitelist,
+    delete_client_blacklist,
+    delete_client_whitelist,
+    list_client_blacklist,
+    list_client_blacklist_names,
+    list_client_whitelist,
+    list_client_whitelist_user_ids,
+)
+from app.queries.client_queries import count_playback_clients_by_app, count_playback_devices
 
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 from app.core.security_utils import safe_error_message
@@ -25,17 +33,17 @@ def add_audit_log(admin_id: str, admin_name: str, action: str,
                   target_count: int = 0, details: str = "", ip_address: str = ""):
     """添加操作审计日志"""
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        c.execute("""
-            INSERT INTO user_audit_logs 
-            (admin_id, admin_name, action, target_user_id, target_user_name, 
-             target_count, details, ip_address, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (admin_id, admin_name, action, target_user_id, target_user_name,
-              target_count, details, ip_address, datetime.datetime.now().isoformat()))
-        conn.commit()
-        conn.close()
+        create_user_audit_log(
+            admin_id=admin_id,
+            admin_name=admin_name,
+            action=action,
+            target_user_id=target_user_id,
+            target_user_name=target_user_name,
+            target_count=target_count,
+            details=details,
+            ip_address=ip_address,
+            created_at=datetime.datetime.now().isoformat(),
+        )
     except Exception as e:
         logging.error(f"[审计日志] 添加失败: {e}")
 
@@ -55,7 +63,7 @@ async def get_blacklist(request: Request):
     if not is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
-    rows = query_db("SELECT * FROM client_blacklist ORDER BY created_at DESC")
+    rows = list_client_blacklist()
     return {"status": "success", "data": [dict(r) for r in rows] if rows else []}
 
 # 👇 🔥 PRO 功能：添加设备到黑名单
@@ -68,7 +76,7 @@ async def add_blacklist(data: BlacklistModel, request: Request):
     if not app_name: 
         return {"status": "error", "message": "软件名不能为空"}
     try:
-        query_db("INSERT INTO client_blacklist (app_name) VALUES (?)", (app_name,))
+        add_client_blacklist(app_name)
         
         # 记录审计日志
         admin_user = request.session.get("user", {})
@@ -93,7 +101,7 @@ async def delete_blacklist(app_name: str, request: Request):
     # 🔒 安全检查：写操作必须管理员
     if not is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
-    query_db("DELETE FROM client_blacklist WHERE app_name = ?", (app_name,))
+    delete_client_blacklist(app_name)
     
     # 记录审计日志
     admin_user = request.session.get("user", {})
@@ -119,7 +127,7 @@ async def get_whitelist(request: Request):
     if not is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
-    rows = query_db("SELECT * FROM client_whitelist ORDER BY created_at DESC")
+    rows = list_client_whitelist()
     return {"status": "success", "data": [dict(r) for r in rows] if rows else []}
 
 # 👇 🔥 PRO 功能：添加用户到白名单
@@ -133,7 +141,7 @@ async def add_whitelist(data: WhitelistModel, request: Request):
     if not user_id or not user_name:
         return {"status": "error", "message": "用户ID和用户名不能为空"}
     try:
-        query_db("INSERT INTO client_whitelist (user_id, user_name) VALUES (?, ?)", (user_id, user_name))
+        add_client_whitelist(user_id, user_name)
         
         # 记录审计日志
         admin_user = request.session.get("user", {})
@@ -159,7 +167,7 @@ async def delete_whitelist(user_id: str, request: Request):
     # 🔒 安全检查：写操作必须管理员
     if not is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
-    query_db("DELETE FROM client_whitelist WHERE user_id = ?", (user_id,))
+    delete_client_whitelist(user_id)
     
     # 记录审计日志
     admin_user = request.session.get("user", {})
@@ -197,7 +205,7 @@ async def batch_add_whitelist(request: Request):
             skipped_count += 1
             continue
         try:
-            query_db("INSERT INTO client_whitelist (user_id, user_name) VALUES (?, ?)", (user_id, user_name))
+            add_client_whitelist(user_id, user_name)
             added_count += 1
         except:
             skipped_count += 1
@@ -230,7 +238,7 @@ async def batch_delete_whitelist(request: Request):
     
     deleted_count = 0
     for user_id in user_ids:
-        query_db("DELETE FROM client_whitelist WHERE user_id = ?", (user_id,))
+        delete_client_whitelist(user_id)
         deleted_count += 1
     
     # 记录审计日志
@@ -315,13 +323,11 @@ async def get_clients_data(request: Request):
     top_devices = {}
     
     try:
-        # 🔥 自动检测客户端列名，兼容不同版本数据库
-        client_col = get_playback_column_name()
-        pie_rows = query_db(f"SELECT COALESCE({client_col}, '未知客户端') as c_name, COUNT(*) as cnt FROM PlaybackActivity WHERE {client_col} IS NOT NULL AND {client_col} != '' GROUP BY {client_col}")
+        pie_rows = count_playback_clients_by_app()
         if pie_rows:
             app_counts = {r['c_name']: r['cnt'] for r in pie_rows}
             
-        bar_rows = query_db("SELECT DeviceName, COUNT(*) as cnt FROM PlaybackActivity WHERE DeviceName IS NOT NULL AND DeviceName != '' GROUP BY DeviceName ORDER BY cnt DESC LIMIT 10")
+        bar_rows = count_playback_devices()
         if bar_rows:
             top_devices = {r['DeviceName']: r['cnt'] for r in bar_rows}
     except Exception as e:
@@ -336,11 +342,11 @@ async def get_clients_data(request: Request):
         sorted_devs = sorted(devices, key=lambda x: x.get("DateLastActivity", ""), reverse=True)[:10]
         top_devices = { (d.get("Name") or "未知设备"): 1 for d in sorted_devs}
 
-    blacklist_rows = query_db("SELECT app_name FROM client_blacklist")
+    blacklist_rows = list_client_blacklist_names()
     blacklist = [r['app_name'].lower() for r in blacklist_rows] if blacklist_rows else []
     
     # 🔥 获取白名单用户列表
-    whitelist_rows = query_db("SELECT user_id FROM client_whitelist")
+    whitelist_rows = list_client_whitelist_user_ids()
     whitelist_user_ids = set(r['user_id'] for r in whitelist_rows) if whitelist_rows else set()
 
     table_data = []
@@ -456,14 +462,14 @@ async def execute_block(request: Request):
 
 def _do_block_devices():
     """执行阻断逻辑（可被定时任务调用）"""
-    blacklist_rows = query_db("SELECT app_name FROM client_blacklist")
+    blacklist_rows = list_client_blacklist_names()
     if not blacklist_rows:
         return {"blocked_count": 0, "blocked_names": [], "whitelist_skipped": 0}
     
     blacklist = [r['app_name'].lower() for r in blacklist_rows]
     
     # 🔥 获取白名单用户列表
-    whitelist_rows = query_db("SELECT user_id FROM client_whitelist")
+    whitelist_rows = list_client_whitelist_user_ids()
     whitelist_user_ids = set(r['user_id'] for r in whitelist_rows) if whitelist_rows else set()
     
     blocked_count = 0

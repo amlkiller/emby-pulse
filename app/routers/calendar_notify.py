@@ -2,7 +2,6 @@
 日历通知系统
 支持自定义时间推送每日更新日历到 TG 机器人/企业微信
 """
-import sqlite3
 import logging
 import json
 import datetime
@@ -12,9 +11,14 @@ from fastapi import APIRouter, Request
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 from pydantic import BaseModel
 from typing import Optional, List
-from app.core.database import SYSTEM_DB_PATH
 from app.core.config import cfg
 from app.core.security_utils import safe_error_message
+from app.dao.calendar_notify_dao import (
+    ensure_calendar_notify_config_table,
+    get_calendar_notify_config,
+    mark_calendar_notify_sent,
+    save_calendar_notify_config,
+)
 
 logger = logging.getLogger("uvicorn")
 router = APIRouter(prefix="/api/calendar/notify", tags=["日历通知"])
@@ -23,23 +27,7 @@ router = APIRouter(prefix="/api/calendar/notify", tags=["日历通知"])
 def _ensure_table():
     """确保日历通知配置表存在"""
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        c.execute('''CREATE TABLE IF NOT EXISTS calendar_notify_config (
-            id INTEGER PRIMARY KEY CHECK (id = 1),
-            enabled INTEGER DEFAULT 0,
-            notify_time TEXT DEFAULT '09:00',
-            channels TEXT DEFAULT '["tg_bot"]',
-            tg_chat_id TEXT,
-            wecom_touser TEXT DEFAULT '@all',
-            last_sent TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )''')
-        # 插入默认配置
-        c.execute('''INSERT OR IGNORE INTO calendar_notify_config (id, enabled) VALUES (1, 0)''')
-        conn.commit()
-        conn.close()
+        ensure_calendar_notify_config_table()
     except Exception as e:
         logger.error(f"[日历通知] 建表失败: {e}")
 
@@ -62,12 +50,7 @@ def get_notify_config(request: Request):
         return {"status": "error", "message": "未授权"}
     
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.row_factory = sqlite3.Row
-        c = conn.cursor()
-        c.execute("SELECT * FROM calendar_notify_config WHERE id = 1")
-        row = c.fetchone()
-        conn.close()
+        row = get_calendar_notify_config()
         
         if row:
             return {
@@ -93,15 +76,13 @@ def save_notify_config(request: Request, config: CalendarNotifyConfig):
         return {"status": "error", "message": "未授权"}
     
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        c.execute('''UPDATE calendar_notify_config SET 
-                     enabled = ?, notify_time = ?, channels = ?, tg_chat_id = ?, wecom_touser = ?, updated_at = datetime('now', 'localtime')
-                     WHERE id = 1''',
-                  (1 if config.enabled else 0, config.notify_time, json.dumps(config.channels), 
-                   config.tg_chat_id or "", config.wecom_touser))
-        conn.commit()
-        conn.close()
+        save_calendar_notify_config(
+            enabled=config.enabled,
+            notify_time=config.notify_time,
+            channels=json.dumps(config.channels),
+            tg_chat_id=config.tg_chat_id or "",
+            wecom_touser=config.wecom_touser,
+        )
         
         # 重启定时任务 - 使用当前模块的服务实例
         init_calendar_notify_service()
@@ -232,12 +213,7 @@ def send_calendar_notify(test: bool = False):
     """发送日历通知"""
     try:
         # 获取配置
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.row_factory = sqlite3.Row
-        c = conn.cursor()
-        c.execute("SELECT * FROM calendar_notify_config WHERE id = 1")
-        row = c.fetchone()
-        conn.close()
+        row = get_calendar_notify_config()
         
         if not row:
             return {"success": False, "message": "未找到配置"}
@@ -316,11 +292,7 @@ def send_calendar_notify(test: bool = False):
         
         # 更新最后发送时间
         if not test and results:
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            c = conn.cursor()
-            c.execute("UPDATE calendar_notify_config SET last_sent = datetime('now', 'localtime') WHERE id = 1")
-            conn.commit()
-            conn.close()
+            mark_calendar_notify_sent()
         
         if results:
             return {"success": True, "message": f"已发送至: {', '.join(results)}"}
@@ -363,12 +335,7 @@ class CalendarNotifyService:
         while self.running:
             try:
                 # 检查是否启用
-                conn = sqlite3.connect(SYSTEM_DB_PATH)
-                conn.row_factory = sqlite3.Row
-                c = conn.cursor()
-                c.execute("SELECT enabled, notify_time, last_sent FROM calendar_notify_config WHERE id = 1")
-                row = c.fetchone()
-                conn.close()
+                row = get_calendar_notify_config()
                 
                 if row and row['enabled']:
                     notify_time = row['notify_time'] or "09:00"

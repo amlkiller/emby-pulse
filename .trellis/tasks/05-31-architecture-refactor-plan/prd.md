@@ -24,6 +24,7 @@ Define the architecture refactor target for EmbyPulse-Pro and implement the firs
 - The user confirmed first-stage representative modules should be `app/routers/history.py` and `app/routers/api_tokens.py`.
 - The user confirmed no formal ADR is needed at this stage.
 - The user asked to proceed with the refactor after accepting the architecture plan.
+- The user confirmed the final business-domain architecture should collect each domain under `app/domains/<name>/` instead of permanently keeping routers/services/DAO split across top-level directories.
 
 ## Requirements
 
@@ -35,6 +36,9 @@ Define the architecture refactor target for EmbyPulse-Pro and implement the firs
 - `app/queries/` and `app/dao/` should be treated as transition directories, not the final business-domain layout.
 - External clients for Emby/Jellyfin, TMDB, Telegram, WeCom, and MoviePilot should be planned as second-stage infrastructure adapters under `app/infra/clients/`.
 - Configuration access cleanup should be planned as a third-stage effort using scenario-specific settings boundaries.
+- The terminal business-domain architecture should move domain router, schemas, service, DAO, queries, policy, and events into `app/domains/<name>/` packages after infrastructure boundaries are stable.
+- `app/routers/`, `app/services/`, `app/dao/`, and `app/queries/` are transition or compatibility locations, not the final architecture.
+- New domain code should follow `domain router -> domain service -> domain dao/queries -> infra` and avoid direct `query_db()`, `sqlite3.connect()`, scattered `requests.*`, or unbounded `cfg.get()/cfg.set()`.
 - Plugins should not be migrated in the first stage, but the database API must provide a viable migration path for plugin state/config/log access.
 - First-stage completion should require the new database boundary and representative migrated modules, not full-repo `query_db()` removal.
 - First-stage representative migrations should target `history.py` for playback queries and `api_tokens.py` for system CRUD.
@@ -48,6 +52,7 @@ Define the architecture refactor target for EmbyPulse-Pro and implement the firs
 - [x] `架构.md` captures all confirmed architecture decisions.
 - [x] Open architecture questions are resolved one at a time with recommended answers.
 - [x] The final plan distinguishes immediate refactor goals from later business-domain modularization.
+- [x] The final plan records `app/domains/<name>/` as the terminal business-domain layout.
 - [x] The final plan identifies out-of-scope behavior changes.
 - [x] The final plan separates first-stage completion criteria from the final removal target for `query_db()`.
 - [x] `app/infra/db/` exists with initial database boundary modules.
@@ -60,6 +65,8 @@ Define the architecture refactor target for EmbyPulse-Pro and implement the firs
 - [x] `app/routers/pwa.py` delegates PWA config/icon tables to a DAO.
 - [x] `app/routers/audit.py` delegates `user_audit_logs` access to a DAO.
 - [x] `app/routers/risk.py` delegates risk log and summary reads to a DAO.
+- [x] `app/routers/clients.py` delegates client blacklist/whitelist system table access to a DAO and playback client statistics to a query service.
+- [x] `app/routers/calendar_notify.py` delegates `calendar_notify_config` table access to a DAO.
 - [x] Existing tests or import checks pass.
 
 ## Out of Scope
