@@ -19,6 +19,14 @@ def list_bot_notify_mutes():
     return system_store.fetch_all("SELECT user_id, event_type FROM bot_notify_mutes")
 
 
+def is_bot_notify_muted(user_id, event_type) -> bool:
+    row = system_store.fetch_one(
+        "SELECT 1 FROM bot_notify_mutes WHERE user_id = ? AND event_type = ?",
+        (user_id, event_type),
+    )
+    return bool(row)
+
+
 def replace_bot_notify_mutes(playback_users, login_users) -> None:
     with system_store.connect() as conn:
         cursor = conn.cursor()

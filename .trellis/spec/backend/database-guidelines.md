@@ -20,6 +20,7 @@
 - `app.infra.db.playback_store.playback_store.query(sql: str, params=(), one: bool = False) -> list[DataRow] | DataRow | None`
 - `app.infra.db.playback_store.get_playback_column_name() -> str`
 - `app.dao.notify_rule_dao.list_bot_notify_mutes() -> list[DataRow]`
+- `app.dao.notify_rule_dao.is_bot_notify_muted(user_id, event_type) -> bool`
 - `app.dao.notify_rule_dao.replace_bot_notify_mutes(playback_users, login_users) -> None`
 - `app.dao.pro_license_dao.replace_license(license_key: str, machine_id: str, status: str = "pro") -> None`
 - `app.dao.pro_license_dao.get_license_status() -> DataRow | None`

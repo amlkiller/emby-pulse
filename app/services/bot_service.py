@@ -937,8 +937,7 @@ class NotificationBot:
     def _is_muted(self, user_id, event_type):
         if not user_id: return False
         try:
-            res = query_db("SELECT 1 FROM bot_notify_mutes WHERE user_id = ? AND event_type = ?", (user_id, event_type))
-            return bool(res)
+            return notify_rule_dao.is_bot_notify_muted(user_id, event_type)
         except:
             return False
 
