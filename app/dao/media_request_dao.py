@@ -237,6 +237,17 @@ def list_all_requests():
     )
 
 
+def get_request_summary_by_tmdb(tmdb_id):
+    return system_store.fetch_one("SELECT media_type, title FROM media_requests WHERE tmdb_id = ? LIMIT 1", (tmdb_id,))
+
+
+def list_pending_requests_by_tmdb(tmdb_id):
+    return system_store.fetch_all(
+        "SELECT season, title, media_type, year FROM media_requests WHERE tmdb_id = ? AND status = 0",
+        (tmdb_id,),
+    )
+
+
 def get_media_request(tmdb_id, season):
     return system_store.fetch_one("SELECT * FROM media_requests WHERE tmdb_id = ? AND season = ?", (tmdb_id, season))
 

@@ -2384,7 +2384,7 @@ class NotificationBot:
             status_text = {"fix": "🛠️ 已标记：修复中", "done": "✅ 已标记：修复完成", "reject": "❌ 已标记：暂不处理(忽略)"}
             
             if action in status_map:
-                query_db("UPDATE media_feedback SET status = ? WHERE id = ?", (status_map[action], feed_id))
+                media_request_dao.update_feedback_status(feed_id, status_map[action])
                 msg_obj = cq["message"]
                 operator = cq.get('from', {}).get('first_name', 'Admin')
                 if "caption" in msg_obj:
@@ -2442,9 +2442,8 @@ class NotificationBot:
                 except:
                     pass
                 # 尝试从数据库获取求片信息以构建影巢搜索按钮
-                rows = query_db("SELECT media_type, title FROM media_requests WHERE tmdb_id = ? LIMIT 1", (tid,))
-                if hdhive_enabled and rows:
-                    r = rows[0]
+                r = media_request_dao.get_request_summary_by_tmdb(tid)
+                if hdhive_enabled and r:
                     title_safe = r["title"].replace("_", "-").replace(" ", "-")
                     keyboard = {"inline_keyboard": [
                         [{"text": "🚀 推送 MP", "callback_data": f"req_approve_{tid}"}, {"text": "✋ 手动接单", "callback_data": f"req_manual_{tid}"}],
@@ -2468,7 +2467,7 @@ class NotificationBot:
             else:
                 action_db = action
 
-            rows = query_db("SELECT season, title, media_type, year FROM media_requests WHERE tmdb_id = ? AND status = 0", (tid,))
+            rows = media_request_dao.list_pending_requests_by_tmdb(tid)
             if not rows:
                 try: requests.post(f"https://api.telegram.org/bot{token}/editMessageReplyMarkup", json={"chat_id": cid, "message_id": mid, "reply_markup": {"inline_keyboard": []}}, proxies=proxies, timeout=5)
                 except Exception: pass
@@ -2482,13 +2481,13 @@ class NotificationBot:
                         if r["media_type"] == "tv": payload["season"] = r['season']
                         try: requests.post(f"{mp_url.rstrip('/')}/api/v1/subscribe/", json=payload, headers={"X-API-KEY": mp_token.strip().strip("'\"")}, timeout=10)
                         except Exception: pass
-                    query_db("UPDATE media_requests SET status = 1 WHERE tmdb_id = ? AND season = ?", (tid, r['season']))
+                    media_request_dao.update_media_request_status(tid, r['season'], 1)
                 action_text = "✅ 已审批：推送 MP 自动下载"
             elif action_db == "manual":
-                for r in rows: query_db("UPDATE media_requests SET status = 4 WHERE tmdb_id = ? AND season = ?", (tid, r['season']))
+                for r in rows: media_request_dao.update_media_request_status(tid, r['season'], 4)
                 action_text = "✅ 已审批：管理员手动接单"
             elif action_db == "reject":
-                for r in rows: query_db("UPDATE media_requests SET status = 3, reject_reason = ? WHERE tmdb_id = ? AND season = ?", (reject_reason, tid, r['season']))
+                for r in rows: media_request_dao.update_media_request_status(tid, r['season'], 3, reject_reason)
                 action_text = f"❌ 已拒绝 ({reject_reason})"
                 
             msg_obj = cq["message"]
