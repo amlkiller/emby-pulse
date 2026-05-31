@@ -9,7 +9,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from typing import List, Optional
 from app.core.config import cfg, templates
-from app.core.database import add_sys_notification
+from app.dao.notification_dao import add_sys_notification
 from app.dao import invitation_dao
 from app.dao import point_dao
 from app.core.media_adapter import media_api

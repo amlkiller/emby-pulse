@@ -12,7 +12,7 @@ from typing import Optional, List
 import threading
 
 from app.core.config import cfg, REPORT_COVER_URL
-from app.core.database import add_sys_notification
+from app.dao.notification_dao import add_sys_notification
 from app.dao.media_request_dao import (
     claim_registration_invitation,
     create_media_feedback,
@@ -2019,7 +2019,7 @@ async def user_community_register(data: UserRegisterModel, request: Request):
             
             # 8. 发送通知
             try:
-                from app.core.database import add_sys_notification
+                from app.dao.notification_dao import add_sys_notification
                 from app.services.bot_service import bot
                 from app.routers.notify_admin import get_notify_rule
                 

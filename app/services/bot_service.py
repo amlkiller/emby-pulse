@@ -11,7 +11,8 @@ import ipaddress
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from app.core.config import cfg, REPORT_COVER_URL, FALLBACK_IMAGE_URL
-from app.core.database import get_base_filter, add_sys_notification
+from app.core.database import get_base_filter
+from app.dao.notification_dao import add_sys_notification
 from app.dao import bot_service_dao, media_request_dao, message_dao, user_bot_dao
 from app.dao import gap_dao
 from app.dao import notify_admin_dao, notify_rule_dao
@@ -1508,7 +1509,7 @@ class NotificationBot:
                 
                 # Web通知中心
                 if 'web' in channels:
-                    from app.core.database import add_sys_notification
+                    from app.dao.notification_dao import add_sys_notification
                     add_sys_notification("user", f"用户登录: {user_name}", f"{ip} ({loc}) - {client}", "/users_manage")
             except Exception as e:
                 logger.error(f"[用户登录通知] 发送失败: {e}")

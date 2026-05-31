@@ -164,7 +164,7 @@ class PluginBase:
         # 发送到全局通知（如果启用）
         if notify and self._is_notification_enabled():
             try:
-                from app.core.database import add_sys_notification
+                from app.dao.notification_dao import add_sys_notification
                 add_sys_notification("plugin", self.name, message, "/plugins")
             except Exception:
                 pass
