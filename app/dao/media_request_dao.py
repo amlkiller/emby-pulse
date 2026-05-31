@@ -241,6 +241,22 @@ def get_media_request(tmdb_id, season):
     return system_store.fetch_one("SELECT * FROM media_requests WHERE tmdb_id = ? AND season = ?", (tmdb_id, season))
 
 
+def list_pending_sync_requests():
+    return system_store.fetch_all(
+        "SELECT tmdb_id, media_type, season, request_type, episodes FROM media_requests WHERE status IN (0, 1, 4, 7)"
+    )
+
+
+def mark_sync_request_finished(tmdb_id, season=None) -> None:
+    if season is None:
+        system_store.execute("UPDATE media_requests SET status = 2, updated_at = CURRENT_TIMESTAMP WHERE tmdb_id = ?", (tmdb_id,))
+    else:
+        system_store.execute(
+            "UPDATE media_requests SET status = 2, updated_at = CURRENT_TIMESTAMP WHERE tmdb_id = ? AND season = ?",
+            (tmdb_id, season),
+        )
+
+
 def update_media_request_status(tmdb_id, season, status, reject_reason=None) -> None:
     if reject_reason is None:
         system_store.execute("UPDATE media_requests SET status = ? WHERE tmdb_id = ? AND season = ?", (status, tmdb_id, season))

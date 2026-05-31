@@ -89,7 +89,7 @@ Define the architecture refactor target for EmbyPulse-Pro and implement the firs
 - [x] `app/routers/users.py` delegates admin invitation code create/list/export/delete access to a DAO.
 - [x] `app/routers/users.py` delegates user pinning, request permission, and tag CRUD access to a DAO.
 - [x] `app/services/user_bot_service.py` delegates user-bot binding, channel binding, blacklist, bot-user, and base table bootstrap access to a DAO.
-- [x] `app/services/bot_service.py` delegates request-admin message sync persistence, notify-rule/mute table reads/bootstrap, and media request completion status persistence to DAO boundaries.
+- [x] `app/services/bot_service.py` delegates request-admin message sync persistence, notify-rule/mute table reads/bootstrap, pending media request sync reads, and media request completion status persistence to DAO boundaries.
 - [x] Existing tests or import checks pass.
 
 ## Out of Scope

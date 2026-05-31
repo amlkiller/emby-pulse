@@ -812,7 +812,7 @@ class SystemDaemon:
     def _sync_pending_requests(self):
         try:
             # 🔥 修复：检查所有未完成状态（待审批、下载中、手动接单、待入库）
-            rows = query_db("SELECT tmdb_id, media_type, season, request_type, episodes FROM media_requests WHERE status IN (0, 1, 4, 7)")
+            rows = media_request_dao.list_pending_sync_requests()
             if not rows: return
             host = cfg.get("emby_host"); key = cfg.get("emby_api_key")
             admin_id = get_admin_id()
@@ -827,7 +827,7 @@ class SystemDaemon:
                 res = requests.get(url, timeout=5).json()
                 if res.get("Items"):
                     if mtype == "movie":
-                        query_db("UPDATE media_requests SET status = 2, updated_at = CURRENT_TIMESTAMP WHERE tmdb_id = ?", (tid,))
+                        media_request_dao.mark_sync_request_finished(tid)
                         logger.info(f"[入库同步] 电影已入库: tmdb_id={tid}")
                     else:
                         # 🔥 追新请求：检查请求的集数是否都已入库
@@ -847,14 +847,14 @@ class SystemDaemon:
                             
                             # 如果请求的集数都已入库，更新状态
                             if requested_eps and all(e in local_eps for e in requested_eps):
-                                query_db("UPDATE media_requests SET status = 2, updated_at = CURRENT_TIMESTAMP WHERE tmdb_id = ? AND season = ?", (tid, sn))
+                                media_request_dao.mark_sync_request_finished(tid, sn)
                                 logger.info(f"[入库同步] 追新已入库: tmdb_id={tid}, season={sn}, episodes={episodes_str}")
                         else:
                             # 求片请求：检查季是否存在
                             s_res = requests.get(f"{host}/emby/Shows/{sid}/Seasons?api_key={key}&UserId={admin_id}", timeout=5).json()
                             local_seasons = [s.get("IndexNumber") for s in s_res.get("Items", [])]
                             if sn in local_seasons:
-                                query_db("UPDATE media_requests SET status = 2, updated_at = CURRENT_TIMESTAMP WHERE tmdb_id = ? AND season = ?", (tid, sn))
+                                media_request_dao.mark_sync_request_finished(tid, sn)
                                 logger.info(f"[入库同步] 求片已入库: tmdb_id={tid}, season={sn}")
                 time.sleep(0.5) 
         except Exception as e: 
