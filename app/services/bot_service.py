@@ -13,7 +13,7 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from app.core.config import cfg, REPORT_COVER_URL, FALLBACK_IMAGE_URL
 from app.core.database import query_db, get_base_filter, add_sys_notification, DB_PATH, SYSTEM_DB_PATH
-from app.dao import bot_service_dao, media_request_dao
+from app.dao import bot_service_dao, media_request_dao, message_dao
 from app.dao import gap_dao
 from app.dao import notify_admin_dao, notify_rule_dao
 from app.dao import user_dao
@@ -3228,12 +3228,8 @@ class NotificationBot:
         
         # 获取用户信息
         try:
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            c = conn.cursor()
-            c.execute("SELECT remark FROM local_users WHERE emby_user_id = ?", (user_id,))
-            row = c.fetchone()
-            user_display = row[0] if row and row[0] else user_id
-            conn.close()
+            row = message_dao.get_local_user_remark_by_emby_id(user_id)
+            user_display = row["remark"] if row and row["remark"] else user_id
         except:
             user_display = user_id
         
@@ -3260,11 +3256,7 @@ class NotificationBot:
     def _handle_msg_block_callback(self, cid, mid, user_id, token, proxies, cq):
         """处理屏蔽通知的回调"""
         try:
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            c = conn.cursor()
-            c.execute("INSERT OR IGNORE INTO msg_notify_block (user_id) VALUES (?)", (user_id,))
-            conn.commit()
-            conn.close()
+            message_dao.add_notify_block(user_id)
             
             operator = cq.get('from', {}).get('first_name', 'Admin')
             msg_obj = cq["message"]
@@ -3291,11 +3283,7 @@ class NotificationBot:
     def _handle_msg_unblock_callback(self, cid, mid, user_id, token, proxies, cq):
         """处理取消屏蔽通知的回调"""
         try:
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            c = conn.cursor()
-            c.execute("DELETE FROM msg_notify_block WHERE user_id = ?", (user_id,))
-            conn.commit()
-            conn.close()
+            message_dao.remove_notify_block(user_id)
             
             operator = cq.get('from', {}).get('first_name', 'Admin')
             msg_obj = cq["message"]
@@ -3336,14 +3324,9 @@ class NotificationBot:
         user_id = self._msg_reply_mode.pop(cid)
         
         try:
-            # 存储消息到数据库
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            c = conn.cursor()
-            
             # 查找或创建会话
-            c.execute("SELECT id FROM msg_conversations WHERE user_id = ?", (user_id,))
-            row = c.fetchone()
-            if not row:
+            conversation = message_dao.get_conversation_by_user(user_id)
+            if not conversation:
                 # 获取用户名
                 username = user_id
                 try:
@@ -3352,29 +3335,11 @@ class NotificationBot:
                         if user_info and user_info.status_code == 200:
                             username = user_info.json().get("Name", user_id)
                 except Exception: pass
-                c.execute("""
-                    INSERT INTO msg_conversations (user_id, username, created_at, last_time)
-                    VALUES (?, ?, datetime('now','localtime'), datetime('now','localtime'))
-                """, (user_id, username))
-                conv_id = c.lastrowid
+                conv_id = message_dao.create_conversation(user_id, username)
             else:
-                conv_id = row[0]
+                conv_id = conversation["id"]
             
-            # 插入消息
-            c.execute("""
-                INSERT INTO msg_items (conversation_id, sender_type, sender_id, sender_name, content, created_at)
-                VALUES (?, 'admin', ?, '管理员', ?, datetime('now','localtime'))
-            """, (conv_id, 'bot', text))
-            
-            # 更新会话
-            c.execute("""
-                UPDATE msg_conversations 
-                SET last_message = ?, last_time = datetime('now','localtime'), unread_user = unread_user + 1
-                WHERE id = ?
-            """, (text[:100], conv_id))
-            
-            conn.commit()
-            conn.close()
+            message_dao.insert_admin_message(conv_id, "bot", "管理员", text, text[:100])
             
             # 尝试通过用户机器人发送通知
             try:

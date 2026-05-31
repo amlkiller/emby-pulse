@@ -166,8 +166,13 @@
 - `app.dao.message_dao.ensure_msg_tables() -> None`
 - `app.dao.message_dao.list_conversations(limit: int, offset: int) -> list[DataRow]`
 - `app.dao.message_dao.get_or_create_conversation(user_id: str, username: str, user_avatar=None) -> tuple[int, dict]`
+- `app.dao.message_dao.get_conversation_by_user(user_id: str) -> DataRow | None`
+- `app.dao.message_dao.create_conversation(user_id: str, username: str, user_avatar=None) -> int`
 - `app.dao.message_dao.insert_admin_message(conversation_id: int, sender_id: str, sender_name: str, content: str, last_message: str) -> None`
 - `app.dao.message_dao.insert_user_message(user_id: str, username: str, user_avatar, content: str, last_message: str, notification_message: str) -> int`
+- `app.dao.message_dao.get_local_user_remark_by_emby_id(user_id: str) -> DataRow | None`
+- `app.dao.message_dao.add_notify_block(user_id: str) -> bool`
+- `app.dao.message_dao.remove_notify_block(user_id: str) -> None`
 - `app.dao.message_dao.ensure_mute_table() -> None`
 - `app.dao.message_dao.upsert_user_mute(user_id: str, username: str, muted_until, reason: str, admin_id: str, admin_name: str) -> None`
 - `app.dao.message_dao.ensure_announcement_tables() -> None`
@@ -268,7 +273,7 @@
 - Good: `db_tools.py` keeps admin permission checks, audit logging, and restore path validation in the route while delegating database health, migration, backup, restore, and deep-check operations to `migration_service`.
 - Good: `gaps.py` keeps Emby/TMDB scanning, download handoff, and in-memory scan-state updates in the route while delegating gap tables, config, and scan cache persistence to `gap_dao`.
 - Good: `bot.py` keeps bot settings validation, Telegram/WeCom HTTP calls, and admin response assembly in the route while delegating user-bot admin tables, registration logs, TG bindings, lottery, and scratch-card persistence to `bot_admin_dao`.
-- Good: `bot_service.py` keeps Emby availability/Policy checks, Telegram callback handling, message editing, notification dispatch, gap scan-state mutation, and text rendering in the service while delegating request-admin message sync persistence, notify-rule/mute reads/bootstrap, media request/feedback status persistence, gap table/cache persistence, and user expiration metadata reads to DAO boundaries.
+- Good: `bot_service.py` keeps Emby availability/Policy checks, Telegram callback handling, message editing, notification dispatch, gap scan-state mutation, and text rendering in the service while delegating request-admin message sync persistence, notify-rule/mute reads/bootstrap, media request/feedback status persistence, gap table/cache persistence, message reply/block persistence, and user expiration metadata reads to DAO boundaries.
 - Good: `stats.py` keeps chart aggregation, media-server enrichment, and permission filtering in the route while delegating playback SQL execution and base user filters to `stats_queries`.
 - Good: `auth.py` keeps password hashing, local/Emby login decisions, TOTP validation, session updates, and audit logging in the route while delegating login failure and `local_users` persistence to `auth_dao`.
 - Good: `messages.py` keeps permission checks, Emby user lookups, content sanitization, bot notification delivery, and response assembly in the route while delegating message, mute, notification-block, announcement, and related user lookup tables to `message_dao`.
