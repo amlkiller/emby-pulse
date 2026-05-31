@@ -10,7 +10,7 @@
 
 - Trigger: database infrastructure refactor that starts removing `query_db()` from representative modules.
 - Applies to new backend code that reads/writes EmbyPulse system data or playback reporting data.
-- First-stage sample modules are `app/routers/history.py` and `app/routers/api_tokens.py`.
+- First-stage sample modules include `app/routers/history.py`, `app/routers/api_tokens.py`, and `app/routers/notifications.py`.
 
 ### 2. Signatures
 
@@ -40,6 +40,7 @@
 
 - Good: `api_tokens.py` calls `api_token_dao.create_api_token_record(...)` and keeps HTTP response shape unchanged.
 - Base: `history.py` calls `history_queries.count_history(...)` and still returns the same pagination payload.
+- Good: `notifications.py` calls `notification_dao.list_notifications(...)` and preserves the `{"success", "unread_count", "items"}` response shape.
 - Bad: a router imports `query_db`, `SYSTEM_DB_PATH`, or `sqlite3` only to run route-local SQL.
 
 ### 6. Tests Required

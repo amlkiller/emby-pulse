@@ -41,6 +41,7 @@ Define the architecture refactor target for EmbyPulse-Pro and implement the firs
 - No ADR should be created until implementation hardens the `app/infra/db` public API and the decision becomes harder to reverse.
 - First-stage implementation should keep HTTP routes, response shapes, database data compatibility, and external behavior stable.
 - The first-stage implementation should not migrate plugins, global config access, or external clients.
+- Follow-up implementation migrated `app/routers/notifications.py` to `notification_dao` as another low-risk system-store sample.
 
 ## Acceptance Criteria
 
@@ -52,6 +53,7 @@ Define the architecture refactor target for EmbyPulse-Pro and implement the firs
 - [x] `app/infra/db/` exists with initial database boundary modules.
 - [x] `app/routers/history.py` no longer imports or calls `query_db()`.
 - [x] `app/routers/api_tokens.py` no longer opens direct SQLite connections.
+- [x] `app/routers/notifications.py` no longer imports `query_db` or opens direct SQLite connections.
 - [x] Existing tests or import checks pass.
 
 ## Out of Scope
