@@ -1,17 +1,24 @@
 from fastapi import APIRouter, Request
 from typing import Optional
-from app.core.database import query_db, get_playback_column_name
 from app.core.config import cfg
 # 🔥 引入核心适配器
 from app.core.media_adapter import media_api
-# 🔥 引入共享 IP 归属地工具
-from app.utils.ip_location import get_location, get_isp, get_location_with_isp
 import math
-import sqlite3
-import os
 import ipaddress
 import time
 from app.core.security_utils import safe_error_message
+from app.queries.history_queries import (
+    build_history_select_fields,
+    count_history,
+    count_today_active_users,
+    count_today_plays,
+    count_total_plays,
+    fetch_history_rowids,
+    fetch_history_rows,
+    fetch_history_rows_by_rowids,
+    fetch_local_ip_data,
+    sum_today_duration,
+)
 
 router = APIRouter()
 
@@ -128,36 +135,11 @@ def api_get_history(
 
         where_sql = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
 
-        # 🔥 自动检测客户端列名，兼容不同版本数据库
-        client_col = get_playback_column_name()
-        
-        # 🔥 动态检测可用列：直接查询表的第一行，看哪些列存在
-        try:
-            test_sql = "SELECT * FROM PlaybackActivity LIMIT 1"
-            test_res = query_db(test_sql, [])
-            if test_res and len(test_res) > 0:
-                first_row = test_res[0]
-                if hasattr(first_row, 'keys'):
-                    available_columns = list(first_row.keys())
-                elif isinstance(first_row, dict):
-                    available_columns = list(first_row.keys())
-                else:
-                    available_columns = ["DateCreated", "UserId", "ItemId", "ItemName", "PlayDuration"]
-            else:
-                available_columns = ["DateCreated", "UserId", "ItemId", "ItemName", "PlayDuration"]
-        except:
-            available_columns = ["DateCreated", "UserId", "ItemId", "ItemName", "PlayDuration"]
-        
-        # 确保核心列存在，并按合理顺序排列
-        core_columns = ["DateCreated", "UserId", "ItemId", "ItemName", "PlayDuration"]
-        extra_columns = [col for col in available_columns if col not in core_columns]
-        select_fields = core_columns + extra_columns
+        select_fields = build_history_select_fields()
 
         # 🔥 优化：COUNT 查询使用索引，速度更快
-        count_sql = f"SELECT COUNT(*) as c FROM PlaybackActivity{where_sql}"
         try:
-            count_res = query_db(count_sql, params)
-            total = count_res[0]['c'] if count_res else 0
+            total = count_history(where_sql, params)
         except:
             total = 0
 
@@ -170,61 +152,19 @@ def api_get_history(
         # 对于大偏移量，先获取 ID，再关联查询
         if page > 10:
             # 大偏移量优化：先获取 ID 列表
-            id_sql = f"SELECT rowid FROM PlaybackActivity{where_sql} ORDER BY DateCreated DESC LIMIT ? OFFSET ?"
-            id_rows = query_db(id_sql, params + [limit, (page - 1) * limit])
+            id_rows = fetch_history_rowids(where_sql, params, limit, (page - 1) * limit)
             if id_rows:
                 rowids = [r['rowid'] for r in id_rows]
-                rowid_placeholders = ','.join(['?' for _ in rowids])
-                data_sql = f"SELECT {', '.join(select_fields)} FROM PlaybackActivity WHERE rowid IN ({rowid_placeholders}) ORDER BY DateCreated DESC"
-                rows = query_db(data_sql, rowids)
+                rows = fetch_history_rows_by_rowids(select_fields, rowids)
             else:
                 rows = []
         else:
             # 小偏移量直接查询
             offset = (page - 1) * limit
-            data_sql = f"SELECT {', '.join(select_fields)} FROM PlaybackActivity{where_sql} ORDER BY DateCreated DESC LIMIT ? OFFSET ?"
-            rows = query_db(data_sql, params + [limit, offset])
+            rows = fetch_history_rows(select_fields, where_sql, params, limit, offset)
 
         # 🔥 优化：只查询当前页需要的 IP 数据，而不是全表
-        local_ip_data = {}
-        # 支持 Pro 版的配置目录（/workspace/config）
-        if os.path.exists("/workspace"):
-            data_dir = "/workspace/data"
-        else:
-            data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
-        local_db_path = os.path.join(data_dir, "playback.db")
-
-        if os.path.exists(local_db_path) and rows:
-            try:
-                # 🔥 优化：只查询当前页的 IP 数据
-                item_ids = [r['ItemId'] for r in rows if r.get('ItemId')]
-                user_ids = [r['UserId'] for r in rows if r.get('UserId')]
-                
-                local_conn = sqlite3.connect(local_db_path)
-                local_conn.row_factory = sqlite3.Row
-                local_c = local_conn.cursor()
-                
-                # 使用 IN 查询，只获取当前页的 IP 数据
-                if item_ids and user_ids:
-                    placeholders = ','.join(['?' for _ in item_ids])
-                    user_placeholders = ','.join(['?' for _ in user_ids])
-                    local_c.execute(f"""
-                        SELECT UserId, ItemId, RemoteEndPoint, Location, ISP 
-                        FROM PlaybackActivity 
-                        WHERE ItemId IN ({placeholders}) AND UserId IN ({user_placeholders})
-                        AND RemoteEndPoint IS NOT NULL AND RemoteEndPoint != ''
-                    """, item_ids + user_ids)
-                    for row in local_c.fetchall():
-                        key = str(row['UserId']) + '_' + str(row['ItemId'])
-                        if key not in local_ip_data:
-                            local_ip_data[key] = {
-                                'ip': row['RemoteEndPoint'] or '',
-                                'location': row['Location'] or '',
-                                'isp': row['ISP'] or ''
-                            }
-                local_conn.close()
-            except Exception as e:
-                print(f"[IP补充] 加载本地IP数据失败: {e}")
+        local_ip_data = fetch_local_ip_data(rows)
 
         user_map = get_user_map_local()
         result = []
@@ -354,36 +294,28 @@ def api_get_history_stats(request: Request):
         active_users = 0
         total_count = 0
 
-        # 🔥 从 playback_reporting.db 获取统计数据（通过 query_db）
+        # 🔥 从 playback_reporting.db 获取统计数据
         # 今日播放次数
         try:
-            sql = f"SELECT COUNT(*) as c FROM PlaybackActivity WHERE DateCreated >= ? AND DateCreated < ?{hidden_clause}{valid_user_clause}"
-            res = query_db(sql, [today_start, today_end] + params)
-            today_count = res[0]['c'] if res and res[0]['c'] else 0
+            today_count = count_today_plays(today_start, today_end, hidden_clause + valid_user_clause, params)
         except Exception as e:
             print(f"[统计] 今日播放次数查询失败: {e}")
 
         # 今日播放总时长
         try:
-            sql = f"SELECT SUM(PlayDuration) as total FROM PlaybackActivity WHERE DateCreated >= ? AND DateCreated < ?{hidden_clause}{valid_user_clause}"
-            res = query_db(sql, [today_start, today_end] + params)
-            total_seconds = res[0]['total'] if res and res[0]['total'] else 0
+            total_seconds = sum_today_duration(today_start, today_end, hidden_clause + valid_user_clause, params)
         except Exception as e:
             print(f"[统计] 今日播放时长查询失败: {e}")
 
         # 活跃用户数
         try:
-            sql = f"SELECT COUNT(DISTINCT UserId) as c FROM PlaybackActivity WHERE DateCreated >= ? AND DateCreated < ?{hidden_clause}{valid_user_clause}"
-            res = query_db(sql, [today_start, today_end] + params)
-            active_users = res[0]['c'] if res and res[0]['c'] else 0
+            active_users = count_today_active_users(today_start, today_end, hidden_clause + valid_user_clause, params)
         except Exception as e:
             print(f"[统计] 活跃用户数查询失败: {e}")
 
         # 累计播放次数
         try:
-            sql = f"SELECT COUNT(*) as c FROM PlaybackActivity WHERE 1=1{hidden_clause}{valid_user_clause}"
-            res = query_db(sql, params)
-            total_count = res[0]['c'] if res and res[0]['c'] else 0
+            total_count = count_total_plays(hidden_clause + valid_user_clause, params)
         except Exception as e:
             print(f"[统计] 累计播放次数查询失败: {e}")
 

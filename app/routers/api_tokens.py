@@ -5,12 +5,15 @@ API Token 管理路由
 from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel
 from typing import Optional
-import sqlite3
 import hashlib
-from app.core.database import SYSTEM_DB_PATH
+from app.dao.api_token_dao import (
+    create_api_token_record,
+    delete_api_token,
+    list_api_tokens,
+    mark_api_token_used,
+)
 from app.routers.auth import is_admin_user
 from app.core.jwt_token import create_api_token, verify_api_token
-from app.core.config import cfg
 from app.core.security_utils import safe_error_message
 
 router = APIRouter()
@@ -59,28 +62,19 @@ async def create_token(request: Request, data: CreateTokenRequest):
     
     # 保存到数据库
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        
         # 计算过期时间
         from datetime import datetime, timedelta
         expires_at = datetime.utcnow() + timedelta(hours=data.expires_hours)
         created_at = datetime.utcnow()
         
         token_hash = _hash_token(token)
-        c.execute("""
-            INSERT INTO api_tokens (user_id, token, name, expires_at, created_at)
-            VALUES (?, ?, ?, ?, ?)
-        """, (
+        create_api_token_record(
             user.get("id"),
             token_hash,
             data.name,
             expires_at.isoformat(),
-            created_at.isoformat()
-        ))
-        
-        conn.commit()
-        conn.close()
+            created_at.isoformat(),
+        )
         
         return {
             "status": "success",
@@ -103,31 +97,9 @@ async def list_tokens(request: Request):
         raise HTTPException(status_code=403, detail="需要管理员权限")
 
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        
-        c.execute("""
-            SELECT id, name, expires_at, created_at, last_used_at
-            FROM api_tokens
-            WHERE user_id = ?
-            ORDER BY created_at DESC
-        """, (user.get("id"),))
-        
-        tokens = []
-        for row in c.fetchall():
-            tokens.append({
-                "id": row[0],
-                "name": row[1],
-                "expires_at": row[2],
-                "created_at": row[3],
-                "last_used_at": row[4]
-            })
-        
-        conn.close()
-        
         return {
             "status": "success",
-            "tokens": tokens
+            "tokens": list_api_tokens(user.get("id"))
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=safe_error_message(e, "查询失败"))
@@ -143,16 +115,7 @@ async def delete_token(request: Request, token_id: int):
         raise HTTPException(status_code=403, detail="需要管理员权限")
 
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        
-        # 只能删除自己的 Token
-        c.execute("DELETE FROM api_tokens WHERE id = ? AND user_id = ?", 
-                  (token_id, user.get("id")))
-        
-        conn.commit()
-        conn.close()
-        
+        delete_api_token(token_id, user.get("id"))
         return {"status": "success", "message": "Token 已删除"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=safe_error_message(e, "删除失败"))
@@ -175,16 +138,8 @@ async def verify_token(request: Request):
     
     # 更新最后使用时间
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
         token_hash = _hash_token(token)
-        c.execute("""
-            UPDATE api_tokens
-            SET last_used_at = datetime('now')
-            WHERE token = ?
-        """, (token_hash,))
-        conn.commit()
-        conn.close()
+        mark_api_token_used(token_hash)
     except:
         pass  # 忽略更新失败
     
