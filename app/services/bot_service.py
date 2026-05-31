@@ -13,6 +13,8 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from app.core.config import cfg, REPORT_COVER_URL, FALLBACK_IMAGE_URL
 from app.core.database import query_db, get_base_filter, add_sys_notification, DB_PATH, SYSTEM_DB_PATH
+from app.dao import bot_service_dao
+from app.dao import notify_admin_dao, notify_rule_dao
 from app.utils.proxy_helper import get_safe_proxies, get_safe_wecom_base  # 🔒 SSRF 安全代理读取
 from app.services.report_service import report_gen, HAS_PIL
 from app.core.event_bus import bus
@@ -41,22 +43,7 @@ def _submit_bot_task(fn, *args):
 
 def _ensure_request_admin_messages_table():
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        c.execute('''CREATE TABLE IF NOT EXISTS request_admin_messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tmdb_id INTEGER NOT NULL,
-            chat_id TEXT NOT NULL,
-            message_id INTEGER NOT NULL,
-            is_caption INTEGER DEFAULT 1,
-            original_text TEXT DEFAULT '',
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(tmdb_id, chat_id, message_id)
-        )''')
-        c.execute("CREATE INDEX IF NOT EXISTS idx_request_admin_messages_tmdb ON request_admin_messages(tmdb_id)")
-        conn.commit()
-        conn.close()
+        bot_service_dao.ensure_request_admin_messages_table()
     except Exception as e:
         logger.error(f"[求片审核同步] 初始化消息表失败: {e}")
 
@@ -78,15 +65,7 @@ def _record_request_admin_message(tmdb_id, chat_id, message_id, is_caption, orig
         return
     try:
         _ensure_request_admin_messages_table()
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        c.execute('''
-            INSERT OR REPLACE INTO request_admin_messages
-            (tmdb_id, chat_id, message_id, is_caption, original_text, updated_at)
-            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        ''', (int(tmdb_id), str(chat_id), int(message_id), 1 if is_caption else 0, original_text or ""))
-        conn.commit()
-        conn.close()
+        bot_service_dao.save_request_admin_message(tmdb_id, chat_id, message_id, is_caption, original_text)
     except Exception as e:
         logger.error(f"[求片审核同步] 记录消息失败: {e}")
 
@@ -95,12 +74,7 @@ def _sync_request_admin_messages(tmdb_id, action_text, operator, token, proxies,
         return
     try:
         _ensure_request_admin_messages_table()
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.row_factory = sqlite3.Row
-        c = conn.cursor()
-        c.execute("SELECT chat_id, message_id, is_caption, original_text FROM request_admin_messages WHERE tmdb_id = ?", (int(tmdb_id),))
-        rows = c.fetchall()
-        conn.close()
+        rows = bot_service_dao.list_request_admin_messages(tmdb_id)
 
         seen = set()
         for row in rows:
@@ -126,11 +100,7 @@ def _sync_request_admin_messages(tmdb_id, action_text, operator, token, proxies,
             logger.info(f"[求片审核同步] 未找到已记录副本 tmdb_id={tmdb_id}")
         elif rows:
             try:
-                conn = sqlite3.connect(SYSTEM_DB_PATH)
-                c = conn.cursor()
-                c.execute("DELETE FROM request_admin_messages WHERE tmdb_id = ?", (int(tmdb_id),))
-                conn.commit()
-                conn.close()
+                bot_service_dao.delete_request_admin_messages(tmdb_id)
             except Exception as e:
                 logger.error(f"[求片审核同步] 清理消息记录失败: {e}")
     except Exception as e:
@@ -165,12 +135,7 @@ def get_notify_channels(notify_type: str) -> list:
     
     # 从 notify_rules 表读取
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.row_factory = sqlite3.Row
-        c = conn.cursor()
-        c.execute("SELECT channels, enabled FROM notify_rules WHERE notify_type = ?", (notify_type,))
-        row = c.fetchone()
-        conn.close()
+        row = notify_admin_dao.get_notify_rule_row(notify_type)
         
         if row and row['enabled'] == 1:
             channels = json.loads(row['channels'] or '[]')
@@ -196,18 +161,7 @@ def get_admin_id():
 
 def init_notify_rules_db():
     try:
-        # 🔥 系统表使用 SYSTEM_DB_PATH
-        # 注意：此表用于机器人通知规则，与消息中心的 notify_mutes 不同
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        c.execute('''CREATE TABLE IF NOT EXISTS bot_notify_mutes (
-            user_id TEXT,
-            event_type TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (user_id, event_type)
-        )''')
-        conn.commit()
-        conn.close()
+        notify_rule_dao.ensure_bot_notify_mutes_table()
     except Exception as e:
         logger.error(f"Failed to create bot_notify_mutes table: {e}")
 
