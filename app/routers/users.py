@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 from app.core.config import cfg
 from app.core.database import query_db, SYSTEM_DB_PATH
+from app.dao import audit_dao
 from app.core.media_adapter import media_api
 
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
@@ -32,17 +33,17 @@ def add_audit_log(admin_id: str, admin_name: str, action: str,
                   target_count: int = 0, details: str = "", ip_address: str = ""):
     """添加操作审计日志"""
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        c.execute("""
-            INSERT INTO user_audit_logs
-            (admin_id, admin_name, action, target_user_id, target_user_name,
-             target_count, details, ip_address, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (admin_id, admin_name, action, target_user_id, target_user_name,
-              target_count, details, ip_address, datetime.datetime.now().isoformat()))
-        conn.commit()
-        conn.close()
+        audit_dao.create_user_audit_log(
+            admin_id,
+            admin_name,
+            action,
+            target_user_id,
+            target_user_name,
+            target_count,
+            details,
+            ip_address,
+            datetime.datetime.now().isoformat(),
+        )
     except Exception as e:
         logging.error(f"[审计日志] 添加失败: {e}")
 
@@ -149,78 +150,27 @@ def api_get_audit_logs(request: Request, page: int = 1, limit: int = 20,
         return {"status": "error", "message": "需要管理员权限"}
 
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.row_factory = sqlite3.Row
-
-        # 构建查询条件
-        conditions = []
-        params = []
-
-        if action:
-            # 🔒 转义 LIKE 通配符，防止注入 %/_ 引发数据过度匹配
-            safe_action = action.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-            conditions.append("action LIKE ? ESCAPE '\\'")
-            params.append(f"%{safe_action}%")
-        if start_date:
-            conditions.append("created_at >= ?")
-            params.append(start_date)
-        if end_date:
-            conditions.append("created_at <= ?")
-            params.append(end_date + "T23:59:59")
-        if target_user_id:
-            # 🔒 转义 LIKE 通配符
-            safe_uid = target_user_id.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-            conditions.append("target_user_id LIKE ? ESCAPE '\\'")
-            params.append(f"%{safe_uid}%")
-
-        where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
-
-        # 查询总数
-        count_sql = f"SELECT COUNT(*) as count FROM user_audit_logs {where_clause}"
-        count_res = conn.execute(count_sql, params).fetchone()
-        total_count = count_res['count'] if count_res else 0
-
-        # 查询数据
-        offset = (page - 1) * limit
-        data_sql = f"SELECT * FROM user_audit_logs {where_clause} ORDER BY id DESC LIMIT ? OFFSET ?"
-        logs = conn.execute(data_sql, params + [limit, offset]).fetchall()
-
-        result = []
-        for log in logs:
-            result.append({
-                "id": log['id'],
-                "admin_id": log['admin_id'],
-                "admin_name": log['admin_name'],
-                "action": log['action'],
-                "target_user_id": log['target_user_id'] or "",
-                "target_user_name": log['target_user_name'] or "",
-                "target_count": log['target_count'] or 0,
-                "details": log['details'] or "",
-                "ip_address": log['ip_address'] or "",
-                "created_at": log['created_at']
-            })
-
-        conn.close()
-
-        total_pages = max(1, (total_count + limit - 1) // limit)
+        result = audit_dao.list_user_audit_logs(
+            page=page,
+            limit=limit,
+            action=action,
+            start_date=start_date,
+            end_date=end_date,
+            target_user_id=target_user_id,
+        )
 
         return {
             "status": "success",
             "data": {
-                "logs": result,
-                "total_count": total_count,
-                "total_pages": total_pages,
-                "page": page
+                "logs": result["logs"],
+                "total_count": result["total_count"],
+                "total_pages": result["total_pages"],
+                "page": result["page"]
             }
         }
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         logging.error(f"[审计日志] 查询失败: {e}")
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 @router.get("/api/manage/audit_logs/stats")
 def api_get_audit_stats(request: Request, days: int = 7):
@@ -230,47 +180,20 @@ def api_get_audit_stats(request: Request, days: int = 7):
     days = max(1, min(days, 365))
 
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.row_factory = sqlite3.Row
-
         start_date = (datetime.datetime.now() - datetime.timedelta(days=days)).isoformat()
-
-        # 按操作类型统计
-        action_stats = conn.execute(
-            "SELECT action, COUNT(*) as count FROM user_audit_logs WHERE created_at >= ? GROUP BY action ORDER BY count DESC",
-            [start_date]
-        ).fetchall()
-
-        # 按管理员统计
-        admin_stats = conn.execute(
-            "SELECT admin_name, COUNT(*) as count FROM user_audit_logs WHERE created_at >= ? GROUP BY admin_id ORDER BY count DESC LIMIT 10",
-            [start_date]
-        ).fetchall()
-
-        # 总计
-        total = conn.execute(
-            "SELECT COUNT(*) as count FROM user_audit_logs WHERE created_at >= ?",
-            [start_date]
-        ).fetchone()
-
-        conn.close()
+        stats = audit_dao.get_user_audit_stats(start_date)
 
         return {
             "status": "success",
             "data": {
-                "action_stats": [{"action": r['action'], "count": r['count']} for r in action_stats],
-                "admin_stats": [{"admin_name": r['admin_name'], "count": r['count']} for r in admin_stats],
-                "total_count": total['count'] if total else 0,
+                "action_stats": stats["action_stats"],
+                "admin_stats": stats["admin_stats"],
+                "total_count": stats["total_count"],
                 "days": days
             }
         }
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 @router.delete("/api/manage/audit_logs/{log_id}")
 def api_delete_audit_log(log_id: int, request: Request):
@@ -279,18 +202,10 @@ def api_delete_audit_log(log_id: int, request: Request):
         return {"status": "error", "message": "需要管理员权限"}
 
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.execute("DELETE FROM user_audit_logs WHERE id = ?", [log_id])
-        conn.commit()
-        conn.close()
+        audit_dao.delete_user_audit_log(log_id)
         return {"status": "success", "message": "删除成功"}
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 @router.post("/api/manage/audit_logs/clear")
 def api_clear_audit_logs(request: Request, days: int = 30):
@@ -301,20 +216,11 @@ def api_clear_audit_logs(request: Request, days: int = 30):
         return {"status": "error", "message": "需要管理员权限"}
 
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
         cutoff_date = (datetime.datetime.now() - datetime.timedelta(days=days)).isoformat()
-        result = conn.execute("DELETE FROM user_audit_logs WHERE created_at < ?", [cutoff_date])
-        deleted_count = result.rowcount
-        conn.commit()
-        conn.close()
+        deleted_count = audit_dao.clear_user_audit_logs_before(cutoff_date)
         return {"status": "success", "message": f"已清理 {deleted_count} 条日志"}
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 @router.post("/api/manage/user/verify_password")
 def api_verify_delete_password(data: PasswordVerifyModel, request: Request):

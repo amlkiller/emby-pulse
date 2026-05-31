@@ -10,7 +10,7 @@
 
 - Trigger: database infrastructure refactor that starts removing `query_db()` from representative modules.
 - Applies to new backend code that reads/writes EmbyPulse system data or playback reporting data.
-- First-stage sample modules include `app/routers/history.py`, `app/routers/api_tokens.py`, `app/routers/notifications.py`, `app/routers/notify_rules.py`, `app/routers/pro.py`, `app/routers/notify_admin.py`, `app/routers/pwa.py`, `app/routers/audit.py`, `app/routers/risk.py`, `app/routers/clients.py`, `app/routers/calendar_notify.py`, `app/routers/webhook.py`, `app/services/report_service.py`, `app/routers/insight.py`, `app/routers/system_tools.py`, `app/services/risk_service.py`, `app/services/calendar_service.py`, `app/routers/views.py`, `app/routers/tasks.py`, `app/routers/dedupe.py`, `app/routers/system.py`, `app/routers/db_tools.py`, `app/routers/gaps.py`, `app/routers/bot.py`, `app/routers/stats.py`, `app/routers/auth.py`, `app/routers/messages.py`, `app/routers/media_request.py`, and the low-risk config/account/log slice of `app/routers/points.py`.
+- First-stage sample modules include `app/routers/history.py`, `app/routers/api_tokens.py`, `app/routers/notifications.py`, `app/routers/notify_rules.py`, `app/routers/pro.py`, `app/routers/notify_admin.py`, `app/routers/pwa.py`, `app/routers/audit.py`, `app/routers/risk.py`, `app/routers/clients.py`, `app/routers/calendar_notify.py`, `app/routers/webhook.py`, `app/services/report_service.py`, `app/routers/insight.py`, `app/routers/system_tools.py`, `app/services/risk_service.py`, `app/services/calendar_service.py`, `app/routers/views.py`, `app/routers/tasks.py`, `app/routers/dedupe.py`, `app/routers/system.py`, `app/routers/db_tools.py`, `app/routers/gaps.py`, `app/routers/bot.py`, `app/routers/stats.py`, `app/routers/auth.py`, `app/routers/messages.py`, `app/routers/media_request.py`, the low-risk config/account/log slice of `app/routers/points.py`, and the user audit-log slice of `app/routers/users.py`.
 
 ### 2. Signatures
 
@@ -28,6 +28,10 @@
 - `app.dao.pwa_dao.save_pwa_config_value(key: str, value: str) -> None`
 - `app.dao.audit_dao.list_user_audit_logs_since(start_datetime: str, limit: int) -> list[DataRow]`
 - `app.dao.audit_dao.create_user_audit_log(...) -> None`
+- `app.dao.audit_dao.list_user_audit_logs(page: int = 1, limit: int = 20, action: str = None, start_date: str = None, end_date: str = None, target_user_id: str = None) -> dict`
+- `app.dao.audit_dao.get_user_audit_stats(start_date: str) -> dict`
+- `app.dao.audit_dao.delete_user_audit_log(log_id: int) -> None`
+- `app.dao.audit_dao.clear_user_audit_logs_before(cutoff_date: str) -> int`
 - `app.dao.risk_dao.list_risk_logs(limit: int = 200) -> list[DataRow]`
 - `app.dao.risk_dao.count_recent_risk_actions() -> list[DataRow]`
 - `app.dao.risk_dao.set_user_admin_disabled(user_id: str, disabled: bool, created_at: str = "") -> None`
@@ -205,6 +209,7 @@
 - Good: `pro.py` calls `pro_license_dao.replace_license(...)` and keeps system notification write failures non-blocking for activation.
 - Good: `pwa.py` keeps its legacy `True`/`False` helper return behavior while delegating table creation and writes to `pwa_dao`.
 - Good: `audit.py` keeps audit log merge/normalization in the route and delegates only `user_audit_logs` SQL to `audit_dao`.
+- Good: `users.py` keeps admin/session checks and response payload assembly in the route while delegating `user_audit_logs` create/list/stats/delete/cleanup SQL to `audit_dao`.
 - Good: `risk.py` keeps Emby API control and config updates in the route/service layer while delegating `risk_logs` and `users_meta` summary reads to `risk_dao`.
 - Good: `clients.py` keeps media server device control and response assembly in the route while delegating blacklist/whitelist tables to `client_dao` and playback aggregates to `client_queries`.
 - Good: `calendar_notify.py` keeps notification sending, scheduling, and channel-specific HTTP calls in the route/service layer while delegating `calendar_notify_config` reads/writes to `calendar_notify_dao`.
