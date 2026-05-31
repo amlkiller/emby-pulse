@@ -100,7 +100,17 @@ def renew_user_with_invitation_code(code: str, used_by: str, user_id: str):
             row = cursor.execute("SELECT days FROM invitations WHERE code = ?", (code,)).fetchone()
             days = row[0]
 
-            exp_row = cursor.execute("SELECT expire_date FROM users_meta WHERE user_id = ?", (user_id,)).fetchone()
+            cursor.execute("PRAGMA table_info(users_meta)")
+            meta_columns = [column[1] for column in cursor.fetchall()]
+            if "admin_disabled" in meta_columns:
+                exp_row = cursor.execute(
+                    "SELECT expire_date, admin_disabled FROM users_meta WHERE user_id = ?",
+                    (user_id,),
+                ).fetchone()
+                admin_disabled = exp_row[1] if exp_row and exp_row[1] is not None else 0
+            else:
+                exp_row = cursor.execute("SELECT expire_date FROM users_meta WHERE user_id = ?", (user_id,)).fetchone()
+                admin_disabled = 0
             current_exp = exp_row[0] if exp_row and exp_row[0] else ""
 
             if current_exp and ("2099" in current_exp or "3000" in current_exp or "永久" in current_exp):
@@ -122,7 +132,7 @@ def renew_user_with_invitation_code(code: str, used_by: str, user_id: str):
             cursor.execute("UPDATE users_meta SET expire_date = ? WHERE user_id = ?", (new_exp, user_id))
             cursor.execute("UPDATE invitations SET status = 1 WHERE code = ? AND used_count >= max_uses", (code,))
             conn.commit()
-            return {"days": days, "new_exp": new_exp}, None
+            return {"days": days, "new_exp": new_exp, "admin_disabled": admin_disabled}, None
         except Exception:
             conn.rollback()
             raise

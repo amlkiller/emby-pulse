@@ -243,6 +243,8 @@
 - `app.dao.point_dao.get_lottery_winning_numbers(draw_date: str) -> DataRow | None`
 - `app.dao.point_dao.list_expired_pending_pk_invites_with_messages() -> list[DataRow]`
 - `app.dao.point_dao.mark_pk_invitation_expired(invite_id) -> None`
+- `app.dao.point_dao.create_red_packet(total_amount: int, total_count: int, chat_id, creator_id: str, creator_name: str) -> dict`
+- `app.dao.point_dao.grab_red_packet(packet_id: int, user_id: str, user_name: str) -> dict`
 - `app.dao.point_dao.perform_user_checkin(user_id: str, username: str) -> dict`
 - `app.infra.db.local_playback_store.insert_webhook_playback_ip_record(...) -> None`
 - `app.infra.db.local_playback_store.insert_bot_playback_history_record(...) -> None`

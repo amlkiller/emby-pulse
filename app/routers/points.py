@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from app.core.config import cfg, templates
 from app.core.database import SYSTEM_DB_PATH, add_sys_notification
+from app.dao import invitation_dao
 from app.dao import point_dao
 from app.core.media_adapter import media_api
 from app.services.bot_service import bot
@@ -403,60 +404,19 @@ def user_use_renew_code(data: RenewCodeModel, request: Request):
     code = data.code.strip()
     if not code: return {"status": "error", "message": "请输入续费码"}
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        conn.execute("BEGIN IMMEDIATE")
-        # 🔥 原子抢占续费码（防 TOCTOU 竞态）
-        cur = c.execute(
-            """UPDATE invitations
-               SET used_count = used_count + 1,
-                   used_at = datetime('now','localtime'),
-                   used_by = ?
-               WHERE code = ? AND status != 1 AND used_count < max_uses
-               AND type = 'renew'""",
-            (uname, code)
-        )
-        if cur.rowcount == 0:
-            conn.rollback(); conn.close()
+        renew_result, renew_error = invitation_dao.renew_user_with_invitation_code(code, uname, uid)
+        if renew_error == "invalid":
             return {"status": "error", "message": "续费码无效、已被使用、不是续费码或已达使用上限"}
-        row = c.execute("SELECT days FROM invitations WHERE code = ?", (code,)).fetchone()
-        if not row:
-            conn.rollback(); conn.close()
-            return {"status": "error", "message": "续费码数据异常"}
-        days = row[0]
-
-        # 计算新到期时间
-        exp_row = c.execute("SELECT expire_date FROM users_meta WHERE user_id = ?", (uid,)).fetchone()
-        current_exp = exp_row[0] if exp_row and exp_row[0] else ""
-
-        # 永久有效用户不需要续费（回滚已消费的续费码）
-        if current_exp and ("2099" in current_exp or "3000" in current_exp or "永久" in current_exp):
-            conn.rollback(); conn.close()
+        if renew_error == "permanent":
             return {"status": "error", "message": "您的账号为永久有效，无需续费！"}
 
-        # 处理永久续期码：days = -1 或 days = 0 或 days >= 36500
+        days = renew_result["days"]
+        new_exp = renew_result["new_exp"]
+        admin_disabled = renew_result.get("admin_disabled", 0)
         if days == -1 or days == 0 or days >= 36500:
-            new_exp = "2099-12-31"  # 永久有效
             days_display = "永久"
         else:
-            today = datetime.date.today()
-            try:
-                exp_date = datetime.datetime.strptime(current_exp, "%Y-%m-%d").date() if current_exp else today
-                if exp_date < today: exp_date = today
-            except: exp_date = today
-            new_exp = (exp_date + datetime.timedelta(days=days)).strftime("%Y-%m-%d")
             days_display = f"{days} 天"
-
-        c.execute("UPDATE users_meta SET expire_date = ? WHERE user_id = ?", (new_exp, uid))
-        # 标记续费码已用完（used_count 已在原子抢占时递增）
-        c.execute("UPDATE invitations SET status = 1 WHERE code = ? AND used_count >= max_uses", (code,))
-        
-        # 检查是否需要自动解除禁用（仅当 admin_disabled != 1 时才解除）
-        admin_disabled_row = c.execute("SELECT admin_disabled FROM users_meta WHERE user_id = ?", (uid,)).fetchone()
-        admin_disabled = admin_disabled_row[0] if admin_disabled_row else 0
-        
-        conn.commit()
-        conn.close()
 
         # 如果用户被禁用，且不是管理员手动禁用（admin_disabled != 1），则自动解除
         if admin_disabled != 1:
@@ -477,12 +437,7 @@ def user_use_renew_code(data: RenewCodeModel, request: Request):
 
         return {"status": "success", "message": f"续期成功！账号有效期已延长 {days_display}，至 {new_exp}"}
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 
 # ==========================================
@@ -604,15 +559,8 @@ def create_red_packet(data: RedPacketModel, request: Request):
     if not user: return {"status": "error", "message": "未登录"}
     
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH); c = conn.cursor()
-        conn.execute("BEGIN IMMEDIATE")
-        config = {r[0]: r[1] for r in c.execute("SELECT key, value FROM point_config").fetchall()}
-
-        # 检查是否启用红包
-        if int(config.get('enable_red_packet', 0)) == 0:
-            conn.rollback(); conn.close(); return {"status": "error", "message": "积分红包功能未开启"}
-        
         # 检查是否仅管理员可发
+        config = point_dao.get_point_config()
         if int(config.get('red_packet_admin_only', 1)) == 1:
             # 检查是否是管理员 - 从 Emby API 获取用户信息
             try:
@@ -621,50 +569,11 @@ def create_red_packet(data: RedPacketModel, request: Request):
             except:
                 is_admin = False
             if not is_admin:
-                conn.rollback(); conn.close(); return {"status": "error", "message": "仅管理员可发红包"}
-        
-        # 检查红包数量
-        if data.total_count < 1 or data.total_count > 100:
-            conn.rollback(); conn.close(); return {"status": "error", "message": "红包数量需在 1-100 之间"}
-        
-        # 检查积分
-        row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (user['Id'],)).fetchone()
-        current_points = row[0] if row else 0
-        
-        if current_points < data.total_amount:
-            conn.rollback(); conn.close(); return {"status": "error", "message": f"积分不足！当前积分: {current_points}"}
-        
-        # 计算过期时间
-        expire_hours = int(config.get('red_packet_expire_hours', 24))
-        expires_at = datetime.datetime.now() + datetime.timedelta(hours=expire_hours)
-        
-        # 扣除积分
-        new_points = current_points - data.total_amount
-        c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (new_points, user['Id']))
-        
-        # 创建红包
-        c.execute("INSERT INTO point_red_packets (total_amount, remain_amount, total_count, remain_count, creator_id, creator_name, chat_id, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                 (data.total_amount, data.total_amount, data.total_count, data.total_count, user['Id'], user['Name'], data.chat_id, expires_at))
-        packet_id = c.lastrowid
-        
-        c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-                 (user['Id'], user['Name'], f"发放红包 #{packet_id}", -data.total_amount, new_points))
-        
-        conn.commit(); conn.close()
-        
-        return {
-            "status": "success",
-            "message": f"红包创建成功！共 {data.total_count} 个红包，总计 {data.total_amount} 积分",
-            "packet_id": packet_id,
-            "balance": new_points
-        }
+                return {"status": "error", "message": "仅管理员可发红包"}
+
+        return point_dao.create_red_packet(data.total_amount, data.total_count, data.chat_id, user['Id'], user['Name'])
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 
 class GrabRedPacketModel(BaseModel):
@@ -677,106 +586,39 @@ def grab_red_packet(data: GrabRedPacketModel, request: Request):
     if not user: return {"status": "error", "message": "未登录"}
     
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH); c = conn.cursor()
-        
-        # 🔥 使用 EXCLUSIVE 事务锁，防止并发抢红包
-        c.execute("BEGIN EXCLUSIVE")
-        
-        # 获取红包信息
-        packet_row = c.execute("SELECT id, total_amount, remain_amount, total_count, remain_count, creator_id, creator_name, expires_at FROM point_red_packets WHERE id = ?", (data.packet_id,)).fetchone()
-        if not packet_row:
-            conn.rollback(); conn.close()
-            return {"status": "error", "message": "红包不存在"}
-        
-        packet_id, total_amount, remain_amount, total_count, remain_count, creator_id, creator_name, expires_at = packet_row
-        
-        # 检查红包是否过期
-        if expires_at and datetime.datetime.fromisoformat(str(expires_at)) < datetime.datetime.now():
-            conn.rollback(); conn.close()
-            return {"status": "error", "message": "红包已过期"}
-        
-        # 检查红包是否抢完
-        if remain_count <= 0 or remain_amount <= 0:
-            conn.rollback(); conn.close()
-            return {"status": "error", "message": "红包已抢完"}
-        
-        # 检查是否已抢过
-        if c.execute("SELECT 1 FROM point_red_packet_logs WHERE packet_id = ? AND user_id = ?", (packet_id, user['Id'])).fetchone():
-            conn.rollback(); conn.close()
-            return {"status": "error", "message": "您已抢过该红包"}
-        
-        # 计算抢到的金额（随机分配）
-        # 使用二倍均值法，保证公平
-        if remain_count == 1:
-            grab_amount = remain_amount  # 最后一个红包拿剩余全部
-        else:
-            max_grab = remain_amount // remain_count * 2
-            grab_amount = random.randint(1, min(max_grab, remain_amount - remain_count + 1))
-        
-        # 更新红包
-        new_remain_amount = remain_amount - grab_amount
-        new_remain_count = remain_count - 1
-        c.execute("UPDATE point_red_packets SET remain_amount = ?, remain_count = ? WHERE id = ?", (new_remain_amount, new_remain_count, packet_id))
-        
-        # 更新用户积分
-        row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (user['Id'],)).fetchone()
-        new_points = (row[0] or 0) + grab_amount if row else grab_amount
-        if row:
-            c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (new_points, user['Id']))
-        else:
-            c.execute("INSERT INTO users_meta (user_id, points) VALUES (?, ?)", (user['Id'], new_points))
-        
-        # 记录日志
-        c.execute("INSERT INTO point_red_packet_logs (packet_id, user_id, user_name, amount) VALUES (?, ?, ?, ?)",
-                 (packet_id, user['Id'], user['Name'], grab_amount))
-        c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-                 (user['Id'], user['Name'], f"抢红包 #{packet_id} (来自{creator_name})", grab_amount, new_points))
-        
-        # 🔥 检查是否是最后一个红包，发送抢完通知
-        is_last_one = (new_remain_count == 0)
-        if is_last_one:
-            # 获取红包领取记录
-            c.execute("SELECT user_name, amount FROM point_red_packet_logs WHERE packet_id = ? ORDER BY created_at", (packet_id,))
-            grab_logs = c.fetchall()
-            
+        result = point_dao.grab_red_packet(data.packet_id, user['Id'], user['Name'])
+        if result.get("status") != "success":
+            return result
+
+        if result.get("is_last_one"):
             # 构建抢完通知消息
             msg = f"🧧 <b>红包已抢完</b>\n\n"
-            msg += f"👤 <b>发红包</b>: {creator_name}\n"
-            msg += f"💰 <b>总金额</b>: {total_amount} 积分\n"
-            msg += f"📦 <b>总个数</b>: {total_count} 个\n\n"
+            msg += f"👤 <b>发红包</b>: {result.get('creator_name')}\n"
+            msg += f"💰 <b>总金额</b>: {result.get('total_amount')} 积分\n"
+            msg += f"📦 <b>总个数</b>: {result.get('total_count')} 个\n\n"
             msg += f"📋 <b>领取明细</b>:\n"
-            for i, (uname, amt) in enumerate(grab_logs, 1):
-                msg += f"{i}. {uname}: {amt} 积分\n"
-            
-            # 获取红包的 chat_id
-            chat_row = c.execute("SELECT chat_id FROM point_red_packets WHERE id = ?", (packet_id,)).fetchone()
-            chat_id = chat_row[0] if chat_row else None
+            for i, log in enumerate(result.get("grab_logs", []), 1):
+                msg += f"{i}. {log.get('user_name')}: {log.get('amount')} 积分\n"
             
             # 发送通知
             try:
+                chat_id = result.get("chat_id")
                 if chat_id:
                     bot.send_message(chat_id, msg, platform="telegram")
                 else:
                     bot.send_message("sys_notify", msg, platform="all")
             except Exception as e:
                 print(f"[红包] 发送抢完通知失败: {e}")
-        
-        conn.commit(); conn.close()
-        
+
         return {
             "status": "success",
-            "message": f"恭喜！抢到 {grab_amount} 积分",
-            "amount": grab_amount,
-            "balance": new_points,
-            "creator_name": creator_name
+            "message": result["message"],
+            "amount": result["amount"],
+            "balance": result["balance"],
+            "creator_name": result["creator_name"]
         }
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 
 @router.get("/api/points/red_packet/logs")
