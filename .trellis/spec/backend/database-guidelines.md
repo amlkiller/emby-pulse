@@ -10,7 +10,7 @@
 
 - Trigger: database infrastructure refactor that starts removing `query_db()` from representative modules.
 - Applies to new backend code that reads/writes EmbyPulse system data or playback reporting data.
-- First-stage sample modules include `app/routers/history.py`, `app/routers/api_tokens.py`, `app/routers/notifications.py`, `app/routers/notify_rules.py`, `app/routers/pro.py`, `app/routers/notify_admin.py`, `app/routers/pwa.py`, `app/routers/audit.py`, `app/routers/risk.py`, `app/routers/clients.py`, `app/routers/calendar_notify.py`, `app/routers/webhook.py`, `app/services/report_service.py`, `app/routers/insight.py`, `app/routers/system_tools.py`, `app/services/risk_service.py`, `app/services/calendar_service.py`, `app/routers/views.py`, `app/routers/tasks.py`, `app/routers/dedupe.py`, `app/routers/system.py`, `app/routers/db_tools.py`, `app/routers/gaps.py`, `app/routers/bot.py`, and `app/routers/stats.py`.
+- First-stage sample modules include `app/routers/history.py`, `app/routers/api_tokens.py`, `app/routers/notifications.py`, `app/routers/notify_rules.py`, `app/routers/pro.py`, `app/routers/notify_admin.py`, `app/routers/pwa.py`, `app/routers/audit.py`, `app/routers/risk.py`, `app/routers/clients.py`, `app/routers/calendar_notify.py`, `app/routers/webhook.py`, `app/services/report_service.py`, `app/routers/insight.py`, `app/routers/system_tools.py`, `app/services/risk_service.py`, `app/services/calendar_service.py`, `app/routers/views.py`, `app/routers/tasks.py`, `app/routers/dedupe.py`, `app/routers/system.py`, `app/routers/db_tools.py`, `app/routers/gaps.py`, `app/routers/bot.py`, `app/routers/stats.py`, and `app/routers/auth.py`.
 
 ### 2. Signatures
 
@@ -113,6 +113,17 @@
 - `app.dao.bot_admin_dao.clear_active_scratch_card() -> dict`
 - `app.dao.bot_admin_dao.get_lottery_pool_info(today: str, tomorrow: str) -> dict`
 - `app.dao.bot_admin_dao.adjust_lottery_pool(today: str, tomorrow: str, init_pool: int) -> dict`
+- `app.dao.auth_dao.ensure_local_users_table() -> None`
+- `app.dao.auth_dao.get_login_failure(lock_key: str) -> DataRow | None`
+- `app.dao.auth_dao.upsert_login_failure(lock_key: str, lock_type: str, failure_count: int, locked_until) -> None`
+- `app.dao.auth_dao.count_enabled_local_users(role: str | None = None) -> int`
+- `app.dao.auth_dao.list_local_users() -> list[DataRow]`
+- `app.dao.auth_dao.create_local_user(username, password_hash, role, remark, permissions_json) -> None`
+- `app.dao.auth_dao.update_local_user_fields(user_id: int, updates: dict, updated_at: str) -> None`
+- `app.dao.auth_dao.get_local_user_for_login(username: str) -> DataRow | None`
+- `app.dao.auth_dao.update_local_user_login(user_id: int, last_login_at: str, last_login_ip: str) -> None`
+- `app.dao.auth_dao.enable_local_user_totp(user_id: int, secret: str) -> None`
+- `app.dao.auth_dao.disable_local_user_totp(user_id: int) -> None`
 - `app.infra.db.local_playback_store.insert_webhook_playback_ip_record(...) -> None`
 - `app.infra.db.perf_stats.get_query_perf_stats() -> dict`
 - `app.queries.client_queries.count_playback_clients_by_app() -> list[DataRow]`
@@ -178,6 +189,7 @@
 - Good: `gaps.py` keeps Emby/TMDB scanning, download handoff, and in-memory scan-state updates in the route while delegating gap tables, config, and scan cache persistence to `gap_dao`.
 - Good: `bot.py` keeps bot settings validation, Telegram/WeCom HTTP calls, and admin response assembly in the route while delegating user-bot admin tables, registration logs, TG bindings, lottery, and scratch-card persistence to `bot_admin_dao`.
 - Good: `stats.py` keeps chart aggregation, media-server enrichment, and permission filtering in the route while delegating playback SQL execution and base user filters to `stats_queries`.
+- Good: `auth.py` keeps password hashing, local/Emby login decisions, TOTP validation, session updates, and audit logging in the route while delegating login failure and `local_users` persistence to `auth_dao`.
 - Bad: a router imports `query_db`, `SYSTEM_DB_PATH`, or `sqlite3` only to run route-local SQL.
 
 ### 6. Tests Required

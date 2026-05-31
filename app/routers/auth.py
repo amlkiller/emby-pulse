@@ -18,13 +18,40 @@ from io import BytesIO
 from fastapi import APIRouter, Request, Depends
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
-from app.core.database import query_db, SYSTEM_DB_PATH
+from app.dao.auth_dao import (
+    cleanup_expired_login_locks,
+    clear_login_failure,
+    count_enabled_admin_users,
+    count_enabled_local_users,
+    create_local_user as create_local_user_record,
+    delete_local_user as delete_local_user_record,
+    disable_local_user_totp,
+    enable_local_user_totp,
+    ensure_local_users_table as ensure_local_users_table_record,
+    get_local_user_by_id,
+    get_local_user_for_login,
+    get_local_user_id_by_username,
+    get_local_user_totp_enabled,
+    get_local_user_totp_pending_secret,
+    get_local_user_totp_secret,
+    get_local_user_totp_setup_secret,
+    get_login_failure,
+    get_login_failure_count,
+    list_local_users,
+    set_local_user_totp_pending_secret,
+    update_local_user_avatar,
+    update_local_user_fields,
+    update_local_user_login,
+    update_local_user_password,
+    update_local_user_permissions,
+    upsert_env_local_admin,
+    upsert_login_failure,
+)
 from app.core.config import cfg
 
 from app.core.security_utils import sanitize_html, safe_error_message
 from app.core.security import validate_password_strength
 from app.core.rate_limiter import get_client_ip
-import sqlite3
 
 
 logger = logging.getLogger("uvicorn")
@@ -52,19 +79,7 @@ def _check_login_locked(lock_key: str) -> tuple:
         lock_key: 锁定键（ip:xxx 或 user:xxx）
     """
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.row_factory = sqlite3.Row
-        c = conn.cursor()
-        
-        c.execute("""
-            SELECT locked_until, failure_count 
-            FROM login_failures 
-            WHERE lock_key = ?
-        """, (lock_key,))
-        
-        row = c.fetchone()
-        conn.close()
-        
+        row = get_login_failure(lock_key)
         if not row:
             return False, 0
         
@@ -88,55 +103,30 @@ def _record_login_failure(lock_key: str, lock_type: str):
         lock_type: 锁定类型（ip 或 user）
     """
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-
-        c.execute("SELECT failure_count FROM login_failures WHERE lock_key = ?", (lock_key,))
-        row = c.fetchone()
-
-        failure_count = (row[0] + 1) if row else 1
+        failure_count = (get_login_failure_count(lock_key) or 0) + 1
 
         # 仅 IP 级别触发硬锁定；user 级别只记录次数，不做全局锁定（防 DoS）
         locked_until = None
         if lock_type == "ip" and failure_count >= _LOGIN_MAX_FAILURES:
             locked_until = datetime.datetime.fromtimestamp(time.time() + _LOGIN_LOCK_DURATION).isoformat()
 
-        c.execute("""
-            INSERT INTO login_failures (lock_key, lock_type, failure_count, locked_until, updated_at)
-            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-            ON CONFLICT(lock_key) DO UPDATE SET
-                failure_count = excluded.failure_count,
-                locked_until = excluded.locked_until,
-                updated_at = CURRENT_TIMESTAMP
-        """, (lock_key, lock_type, failure_count, locked_until))
-
-        conn.commit()
-        conn.close()
+        upsert_login_failure(lock_key, lock_type, failure_count, locked_until)
     except Exception as e:
         logger.error(f"[登录锁定] 记录失败: {e}")
 
 def _clear_login_failure(lock_key: str):
     """登录成功，清除失败记录"""
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        c.execute("DELETE FROM login_failures WHERE lock_key = ?", (lock_key,))
-        conn.commit()
-        conn.close()
+        clear_login_failure(lock_key)
     except Exception as e:
         logger.error(f"[登录锁定] 清除失败: {e}")
 
 def _get_remaining_attempts(lock_key: str) -> int:
     """获取剩余尝试次数"""
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        c.execute("SELECT failure_count FROM login_failures WHERE lock_key = ?", (lock_key,))
-        row = c.fetchone()
-        conn.close()
-        
-        if row:
-            return max(0, _LOGIN_MAX_FAILURES - row[0])
+        failure_count = get_login_failure_count(lock_key)
+        if failure_count is not None:
+            return max(0, _LOGIN_MAX_FAILURES - failure_count)
         return _LOGIN_MAX_FAILURES
     except Exception as e:
         logger.error(f"[登录锁定] 获取剩余次数失败: {e}")
@@ -145,13 +135,7 @@ def _get_remaining_attempts(lock_key: str) -> int:
 def _cleanup_expired_locks():
     """清理过期的锁定记录（可定期调用）"""
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        c.execute("DELETE FROM login_failures WHERE locked_until IS NOT NULL AND locked_until < CURRENT_TIMESTAMP")
-        deleted = c.rowcount
-        conn.commit()
-        conn.close()
-        return deleted
+        return cleanup_expired_login_locks()
     except Exception as e:
         logger.error(f"[登录锁定] 清理失败: {e}")
         return 0
@@ -281,55 +265,7 @@ def verify_password(password: str, password_hash: str) -> bool:
 def ensure_local_users_table():
     """确保 local_users 表存在且结构正确"""
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        c.execute('''CREATE TABLE IF NOT EXISTS local_users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            role TEXT DEFAULT 'admin',
-            remark TEXT DEFAULT '',
-            avatar TEXT DEFAULT '',
-            is_enabled INTEGER DEFAULT 1,
-            permissions TEXT DEFAULT '[]',
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            last_login_at DATETIME,
-            last_login_ip TEXT
-        )''')
-        # 检查列是否存在
-        c.execute("PRAGMA table_info(local_users)")
-        columns = [row[1] for row in c.fetchall()]
-        if 'username' not in columns:
-            c.execute("ALTER TABLE local_users ADD COLUMN username TEXT UNIQUE NOT NULL")
-        if 'password_hash' not in columns:
-            c.execute("ALTER TABLE local_users ADD COLUMN password_hash TEXT NOT NULL")
-        if 'role' not in columns:
-            c.execute("ALTER TABLE local_users ADD COLUMN role TEXT DEFAULT 'admin'")
-        if 'remark' not in columns:
-            c.execute("ALTER TABLE local_users ADD COLUMN remark TEXT DEFAULT ''")
-        if 'avatar' not in columns:
-            c.execute("ALTER TABLE local_users ADD COLUMN avatar TEXT DEFAULT ''")
-        if 'is_enabled' not in columns:
-            c.execute("ALTER TABLE local_users ADD COLUMN is_enabled INTEGER DEFAULT 1")
-        if 'permissions' not in columns:
-            c.execute("ALTER TABLE local_users ADD COLUMN permissions TEXT DEFAULT '[]'")
-        if 'created_at' not in columns:
-            c.execute("ALTER TABLE local_users ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP")
-        if 'updated_at' not in columns:
-            c.execute("ALTER TABLE local_users ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP")
-        if 'last_login_at' not in columns:
-            c.execute("ALTER TABLE local_users ADD COLUMN last_login_at DATETIME")
-        if 'last_login_ip' not in columns:
-            c.execute("ALTER TABLE local_users ADD COLUMN last_login_ip TEXT")
-        if 'totp_secret' not in columns:
-            c.execute("ALTER TABLE local_users ADD COLUMN totp_secret TEXT DEFAULT ''")  # TOTP 密钥
-        if 'totp_enabled' not in columns:
-            c.execute("ALTER TABLE local_users ADD COLUMN totp_enabled INTEGER DEFAULT 0")  # 是否启用 TOTP
-        if 'totp_pending_secret' not in columns:
-            c.execute("ALTER TABLE local_users ADD COLUMN totp_pending_secret TEXT DEFAULT ''")  # TOTP 待验证密钥
-        conn.commit()
-        conn.close()
+        ensure_local_users_table_record()
     except Exception as e:
         print(f"[本地认证] 表结构检查失败: {e}")
 
@@ -361,23 +297,16 @@ def ensure_env_local_admin():
 
     try:
         # 检查用户是否已存在
-        existing = query_db("SELECT id FROM local_users WHERE username = ?", (admin_username,), one=True)
+        new_hash = hash_password(admin_password)
+        created = upsert_env_local_admin(
+            admin_username,
+            new_hash,
+            datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        )
 
-        if existing:
-            # 用户已存在，更新密码（如果环境变量有设置）
-            new_hash = hash_password(admin_password)
-            query_db(
-                "UPDATE local_users SET password_hash = ?, role = 'admin', is_enabled = 1, updated_at = ? WHERE username = ?",
-                (new_hash, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), admin_username)
-            )
+        if not created:
             print(f"[本地认证] 环境变量管理员 '{admin_username}' 密码已更新")
         else:
-            # 创建新管理员
-            password_hash = hash_password(admin_password)
-            query_db(
-                "INSERT INTO local_users (username, password_hash, role, is_enabled, remark, permissions) VALUES (?, ?, 'admin', 1, '环境变量创建的管理员', '[]')",
-                (admin_username, password_hash)
-            )
             print(f"[本地认证] 环境变量管理员 '{admin_username}' 已创建")
 
         # 同时确保本地认证开关开启
@@ -401,8 +330,7 @@ async def get_auth_settings():
     enable_local = cfg.get("enable_local_auth", False)
     local_users_count = 0
     try:
-        rows = query_db("SELECT COUNT(*) as cnt FROM local_users WHERE is_enabled = 1")
-        local_users_count = rows[0]['cnt'] if rows else 0
+        local_users_count = count_enabled_local_users()
     except:
         pass
 
@@ -440,8 +368,7 @@ async def save_auth_settings(request: Request, data: AuthSettingsUpdate):
         # 检查是否有本地管理员
         local_users_count = 0
         try:
-            rows = query_db("SELECT COUNT(*) as cnt FROM local_users WHERE is_enabled = 1 AND role = 'admin'")
-            local_users_count = rows[0]['cnt'] if rows else 0
+            local_users_count = count_enabled_admin_users()
         except:
             pass
         if local_users_count == 0:
@@ -464,7 +391,7 @@ async def get_local_users(request: Request):
     if not is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
 
-    rows = query_db("SELECT id, username, role, remark, avatar, is_enabled, permissions, created_at, updated_at, last_login_at, last_login_ip FROM local_users ORDER BY created_at DESC")
+    rows = list_local_users()
 
     # 解析 permissions JSON
     users = []
@@ -503,7 +430,7 @@ async def create_local_user(request: Request, data: LocalUserCreate):
         return {"status": "error", "message": "角色必须是 admin 或 sub_admin"}
 
     # 检查用户名是否已存在
-    existing = query_db("SELECT id FROM local_users WHERE username = ?", (username,), one=True)
+    existing = get_local_user_id_by_username(username)
     if existing:
         return {"status": "error", "message": "用户名已存在"}
 
@@ -513,10 +440,7 @@ async def create_local_user(request: Request, data: LocalUserCreate):
     # 创建用户
     password_hash = hash_password(data.password)
     try:
-        query_db(
-            "INSERT INTO local_users (username, password_hash, role, remark, permissions) VALUES (?, ?, ?, ?, ?)",
-            (username, password_hash, data.role, sanitize_html(data.remark), permissions_json)
-        )
+        create_local_user_record(username, password_hash, data.role, sanitize_html(data.remark), permissions_json)
         # 🔒 审计日志：创建用户
         from app.core.audit_logger import log_audit
         current_user = request.session.get("user", {})
@@ -541,38 +465,37 @@ async def update_local_user(request: Request, user_id: int, data: LocalUserUpdat
         return {"status": "error", "message": "需要管理员权限"}
 
     # 检查用户是否存在
-    user = query_db("SELECT id FROM local_users WHERE id = ?", (user_id,), one=True)
+    user = get_local_user_by_id(user_id, "id")
     if not user:
         return {"status": "error", "message": "用户不存在"}
 
-    # 构建更新语句
+    # 构建更新字段
     updates = []
-    params = []
+    update_values = {}
 
     if data.remark is not None:
         updates.append("remark = ?")
-        params.append(sanitize_html(data.remark))
+        update_values["remark"] = sanitize_html(data.remark)
     if data.is_enabled is not None:
         updates.append("is_enabled = ?")
-        params.append(data.is_enabled)
+        update_values["is_enabled"] = data.is_enabled
     if data.role:
         if data.role not in ["admin", "sub_admin"]:
             return {"status": "error", "message": "无效的角色"}
         updates.append("role = ?")
-        params.append(data.role)
+        update_values["role"] = data.role
     if data.permissions is not None:
         updates.append("permissions = ?")
-        params.append(json.dumps(data.permissions))
+        update_values["permissions"] = json.dumps(data.permissions)
 
     if not updates:
         return {"status": "error", "message": "没有要更新的内容"}
 
     updates.append("updated_at = ?")
-    params.append(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-    params.append(user_id)
+    updated_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     try:
-        query_db(f"UPDATE local_users SET {', '.join(updates)} WHERE id = ?", params)
+        update_local_user_fields(user_id, update_values, updated_at)
         # 🔒 审计日志：更新用户
         from app.core.audit_logger import log_audit
         current_user = request.session.get("user", {})
@@ -608,10 +531,7 @@ async def change_local_user_password(request: Request, user_id: int, data: Passw
     if is_self_change:
         if not data.old_password:
             return {"status": "error", "message": "请提供原密码"}
-        existing = query_db(
-            "SELECT password_hash FROM local_users WHERE id = ?",
-            (user_id,), one=True
-        )
+        existing = get_local_user_by_id(user_id, "password_hash")
         if not existing:
             return {"status": "error", "message": "用户不存在"}
         if not verify_password(data.old_password, existing['password_hash']):
@@ -623,17 +543,14 @@ async def change_local_user_password(request: Request, user_id: int, data: Passw
         return {"status": "error", "message": pw_error}
 
     # 检查用户是否存在
-    user = query_db("SELECT id FROM local_users WHERE id = ?", (user_id,), one=True)
+    user = get_local_user_by_id(user_id, "id")
     if not user:
         return {"status": "error", "message": "用户不存在"}
 
     # 更新密码
     password_hash = hash_password(data.new_password)
     try:
-        query_db(
-            "UPDATE local_users SET password_hash = ?, updated_at = ? WHERE id = ?",
-            (password_hash, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), user_id)
-        )
+        update_local_user_password(user_id, password_hash, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         # 🔒 审计日志：密码修改
         from app.core.audit_logger import log_audit
         current_user = request.session.get("user", {})
@@ -658,20 +575,20 @@ async def delete_local_user(request: Request, user_id: int):
         return {"status": "error", "message": "子账号无法删除用户"}
 
     # 检查用户是否存在
-    user = query_db("SELECT id, username FROM local_users WHERE id = ?", (user_id,), one=True)
+    user = get_local_user_by_id(user_id, "id, username")
     if not user:
         return {"status": "error", "message": "用户不存在"}
 
     # 检查是否是最后一个管理员
-    admin_count = query_db("SELECT COUNT(*) as cnt FROM local_users WHERE role = 'admin' AND is_enabled = 1")
-    if admin_count and admin_count[0]['cnt'] <= 1:
+    admin_count = count_enabled_admin_users()
+    if admin_count <= 1:
         # 检查要删除的是否是这个管理员
-        user_role = query_db("SELECT role FROM local_users WHERE id = ?", (user_id,), one=True)
+        user_role = get_local_user_by_id(user_id, "role")
         if user_role and user_role['role'] == 'admin':
             return {"status": "error", "message": "不能删除最后一个管理员账号"}
 
     try:
-        query_db("DELETE FROM local_users WHERE id = ?", (user_id,))
+        delete_local_user_record(user_id)
         # 🔒 审计日志：删除用户
         from app.core.audit_logger import log_audit
         current_user = request.session.get("user", {})
@@ -713,7 +630,7 @@ async def get_avatar(request: Request, user_id: int):
             return RedirectResponse("/static/img/logo-app.png")
 
     try:
-        user = query_db("SELECT avatar FROM local_users WHERE id = ?", (user_id,), one=True)
+        user = get_local_user_by_id(user_id, "avatar")
         if user and user['avatar']:
             # 返回头像数据（可能是 base64 或 URL）
             avatar = user['avatar']
@@ -760,10 +677,7 @@ async def update_avatar(request: Request, data: AvatarUpdate):
         return {"status": "error", "message": str(ve)}
 
     try:
-        query_db(
-            "UPDATE local_users SET avatar = ?, updated_at = ? WHERE id = ?",
-            (safe_avatar, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), user_id)
-        )
+        update_local_user_avatar(user_id, safe_avatar, datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
         # 注意：头像数据存储在数据库中，不存储在 session 中（session 有大小限制）
         # 前端通过 /api/auth/avatar/{user_id} 获取头像
@@ -797,7 +711,7 @@ async def update_user_permissions(request: Request, user_id: int, data: Permissi
         return {"status": "error", "message": "需要管理员权限"}
 
     # 检查用户是否存在
-    user = query_db("SELECT id, role FROM local_users WHERE id = ?", (user_id,), one=True)
+    user = get_local_user_by_id(user_id, "id, role")
     if not user:
         return {"status": "error", "message": "用户不存在"}
 
@@ -811,10 +725,7 @@ async def update_user_permissions(request: Request, user_id: int, data: Permissi
         return {"status": "error", "message": f"无效的权限: {', '.join(invalid_perms)}"}
 
     try:
-        query_db(
-            "UPDATE local_users SET permissions = ?, updated_at = ? WHERE id = ?",
-            (json.dumps(data.permissions), datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), user_id)
-        )
+        update_local_user_permissions(user_id, json.dumps(data.permissions), datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         return {"status": "success", "message": "权限更新成功"}
     except Exception as e:
         logger.error(f"[更新权限失败] {str(e)}")
@@ -833,11 +744,7 @@ def verify_local_user(username: str, password: str, client_ip: str = None, totp_
         return False, "本地认证未启用"
 
     # 查询用户
-    user = query_db(
-        "SELECT id, username, password_hash, role, remark, avatar, is_enabled, permissions, totp_secret, totp_enabled FROM local_users WHERE username = ?",
-        (username,),
-        one=True
-    )
+    user = get_local_user_for_login(username)
     
     if not user:
         return False, "用户名或密码错误"
@@ -863,10 +770,7 @@ def verify_local_user(username: str, password: str, client_ip: str = None, totp_
     
     # 更新最后登录信息
     try:
-        query_db(
-            "UPDATE local_users SET last_login_at = ?, last_login_ip = ? WHERE id = ?",
-            (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), client_ip, user['id'])
-        )
+        update_local_user_login(user['id'], datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), client_ip)
     except:
         pass
 
@@ -1138,7 +1042,7 @@ async def totp_setup(request: Request):
     user_id = user.get("id")
     
     # 检查是否已启用 TOTP
-    existing = query_db("SELECT totp_enabled FROM local_users WHERE id = ?", (user_id,), one=True)
+    existing = get_local_user_totp_enabled(user_id)
     if existing and existing['totp_enabled']:
         return {"status": "error", "message": "已启用两步验证，如需更换请先禁用"}
     
@@ -1171,7 +1075,7 @@ async def totp_setup(request: Request):
     img_base64 = base64.b64encode(buffer.getvalue()).decode()
     
     # 保存到待验证字段（不覆盖已启用的密钥）
-    query_db("UPDATE local_users SET totp_pending_secret = ? WHERE id = ?", (secret, user_id))
+    set_local_user_totp_pending_secret(user_id, secret)
     
     return {
         "status": "success",
@@ -1201,7 +1105,7 @@ async def totp_verify(request: Request, data: TOTPVerifyModel):
     user_id = user.get("id")
     
     # 获取用户当前的 TOTP secret（优先使用待验证密钥）
-    row = query_db("SELECT totp_pending_secret, totp_secret FROM local_users WHERE id = ?", (user_id,), one=True)
+    row = get_local_user_totp_setup_secret(user_id)
     secret = (row['totp_pending_secret'] or row['totp_secret']) if row else ''
     if not secret:
         return {"status": "error", "message": "请先生成验证器密钥"}
@@ -1235,11 +1139,10 @@ async def totp_enable(request: Request, data: TOTPEnableModel):
         return {"status": "error", "message": "验证码错误或已过期"}
     
     # 启用 TOTP
-    pending = query_db("SELECT totp_pending_secret FROM local_users WHERE id = ?", (user_id,), one=True)
+    pending = get_local_user_totp_pending_secret(user_id)
     if not pending or not pending['totp_pending_secret']:
         return {"status": "error", "message": "请先调用 TOTP setup 生成密钥"}
-    query_db("UPDATE local_users SET totp_secret = ?, totp_enabled = 1, totp_pending_secret = '' WHERE id = ?",
-             (pending['totp_pending_secret'], user_id))
+    enable_local_user_totp(user_id, pending['totp_pending_secret'])
     
     return {"status": "success", "message": "两步验证已启用"}
 
@@ -1260,7 +1163,7 @@ async def totp_disable(request: Request, data: TOTPVerifyModel):
     user_id = user.get("id")
     
     # 获取当前 secret
-    row = query_db("SELECT totp_secret FROM local_users WHERE id = ?", (user_id,), one=True)
+    row = get_local_user_totp_secret(user_id)
     if not row or not row['totp_secret']:
         return {"status": "error", "message": "未启用两步验证"}
     
@@ -1270,7 +1173,7 @@ async def totp_disable(request: Request, data: TOTPVerifyModel):
         return {"status": "error", "message": "验证码错误或已过期"}
     
     # 禁用 TOTP
-    query_db("UPDATE local_users SET totp_secret = '', totp_pending_secret = '', totp_enabled = 0 WHERE id = ?", (user_id,))
+    disable_local_user_totp(user_id)
     
     return {"status": "success", "message": "两步验证已禁用"}
 
@@ -1288,7 +1191,7 @@ async def totp_status(request: Request):
         return {"status": "success", "data": {"enabled": False, "available": False}}
     
     user_id = user.get("id")
-    row = query_db("SELECT totp_enabled FROM local_users WHERE id = ?", (user_id,), one=True)
+    row = get_local_user_totp_enabled(user_id)
     
     return {
         "status": "success",

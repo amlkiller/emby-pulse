@@ -81,6 +81,7 @@ Define the architecture refactor target for EmbyPulse-Pro and implement the firs
 - [x] `app/routers/gaps.py` delegates gap config, records, perfect-series, and scan-cache persistence to a DAO.
 - [x] `app/routers/bot.py` delegates user-bot admin, registration log, TG binding, lottery, and scratch-card table access to a DAO.
 - [x] `app/routers/stats.py` delegates playback statistics SQL and base playback filters to a query service.
+- [x] `app/routers/auth.py` delegates login failure, local user, avatar, permission, and TOTP table access to a DAO.
 - [x] Existing tests or import checks pass.
 
 ## Out of Scope
