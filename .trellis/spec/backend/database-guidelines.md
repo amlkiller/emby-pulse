@@ -10,7 +10,7 @@
 
 - Trigger: database infrastructure refactor that starts removing `query_db()` from representative modules.
 - Applies to new backend code that reads/writes EmbyPulse system data or playback reporting data.
-- First-stage sample modules include `app/routers/history.py`, `app/routers/api_tokens.py`, `app/routers/notifications.py`, `app/routers/notify_rules.py`, `app/routers/pro.py`, `app/routers/notify_admin.py`, `app/routers/pwa.py`, `app/routers/audit.py`, `app/routers/risk.py`, `app/routers/clients.py`, `app/routers/calendar_notify.py`, `app/routers/webhook.py`, `app/services/report_service.py`, `app/routers/insight.py`, `app/routers/system_tools.py`, `app/services/risk_service.py`, `app/services/calendar_service.py`, `app/routers/views.py`, `app/routers/tasks.py`, `app/routers/dedupe.py`, `app/routers/system.py`, and `app/routers/db_tools.py`.
+- First-stage sample modules include `app/routers/history.py`, `app/routers/api_tokens.py`, `app/routers/notifications.py`, `app/routers/notify_rules.py`, `app/routers/pro.py`, `app/routers/notify_admin.py`, `app/routers/pwa.py`, `app/routers/audit.py`, `app/routers/risk.py`, `app/routers/clients.py`, `app/routers/calendar_notify.py`, `app/routers/webhook.py`, `app/services/report_service.py`, `app/routers/insight.py`, `app/routers/system_tools.py`, `app/services/risk_service.py`, `app/services/calendar_service.py`, `app/routers/views.py`, `app/routers/tasks.py`, `app/routers/dedupe.py`, `app/routers/system.py`, `app/routers/db_tools.py`, and `app/routers/gaps.py`.
 
 ### 2. Signatures
 
@@ -85,6 +85,19 @@
 - `app.dao.dedupe_dao.delete_dedupe_result_by_item_id(item_id: str) -> None`
 - `app.dao.dedupe_dao.get_dedupe_config_values() -> dict`
 - `app.dao.dedupe_dao.save_dedupe_config_values(config: dict) -> None`
+- `app.dao.gap_dao.ensure_gap_tables(logger=None) -> None`
+- `app.dao.gap_dao.add_gap_perfect_series(series_id, tmdb_id, series_name) -> None`
+- `app.dao.gap_dao.get_gap_cache_interval_hours(default: int = 6) -> int`
+- `app.dao.gap_dao.list_gap_records_for_lock() -> list[DataRow]`
+- `app.dao.gap_dao.list_gap_perfect_series_ids() -> list[str]`
+- `app.dao.gap_dao.get_gap_config_value(key: str) -> str | None`
+- `app.dao.gap_dao.save_gap_scan_cache(results) -> None`
+- `app.dao.gap_dao.load_gap_scan_cache() -> Any | None`
+- `app.dao.gap_dao.list_ignored_series_ids() -> list[str]`
+- `app.dao.gap_dao.save_gap_record_status(series_id, series_name, season, episode, status: int) -> None`
+- `app.dao.gap_dao.list_gap_ignore_records() -> list[DataRow]`
+- `app.dao.gap_dao.list_gap_perfect_records() -> list[DataRow]`
+- `app.dao.gap_dao.get_gap_config_map() -> dict`
 - `app.infra.db.local_playback_store.insert_webhook_playback_ip_record(...) -> None`
 - `app.infra.db.perf_stats.get_query_perf_stats() -> dict`
 - `app.queries.client_queries.count_playback_clients_by_app() -> list[DataRow]`
@@ -145,6 +158,7 @@
 - Good: `dedupe.py` keeps Emby scan/delete orchestration and duplicate scoring in the route while delegating dedupe result, whitelist, and config persistence to `dedupe_dao`.
 - Good: `system.py` keeps settings validation, external connectivity probes, and response assembly in the route while delegating database diagnostics, repair DDL, and dashboard layout persistence to DAO/query modules.
 - Good: `db_tools.py` keeps admin permission checks, audit logging, and restore path validation in the route while delegating database health, migration, backup, restore, and deep-check operations to `migration_service`.
+- Good: `gaps.py` keeps Emby/TMDB scanning, download handoff, and in-memory scan-state updates in the route while delegating gap tables, config, and scan cache persistence to `gap_dao`.
 - Bad: a router imports `query_db`, `SYSTEM_DB_PATH`, or `sqlite3` only to run route-local SQL.
 
 ### 6. Tests Required

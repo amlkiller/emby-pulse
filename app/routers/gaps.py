@@ -11,12 +11,30 @@ import time
 import logging
 
 from app.core.config import cfg
-from app.core.database import query_db, SYSTEM_DB_PATH
+from app.dao.gap_dao import (
+    add_gap_perfect_series,
+    delete_gap_perfect_series,
+    delete_gap_record_by_id,
+    delete_gap_record_by_series_episode,
+    delete_gap_records_by_series_id,
+    ensure_gap_tables,
+    get_gap_cache_interval_hours,
+    get_gap_config_map,
+    get_gap_config_value,
+    list_gap_ignore_records,
+    list_gap_perfect_records,
+    list_gap_perfect_series_ids,
+    list_gap_records_for_lock,
+    list_ignored_series_ids,
+    load_gap_scan_cache,
+    save_gap_config_value,
+    save_gap_record_status,
+    save_gap_scan_cache,
+)
 from app.routers.search import get_emby_sys_info, is_new_emby_router
 from app.routers.auth import is_admin_user
 # 🔥 引入核心适配器
 from app.core.media_adapter import media_api
-import sqlite3
 
 logger = logging.getLogger("uvicorn")
 
@@ -26,27 +44,7 @@ router = APIRouter(prefix="/api/gaps", tags=["gaps"])
 def _ensure_gap_tables():
     """确保缺集相关表存在"""
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        c.execute("CREATE TABLE IF NOT EXISTS gap_config (key TEXT PRIMARY KEY, value TEXT, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)")
-        c.execute("CREATE TABLE IF NOT EXISTS gap_records (id INTEGER PRIMARY KEY AUTOINCREMENT, series_id TEXT, series_name TEXT, season_number INTEGER, episode_number INTEGER, status INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(series_id, season_number, episode_number))")
-        c.execute("CREATE TABLE IF NOT EXISTS gap_perfect_series (id INTEGER PRIMARY KEY AUTOINCREMENT, series_id TEXT, tmdb_id TEXT, series_name TEXT, total_seasons INTEGER, total_episodes INTEGER, marked_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(series_id))")
-        c.execute("CREATE TABLE IF NOT EXISTS gap_scan_cache (id INTEGER PRIMARY KEY, result_json TEXT, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)")
-        
-        # 🔥 新增：确保默认缓存间隔配置存在
-        c.execute("SELECT value FROM gap_config WHERE key = 'cache_interval_hours'")
-        if not c.fetchone():
-            c.execute("INSERT INTO gap_config (key, value) VALUES ('cache_interval_hours', '6')")
-        # 迁移旧表结构（如果存在旧列）
-        c.execute("PRAGMA table_info(gap_scan_cache)")
-        cols = [col[1] for col in c.fetchall()]
-        if "series_id" in cols and "result_json" not in cols:
-            # 旧表结构，需要重建
-            logger.info("[缺集管理] 检测到旧版 gap_scan_cache 表结构，正在迁移...")
-            c.execute("DROP TABLE gap_scan_cache")
-            c.execute("CREATE TABLE gap_scan_cache (id INTEGER PRIMARY KEY, result_json TEXT, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)")
-        conn.commit()
-        conn.close()
+        ensure_gap_tables(logger)
     except Exception as e:
         logger.error(f"[缺集管理] 初始化表失败: {e}")
 
@@ -112,7 +110,7 @@ def process_single_series(series, lock_map, host, tmdb_key, proxies, today, glob
         return {"series_id": series_id, "series_name": series_name, "tmdb_id": tmdb_id, "tmdb_status": tmdb_status, "poster": f"/api/library/image/{series_id}?type=Primary&width=300", "emby_url": emby_url, "gaps": series_gaps}
     else:
         if tmdb_status in ["Ended", "Canceled"]:
-            try: query_db("INSERT OR IGNORE INTO gap_perfect_series (series_id, tmdb_id, series_name) VALUES (?, ?, ?)", (series_id, tmdb_id, series_name))
+            try: add_gap_perfect_series(series_id, tmdb_id, series_name)
             except Exception: pass
         return None
 
@@ -128,12 +126,7 @@ def _start_background_gap_sync():
         while True:
             try:
                 # 从数据库读取缓存间隔配置
-                conn = sqlite3.connect(SYSTEM_DB_PATH)
-                c = conn.cursor()
-                c.execute("SELECT value FROM gap_config WHERE key = 'cache_interval_hours'")
-                row = c.fetchone()
-                interval_hours = int(row[0]) if row else 6
-                conn.close()
+                interval_hours = get_gap_cache_interval_hours()
                 
                 logger.info(f"🔄 [定时任务] 开始在后台自动刷新缺集扫描缓存（间隔: {interval_hours}小时）...")
                 
@@ -185,20 +178,19 @@ def run_scan_task():
 
         # 表结构已由 db_schemas.py 统一创建，此处仅确保数据操作
 
-        records = query_db("SELECT series_id, season_number, episode_number, status FROM gap_records")
+        records = list_gap_records_for_lock()
         lock_map = {f"{r['series_id']}_{r['season_number']}_{r['episode_number']}": r['status'] for r in records} if records else {}
         logger.info(f"[缺集扫描] 已忽略记录: {len(lock_map)} 条")
         
-        perfect_records = query_db("SELECT series_id FROM gap_perfect_series")
-        perfect_set = set([r['series_id'] for r in perfect_records]) if perfect_records else set()
+        perfect_set = set(list_gap_perfect_series_ids())
         logger.info(f"[缺集扫描] 完结免检剧集: {len(perfect_set)} 部")
 
         # 获取屏蔽的媒体库列表
-        config_rows = query_db("SELECT key, value FROM gap_config WHERE key = 'excluded_libraries'")
+        excluded_libraries = get_gap_config_value("excluded_libraries")
         excluded_libs = set()
-        if config_rows and config_rows[0]['value']:
+        if excluded_libraries:
             try:
-                excluded_libs = set(json.loads(config_rows[0]['value']))
+                excluded_libs = set(json.loads(excluded_libraries))
                 logger.info(f"[缺集扫描] 屏蔽媒体库: {excluded_libs}")
             except Exception: pass
 
@@ -270,7 +262,7 @@ def run_scan_task():
         
         logger.info(f"[缺集扫描] 扫描完成，发现 {len(results)} 部有缺集的剧集")
         with state_lock: scan_state["results"] = results
-        try: query_db("INSERT OR REPLACE INTO gap_scan_cache (id, result_json, updated_at) VALUES (1, ?, datetime('now', 'localtime'))", (json.dumps(results),))
+        try: save_gap_scan_cache(results)
         except Exception: pass
     except Exception as e:
         logger.error(f"[缺集扫描] 扫描异常: {e}")
@@ -300,12 +292,11 @@ def get_progress(request: Request):
         if not scan_state["is_scanning"]:
             if not scan_state["results"]:
                 try:
-                    row = query_db("SELECT result_json FROM gap_scan_cache WHERE id = 1")
-                    if row: scan_state["results"] = json.loads(row[0]['result_json'])
+                    cached_results = load_gap_scan_cache()
+                    if cached_results: scan_state["results"] = cached_results
                 except Exception: pass
             try:
-                ignores = query_db("SELECT series_id FROM gap_records WHERE status=1 AND season_number=-1")
-                ignore_ids = set([r['series_id'] for r in ignores]) if ignores else set()
+                ignore_ids = set(list_ignored_series_ids())
                 scan_state["results"] = [s for s in scan_state["results"] if s.get('series_id') not in ignore_ids]
             except Exception: pass
         return {"status": "success", "data": scan_state}
@@ -341,7 +332,7 @@ def run_verify_task():
                 for gap in s["gaps"]:
                     if f"{gap['season']}_{gap['episode']}" in local_eps:
                         changed = True
-                        try: query_db("DELETE FROM gap_records WHERE series_id=? AND season_number=? AND episode_number=?", (s_id, gap['season'], gap['episode']))
+                        try: delete_gap_record_by_series_episode(s_id, gap['season'], gap['episode'])
                         except Exception: pass
                     else:
                         new_gaps.append(gap)
@@ -349,7 +340,7 @@ def run_verify_task():
                 
                 if len(new_gaps) == 0 and changed:
                     if s.get("tmdb_status") in ["Ended", "Canceled"]:
-                        try: query_db("INSERT OR IGNORE INTO gap_perfect_series (series_id, tmdb_id, series_name) VALUES (?, ?, ?)", (s_id, s.get("tmdb_id"), s.get("series_name")))
+                        try: add_gap_perfect_series(s_id, s.get("tmdb_id"), s.get("series_name"))
                         except Exception: pass
             except Exception: pass
                 
@@ -357,7 +348,7 @@ def run_verify_task():
             with state_lock:
                 if not scan_state["is_scanning"]:
                     scan_state["results"] = [s for s in results_copy if len(s.get("gaps", [])) > 0]
-                    try: query_db("INSERT OR REPLACE INTO gap_scan_cache (id, result_json, updated_at) VALUES (1, ?, datetime('now', 'localtime'))", (json.dumps(scan_state["results"]),))
+                    try: save_gap_scan_cache(scan_state["results"])
                     except Exception: pass
     except Exception: pass
 
@@ -380,7 +371,7 @@ def ignore_gap(request: Request, payload: dict):
         return {"status": "error", "message": "需要管理员权限"}
     try:
         s_id = payload.get("series_id"); s_num = int(payload.get("season_number", 0)); e_num = int(payload.get("episode_number", 0))
-        query_db("INSERT INTO gap_records (series_id, series_name, season_number, episode_number, status) VALUES (?, ?, ?, ?, 1) ON CONFLICT(series_id, season_number, episode_number) DO UPDATE SET status = 1", (s_id, payload.get("series_name", ""), s_num, e_num))
+        save_gap_record_status(s_id, payload.get("series_name", ""), s_num, e_num, 1)
         with state_lock:
             for s in scan_state["results"]:
                 if s.get("series_id") == s_id: s["gaps"] = [ep for ep in s.get("gaps", []) if not (ep["season"] == s_num and ep["episode"] == e_num)]
@@ -395,7 +386,7 @@ def ignore_entire_series(request: Request, payload: dict):
         return {"status": "error", "message": "需要管理员权限"}
     try:
         s_id = payload.get("series_id")
-        query_db("INSERT INTO gap_records (series_id, series_name, season_number, episode_number, status) VALUES (?, ?, -1, -1, 1) ON CONFLICT(series_id, season_number, episode_number) DO UPDATE SET status = 1", (s_id, payload.get("series_name", "")))
+        save_gap_record_status(s_id, payload.get("series_name", ""), -1, -1, 1)
         with state_lock: scan_state["results"] = [s for s in scan_state["results"] if s.get("series_id") != s_id]
         return {"status": "success"}
     except Exception as e: return {"status": "error"}
@@ -406,8 +397,8 @@ def get_ignored_list(request: Request):
     if not is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     try:
-        records = query_db("SELECT id, series_id, series_name, season_number, episode_number, created_at FROM gap_records WHERE status = 1 AND series_id != 'SYSTEM'")
-        perfects = query_db("SELECT series_id, tmdb_id, series_name, marked_at FROM gap_perfect_series")
+        records = list_gap_ignore_records()
+        perfects = list_gap_perfect_records()
         data = []
         if records:
             for r in records: data.append({"type": "record", "id": r['id'], "series_name": r['series_name'], "target": "全剧集" if r['season_number'] == -1 else f"S{str(r['season_number']).zfill(2)}E{str(r['episode_number']).zfill(2)}", "time": r['created_at']})
@@ -433,8 +424,8 @@ def unignore_item(request: Request, payload: dict):
     if not is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     try:
-        if payload.get("type") == "record": query_db("DELETE FROM gap_records WHERE id = ?", (payload.get("id"),))
-        elif payload.get("type") == "perfect": query_db("DELETE FROM gap_perfect_series WHERE series_id = ?", (payload.get("id"),))
+        if payload.get("type") == "record": delete_gap_record_by_id(payload.get("id"))
+        elif payload.get("type") == "perfect": delete_gap_perfect_series(payload.get("id"))
         return {"status": "success"}
     except Exception as e: return {"status": "error"}
 
@@ -450,10 +441,10 @@ def delete_ignore_item(request: Request, payload: dict):
 
         if target == "全剧集":
             # 删除 gap_records 中该剧的所有记录
-            query_db("DELETE FROM gap_records WHERE series_id = ?", (item_id,))
+            delete_gap_records_by_series_id(item_id)
         else:
             # 删除单条记录
-            query_db("DELETE FROM gap_records WHERE id = ?", (item_id,))
+            delete_gap_record_by_id(item_id)
 
         return {"status": "success"}
     except Exception as e: return {"status": "error", "message": safe_error_message(e)}
@@ -463,8 +454,7 @@ def get_gap_config(request: Request):
     # 🔒 管理员专用
     if not is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
-    rows = query_db("SELECT key, value FROM gap_config")
-    conf = {r['key']: r['value'] for r in rows} if rows else {}
+    conf = get_gap_config_map()
     # 解析 excluded_libraries
     if conf.get('excluded_libraries'):
         try:
@@ -526,7 +516,7 @@ def save_gap_config(request: Request, payload: dict):
     if not is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     for k, v in payload.items():
-        query_db("INSERT OR REPLACE INTO gap_config (key, value) VALUES (?, ?)", (k, str(v).strip()))
+        save_gap_config_value(k, v)
     return {"status": "success"}
 
 # ==================== 影巢搜索 ====================
@@ -1256,7 +1246,7 @@ def download_gap_item(request: Request = None, payload: dict = None):
     clean_token = mp_token.strip().strip("'\"") if mp_token else ""
     headers = {"X-API-KEY": clean_token, "Content-Type": "application/json"}
 
-    ui_conf = {r['key']: r['value'] for r in query_db("SELECT key, value FROM gap_config")} if query_db("SELECT key, value FROM gap_config") else {}
+    ui_conf = get_gap_config_map()
     
     client_type = ui_conf.get("client_type", ""); client_url = ui_conf.get("client_url", "")
     client_user = ui_conf.get("client_user", ""); client_pass = ui_conf.get("client_pass", "")
@@ -1281,7 +1271,7 @@ def download_gap_item(request: Request = None, payload: dict = None):
                 
                 # 更新缺集状态为"下载中"
                 for ep in episodes:
-                    query_db("INSERT INTO gap_records (series_id, series_name, season_number, episode_number, status) VALUES (?, ?, ?, ?, 2) ON CONFLICT(series_id, season_number, episode_number) DO UPDATE SET status = 2", (series_id, series_name, int(season), int(ep)))
+                    save_gap_record_status(series_id, series_name, int(season), int(ep), 2)
                 
                 with state_lock:
                     for s in scan_state["results"]:
