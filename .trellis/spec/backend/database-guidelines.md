@@ -137,6 +137,8 @@
 - `app.dao.user_bot_dao.record_bot_user(tg_user_id, tg_name: str = "") -> None`
 - `app.dao.user_bot_dao.list_bot_users() -> list[dict]`
 - `app.dao.user_bot_dao.bind_user(tg_user_id, emby_user_id, emby_username, init_password: str = "", tg_username: str = "", tg_display_name: str = "") -> None`
+- `app.dao.user_bot_dao.get_tg_user_id_by_username(tg_username: str) -> str | None`
+- `app.dao.user_bot_dao.get_binding_by_tg_user_or_username(identifier) -> dict | None`
 - `app.dao.user_bot_dao.update_binding_init_password(tg_user_id, init_password: str) -> None`
 - `app.dao.user_bot_dao.is_blacklisted(tg_user_id) -> bool`
 - `app.dao.user_bot_dao.add_to_blacklist(tg_user_id, reason: str = "") -> None`
@@ -323,6 +325,7 @@
 - Good: `auth.py` keeps password hashing, local/Emby login decisions, TOTP validation, session updates, and audit logging in the route while delegating login failure and `local_users` persistence to `auth_dao`.
 - Good: `messages.py` keeps permission checks, Emby user lookups, content sanitization, bot notification delivery, and response assembly in the route while delegating message, mute, notification-block, announcement, and related user lookup tables to `message_dao`.
 - Good: `media_request.py` keeps request validation, Emby/TMDB/MoviePilot calls, cache assembly, notification delivery, and response shaping in the route while delegating request, feedback, update, invitation, point, gap-cache, and user metadata persistence to `media_request_dao`.
+- Good: `user_bot_service.py` keeps Telegram command parsing and response formatting in the service while delegating TG binding lookups and point robbery transactions to DAO boundaries.
 - Good: `points.py` keeps admin/session checks, Emby user enrichment, pagination payload assembly, and later game workflows in the route while delegating point config, point schema bootstrap, point balances, batch updates, point log reads, red-packet log reads, point ranking reads, and daily check-in transactions to `point_dao`.
 - Good: `points.py` keeps Emby user existence/name lookup in the route while delegating transfer fee calculation, balance mutation, transfer logs, and transfer transaction handling to `point_dao`.
 - Good: `points.py` keeps Emby policy re-enable, sys notification writes, and response shaping in the route while delegating store-item lookup, point deduction, expiry update, purchase limit checks, and point-log writes to `point_dao`.

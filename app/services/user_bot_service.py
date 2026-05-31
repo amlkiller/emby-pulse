@@ -1592,37 +1592,12 @@ def cmd_rob(chat_id, tg_user_id, text, is_group=False, entities=None):
     if len(parts) < 2:
         return _send(chat_id, "💡 使用方法：/rob @用户\n示例：/rob @张三\n\n💡 也可以直接使用 Emby 用户名")
     
-    conn = None
     try:
         # 用户名可能是多个部分
         target = ' '.join(parts[1:]).lstrip('@')
         
         if not target:
             return _send(chat_id, "❌ 请指定要打劫的用户")
-        
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        conn.execute("BEGIN IMMEDIATE")
-
-        # 获取配置
-        config = {r[0]: r[1] for r in c.execute("SELECT key, value FROM point_config").fetchall()}
-
-        # 检查是否启用打劫
-        if int(config.get('enable_rob', 0)) == 0:
-            conn.close()
-            return _send(chat_id, "❌ 打劫功能未开启")
-        
-        # 获取配置参数
-        success_rate = int(config.get('rob_success_rate', 50))
-        rob_min = int(config.get('rob_min', 1))
-        rob_max = int(config.get('rob_max', 10))
-        counter_rate = int(config.get('rob_counter_rate', 30))
-        counter_min = int(config.get('rob_counter_min', 1))
-        counter_max = int(config.get('rob_counter_max', 5))
-        protect_threshold = int(config.get('rob_protect_threshold', 50))
-        max_per_day = int(config.get('rob_max_per_day', 5))
-        max_be_robbed = int(config.get('rob_max_be_robbed', 3))
-        cooldown_hours = int(config.get('rob_cooldown_hours', 2))
         
         # 🔥 优先从 entities 获取被 @ 用户的真实 TG ID
         mentioned_user_id = None
@@ -1636,10 +1611,7 @@ def cmd_rob(chat_id, tg_user_id, text, is_group=False, entities=None):
                         offset = ent.get("offset", 0)
                         length = ent.get("length", 0)
                         mentioned_username = text[offset:offset+length].lstrip('@')
-                        c.execute("SELECT tg_user_id FROM tg_user_bindings WHERE tg_username = ?", (mentioned_username,))
-                        row = c.fetchone()
-                        if row:
-                            mentioned_user_id = row[0]
+                        mentioned_user_id = user_bot_dao.get_tg_user_id_by_username(mentioned_username)
                         break
         
         # 通过 TG 用户ID或用户名查找绑定的 Emby 用户
@@ -1648,17 +1620,14 @@ def cmd_rob(chat_id, tg_user_id, text, is_group=False, entities=None):
         to_tg_display_name = None
         
         if mentioned_user_id:
-            c.execute("SELECT emby_user_id, emby_username, tg_display_name FROM tg_user_bindings WHERE tg_user_id = ?", (mentioned_user_id,))
-            row = c.fetchone()
+            row = user_bot_dao.get_binding_by_tg_user_or_username(mentioned_user_id)
             if row:
-                to_user_id = row[0]
-                to_user_name = row[1]
-                to_tg_display_name = row[2] or row[1]
+                to_user_id = row["emby_user_id"]
+                to_user_name = row["emby_username"]
+                to_tg_display_name = row["tg_display_name"] or row["emby_username"]
         
         if not to_user_id:
-            c.execute("SELECT emby_user_id, emby_username, tg_display_name FROM tg_user_bindings WHERE tg_user_id = ? OR tg_username = ?", (target, target))
-            row = c.fetchone()
-            
+            row = user_bot_dao.get_binding_by_tg_user_or_username(target)
             if not row:
                 try:
                     from app.core.media_adapter import media_api
@@ -1670,136 +1639,32 @@ def cmd_rob(chat_id, tg_user_id, text, is_group=False, entities=None):
                 except:
                     pass
             else:
-                to_user_id = row[0]
-                to_user_name = row[1]
-                to_tg_display_name = row[2] or row[1]
+                to_user_id = row["emby_user_id"]
+                to_user_name = row["emby_username"]
+                to_tg_display_name = row["tg_display_name"] or row["emby_username"]
         
         # 显示名称优先使用 TG 显示名称
         display_name = to_tg_display_name or to_user_name
         
         if not to_user_id:
-            conn.close()
             return _send(chat_id, f"❌ 未找到用户：{target}\n\n💡 请确认对方已绑定机器人，或直接使用 Emby 用户名")
         
         # 不能打劫自己
         if to_user_id == binding['emby_user_id']:
-            conn.close()
             return _send(chat_id, "❌ 不能打劫自己")
-        
-        # 获取攻击者积分
-        from_row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (binding['emby_user_id'],)).fetchone()
-        from_points = from_row[0] if from_row else 0
-        
-        # 获取目标用户积分
-        to_row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (to_user_id,)).fetchone()
-        to_points = to_row[0] if to_row else 0
-        
-        # 🔥 检查攻击者积分是否低于保护阈值
-        if from_points < protect_threshold:
-            conn.close()
-            return _send(chat_id, f"🛡️ 你的积分低于 {protect_threshold}，无法打劫他人")
-        
-        # 检查目标用户积分是否低于保护阈值
-        if to_points < protect_threshold:
-            conn.close()
-            return _send(chat_id, f"🛡️ 对方积分低于 {protect_threshold}，处于保护状态")
-        
-        # 检查攻击者今日打劫次数
-        today_rob_count = c.execute(
-            "SELECT COUNT(*) FROM point_rob_logs WHERE from_user_id = ? AND date(created_at, 'localtime') = date('now', 'localtime')",
-            (binding['emby_user_id'],)
-        ).fetchone()[0]
-        if today_rob_count >= max_per_day:
-            conn.close()
-            return _send(chat_id, f"❌ 今日打劫次数已达上限（{max_per_day}次）")
-        
-        # 检查目标用户今日被被打劫次数
-        today_be_robbed_count = c.execute(
-            "SELECT COUNT(*) FROM point_rob_logs WHERE to_user_id = ? AND date(created_at, 'localtime') = date('now', 'localtime')",
-            (to_user_id,)
-        ).fetchone()[0]
-        if today_be_robbed_count >= max_be_robbed:
-            conn.close()
-            return _send(chat_id, f"❌ 对方今日已被打劫 {max_be_robbed} 次，休息一下吧")
-        
-        # 检查冷却时间
-        last_rob = c.execute(
-            "SELECT created_at FROM point_rob_logs WHERE from_user_id = ? AND to_user_id = ? ORDER BY created_at DESC LIMIT 1",
-            (binding['emby_user_id'], to_user_id)
-        ).fetchone()
-        if last_rob:
-            from datetime import datetime, timedelta
-            try:
-                last_time = datetime.fromisoformat(last_rob[0].replace('Z', '+00:00'))
-                cooldown_end = last_time + timedelta(hours=cooldown_hours)
-                if datetime.now(last_time.tzinfo) < cooldown_end:
-                    remaining = int((cooldown_end - datetime.now(last_time.tzinfo)).total_seconds() / 60)
-                    conn.close()
-                    return _send(chat_id, f"❌ 冷却中，还需等待 {remaining} 分钟")
-            except:
-                pass
-        
-        # 随机打劫金额
-        import random as rand_module
-        rob_amount = rand_module.randint(rob_min, rob_max)
-        
-        # 判断是否成功
-        is_success = rand_module.randint(1, 100) <= success_rate
-        
-        if is_success:
-            # 打劫成功
-            actual_amount = min(rob_amount, to_points)
 
-            c.execute("UPDATE users_meta SET points = points + ? WHERE user_id = ?", (actual_amount, binding['emby_user_id']))
-            c.execute("UPDATE users_meta SET points = points - ? WHERE user_id = ?", (actual_amount, to_user_id))
+        result = point_dao.rob_points(binding['emby_user_id'], binding['emby_username'], to_user_id, to_user_name)
+        if result.get("status") != "success":
+            message = result.get("message", "打劫失败")
+            if message.startswith("你的积分低于") or message.startswith("对方积分低于"):
+                return _send(chat_id, f"🛡️ {message}")
+            return _send(chat_id, f"❌ {message}")
 
-            new_from_points = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (binding['emby_user_id'],)).fetchone()[0]
-            new_to_points = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (to_user_id,)).fetchone()[0]
-
-            c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-                     (binding['emby_user_id'], binding['emby_username'], f"打劫 {to_user_name}", actual_amount, new_from_points))
-            c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-                     (to_user_id, to_user_name, f"被 {binding['emby_username']} 打劫", -actual_amount, new_to_points))
-            c.execute("INSERT INTO point_rob_logs (from_user_id, from_user_name, to_user_id, to_user_name, amount, success, counter_amount) VALUES (?, ?, ?, ?, ?, 1, 0)",
-                     (binding['emby_user_id'], binding['emby_username'], to_user_id, to_user_name, actual_amount))
-
-            conn.commit()
-            conn.close()
-
-            return _send(chat_id, f"🎉 <b>打劫成功！</b>\n\n👤 从 <b>{display_name}</b> 身上抢到 <b>{actual_amount}</b> 积分\n💰 当前余额：<b>{new_from_points}</b> 积分")
-        else:
-            # 打劫失败，触发反杀
-            counter_amount = rand_module.randint(counter_min, counter_max)
-            actual_counter = min(counter_amount, from_points)
-
-            c.execute("UPDATE users_meta SET points = points - ? WHERE user_id = ?", (actual_counter, binding['emby_user_id']))
-            c.execute("UPDATE users_meta SET points = points + ? WHERE user_id = ?", (actual_counter, to_user_id))
-
-            new_from_points = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (binding['emby_user_id'],)).fetchone()[0]
-            new_to_points = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (to_user_id,)).fetchone()[0]
-
-            c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-                     (binding['emby_user_id'], binding['emby_username'], f"打劫 {to_user_name} 失败", -actual_counter, new_from_points))
-            c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-                     (to_user_id, to_user_name, f"反杀 {binding['emby_username']}", actual_counter, new_to_points))
-            c.execute("INSERT INTO point_rob_logs (from_user_id, from_user_name, to_user_id, to_user_name, amount, success, counter_amount) VALUES (?, ?, ?, ?, ?, 0, ?)",
-                     (binding['emby_user_id'], binding['emby_username'], to_user_id, to_user_name, 0, actual_counter))
-            
-            conn.commit()
-            conn.close()
-            
-            return _send(chat_id, f"😢 <b>打劫失败！</b>\n\n💥 被 <b>{display_name}</b> 反杀，损失 <b>{actual_counter}</b> 积分\n💰 当前余额：<b>{new_from_points}</b> 积分")
+        if result.get("success"):
+            return _send(chat_id, f"🎉 <b>打劫成功！</b>\n\n👤 从 <b>{display_name}</b> 身上抢到 <b>{result.get('amount', 0)}</b> 积分\n💰 当前余额：<b>{result.get('balance', 0)}</b> 积分")
+        return _send(chat_id, f"😢 <b>打劫失败！</b>\n\n💥 被 <b>{display_name}</b> 反杀，损失 <b>{result.get('counter_amount', 0)}</b> 积分\n💰 当前余额：<b>{result.get('balance', 0)}</b> 积分")
             
     except Exception as e:
-        if conn:
-            try:
-                conn.rollback()
-            except Exception:
-                pass
-            try:
-                conn.close()
-            except Exception:
-                pass
         logger.error(f"[UserBot] 打劫失败: {e}")
         return _send(chat_id, f"❌ 打劫失败：{safe_error_message(e, '打劫操作异常，请稍后重试')}")
 

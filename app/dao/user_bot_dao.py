@@ -126,6 +126,32 @@ def get_binding(tg_user_id):
     }
 
 
+def get_tg_user_id_by_username(tg_username: str):
+    row = system_store.fetch_one(
+        "SELECT tg_user_id FROM tg_user_bindings WHERE tg_username = ?",
+        (tg_username,),
+    )
+    return row["tg_user_id"] if row else None
+
+
+def get_binding_by_tg_user_or_username(identifier):
+    row = system_store.fetch_one(
+        """
+        SELECT emby_user_id, emby_username, tg_display_name
+        FROM tg_user_bindings
+        WHERE tg_user_id = ? OR tg_username = ?
+        """,
+        (str(identifier), str(identifier)),
+    )
+    if not row:
+        return None
+    return {
+        "emby_user_id": row["emby_user_id"],
+        "emby_username": row["emby_username"],
+        "tg_display_name": row["tg_display_name"] or row["emby_username"],
+    }
+
+
 def get_channel_binding(channel_id):
     return system_store.fetch_one(
         "SELECT tg_user_id, channel_title FROM tg_channel_bindings WHERE channel_id = ?",
