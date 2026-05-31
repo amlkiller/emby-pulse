@@ -2,7 +2,7 @@ import os
 
 from app.core.config import DB_PATH, SYSTEM_DB_PATH
 from app.core.database import auto_migrate_system_db, init_db
-from app.core.db_manager import ensure_tables
+from app.infra.db.db_manager import ensure_tables
 
 
 def initialize_databases() -> None:
@@ -21,4 +21,3 @@ def initialize_databases() -> None:
 
     print(f"[📊 数据库] 系统库: {SYSTEM_DB_PATH} {'✅' if os.path.exists(SYSTEM_DB_PATH) else '❌'}")
     print(f"[📊 数据库] 播放库: {DB_PATH} {'✅' if os.path.exists(DB_PATH) else '❌ (将使用API模式)'}")
-

@@ -6,48 +6,48 @@ existing implementation until schema ownership is fully moved out of app.core.
 
 import os
 
-from app.core import db_manager as legacy_db_manager
 from app.core.config import DB_PATH
 from app.core.database import auto_migrate_system_db, init_db  # noqa: F401
 from app.core.security_utils import safe_error_message
+from app.infra.db import db_manager
 from app.infra.db.schema_registry import SYSTEM_TABLES, TABLE_ALTERS
 from app.infra.db.system_store import system_store
 
 
 def full_health_check():
-    return legacy_db_manager.full_health_check()
+    return db_manager.full_health_check()
 
 
 def ensure_tables():
-    return legacy_db_manager.ensure_tables()
+    return db_manager.ensure_tables()
 
 
 def check_system_tables():
-    return legacy_db_manager.check_system_tables()
+    return db_manager.check_system_tables()
 
 
 def check_old_db_tables():
-    return legacy_db_manager.check_old_db_tables()
+    return db_manager.check_old_db_tables()
 
 
 def migrate_tables(mode="incremental", tables=None):
-    return legacy_db_manager.migrate_tables(mode=mode, tables=tables)
+    return db_manager.migrate_tables(mode=mode, tables=tables)
 
 
 def get_backup_list():
-    return legacy_db_manager.get_backup_list()
+    return db_manager.get_backup_list()
 
 
 def delete_backup(filename: str):
-    return legacy_db_manager.delete_backup(filename)
+    return db_manager.delete_backup(filename)
 
 
 def restore_backup(backup_path: str):
-    return legacy_db_manager.restore_backup(backup_path)
+    return db_manager.restore_backup(backup_path)
 
 
 def get_backup_directory() -> str:
-    return legacy_db_manager.BACKUP_DIR
+    return db_manager.BACKUP_DIR
 
 
 def get_system_table_names():
@@ -68,13 +68,13 @@ def system_database_exists() -> bool:
 
 def backup_system_database():
     if system_database_exists():
-        return legacy_db_manager.backup_database(system_store.db_path)
+        return db_manager.backup_database(system_store.db_path)
     return None
 
 
 def backup_old_database():
     if old_database_exists():
-        return legacy_db_manager.backup_database(DB_PATH)
+        return db_manager.backup_database(DB_PATH)
     return None
 
 
