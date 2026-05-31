@@ -1,4 +1,3 @@
-import sqlite3
 import datetime
 import random
 import json
@@ -10,7 +9,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from typing import List, Optional
 from app.core.config import cfg, templates
-from app.core.database import SYSTEM_DB_PATH, add_sys_notification
+from app.core.database import add_sys_notification
 from app.dao import invitation_dao
 from app.dao import point_dao
 from app.core.media_adapter import media_api
@@ -18,10 +17,7 @@ from app.services.bot_service import bot
 
 from app.routers.auth import check_permission
 
-from app.routers.views import get_common_vars
-
 router = APIRouter()
-from app.main import APP_VERSION
 from app.core.security_utils import safe_error_message
 
 get_point_config = point_dao.get_point_config
@@ -41,6 +37,8 @@ class BatchPointsModel(BaseModel): user_ids: List[str]; amount: int; reason: str
 
 @router.get("/points")
 async def points_page(request: Request):
+    from app.routers.views import get_common_vars
+
     if not request.session.get("user"):
         return RedirectResponse("/login", status_code=303)
     
@@ -580,125 +578,11 @@ def pk_accept(data: PKAcceptModel, request: Request):
         return {"status": "error", "message": "未登录"}
     
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        conn.execute("BEGIN IMMEDIATE")
-        config = {r[0]: r[1] for r in c.execute("SELECT key, value FROM point_config").fetchall()}
-
-        invite = c.execute(
-            "SELECT * FROM pk_invitations WHERE id = ? AND status = 'pending'",
-            (data.invite_id,)
-        ).fetchone()
-
-        if not invite:
-            conn.rollback(); conn.close()
-            return {"status": "error", "message": "邀请不存在或已过期"}
-
-        if invite[3] != user['Id']:
-            conn.rollback(); conn.close()
-            return {"status": "error", "message": "这不是发给你的PK邀请"}
-
-        from datetime import datetime
-        expires_at = datetime.fromisoformat(invite[9])
-        if datetime.now() > expires_at:
-            c.execute("UPDATE pk_invitations SET status = 'expired' WHERE id = ?", (data.invite_id,))
-            conn.commit()
-            conn.close()
-            return {"status": "error", "message": "PK邀请已过期"}
-
-        points = invite[5]
-        min_points = int(config.get('user_pk_min_points', 10))
-        max_points = int(config.get('user_pk_max_points', 500))
-        if points < min_points or points > max_points:
-            c.execute("UPDATE pk_invitations SET status = 'cancelled' WHERE id = ?", (data.invite_id,))
-            conn.commit(); conn.close()
-            return {"status": "error", "message": f"积分范围已变更，PK取消（需在 {min_points}-{max_points} 之间）"}
-
-        tax_rate = int(config.get('user_pk_tax', 5))
-        challenger_points_row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (invite[1],)).fetchone()
-        challenger_points = challenger_points_row[0] if challenger_points_row else 0
-        target_points_row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (invite[3],)).fetchone()
-        target_points = target_points_row[0] if target_points_row else 0
-
-        if challenger_points < points or target_points < points:
-            conn.rollback(); conn.close()
-            return {"status": "error", "message": "双方积分不足，PK取消"}
-
-        challenger_roll = random.randint(1, 100)
-        target_roll = random.randint(1, 100)
-
-        if challenger_roll > target_roll:
-            winner_id = invite[1]
-            winner_name = invite[2]
-            loser_id = invite[3]
-            loser_name = invite[4]
-        elif target_roll > challenger_roll:
-            winner_id = invite[3]
-            winner_name = invite[4]
-            loser_id = invite[1]
-            loser_name = invite[2]
-        else:
-            c.execute("UPDATE pk_invitations SET status = 'completed' WHERE id = ?", (data.invite_id,))
-            conn.commit()
-            conn.close()
-            return {
-                "status": "success",
-                "message": f"平局！{invite[2]}({challenger_roll}点) vs {invite[4]}({target_roll}点)，积分退还",
-                "challenger_roll": challenger_roll,
-                "target_roll": target_roll,
-                "tie": True
-            }
-
-        win_amount = points
-        tax = int(win_amount * tax_rate / 100)
-        actual_win = win_amount - tax
-        challenger_points_now = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (invite[1],)).fetchone()
-        target_points_now = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (invite[3],)).fetchone()
-        challenger_balance = challenger_points_now[0] if challenger_points_now else 0
-        target_balance = target_points_now[0] if target_points_now else 0
-
-        loser_balance = challenger_balance if loser_id == invite[1] else target_balance
-        if loser_balance < points:
-            c.execute("UPDATE pk_invitations SET status = 'cancelled' WHERE id = ?", (data.invite_id,))
-            conn.commit()
-            conn.close()
-            return {"status": "error", "message": f"积分不足，PK取消（输家积分：{loser_balance}，需要：{points}）"}
-
-        c.execute("UPDATE users_meta SET points = points + ? WHERE user_id = ?", (actual_win, winner_id))
-        c.execute("UPDATE users_meta SET points = points - ? WHERE user_id = ?", (points, loser_id))
-        c.execute(
-            "INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, (SELECT points FROM users_meta WHERE user_id = ?))",
-            (winner_id, winner_name, f"PK战胜 {loser_name}", actual_win, winner_id)
-        )
-        c.execute(
-            "INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, (SELECT points FROM users_meta WHERE user_id = ?))",
-            (loser_id, loser_name, f"PK败给 {winner_name}", -points, loser_id)
-        )
-        c.execute(
-            "INSERT INTO pk_logs (challenger_id, challenger_name, target_id, target_name, points, challenger_roll, target_roll, winner_id, winner_name, tax) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (invite[1], invite[2], invite[3], invite[4], points, challenger_roll, target_roll, winner_id, winner_name, tax)
-        )
-        c.execute("UPDATE pk_invitations SET status = 'completed' WHERE id = ?", (data.invite_id,))
-        conn.commit()
-        conn.close()
-        
-        return {
-            "status": "success",
-            "message": f"🎉 {winner_name}({max(challenger_roll, target_roll)}点) 战胜 {loser_name}({min(challenger_roll, target_roll)}点)，获得 {actual_win} 积分（扣{tax_rate}%手续费）",
-            "challenger_roll": challenger_roll,
-            "target_roll": target_roll,
-            "winner_name": winner_name,
-            "win_amount": actual_win,
-            "tax": tax
-        }
+        result = point_dao.accept_pk_invitation(data.invite_id, user["Id"])
+        return result
 
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 
 @router.post("/api/user/points/pk/reject")
@@ -940,8 +824,15 @@ def slot_spin(request: Request):
         else:
             action_desc += " 未中奖"
         
-        amount_change = reward if win else (-cost if not is_free else 0)
-        point_result = point_dao.apply_game_point_change(user['Id'], user['Name'], '老虎机', amount_change)
+        balance_change = reward - (0 if is_free else cost)
+        log_amount = reward if win else (-cost if not is_free else 0)
+        point_result = point_dao.apply_game_point_change(
+            user['Id'],
+            user['Name'],
+            '老虎机',
+            balance_change,
+            log_amount=log_amount,
+        )
         if point_result.get("status") != "success":
             return {"status": "error", "message": point_result.get("message", "积分更新失败")}
         current_points = point_result["points"]
@@ -1383,28 +1274,13 @@ async def get_my_lottery_tickets(request: Request):
         return {"status": "error", "message": "未登录"}
     
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
         today = datetime.datetime.now().strftime('%Y-%m-%d')
-        
-        # 查询我的彩票号（使用 numbers 字段）
-        tickets = c.execute(
-            "SELECT numbers FROM lottery_tickets WHERE user_id = ? AND draw_date = ?",
-            (user['Id'], today)
-        ).fetchall()
-        conn.close()
-        
         return {
             "status": "success",
-            "tickets": [t[0] for t in tickets]
+            "tickets": point_dao.list_lottery_ticket_numbers(user['Id'], today)
         }
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 @router.post("/api/lottery/buy")
 async def buy_lottery(request: Request):
@@ -1429,79 +1305,36 @@ async def buy_lottery(request: Request):
         cost = int(config.get('lottery_cost', 100))
         max_per_day = int(config.get('lottery_max_per_day', 10))
         
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        conn.execute("BEGIN IMMEDIATE")
         today = datetime.datetime.now().strftime('%Y-%m-%d')
-
-        # 检查今日已购买数量
-        today_count = c.execute(
-            "SELECT COUNT(*) FROM lottery_tickets WHERE user_id = ? AND draw_date = ?",
-            (user['Id'], today)
-        ).fetchone()[0]
-        
-        if today_count + count > max_per_day:
-            conn.rollback(); conn.close()
-            return {"status": "error", "message": f"今日最多购买 {max_per_day} 张"}
-        
-        # 获取当前积分
-        points_row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (user['Id'],)).fetchone()
-        current_points = points_row[0] if points_row else 0
-        
-        total_cost = cost * count
-        if current_points < total_cost:
-            conn.rollback(); conn.close()
-            return {"status": "error", "message": "积分不足"}
-        
-        # 扣除积分
-        current_points -= total_cost
-        c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (current_points, user['Id']))
         
         # 生成彩票号
         import random
         tickets = []
+        ticket_count = count
         
         # 如果有自选号码，第一张用自选号码
         if custom_number and len(custom_number) == 4 and custom_number.isdigit():
             tickets.append(custom_number)
-            c.execute(
-                "INSERT INTO lottery_tickets (user_id, username, numbers, cost, draw_date, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-                (user['Id'], user.get('Name', ''), custom_number, cost, today, datetime.datetime.now().isoformat())
-            )
             count -= 1
         
         # 剩余的随机生成
         for _ in range(count):
             ticket_number = str(random.randint(0, 9999)).zfill(4)
             tickets.append(ticket_number)
-            c.execute(
-                "INSERT INTO lottery_tickets (user_id, username, numbers, cost, draw_date, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-                (user['Id'], user.get('Name', ''), ticket_number, cost, today, datetime.datetime.now().isoformat())
-            )
-        
-        # 记录日志
-        c.execute(
-            "INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-            (user['Id'], user['Name'], '购买彩票', -total_cost, current_points)
-        )
-        
-        conn.commit()
-        conn.close()
+
+        result = point_dao.buy_lottery_tickets(user['Id'], user['Name'], ticket_count, cost, max_per_day, today, tickets)
+        if result.get("status") != "success":
+            return result
         
         return {
             "status": "success",
             "tickets": tickets,
-            "today_tickets": today_count + len(tickets),
-            "new_points": current_points
+            "today_tickets": result["today_tickets"],
+            "new_points": result["new_points"]
         }
 
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 @router.get("/api/lottery/pool")
 async def api_user_lottery_pool(request: Request):
@@ -1509,8 +1342,6 @@ async def api_user_lottery_pool(request: Request):
     try:
         user = request.session.get("req_user")
         today = datetime.datetime.now().strftime('%Y-%m-%d')
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
         
         # 获取配置
         config = get_point_config()
@@ -1518,182 +1349,45 @@ async def api_user_lottery_pool(request: Request):
         max_per_day = int(config.get('lottery_max_per_day', 10))
         
         # 检查今天是否已开奖
-        today_drawn = c.execute("SELECT winning_numbers FROM lottery_results WHERE draw_date = ? AND winning_numbers != ''", (today,)).fetchone()
+        today_drawn_row = point_dao.get_lottery_winning_numbers(today)
         
-        if today_drawn:
+        if today_drawn_row and today_drawn_row["winning_numbers"]:
             # 今天已开奖，显示明天的奖池
             target_date = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
             next_draw_time = f"明天 {(datetime.datetime.now() + datetime.timedelta(days=1)).strftime('%m-%d')} {draw_hour}:00"
         else:
             target_date = today
             next_draw_time = f"今天 {datetime.datetime.now().strftime('%m-%d')} {draw_hour}:00"
-        
-        # 确保目标日期有记录
-        c.execute("INSERT OR IGNORE INTO lottery_results (draw_date, winning_numbers, total_pool) VALUES (?, '', 0)", (target_date,))
-        conn.commit()
-        
-        # 获取目标日期奖池
-        target_pool = c.execute("SELECT total_pool FROM lottery_results WHERE draw_date = ?", (target_date,)).fetchone()
-        target_pool = target_pool[0] if target_pool else 0
-        
-        # 获取目标日期购票数（全局）
-        target_tickets = c.execute("SELECT COUNT(*) FROM lottery_tickets WHERE draw_date = ?", (target_date,)).fetchone()[0]
-        
-        # 🔥 获取当前用户今日购票数
-        user_today_tickets = 0
-        if user:
-            user_today_tickets = c.execute(
-                "SELECT COUNT(*) FROM lottery_tickets WHERE user_id = ? AND draw_date = ?",
-                (user['Id'], target_date)
-            ).fetchone()[0]
-        
-        # 获取今日开奖号码
-        today_winning = c.execute("SELECT winning_numbers FROM lottery_results WHERE draw_date = ? AND winning_numbers != ''", (today,)).fetchone()
-        today_winning_number = today_winning[0] if today_winning else None
-        
-        # 检查用户是否中奖
-        my_winning = []
-        my_prize_total = 0
-        if user and today_winning_number:
-            my_tickets = c.execute(
-                "SELECT numbers FROM lottery_tickets WHERE user_id = ? AND draw_date = ?",
-                (user['Id'], today)
-            ).fetchall()
-            for t in my_tickets:
-                if t[0] == today_winning_number:
-                    my_winning.append(t[0])
-            # 计算中奖总额
-            if my_winning:
-                # 获取今日奖池和中奖人数
-                today_pool = c.execute("SELECT total_pool FROM lottery_results WHERE draw_date = ?", (today,)).fetchone()
-                today_pool = today_pool[0] if today_pool else 0
-                winner_count = c.execute("SELECT COUNT(*) FROM lottery_winners WHERE draw_date = ?", (today,)).fetchone()[0]
-                winner_count = max(winner_count, 1)
-                my_prize_total = len(my_winning) * (today_pool // winner_count)
-        
-        conn.close()
+
+        pool_info = point_dao.get_lottery_pool_info(user['Id'] if user else None, today, target_date)
         
         return {
             "status": "success",
             "data": {
-                "today_pool": target_pool,
-                "today_tickets": target_tickets,
-                "user_today_tickets": user_today_tickets,
+                "today_pool": pool_info["today_pool"],
+                "today_tickets": pool_info["today_tickets"],
+                "user_today_tickets": pool_info["user_today_tickets"],
                 "target_date": target_date,
                 "next_draw_time": next_draw_time,
-                "today_winning_number": today_winning_number,
-                "my_winning_tickets": my_winning,
-                "my_prize_total": my_prize_total,
-                "is_drawn": today_drawn is not None,
+                "today_winning_number": pool_info["today_winning_number"],
+                "my_winning_tickets": pool_info["my_winning_tickets"],
+                "my_prize_total": pool_info["my_prize_total"],
+                "is_drawn": pool_info["today_drawn"],
                 "max_per_day": max_per_day
             }
         }
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
+
 @router.get("/api/lottery/results")
 async def get_lottery_results(request: Request):
     """获取开奖结果"""
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        
         user = request.session.get("req_user")
         user_id = user['Id'] if user else None
-        
-        # 获取最近7天的开奖结果（字段名：winning_numbers）
-        results = c.execute('''
-            SELECT draw_date, winning_numbers, total_pool 
-            FROM lottery_results 
-            WHERE winning_numbers != ''
-            ORDER BY draw_date DESC 
-            LIMIT 7
-        ''').fetchall()
-        
-        # 统计每天的中奖人数和用户中奖情况
-        formatted_results = []
-        for r in results:
-            draw_date = r[0]
-            winning_number = r[1]
-            pool = r[2]
-            
-            winner_count = c.execute(
-                "SELECT COUNT(*) FROM lottery_winners WHERE draw_date = ?",
-                (draw_date,)
-            ).fetchone()[0]
-            
-            # 获取中奖名单
-            winners_list = []
-            my_username = None
-            if winner_count > 0:
-                winners_data = c.execute('''
-                    SELECT w.user_id, w.username, w.prize_level, w.prize_amount
-                    FROM lottery_winners w
-                    WHERE w.draw_date = ?
-                    ORDER BY w.prize_amount DESC
-                ''', (draw_date,)).fetchall()
-                for w in winners_data:
-                    winner_user_id = w[0]
-                    username = w[1] or ''
-                    # 如果是当前用户，不脱敏，并记录用户名
-                    if user_id and winner_user_id == user_id:
-                        masked_username = username
-                        my_username = username
-                    else:
-                        # 其他用户脱敏：保留前3个字符，后面用***代替
-                        if len(username) > 3:
-                            masked_username = username[:3] + '***'
-                        else:
-                            masked_username = username[:1] + '***' if username else '***'
-                    winners_list.append({
-                        "username": masked_username,
-                        "prize_level": w[2],
-                        "prize_amount": w[3]
-                    })
-            
-            # 检查用户在该期是否中奖
-            my_won = False
-            my_prize = 0
-            my_winning_tickets = []
-            if user_id:
-                my_tickets = c.execute(
-                    "SELECT numbers FROM lottery_tickets WHERE user_id = ? AND draw_date = ?",
-                    (user_id, draw_date)
-                ).fetchall()
-                for t in my_tickets:
-                    ticket_number = t[0]
-                    if ticket_number == winning_number:
-                        my_won = True
-                        my_winning_tickets.append(ticket_number)
-                # 计算中奖金额
-                if my_won and winner_count > 0:
-                    my_prize = len(my_winning_tickets) * (pool // winner_count)
-            
-            formatted_results.append({
-                "date": draw_date,
-                "winning_number": winning_number,
-                "pool": pool,
-                "winners": winner_count,
-                "winners_list": winners_list,
-                "my_won": my_won,
-                "my_prize": my_prize,
-                "my_winning_tickets": my_winning_tickets
-            })
-        
-        conn.close()
-        
         return {
             "status": "success",
-            "results": formatted_results
+            "results": point_dao.list_lottery_results(user_id)
         }
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
