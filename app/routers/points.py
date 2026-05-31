@@ -10,7 +10,8 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from typing import List, Optional
 from app.core.config import cfg, templates
-from app.core.database import DB_PATH, SYSTEM_DB_PATH, query_db, add_sys_notification
+from app.core.database import SYSTEM_DB_PATH, add_sys_notification
+from app.dao import point_dao
 from app.core.media_adapter import media_api
 from app.services.bot_service import bot
 
@@ -22,213 +23,17 @@ router = APIRouter()
 from app.main import APP_VERSION
 from app.core.security_utils import safe_error_message
 
-def get_point_config():
-    """获取积分配置"""
-    conn = None
-    try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        # 从 point_config 表读取
-        c.execute("SELECT key, value FROM point_config")
-        rows = c.fetchall()
-        conn.close()
-        return {row[0]: row[1] for row in rows}
-    except:
-        return {}
-    finally:
-        try: conn and conn.close()
-        except: pass
+get_point_config = point_dao.get_point_config
 
-def ensure_lottery_table():
-    """确保彩票表存在"""
-    conn = None
-    try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        # 检查表是否存在
-        c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='lottery_tickets'")
-        if not c.fetchone():
-            # 创建表（与 TG 机器人一致）
-            c.execute('''
-                CREATE TABLE lottery_tickets (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id TEXT NOT NULL,
-                    username TEXT,
-                    numbers TEXT NOT NULL,
-                    cost INTEGER,
-                    draw_date TEXT,
-                    created_at TEXT
-                )
-            ''')
-            conn.commit()
-        conn.close()
-    except:
-        try: conn and conn.rollback()
-        except: pass
-    finally:
-        try: conn and conn.close()
-        except: pass
+try:
+    point_dao.ensure_lottery_table()
+except Exception:
+    pass
 
-# 初始化彩票表
-ensure_lottery_table()
-
-def ensure_points_schema():
-    try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        c.execute("PRAGMA table_info(users_meta)")
-        cols = [col[1] for col in c.fetchall()]
-        if 'points' not in cols: c.execute("ALTER TABLE users_meta ADD COLUMN points INTEGER DEFAULT 0")
-            
-        c.execute('''CREATE TABLE IF NOT EXISTS point_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, username TEXT, action TEXT,
-            amount INTEGER, balance INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )''')
-        
-        c.execute('''CREATE TABLE IF NOT EXISTS point_config (key TEXT PRIMARY KEY, value TEXT)''')
-        
-        # 🔥 新增：连续签到记录表
-        c.execute('''CREATE TABLE IF NOT EXISTS point_checkin_streak (
-            user_id TEXT PRIMARY KEY,
-            streak_count INTEGER DEFAULT 0,
-            last_checkin DATE
-        )''')
-        
-        # 🔥 新增：红包表
-        c.execute('''CREATE TABLE IF NOT EXISTS point_red_packets (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            total_amount INTEGER,
-            remain_amount INTEGER,
-            total_count INTEGER,
-            remain_count INTEGER,
-            creator_id TEXT,
-            creator_name TEXT,
-            chat_id TEXT,
-            message_id TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            expires_at DATETIME
-        )''')
-        
-        # 🔥 新增：红包领取记录表
-        c.execute('''CREATE TABLE IF NOT EXISTS point_red_packet_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            packet_id INTEGER,
-            user_id TEXT,
-            user_name TEXT,
-            amount INTEGER,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )''')
-        
-        # 🔥 新增：积分转赠记录表
-        c.execute('''CREATE TABLE IF NOT EXISTS point_transfer_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            from_user_id TEXT,
-            from_user_name TEXT,
-            to_user_id TEXT,
-            to_user_name TEXT,
-            amount INTEGER,
-            fee INTEGER,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )''')
-        
-        # 🔥 新增：打劫记录表
-        c.execute('''CREATE TABLE IF NOT EXISTS point_rob_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            from_user_id TEXT,
-            from_user_name TEXT,
-            to_user_id TEXT,
-            to_user_name TEXT,
-            amount INTEGER,
-            success INTEGER DEFAULT 0,
-            counter_amount INTEGER DEFAULT 0,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )''')
-        
-        # 🔥 新增：用户PK邀请表
-        c.execute('''CREATE TABLE IF NOT EXISTS pk_invitations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            challenger_id TEXT,
-            challenger_name TEXT,
-            challenger_tg_name TEXT,
-            target_id TEXT,
-            target_name TEXT,
-            target_tg_name TEXT,
-            points INTEGER,
-            chat_id TEXT,
-            message_id TEXT,
-            command_message_id TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            expires_at DATETIME,
-            status TEXT DEFAULT 'pending'
-        )''')
-        
-        # 🔥 新增：用户PK记录表
-        c.execute('''CREATE TABLE IF NOT EXISTS pk_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            challenger_id TEXT,
-            challenger_name TEXT,
-            target_id TEXT,
-            target_name TEXT,
-            points INTEGER,
-            challenger_roll INTEGER,
-            target_roll INTEGER,
-            winner_id TEXT,
-            winner_name TEXT,
-            tax INTEGER,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )''')
-        
-        # 🔥 数据库迁移：检查并添加缺失的列
-        red_packet_columns = c.execute("PRAGMA table_info(point_red_packets)").fetchall()
-        red_packet_column_names = [col[1] for col in red_packet_columns]
-        if 'message_id' not in red_packet_column_names:
-            c.execute("ALTER TABLE point_red_packets ADD COLUMN message_id TEXT")
-
-        # 检查 pk_invitations 表是否有 TG 名称列
-        columns = c.execute("PRAGMA table_info(pk_invitations)").fetchall()
-        column_names = [col[1] for col in columns]
-        
-        if 'challenger_tg_name' not in column_names:
-            c.execute("ALTER TABLE pk_invitations ADD COLUMN challenger_tg_name TEXT")
-        if 'target_tg_name' not in column_names:
-            c.execute("ALTER TABLE pk_invitations ADD COLUMN target_tg_name TEXT")
-        if 'command_message_id' not in column_names:
-            c.execute("ALTER TABLE pk_invitations ADD COLUMN command_message_id TEXT")
-        
-        c.execute("SELECT count(*) FROM point_config")
-        if c.fetchone()[0] == 0:
-            default_store = [
-                {"id": "renew_30", "type": "renew", "name": "账号续期 30 天", "cost": 500, "val": 30, "icon": "fa-battery-half", "color": "text-emerald-500", "desc": "延长一个月欢乐时光", "max_buys": 0},
-                {"id": "invite_code", "type": "manual", "name": "购买一枚邀请码", "cost": 2000, "icon": "fa-ticket", "color": "text-amber-500", "desc": "兑换后请凭截图联系服主发放", "max_buys": 0}
-            ]
-            defaults = [
-                ("enable_points", "1"), ("checkin_min", "10"), ("checkin_max", "30"),          
-                ("enable_req_cost", "0"), ("req_cost", "50"), ("store_items", json.dumps(default_store, ensure_ascii=False)),
-                # 🔥 新增配置项
-                ("enable_streak_bonus", "1"), ("streak_7_days", "100"), ("streak_30_days", "500"), ("streak_reset_on_miss", "1"),
-                ("enable_transfer", "1"), ("transfer_fee_rate", "10"), ("transfer_min", "10"), ("transfer_max", "1000"),
-                ("enable_red_packet", "1"), ("red_packet_admin_only", "1"), ("red_packet_expire_hours", "24"),
-                ("enable_bot_checkin", "1"), ("enable_bot_transfer", "1"), ("enable_bot_red_packet", "1"), ("enable_bot_rank", "1"),
-                # 🔥 打劫功能配置
-                ("enable_rob", "1"), ("rob_success_rate", "50"), ("rob_min", "1"), ("rob_max", "10"),
-                ("rob_counter_rate", "30"), ("rob_counter_min", "1"), ("rob_counter_max", "5"),
-                ("rob_protect_threshold", "50"), ("rob_max_per_day", "5"), ("rob_max_be_robbed", "3"), ("rob_cooldown_hours", "2"),
-                # 🔥 用户PK功能配置
-                ("enable_user_pk", "1"), ("user_pk_min_points", "10"), ("user_pk_max_points", "500"),
-                ("user_pk_max_per_day", "5"), ("user_pk_timeout", "5"), ("user_pk_tax", "5")
-            ]
-            c.executemany("INSERT INTO point_config (key, value) VALUES (?, ?)", defaults)
-            
-        conn.commit(); conn.close()
-    except Exception as e:
-        try: conn.rollback()
-        except: pass
-        print(f"初始化积分系统数据库失败: {e}")
-    finally:
-        try: conn.close()
-        except: pass
-
-ensure_points_schema()
+try:
+    point_dao.ensure_points_schema()
+except Exception as e:
+    print(f"初始化积分系统数据库失败: {e}")
 
 class PointConfigModel(BaseModel): configs: dict
 class BatchPointsModel(BaseModel): user_ids: List[str]; amount: int; reason: str
@@ -252,8 +57,7 @@ def get_points_config(request: Request):
     # 🔥 支持管理后台和用户社区两种 session
     user = request.session.get("user") or request.session.get("req_user")
     if not user: return {"status": "error"}
-    rows = query_db("SELECT key, value FROM point_config")
-    config = {r['key']: r['value'] for r in rows} if rows else {}
+    config = point_dao.get_point_config()
     
     config['is_pro'] = True
         
@@ -264,14 +68,7 @@ def get_points_config(request: Request):
 async def save_points_config(request: Request):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     data = await request.json()
-    
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    c = conn.cursor()
-    for k, v in data.get('configs', {}).items():
-            
-        if isinstance(v, (dict, list)): v = json.dumps(v, ensure_ascii=False)
-        c.execute("INSERT OR REPLACE INTO point_config (key, value) VALUES (?, ?)", (k, str(v)))
-    conn.commit(); conn.close()
+    point_dao.save_point_config_values(data.get('configs', {}))
     return {"status": "success", "message": "全局配置已保存"}
 
 @router.get("/api/points/users")
@@ -281,7 +78,7 @@ def get_users_points(request: Request, page: int = 1, page_size: int = 20):
         return {"status": "error", "message": "Emby 服务不可用，请稍后重试"}
     try:
         emby_users = media_api.get("/Users", timeout=5).json()
-        meta_rows = query_db("SELECT user_id, points FROM users_meta")
+        meta_rows = point_dao.list_user_points()
         points_map = {r['user_id']: (r['points'] or 0) for r in meta_rows} if meta_rows else {}
         results = []
         for u in emby_users:
@@ -309,12 +106,7 @@ def get_users_points(request: Request, page: int = 1, page_size: int = 20):
         
         return {"status": "success", "data": paged_results, "total": total, "page": page, "page_size": page_size, "total_pages": total_pages}
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 # 👇 批量发钱功能依然严格锁死！
 @router.post("/api/points/batch_update")
@@ -324,96 +116,30 @@ def batch_update_points(data: BatchPointsModel, request: Request):
     if not media_api.health_check():
         return {"status": "error", "message": "Emby 服务不可用，请稍后重试"}
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH); c = conn.cursor()
-        conn.execute("BEGIN IMMEDIATE")
         users = media_api.get("/Users", timeout=5).json()
         name_map = {u['Id']: u['Name'] for u in users}
-        count = 0
-        for uid in data.user_ids:
-            c.execute("SELECT points FROM users_meta WHERE user_id = ?", (uid,))
-            row = c.fetchone()
-            new_pts = max(0, (row[0] or 0) + data.amount) if row else max(0, data.amount)
-            if row: c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (new_pts, uid))
-            else: c.execute("INSERT INTO users_meta (user_id, points) VALUES (?, ?)", (uid, new_pts))
-            c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)", (uid, name_map.get(uid, "未知用户"), f"管理员操作: {data.reason}", data.amount, new_pts))
-            count += 1
-        conn.commit(); conn.close()
+        count = point_dao.batch_update_user_points(data.user_ids, data.amount, data.reason, name_map)
         return {"status": "success", "message": f"成功修改了 {count} 名用户的资产"}
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 @router.get("/api/points/logs")
 def get_point_logs(request: Request, user_id: str = None, page: int = 1, page_size: int = 50, action_type: str = None):
     """获取积分流水（支持分页和筛选）"""
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH); c = conn.cursor()
-        
-        # 构建查询条件
-        conditions = []
-        params = []
-        
-        if user_id:
-            conditions.append("user_id = ?")
-            params.append(user_id)
-        
-        if action_type and action_type != 'all':
-            conditions.append("action LIKE ?")
-            params.append(f"%{action_type}%")
-        
-        where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
-        
-        # 获取总数
-        count_sql = f"SELECT COUNT(*) FROM point_logs {where_clause}"
-        total = c.execute(count_sql, params).fetchone()[0]
-        
-        # 分页查询
-        offset = (page - 1) * page_size
-        data_sql = f"""
-            SELECT id, user_id, username, action, amount, balance, 
-                   datetime(created_at, 'localtime') as created_at 
-            FROM point_logs 
-            {where_clause}
-            ORDER BY created_at DESC 
-            LIMIT ? OFFSET ?
-        """
-        c.execute(data_sql, params + [page_size, offset])
-        
-        cols = [desc[0] for desc in c.description]
-        logs = [dict(zip(cols, row)) for row in c.fetchall()]
-        
-        # 处理 username 为空的情况
-        for log in logs:
-            if not log.get('username'):
-                # 尝试从 users_meta 获取用户名
-                try:
-                    user_row = c.execute("SELECT name FROM users_meta WHERE user_id = ?", (log.get('user_id'),)).fetchone()
-                    log['username'] = user_row[0] if user_row else '未知用户'
-                except:
-                    log['username'] = '未知用户'
-        
-        conn.close()
+        result = point_dao.list_point_logs(user_id=user_id, page=page, page_size=page_size, action_type=action_type)
         
         return {
             "status": "success", 
-            "data": logs,
-            "total": total,
+            "data": result["logs"],
+            "total": result["total"],
             "page": page,
             "page_size": page_size,
-            "total_pages": (total + page_size - 1) // page_size
+            "total_pages": (result["total"] + page_size - 1) // page_size
         }
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 # ==========================================
 # C端 API
@@ -423,25 +149,9 @@ def get_user_points_info(request: Request):
     user = request.session.get("req_user")
     if not user: return {"status": "error", "message": "未登录"}
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH); c = conn.cursor()
-        row = c.execute("SELECT points, req_free, req_free_count FROM users_meta WHERE user_id = ?", (user['Id'],)).fetchone()
-        points = row[0] if row else 0
-        req_free = row[1] if row and len(row) > 1 else 0  # 0=跟随全局, 1=免费
-        req_free_count = row[2] if row and len(row) > 2 else -1  # -1=无限次
-        has_checked_in = bool(c.execute("SELECT 1 FROM point_logs WHERE user_id = ? AND action LIKE '每日签到%' AND date(created_at, 'localtime') = date('now', 'localtime')", (user['Id'],)).fetchone())
-        config = {r[0]: r[1] for r in c.execute("SELECT key, value FROM point_config").fetchall()}
-        try: store_items = json.loads(config.get('store_items', '[]'))
-        except: store_items = []
-        config['store_items'] = store_items
-        conn.close()
-        return {"status": "success", "data": {"points": points, "has_checked_in": has_checked_in, "config": config, "req_free": req_free, "req_free_count": req_free_count}}
+        return {"status": "success", "data": point_dao.get_user_points_info(user['Id'])}
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 @router.get("/api/user/points/logs")
 def get_my_point_logs(request: Request, page: int = 1, page_size: int = 20):
@@ -449,33 +159,18 @@ def get_my_point_logs(request: Request, page: int = 1, page_size: int = 20):
     user = request.session.get("req_user")
     if not user: return {"status": "error"}
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH); c = conn.cursor()
-        
-        # 获取总数
-        total = c.execute("SELECT COUNT(*) FROM point_logs WHERE user_id = ?", (user['Id'],)).fetchone()[0]
-        
-        # 分页查询
-        offset = (page - 1) * page_size
-        c.execute("SELECT action, amount, balance, datetime(created_at, 'localtime') as created_at FROM point_logs WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?", (user['Id'], page_size, offset))
-        cols = [desc[0] for desc in c.description]
-        logs = [dict(zip(cols, row)) for row in c.fetchall()]
-        conn.close()
+        result = point_dao.list_user_point_logs(user['Id'], page=page, page_size=page_size)
         
         return {
             "status": "success",
-            "data": logs,
-            "total": total,
+            "data": result["logs"],
+            "total": result["total"],
             "page": page,
             "page_size": page_size,
-            "total_pages": (total + page_size - 1) // page_size
+            "total_pages": (result["total"] + page_size - 1) // page_size
         }
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error"}
-    finally:
-        try: conn.close()
-        except: pass
 
 @router.post("/api/user/points/checkin")
 def user_checkin(request: Request):
