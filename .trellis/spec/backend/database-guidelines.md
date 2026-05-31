@@ -84,6 +84,15 @@
 - `app.dao.task_dao.list_task_translations() -> list[DataRow]`
 - `app.dao.task_dao.save_task_translation(original_name: str, translated_name: str) -> None`
 - `app.dao.task_dao.delete_task_translation(original_name: str) -> None`
+- `app.dao.user_dao.set_user_pinned(user_id: str, pinned: bool, created_at: str) -> None`
+- `app.dao.user_dao.save_user_req_permission(user_id: str, req_free: int, req_free_count: int, created_at: str) -> None`
+- `app.dao.user_dao.get_user_req_permission(user_id: str) -> dict`
+- `app.dao.user_dao.list_user_tags() -> list[DataRow]`
+- `app.dao.user_dao.create_user_tag(name: str, color: str) -> int`
+- `app.dao.user_dao.delete_user_tag(tag_id: int) -> None`
+- `app.dao.user_dao.delete_user_tag_by_name(tag_name: str) -> bool`
+- `app.dao.user_dao.save_user_tags(user_id: str, tags: str, created_at: str) -> None`
+- `app.dao.user_dao.get_user_tags(user_id: str) -> str`
 - `app.dao.dedupe_dao.init_dedupe_tables(logger=None) -> None`
 - `app.dao.dedupe_dao.list_dedupe_whitelist_group_keys() -> list[str]`
 - `app.dao.dedupe_dao.DedupeResultWriter`
@@ -216,6 +225,7 @@
 - Good: `audit.py` keeps audit log merge/normalization in the route and delegates only `user_audit_logs` SQL to `audit_dao`.
 - Good: `users.py` keeps admin/session checks and response payload assembly in the route while delegating `user_audit_logs` create/list/stats/delete/cleanup SQL to `audit_dao`.
 - Good: `users.py` keeps invitation code generation, CSV rendering, invite-link assembly, and audit-log writes in the route while delegating `invitations` table CRUD/list/export reads to `invitation_dao`.
+- Good: `users.py` keeps permission checks, response messages, and audit writes in the route while delegating user pinning, request permission, and tag CRUD persistence to `user_dao`.
 - Good: `risk.py` keeps Emby API control and config updates in the route/service layer while delegating `risk_logs` and `users_meta` summary reads to `risk_dao`.
 - Good: `clients.py` keeps media server device control and response assembly in the route while delegating blacklist/whitelist tables to `client_dao` and playback aggregates to `client_queries`.
 - Good: `calendar_notify.py` keeps notification sending, scheduling, and channel-specific HTTP calls in the route/service layer while delegating `calendar_notify_config` reads/writes to `calendar_notify_dao`.

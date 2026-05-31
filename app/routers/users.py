@@ -5,6 +5,7 @@ from app.core.config import cfg
 from app.core.database import query_db, SYSTEM_DB_PATH
 from app.dao import audit_dao
 from app.dao import invitation_dao
+from app.dao import user_dao
 from app.core.media_adapter import media_api
 
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
@@ -1850,35 +1851,7 @@ def api_pin_user(data: PinUserModel, request: Request):
         return {"status": "error", "message": "需要管理员权限"}
 
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-
-        # 使用 users_meta 表存储置顶标记
-        # 在 remark 字段中使用 [PINNED] 前缀
-        c.execute("SELECT remark FROM users_meta WHERE user_id = ?", (data.user_id,))
-        row = c.fetchone()
-        current_remark = row[0] if row and row[0] else ""
-
-        has_pin = current_remark.startswith("[PINNED]")
-
-        if data.pinned and not has_pin:
-            # 添加置顶标记
-            new_remark = "[PINNED]" + current_remark
-        elif not data.pinned and has_pin:
-            # 移除置顶标记
-            new_remark = current_remark[8:]  # 移除 "[PINNED]"
-        else:
-            new_remark = current_remark
-
-        # 更新或插入
-        if row:
-            c.execute("UPDATE users_meta SET remark = ? WHERE user_id = ?", (new_remark, data.user_id))
-        else:
-            c.execute("INSERT INTO users_meta (user_id, remark, created_at) VALUES (?, ?, ?)",
-                     (data.user_id, new_remark, datetime.datetime.now().isoformat()))
-
-        conn.commit()
-        conn.close()
+        user_dao.set_user_pinned(data.user_id, data.pinned, datetime.datetime.now().isoformat())
 
         action = "置顶用户" if data.pinned else "取消置顶"
         add_audit_log(
@@ -1891,12 +1864,7 @@ def api_pin_user(data: PinUserModel, request: Request):
 
         return {"status": "success", "message": f"已{'置顶' if data.pinned else '取消置顶'}用户"}
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 @router.get("/api/users")
 def api_get_users(request: Request):
@@ -1939,31 +1907,15 @@ def api_update_user_req_permission(data: UserReqPermissionModel, request: Reques
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
 
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-
-        # 检查用户是否存在
-        c.execute("SELECT 1 FROM users_meta WHERE user_id = ?", (data.user_id,))
-        exist = c.fetchone()
-
-        if exist:
-            c.execute("UPDATE users_meta SET req_free = ?, req_free_count = ? WHERE user_id = ?",
-                      (data.req_free, data.req_free_count, data.user_id))
-        else:
-            c.execute("INSERT INTO users_meta (user_id, req_free, req_free_count, created_at) VALUES (?, ?, ?, ?)",
-                      (data.user_id, data.req_free, data.req_free_count, datetime.datetime.now().isoformat()))
-
-        conn.commit()
-        conn.close()
-
+        user_dao.save_user_req_permission(
+            data.user_id,
+            data.req_free,
+            data.req_free_count,
+            datetime.datetime.now().isoformat(),
+        )
         return {"status": "success", "message": "求片权限已更新"}
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 @router.get("/api/manage/user/req_permission")
 def api_get_user_req_permission(user_id: str, request: Request):
@@ -1973,23 +1925,9 @@ def api_get_user_req_permission(user_id: str, request: Request):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
 
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        c.execute("SELECT req_free, req_free_count FROM users_meta WHERE user_id = ?", (user_id,))
-        row = c.fetchone()
-        conn.close()
-
-        if row:
-            return {"status": "success", "data": {"req_free": row[0] or 0, "req_free_count": row[1] if row[1] is not None else -1}}
-        else:
-            return {"status": "success", "data": {"req_free": 0, "req_free_count": -1}}
+        return {"status": "success", "data": user_dao.get_user_req_permission(user_id)}
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 # ==========================================
 # 🔥 用户标签 API
@@ -2015,22 +1953,11 @@ def api_get_tags(request: Request):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
 
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.row_factory = sqlite3.Row
-        c = conn.cursor()
-        c.execute("SELECT id, name, color FROM user_tags ORDER BY name")
-        rows = c.fetchall()
-        conn.close()
-
+        rows = user_dao.list_user_tags()
         tags = [{"id": r['id'], "name": r['name'], "color": r['color'] or 'blue'} for r in rows]
         return {"status": "success", "data": tags}
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 class TagCreateModel(BaseModel):
     name: str
@@ -2044,25 +1971,12 @@ def api_create_tag(data: TagCreateModel, request: Request):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
 
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        c.execute("INSERT INTO user_tags (name, color) VALUES (?, ?)", (data.name.strip(), data.color))
-        conn.commit()
-        tag_id = c.lastrowid
-        conn.close()
-
+        tag_id = user_dao.create_user_tag(data.name.strip(), data.color)
         return {"status": "success", "data": {"id": tag_id, "name": data.name.strip(), "color": data.color}}
     except sqlite3.IntegrityError:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": "标签已存在"}
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 @router.delete("/api/manage/tags/{tag_id}")
 def api_delete_tag(tag_id: int, request: Request):
@@ -2072,20 +1986,10 @@ def api_delete_tag(tag_id: int, request: Request):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
 
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        c.execute("DELETE FROM user_tags WHERE id = ?", (tag_id,))
-        conn.commit()
-        conn.close()
-
+        user_dao.delete_user_tag(tag_id)
         return {"status": "success"}
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 
 @router.delete("/api/manage/tags/name/{tag_name}")
@@ -2096,40 +2000,12 @@ def api_delete_tag_by_name(tag_name: str, request: Request):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
 
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-
-        # 获取标签ID
-        row = c.execute("SELECT id FROM user_tags WHERE name = ?", (tag_name,)).fetchone()
-        if not row:
-            conn.close()
+        deleted = user_dao.delete_user_tag_by_name(tag_name)
+        if not deleted:
             return {"status": "error", "message": "标签不存在"}
-
-        tag_id = row[0]
-
-        # 删除标签
-        c.execute("DELETE FROM user_tags WHERE id = ?", (tag_id,))
-
-        # 🔥 从所有用户的标签中移除该标签
-        c.execute("SELECT user_id, tags FROM users_meta WHERE tags IS NOT NULL AND tags != ''")
-        users_with_tags = c.fetchall()
-
-        for user_id, user_tags in users_with_tags:
-            tag_list = [t.strip() for t in user_tags.split(',') if t.strip() and t.strip() != tag_name]
-            new_tags = ','.join(tag_list) if tag_list else ''
-            c.execute("UPDATE users_meta SET tags = ? WHERE user_id = ?", (new_tags, user_id))
-
-        conn.commit()
-        conn.close()
-
         return {"status": "success", "message": f"标签 '{tag_name}' 已删除"}
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 class UserTagsUpdateModel(BaseModel):
     user_id: str
@@ -2143,30 +2019,10 @@ def api_update_user_tags(data: UserTagsUpdateModel, request: Request):
         return {"status": "error", "message": "需要管理员权限"}
 
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-
-        # 检查用户是否存在
-        c.execute("SELECT 1 FROM users_meta WHERE user_id = ?", (data.user_id,))
-        exist = c.fetchone()
-
-        if exist:
-            c.execute("UPDATE users_meta SET tags = ? WHERE user_id = ?", (data.tags, data.user_id))
-        else:
-            c.execute("INSERT INTO users_meta (user_id, tags, created_at) VALUES (?, ?, ?)",
-                      (data.user_id, data.tags, datetime.datetime.now().isoformat()))
-
-        conn.commit()
-        conn.close()
-
+        user_dao.save_user_tags(data.user_id, data.tags, datetime.datetime.now().isoformat())
         return {"status": "success"}
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 @router.get("/api/manage/user/tags")
 def api_get_user_tags(user_id: str, request: Request):
@@ -2176,18 +2032,6 @@ def api_get_user_tags(user_id: str, request: Request):
         return {"status": "error", "message": "需要管理员权限"}
 
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        c.execute("SELECT tags FROM users_meta WHERE user_id = ?", (user_id,))
-        row = c.fetchone()
-        conn.close()
-
-        tags = row[0] if row and row[0] else ""
-        return {"status": "success", "data": tags}
+        return {"status": "success", "data": user_dao.get_user_tags(user_id)}
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass

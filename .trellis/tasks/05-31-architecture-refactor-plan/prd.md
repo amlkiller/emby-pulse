@@ -87,6 +87,7 @@ Define the architecture refactor target for EmbyPulse-Pro and implement the firs
 - [x] `app/routers/points.py` delegates point config, user point listing, batch updates, point log reads, red-packet log reads, point ranking reads, and daily check-in transactions to a DAO.
 - [x] `app/routers/users.py` delegates user audit log create/list/stats/delete/cleanup access to a DAO.
 - [x] `app/routers/users.py` delegates admin invitation code create/list/export/delete access to a DAO.
+- [x] `app/routers/users.py` delegates user pinning, request permission, and tag CRUD access to a DAO.
 - [x] Existing tests or import checks pass.
 
 ## Out of Scope
