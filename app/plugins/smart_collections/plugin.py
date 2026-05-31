@@ -8,76 +8,34 @@ import logging
 import threading
 import requests
 import datetime
-import sqlite3
 from typing import Optional, List, Dict, Any
 from fastapi import Request
 from app.plugins.base import PluginBase
 from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
 from app.core.config import cfg
 from app.core.media_adapter import media_api
-from app.core.database import SYSTEM_DB_PATH
+from app.dao.smart_collection_dao import (
+    add_smart_collection_log,
+    create_smart_collection,
+    delete_smart_collection,
+    ensure_smart_collection_tables,
+    get_smart_collection,
+    list_enabled_smart_collections,
+    list_smart_collection_items,
+    list_smart_collection_logs,
+    list_smart_collections,
+    replace_smart_collection_items,
+    set_smart_collection_sync_state,
+    update_smart_collection,
+)
 
 logger = logging.getLogger("uvicorn")
-
-
-# ==========================================
-# 数据库表结构
-# ==========================================
-
-COLLECTIONS_TABLE = """
-CREATE TABLE IF NOT EXISTS smart_collections (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE,
-    icon TEXT DEFAULT 'fa-layer-group',
-    icon_color TEXT DEFAULT 'from-purple-500 to-pink-500',
-    source_type TEXT DEFAULT 'tmdb_trending',
-    source_config TEXT DEFAULT '{}',
-    min_rating REAL DEFAULT 7.0,
-    update_mode TEXT DEFAULT 'incremental',
-    is_enabled INTEGER DEFAULT 1,
-    last_sync TEXT,
-    last_count INTEGER DEFAULT 0,
-    created_at TEXT,
-    updated_at TEXT
-)
-"""
-
-COLLECTION_ITEMS_TABLE = """
-CREATE TABLE IF NOT EXISTS smart_collection_items (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    collection_id INTEGER NOT NULL,
-    item_id TEXT NOT NULL,
-    tmdb_id TEXT,
-    title TEXT,
-    sort_order INTEGER DEFAULT 0,
-    added_at TEXT,
-    FOREIGN KEY (collection_id) REFERENCES smart_collections(id) ON DELETE CASCADE,
-    UNIQUE(collection_id, item_id)
-)
-"""
-
-SYNC_LOGS_TABLE = """
-CREATE TABLE IF NOT EXISTS smart_collection_sync_logs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    collection_id INTEGER,
-    action TEXT,
-    status TEXT,
-    message TEXT,
-    count INTEGER DEFAULT 0,
-    created_at TEXT
-)
-"""
 
 
 def ensure_tables():
     """确保数据库表存在"""
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.execute(COLLECTIONS_TABLE)
-        conn.execute(COLLECTION_ITEMS_TABLE)
-        conn.execute(SYNC_LOGS_TABLE)
-        conn.commit()
-        conn.close()
+        ensure_smart_collection_tables()
     except Exception as e:
         logger.error(f"[智能合集] 创建数据库表失败: {e}")
 
@@ -234,24 +192,10 @@ class SmartCollectionsPlugin(PluginBase):
     # 数据库操作
     # ==========================================
     
-    def _get_db(self):
-        """获取数据库连接"""
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.row_factory = sqlite3.Row
-        return conn
-    
     def get_all_collections(self) -> dict:
         """获取所有合集"""
         try:
-            conn = self._get_db()
-            rows = conn.execute("""
-                SELECT c.*, 
-                       (SELECT COUNT(*) FROM smart_collection_items WHERE collection_id = c.id) as item_count
-                FROM smart_collections c
-                ORDER BY c.updated_at DESC
-            """).fetchall()
-            conn.close()
-            
+            rows = list_smart_collections()
             collections = []
             for row in rows:
                 collections.append({
@@ -279,19 +223,10 @@ class SmartCollectionsPlugin(PluginBase):
     def get_collection_by_id(self, collection_id: int) -> dict:
         """获取单个合集详情"""
         try:
-            conn = self._get_db()
-            row = conn.execute("SELECT * FROM smart_collections WHERE id = ?", (collection_id,)).fetchone()
+            row = get_smart_collection(collection_id)
             if not row:
-                conn.close()
                 return {"status": "error", "message": "合集不存在"}
-            
-            # 获取合集中的项目
-            items = conn.execute("""
-                SELECT * FROM smart_collection_items 
-                WHERE collection_id = ? 
-                ORDER BY sort_order, added_at DESC
-            """, (collection_id,)).fetchall()
-            conn.close()
+            items = list_smart_collection_items(collection_id)
             
             collection = {
                 "id": row["id"],
@@ -325,39 +260,15 @@ class SmartCollectionsPlugin(PluginBase):
             name = data.get("name", "").strip()
             if not name:
                 return {"status": "error", "message": "合集名称不能为空"}
-            
-            conn = self._get_db()
             now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            
-            min_rating = float(data.get("min_rating") if data.get("min_rating") is not None else 7.0)
-            logger.info(f"[智能合集] min_rating 值: {min_rating}")
-            
-            cursor = conn.execute("""
-                INSERT INTO smart_collections 
-                (name, icon, icon_color, source_type, source_config, min_rating, update_mode, is_enabled, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                name,
-                data.get("icon", "fa-layer-group"),
-                data.get("icon_color", "from-purple-500 to-pink-500"),
-                data.get("source_type", "tmdb_movie_trending"),
-                json.dumps(data.get("source_config", {})),
-                min_rating,
-                data.get("update_mode", "incremental"),
-                1 if data.get("is_enabled", True) else 0,
-                now,
-                now,
-            ))
-            collection_id = cursor.lastrowid
-            conn.commit()
-            conn.close()
-            
+            logger.info(f"[智能合集] min_rating 值: {float(data.get('min_rating') if data.get('min_rating') is not None else 7.0)}")
+            collection_id = create_smart_collection(data, now)
             self._add_sync_log(collection_id, "create", "success", f"创建合集: {name}")
             
             return {"status": "success", "data": {"id": collection_id}, "message": "合集创建成功"}
-        except sqlite3.IntegrityError:
-            return {"status": "error", "message": "合集名称已存在"}
         except Exception as e:
+            if "UNIQUE constraint failed" in str(e):
+                return {"status": "error", "message": "合集名称已存在"}
             logger.error(f"[智能合集] 创建合集失败: {e}")
             return {"status": "error", "message": str(e)}
     
@@ -366,36 +277,15 @@ class SmartCollectionsPlugin(PluginBase):
         try:
             logger.info(f"[智能合集] 更新合集 {collection_id}，收到数据: {data}")
             
-            conn = self._get_db()
-            row = conn.execute("SELECT id FROM smart_collections WHERE id = ?", (collection_id,)).fetchone()
+            row = get_smart_collection(collection_id)
             if not row:
-                conn.close()
                 return {"status": "error", "message": "合集不存在"}
             
             now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             
             min_rating = float(data.get("min_rating") if data.get("min_rating") is not None else 7.0)
             logger.info(f"[智能合集] min_rating 值: {min_rating}")
-            
-            conn.execute("""
-                UPDATE smart_collections SET
-                name = ?, icon = ?, icon_color = ?, source_type = ?, source_config = ?,
-                min_rating = ?, update_mode = ?, is_enabled = ?, updated_at = ?
-                WHERE id = ?
-            """, (
-                data.get("name", ""),
-                data.get("icon", "fa-layer-group"),
-                data.get("icon_color", "from-purple-500 to-pink-500"),
-                data.get("source_type", "tmdb_movie_trending"),
-                json.dumps(data.get("source_config", {})),
-                min_rating,
-                data.get("update_mode", "incremental"),
-                1 if data.get("is_enabled", True) else 0,
-                now,
-                collection_id,
-            ))
-            conn.commit()
-            conn.close()
+            update_smart_collection(collection_id, data, now)
             
             return {"status": "success", "message": "合集更新成功"}
         except Exception as e:
@@ -405,19 +295,9 @@ class SmartCollectionsPlugin(PluginBase):
     def delete_collection_item(self, collection_id: int) -> dict:
         """删除合集"""
         try:
-            conn = self._get_db()
-            row = conn.execute("SELECT name FROM smart_collections WHERE id = ?", (collection_id,)).fetchone()
-            if not row:
-                conn.close()
+            name = delete_smart_collection(collection_id)
+            if not name:
                 return {"status": "error", "message": "合集不存在"}
-            
-            name = row["name"]
-            
-            # 删除数据库记录
-            conn.execute("DELETE FROM smart_collection_items WHERE collection_id = ?", (collection_id,))
-            conn.execute("DELETE FROM smart_collections WHERE id = ?", (collection_id,))
-            conn.commit()
-            conn.close()
             
             # 删除 Emby 中的合集
             self._delete_emby_collection(name)
@@ -467,16 +347,7 @@ class SmartCollectionsPlugin(PluginBase):
     def get_sync_logs(self, limit: int = 50) -> dict:
         """获取同步日志"""
         try:
-            conn = self._get_db()
-            rows = conn.execute("""
-                SELECT l.*, c.name as collection_name
-                FROM smart_collection_sync_logs l
-                LEFT JOIN smart_collections c ON l.collection_id = c.id
-                ORDER BY l.created_at DESC
-                LIMIT ?
-            """, (limit,)).fetchall()
-            conn.close()
-            
+            rows = list_smart_collection_logs(limit)
             logs = []
             for row in rows:
                 logs.append({
@@ -498,14 +369,8 @@ class SmartCollectionsPlugin(PluginBase):
     def _add_sync_log(self, collection_id: int, action: str, status: str, message: str, count: int = 0):
         """添加同步日志"""
         try:
-            conn = self._get_db()
             now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            conn.execute("""
-                INSERT INTO smart_collection_sync_logs (collection_id, action, status, message, count, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (collection_id, action, status, message, count, now))
-            conn.commit()
-            conn.close()
+            add_smart_collection_log(collection_id, action, status, message, count, now)
         except Exception as e:
             logger.error(f"[智能合集] 添加日志失败: {e}")
     
@@ -547,9 +412,7 @@ class SmartCollectionsPlugin(PluginBase):
             return {"status": "error", "message": "Pro 专享功能"}
         
         try:
-            conn = self._get_db()
-            rows = conn.execute("SELECT * FROM smart_collections WHERE is_enabled = 1").fetchall()
-            conn.close()
+            rows = list_enabled_smart_collections()
             
             total = 0
             for row in rows:
@@ -567,10 +430,7 @@ class SmartCollectionsPlugin(PluginBase):
             return {"status": "error", "message": "Pro 专享功能"}
         
         try:
-            conn = self._get_db()
-            row = conn.execute("SELECT * FROM smart_collections WHERE id = ?", (collection_id,)).fetchone()
-            conn.close()
-            
+            row = get_smart_collection(collection_id)
             if not row:
                 return {"status": "error", "message": "合集不存在"}
             
@@ -605,19 +465,8 @@ class SmartCollectionsPlugin(PluginBase):
             
             # 更新数据库
             now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            conn = self._get_db()
-            conn.execute("UPDATE smart_collections SET last_sync = ?, last_count = ?, updated_at = ? WHERE id = ?",
-                        (now, len(item_ids), now, collection_id))
-            
-            # 更新项目记录
-            conn.execute("DELETE FROM smart_collection_items WHERE collection_id = ?", (collection_id,))
-            for idx, item_id in enumerate(item_ids):
-                conn.execute("""
-                    INSERT INTO smart_collection_items (collection_id, item_id, sort_order, added_at)
-                    VALUES (?, ?, ?, ?)
-                """, (collection_id, item_id, idx, now))
-            conn.commit()
-            conn.close()
+            set_smart_collection_sync_state(collection_id, now, len(item_ids))
+            replace_smart_collection_items(collection_id, item_ids, now)
             
             self._add_sync_log(collection_id, "sync", "success", f"{name}: 匹配 {len(item_ids)} 个项目", len(item_ids))
             return len(item_ids)
