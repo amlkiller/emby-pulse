@@ -10,7 +10,7 @@
 
 - Trigger: database infrastructure refactor that starts removing `query_db()` from representative modules.
 - Applies to new backend code that reads/writes EmbyPulse system data or playback reporting data.
-- First-stage sample modules include `app/routers/history.py`, `app/routers/api_tokens.py`, `app/routers/notifications.py`, `app/routers/notify_rules.py`, `app/routers/pro.py`, `app/routers/notify_admin.py`, `app/routers/pwa.py`, `app/routers/audit.py`, `app/routers/risk.py`, `app/routers/clients.py`, `app/routers/calendar_notify.py`, `app/routers/webhook.py`, `app/services/report_service.py`, `app/routers/insight.py`, `app/routers/system_tools.py`, `app/services/risk_service.py`, `app/services/calendar_service.py`, `app/routers/views.py`, `app/routers/tasks.py`, and `app/routers/dedupe.py`.
+- First-stage sample modules include `app/routers/history.py`, `app/routers/api_tokens.py`, `app/routers/notifications.py`, `app/routers/notify_rules.py`, `app/routers/pro.py`, `app/routers/notify_admin.py`, `app/routers/pwa.py`, `app/routers/audit.py`, `app/routers/risk.py`, `app/routers/clients.py`, `app/routers/calendar_notify.py`, `app/routers/webhook.py`, `app/services/report_service.py`, `app/routers/insight.py`, `app/routers/system_tools.py`, `app/services/risk_service.py`, `app/services/calendar_service.py`, `app/routers/views.py`, `app/routers/tasks.py`, `app/routers/dedupe.py`, and `app/routers/system.py`.
 
 ### 2. Signatures
 
@@ -54,6 +54,10 @@
 - `app.dao.insight_dao.list_insight_ignore_item_ids() -> list[DataRow]`
 - `app.dao.system_tool_dao.check_system_table_integrity() -> dict`
 - `app.dao.system_tool_dao.check_system_db_readwrite() -> dict`
+- `app.dao.system_tool_dao.system_database_exists() -> bool`
+- `app.dao.system_tool_dao.repair_core_system_tables() -> list[str]`
+- `app.dao.system_tool_dao.get_dashboard_layout() -> Any | None`
+- `app.dao.system_tool_dao.save_dashboard_layout(data) -> None`
 - `app.dao.calendar_dao.mark_calendar_episode_ready(series_id, season, episode) -> None`
 - `app.dao.calendar_dao.list_calendar_cache_rows(start_date: str, end_date: str) -> list[DataRow]`
 - `app.dao.calendar_dao.replace_calendar_cache_items(week_data) -> None`
@@ -91,6 +95,7 @@
 - `app.queries.report_queries.list_report_top_items(where_sql: str, params, limit: int = 8) -> list[DataRow]`
 - `app.queries.report_queries.list_report_ranked_items(where_sql: str, exclude_sql: str, exclude_types, limit: int) -> list[DataRow]`
 - `app.queries.system_tool_queries.get_latest_playback_date() -> str | None`
+- `app.queries.system_tool_queries.diagnose_playback_database() -> dict`
 - Scenario modules live in `app/queries/*_queries.py` and `app/dao/*_dao.py` during the transition.
 
 ### 3. Contracts
@@ -130,6 +135,7 @@
 - Good: `views.py` keeps validation, Emby user creation, and template rendering in the route while delegating invitation transactions and `users_meta` writes to `invitation_dao`.
 - Good: `tasks.py` keeps Emby scheduled-task polling and display-name assembly in the route while delegating task config and translation persistence to `task_dao`.
 - Good: `dedupe.py` keeps Emby scan/delete orchestration and duplicate scoring in the route while delegating dedupe result, whitelist, and config persistence to `dedupe_dao`.
+- Good: `system.py` keeps settings validation, external connectivity probes, and response assembly in the route while delegating database diagnostics, repair DDL, and dashboard layout persistence to DAO/query modules.
 - Bad: a router imports `query_db`, `SYSTEM_DB_PATH`, or `sqlite3` only to run route-local SQL.
 
 ### 6. Tests Required
