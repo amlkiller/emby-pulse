@@ -383,3 +383,26 @@ def list_user_point_logs(user_id: str, page: int = 1, page_size: int = 20) -> di
         logs = [dict(zip(columns, row)) for row in cursor.fetchall()]
 
     return {"logs": logs, "total": total}
+
+
+def list_red_packet_logs(packet_id: int) -> list[dict]:
+    with system_store.connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT user_name, amount, datetime(created_at, 'localtime') as created_at
+            FROM point_red_packet_logs
+            WHERE packet_id = ?
+            ORDER BY created_at
+            """,
+            (packet_id,),
+        )
+        columns = [desc[0] for desc in cursor.description]
+        return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+
+def list_point_rank(limit: int = 10):
+    return system_store.fetch_all(
+        "SELECT user_id, points FROM users_meta WHERE points > 0 ORDER BY points DESC LIMIT ?",
+        (limit,),
+    )

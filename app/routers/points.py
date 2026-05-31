@@ -858,19 +858,10 @@ def get_red_packet_logs(request: Request, packet_id: int):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH); c = conn.cursor()
-        c.execute("SELECT user_name, amount, datetime(created_at, 'localtime') as created_at FROM point_red_packet_logs WHERE packet_id = ? ORDER BY created_at", (packet_id,))
-        cols = [desc[0] for desc in c.description]
-        logs = [dict(zip(cols, row)) for row in c.fetchall()]
-        conn.close()
+        logs = point_dao.list_red_packet_logs(packet_id)
         return {"status": "success", "data": logs}
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 
 # ==========================================
@@ -882,9 +873,7 @@ def get_points_rank(request: Request, limit: int = 10):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH); c = conn.cursor()
-        c.execute("SELECT user_id, points FROM users_meta WHERE points > 0 ORDER BY points DESC LIMIT ?", (limit,))
-        rows = c.fetchall()
+        rows = point_dao.list_point_rank(limit)
         
         # 获取用户名
         try:
@@ -897,20 +886,14 @@ def get_points_rank(request: Request, limit: int = 10):
         for i, row in enumerate(rows, 1):
             rank_list.append({
                 "rank": i,
-                "user_id": row[0],
-                "user_name": name_map.get(row[0], "未知用户"),
-                "points": row[1]
+                "user_id": row["user_id"],
+                "user_name": name_map.get(row["user_id"], "未知用户"),
+                "points": row["points"]
             })
         
-        conn.close()
         return {"status": "success", "data": rank_list}
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 
 # ==========================================
