@@ -8,6 +8,7 @@ import shutil
 import time
 from collections import deque
 from app.core.config import cfg, DB_PATH, SYSTEM_DB_PATH
+from app.dao.notification_dao import add_system_notification
 
 # 🔥 导出 SYSTEM_DB_PATH 供其他模块使用
 __all__ = ['init_db', 'query_db', 'get_base_filter', 'add_sys_notification',
@@ -1137,19 +1138,6 @@ def get_base_filter(user_id_filter):
 # 👇 核心修复：强制获取北京时间并显式写入，拒绝使用 SQLite 默认的 UTC 零时区！
 def add_sys_notification(notify_type: str, title: str, message: str, action_url: str = ""):
     try:
-        # 获取精准的北京时间 (UTC+8)
-        now_str = (datetime.datetime.utcnow() + datetime.timedelta(hours=8)).strftime("%Y-%m-%d %H:%M:%S")
-
-        # 🔥 系统通知使用系统数据库
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        cur = conn.cursor()
-
-        # 显式指定 created_at 为咱们算好的北京时间
-        cur.execute(
-            "INSERT INTO sys_notifications (type, title, message, action_url, created_at) VALUES (?, ?, ?, ?, ?)",
-            (notify_type, title, message, action_url, now_str)
-        )
-        conn.commit()
-        conn.close()
+        add_system_notification(notify_type, title, message, action_url)
     except Exception as e:
         logger.error(f"[系统通知] 写入数据库失败: {e}")
