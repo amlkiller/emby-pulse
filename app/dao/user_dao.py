@@ -314,6 +314,25 @@ def list_users_with_expire_date():
     return system_store.fetch_all("SELECT user_id, expire_date FROM users_meta WHERE expire_date IS NOT NULL AND expire_date != ''")
 
 
+def list_user_ids_with_expire_date():
+    return system_store.fetch_all("SELECT user_id FROM users_meta WHERE expire_date IS NOT NULL AND expire_date != ''")
+
+
+def delete_user_meta_many(user_ids) -> int:
+    ids = [user_id for user_id in user_ids if user_id]
+    if not ids:
+        return 0
+    placeholders = ",".join(["?" for _ in ids])
+    return system_store.execute(f"DELETE FROM users_meta WHERE user_id IN ({placeholders})", ids)
+
+
+def get_user_display_name(user_id: str):
+    row = system_store.fetch_one("SELECT remark, note FROM users_meta WHERE user_id = ?", (user_id,))
+    if not row:
+        return None
+    return row["remark"] or row["note"] or None
+
+
 def get_user_points_expire(user_id: str):
     return system_store.fetch_one("SELECT points, expire_date FROM users_meta WHERE user_id = ?", (user_id,))
 

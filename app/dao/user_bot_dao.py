@@ -106,6 +106,11 @@ def get_binding_by_emby_id(emby_user_id):
     }
 
 
+def get_tg_user_id_by_emby_id(emby_user_id):
+    binding = get_binding_by_emby_id(emby_user_id)
+    return binding["tg_user_id"] if binding else None
+
+
 def get_binding(tg_user_id):
     row = system_store.fetch_one(
         """
