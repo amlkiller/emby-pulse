@@ -1970,24 +1970,6 @@ def cmd_pk_invite(chat_id, tg_user_id, text, is_group=False, entities=None, user
         if not target:
             return _send(chat_id, "❌ 请指定要PK的用户")
         
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        
-        # 获取配置
-        config = {r[0]: r[1] for r in c.execute("SELECT key, value FROM point_config").fetchall()}
-        
-        # 检查是否启用用户PK
-        if int(config.get('enable_user_pk', 0)) == 0:
-            conn.close()
-            return _send(chat_id, "❌ 用户PK功能未开启")
-        
-        # 检查下注范围
-        min_points = int(config.get('user_pk_min_points', 10))
-        max_points = int(config.get('user_pk_max_points', 500))
-        if points < min_points or points > max_points:
-            conn.close()
-            return _send(chat_id, f"❌ 下注积分需在 {min_points}-{max_points} 之间")
-        
         # 查找目标用户（参考打劫功能的实现）
         mentioned_user_id = None
         if entities:
@@ -2000,10 +1982,7 @@ def cmd_pk_invite(chat_id, tg_user_id, text, is_group=False, entities=None, user
                         offset = ent.get("offset", 0)
                         length = ent.get("length", 0)
                         mentioned_username = text[offset:offset+length].lstrip('@')
-                        c.execute("SELECT tg_user_id FROM tg_user_bindings WHERE tg_username = ?", (mentioned_username,))
-                        row = c.fetchone()
-                        if row:
-                            mentioned_user_id = row[0]
+                        mentioned_user_id = user_bot_dao.get_tg_user_id_by_username(mentioned_username)
                         break
         
         # 查找目标用户
@@ -2011,15 +1990,13 @@ def cmd_pk_invite(chat_id, tg_user_id, text, is_group=False, entities=None, user
         to_user_name = None
         
         if mentioned_user_id:
-            c.execute("SELECT emby_user_id, emby_username FROM tg_user_bindings WHERE tg_user_id = ?", (mentioned_user_id,))
-            row = c.fetchone()
+            row = user_bot_dao.get_binding_by_tg_user_or_username(mentioned_user_id)
             if row:
-                to_user_id = row[0]
-                to_user_name = row[1]
+                to_user_id = row["emby_user_id"]
+                to_user_name = row["emby_username"]
         
         if not to_user_id:
-            c.execute("SELECT emby_user_id, emby_username FROM tg_user_bindings WHERE tg_user_id = ? OR tg_username = ?", (target, target))
-            row = c.fetchone()
+            row = user_bot_dao.get_binding_by_tg_user_or_username(target)
             
             if not row:
                 try:
@@ -2031,73 +2008,37 @@ def cmd_pk_invite(chat_id, tg_user_id, text, is_group=False, entities=None, user
                 except:
                     pass
             else:
-                to_user_id = row[0]
-                to_user_name = row[1]
+                to_user_id = row["emby_user_id"]
+                to_user_name = row["emby_username"]
         
         if not to_user_id:
-            conn.close()
             return _send(chat_id, f"❌ 未找到用户：{target}\n\n💡 请确认对方已绑定机器人，或直接使用 Emby 用户名")
         
         # 不能PK自己
         if to_user_id == binding['emby_user_id']:
-            conn.close()
             return _send(chat_id, "❌ 不能PK自己")
-        
-        # 获取双方积分
-        from_row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (binding['emby_user_id'],)).fetchone()
-        from_points = from_row[0] if from_row else 0
-        
-        to_row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (to_user_id,)).fetchone()
-        to_points = to_row[0] if to_row else 0
-        
-        if from_points < points:
-            conn.close()
-            return _send(chat_id, f"❌ 积分不足，当前积分：{from_points}")
-        
-        if to_points < points:
-            conn.close()
-            return _send(chat_id, f"❌ 对方积分不足（{to_points}），无法接受此PK")
-        
-        # 检查今日PK次数
-        today_pk_count = c.execute(
-            "SELECT COUNT(*) FROM pk_logs WHERE challenger_id = ? AND date(created_at, 'localtime') = date('now', 'localtime')",
-            (binding['emby_user_id'],)
-        ).fetchone()[0]
-        max_per_day = int(config.get('user_pk_max_per_day', 5))
-        if today_pk_count >= max_per_day:
-            conn.close()
-            return _send(chat_id, f"❌ 今日PK次数已达上限（{max_per_day}次）")
-        
-        # 清理过期邀请
-        c.execute("UPDATE pk_invitations SET status = 'expired' WHERE expires_at < datetime('now', 'localtime') AND status = 'pending'")
-        
-        # 检查是否有待处理的邀请（已过期的已被标记为expired）
-        pending = c.execute(
-            "SELECT id FROM pk_invitations WHERE challenger_id = ? AND target_id = ? AND status = 'pending'",
-            (binding['emby_user_id'], to_user_id)
-        ).fetchone()
-        if pending:
-            conn.close()
-            return _send(chat_id, "❌ 已有待处理的PK邀请，请等待对方回应")
-        
-        # 创建邀请
-        from datetime import datetime, timedelta
-        timeout_minutes = int(config.get('user_pk_timeout', 5))
-        expires_at = datetime.now() + timedelta(minutes=timeout_minutes)
-        
+
         # 获取 TG 名称
         target_binding = _get_binding_by_emby_id(to_user_id)
         target_tg_name = target_binding.get('tg_name') if target_binding else None
         challenger_tg_name = binding.get('tg_name') or binding['emby_username']
-        
-        c.execute(
-            "INSERT INTO pk_invitations (challenger_id, challenger_name, challenger_tg_name, target_id, target_name, target_tg_name, points, chat_id, command_message_id, created_at, expires_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'), ?, 'pending')",
-            (binding['emby_user_id'], binding['emby_username'], challenger_tg_name, to_user_id, to_user_name, target_tg_name, points, str(chat_id), str(user_msg_id) if user_msg_id else None, expires_at.isoformat())
+
+        invite_result = point_dao.create_pk_invitation(
+            binding['emby_user_id'],
+            binding['emby_username'],
+            challenger_tg_name,
+            to_user_id,
+            to_user_name,
+            target_tg_name,
+            points,
+            chat_id,
+            command_message_id=user_msg_id,
         )
-        invite_id = c.lastrowid
-        
-        conn.commit()
-        conn.close()
+        if invite_result.get("status") != "success":
+            return _send(chat_id, f"❌ {invite_result.get('message', 'PK邀请失败')}")
+
+        invite_id = invite_result["invite_id"]
+        timeout_minutes = invite_result["timeout_minutes"]
         
         # 🔥 发送邀请通知（只在群聊发送，不私发）
         # 创建 Inline Keyboard 按钮
@@ -2116,16 +2057,12 @@ def cmd_pk_invite(chat_id, tg_user_id, text, is_group=False, entities=None, user
         
         # 在群聊中发送带按钮的消息
         invite_msg = f"🎯 <b>{challenger_tg_name}</b> 向 {target_mention} 发起PK挑战！\n\n💰 下注：<b>{points}</b> 积分\n⏰ 请在 <b>{timeout_minutes}</b> 分钟内回应\n\n💡 点击下方按钮选择接受或拒绝"
-        invite_result = _send(chat_id, invite_msg, reply_markup=keyboard)
+        send_result = _send(chat_id, invite_msg, reply_markup=keyboard)
         
         # 记录邀请消息 ID
-        if invite_result and invite_result.get('ok'):
-            invite_msg_id = invite_result.get('result', {}).get('message_id')
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            c = conn.cursor()
-            c.execute("UPDATE pk_invitations SET message_id = ? WHERE id = ?", (str(invite_msg_id), invite_id))
-            conn.commit()
-            conn.close()
+        if send_result and send_result.get('ok'):
+            invite_msg_id = send_result.get('result', {}).get('message_id')
+            point_dao.save_pk_invitation_message_id(invite_id, invite_msg_id)
         
     except Exception as e:
         logger.error(f"[UserBot] PK邀请失败: {e}")
@@ -2275,27 +2212,18 @@ def cmd_pk_reject(chat_id, tg_user_id, text, is_group=False):
         return _send(chat_id, "❌ 请先私聊机器人绑定账号")
     
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        
         # 获取发给当前用户的最新待处理邀请
-        invite = c.execute(
-            "SELECT id, challenger_id, challenger_name, chat_id FROM pk_invitations WHERE target_id = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 1",
-            (binding['emby_user_id'],)
-        ).fetchone()
+        invite = point_dao.get_latest_pending_pk_invitation_for_target(binding['emby_user_id'])
         
         if not invite:
-            conn.close()
             return _send(chat_id, "❌ 没有待处理的PK邀请")
         
-        invite_id = invite[0]
-        challenger_name = invite[2]
-        original_chat_id = invite[3]
+        invite_id = invite["id"]
+        challenger_name = invite["challenger_name"]
+        original_chat_id = invite["chat_id"]
         
         # 更新状态
-        c.execute("UPDATE pk_invitations SET status = 'rejected' WHERE id = ?", (invite_id,))
-        conn.commit()
-        conn.close()
+        point_dao.set_pk_invitation_status(invite_id, "rejected")
         
         # 通知发起者
         if original_chat_id:
