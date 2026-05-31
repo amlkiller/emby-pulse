@@ -258,6 +258,44 @@ def delete_media_request(tmdb_id, season) -> None:
         conn.commit()
 
 
+def finish_media_requests_for_item(tmdb_id, season=None):
+    with system_store.connect() as conn:
+        cursor = conn.cursor()
+        if season is None:
+            cursor.execute(
+                "SELECT title, year, media_type, season FROM media_requests WHERE tmdb_id = ? AND status IN (0, 1, 4, 7)",
+                (tmdb_id,),
+            )
+        else:
+            cursor.execute(
+                "SELECT title, year, media_type, season FROM media_requests WHERE tmdb_id = ? AND season = ? AND status IN (0, 1, 4, 7)",
+                (tmdb_id, season),
+            )
+        requests_to_notify = [to_data_row(row) for row in cursor.fetchall()]
+
+        users_to_notify = []
+        for request_row in requests_to_notify:
+            cursor.execute(
+                "SELECT user_id, username FROM request_users WHERE tmdb_id = ? AND season = ?",
+                (tmdb_id, request_row["season"]),
+            )
+            users_to_notify.extend(to_data_row(row) for row in cursor.fetchall())
+
+        if season is None:
+            cursor.execute(
+                "UPDATE media_requests SET status = 2, updated_at = CURRENT_TIMESTAMP WHERE tmdb_id = ? AND status IN (0, 1, 4, 7)",
+                (tmdb_id,),
+            )
+        else:
+            cursor.execute(
+                "UPDATE media_requests SET status = 2, updated_at = CURRENT_TIMESTAMP WHERE tmdb_id = ? AND season = ? AND status IN (0, 1, 4, 7)",
+                (tmdb_id, season),
+            )
+        conn.commit()
+
+    return requests_to_notify, users_to_notify
+
+
 def list_request_status_notify_items(items):
     notify_items = []
     user_ids = []

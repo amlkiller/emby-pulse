@@ -13,7 +13,7 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from app.core.config import cfg, REPORT_COVER_URL, FALLBACK_IMAGE_URL
 from app.core.database import query_db, get_base_filter, add_sys_notification, DB_PATH, SYSTEM_DB_PATH
-from app.dao import bot_service_dao
+from app.dao import bot_service_dao, media_request_dao
 from app.dao import notify_admin_dao, notify_rule_dao
 from app.utils.proxy_helper import get_safe_proxies, get_safe_wecom_base  # 🔒 SSRF 安全代理读取
 from app.services.report_service import report_gen, HAS_PIL
@@ -547,30 +547,7 @@ class SystemDaemon:
         if not tmdb_id: return
         try:
             tid = int(tmdb_id)
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            conn.row_factory = sqlite3.Row
-            c = conn.cursor()
-            
-            # 🔥 先查询需要通知的工单（状态在 0,1,4,7 且即将变为 2）
-            if season is None:
-                c.execute("SELECT title, year, media_type, season FROM media_requests WHERE tmdb_id = ? AND status IN (0, 1, 4, 7)", (tid,))
-            else:
-                c.execute("SELECT title, year, media_type, season FROM media_requests WHERE tmdb_id = ? AND season = ? AND status IN (0, 1, 4, 7)", (tid, season))
-            requests_to_notify = c.fetchall()
-            
-            # 查询所有相关用户
-            users_to_notify = []
-            for req in requests_to_notify:
-                c.execute("SELECT user_id, username FROM request_users WHERE tmdb_id = ? AND season = ?", (tid, req['season']))
-                users_to_notify.extend(c.fetchall())
-            
-            # 更新状态
-            if season is None:
-                c.execute("UPDATE media_requests SET status = 2, updated_at = CURRENT_TIMESTAMP WHERE tmdb_id = ? AND status IN (0, 1, 4, 7)", (tid,))
-            else:
-                c.execute("UPDATE media_requests SET status = 2, updated_at = CURRENT_TIMESTAMP WHERE tmdb_id = ? AND season = ? AND status IN (0, 1, 4, 7)", (tid, season))
-            conn.commit()
-            conn.close()
+            requests_to_notify, users_to_notify = media_request_dao.finish_media_requests_for_item(tid, season)
             
             # 🔥 通知用户（入库完成）
             if requests_to_notify and users_to_notify:
@@ -598,17 +575,8 @@ class SystemDaemon:
                 return
             
             # 批量查询 TG 绑定
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            conn.row_factory = sqlite3.Row
-            c = conn.cursor()
             user_ids = [u['user_id'] for u in users_info]
-            tg_bindings = {}
-            if user_ids:
-                placeholders = ','.join(['?'] * len(user_ids))
-                c.execute(f"SELECT emby_user_id, tg_user_id FROM tg_user_bindings WHERE emby_user_id IN ({placeholders})", user_ids)
-                for row in c.fetchall():
-                    tg_bindings[row['emby_user_id']] = row['tg_user_id']
-            conn.close()
+            tg_bindings = media_request_dao.list_tg_bindings(user_ids)
             
             from app.services.user_bot_service import _send, _tg_api
             
