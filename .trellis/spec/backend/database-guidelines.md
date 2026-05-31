@@ -10,7 +10,7 @@
 
 - Trigger: database infrastructure refactor that starts removing `query_db()` from representative modules.
 - Applies to new backend code that reads/writes EmbyPulse system data or playback reporting data.
-- First-stage sample modules include `app/routers/history.py`, `app/routers/api_tokens.py`, `app/routers/notifications.py`, `app/routers/notify_rules.py`, `app/routers/pro.py`, `app/routers/notify_admin.py`, `app/routers/pwa.py`, `app/routers/audit.py`, `app/routers/risk.py`, `app/routers/clients.py`, `app/routers/calendar_notify.py`, `app/routers/webhook.py`, `app/services/report_service.py`, `app/routers/insight.py`, `app/routers/system_tools.py`, `app/services/risk_service.py`, `app/services/calendar_service.py`, `app/routers/views.py`, and `app/routers/tasks.py`.
+- First-stage sample modules include `app/routers/history.py`, `app/routers/api_tokens.py`, `app/routers/notifications.py`, `app/routers/notify_rules.py`, `app/routers/pro.py`, `app/routers/notify_admin.py`, `app/routers/pwa.py`, `app/routers/audit.py`, `app/routers/risk.py`, `app/routers/clients.py`, `app/routers/calendar_notify.py`, `app/routers/webhook.py`, `app/services/report_service.py`, `app/routers/insight.py`, `app/routers/system_tools.py`, `app/services/risk_service.py`, `app/services/calendar_service.py`, `app/routers/views.py`, `app/routers/tasks.py`, and `app/routers/dedupe.py`.
 
 ### 2. Signatures
 
@@ -71,6 +71,16 @@
 - `app.dao.task_dao.list_task_translations() -> list[DataRow]`
 - `app.dao.task_dao.save_task_translation(original_name: str, translated_name: str) -> None`
 - `app.dao.task_dao.delete_task_translation(original_name: str) -> None`
+- `app.dao.dedupe_dao.init_dedupe_tables(logger=None) -> None`
+- `app.dao.dedupe_dao.list_dedupe_whitelist_group_keys() -> list[str]`
+- `app.dao.dedupe_dao.DedupeResultWriter`
+- `app.dao.dedupe_dao.list_dedupe_results() -> list[DataRow]`
+- `app.dao.dedupe_dao.add_dedupe_whitelist_items(items) -> None`
+- `app.dao.dedupe_dao.list_dedupe_whitelist() -> list[DataRow]`
+- `app.dao.dedupe_dao.remove_dedupe_whitelist_items(group_keys) -> None`
+- `app.dao.dedupe_dao.delete_dedupe_result_by_item_id(item_id: str) -> None`
+- `app.dao.dedupe_dao.get_dedupe_config_values() -> dict`
+- `app.dao.dedupe_dao.save_dedupe_config_values(config: dict) -> None`
 - `app.infra.db.local_playback_store.insert_webhook_playback_ip_record(...) -> None`
 - `app.infra.db.perf_stats.get_query_perf_stats() -> dict`
 - `app.queries.client_queries.count_playback_clients_by_app() -> list[DataRow]`
@@ -119,6 +129,7 @@
 - Good: `calendar_service.py` keeps Emby/TMDB API coordination and calendar aggregation in the service while delegating `tv_calendar_cache` and `tv_series_status` persistence to `calendar_dao`.
 - Good: `views.py` keeps validation, Emby user creation, and template rendering in the route while delegating invitation transactions and `users_meta` writes to `invitation_dao`.
 - Good: `tasks.py` keeps Emby scheduled-task polling and display-name assembly in the route while delegating task config and translation persistence to `task_dao`.
+- Good: `dedupe.py` keeps Emby scan/delete orchestration and duplicate scoring in the route while delegating dedupe result, whitelist, and config persistence to `dedupe_dao`.
 - Bad: a router imports `query_db`, `SYSTEM_DB_PATH`, or `sqlite3` only to run route-local SQL.
 
 ### 6. Tests Required

@@ -75,6 +75,7 @@ Define the architecture refactor target for EmbyPulse-Pro and implement the firs
 - [x] `app/services/calendar_service.py` delegates TV calendar cache and series status tables to a DAO.
 - [x] `app/routers/views.py` delegates invitation claim/restore and registration user metadata writes to a DAO.
 - [x] `app/routers/tasks.py` delegates task config and task translation tables to a DAO.
+- [x] `app/routers/dedupe.py` delegates dedupe result, whitelist, and config table access to a DAO.
 - [x] Existing tests or import checks pass.
 
 ## Out of Scope

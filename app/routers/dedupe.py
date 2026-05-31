@@ -1,4 +1,3 @@
-import sqlite3
 import logging
 import re
 import threading
@@ -10,7 +9,18 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 
 from app.core.config import cfg
-from app.core.database import query_db, DB_PATH, SYSTEM_DB_PATH
+from app.dao.dedupe_dao import (
+    DedupeResultWriter,
+    add_dedupe_whitelist_items,
+    delete_dedupe_result_by_item_id,
+    get_dedupe_config_values,
+    init_dedupe_tables,
+    list_dedupe_results,
+    list_dedupe_whitelist,
+    list_dedupe_whitelist_group_keys,
+    remove_dedupe_whitelist_items,
+    save_dedupe_config_values,
+)
 from app.routers.auth import is_admin_user
 from app.core.security_utils import safe_error_message
 
@@ -27,98 +37,7 @@ scan_state = {
 
 def init_dedupe_db():
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        
-        # 检查 dedupe_whitelist 是否需要迁移（旧表有 id 列，新表用 group_key 作主键）
-        c.execute("PRAGMA table_info(dedupe_whitelist)")
-        w_cols = [col[1] for col in c.fetchall()]
-        needs_migration = "id" in w_cols and "group_key" not in w_cols
-        
-        if needs_migration:
-            logger.info("[去重引擎] 检测到旧版 dedupe_whitelist 表结构，正在迁移...")
-            # 备份旧数据
-            c.execute("SELECT item_id, item_name, created_at FROM dedupe_whitelist")
-            old_data = c.fetchall()
-            # 删除旧表
-            c.execute("DROP TABLE IF EXISTS dedupe_whitelist")
-            # 创建新表
-            c.execute('''CREATE TABLE dedupe_whitelist (
-                group_key TEXT PRIMARY KEY,
-                title TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )''')
-            # 迁移数据（item_id -> group_key, item_name -> title）
-            for row in old_data:
-                if row[0]:  # item_id 不为空
-                    c.execute("INSERT OR IGNORE INTO dedupe_whitelist (group_key, title, created_at) VALUES (?, ?, ?)",
-                              (row[0], row[1] or "", row[2] or ""))
-            logger.info(f"[去重引擎] 已迁移 {len(old_data)} 条白名单记录")
-        else:
-            c.execute('''CREATE TABLE IF NOT EXISTS dedupe_whitelist (
-                group_key TEXT PRIMARY KEY,
-                title TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )''')
-        
-        # dedupe_results 表 - 完整结构
-        c.execute('''CREATE TABLE IF NOT EXISTS dedupe_results (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            group_key TEXT,
-            tmdb_id TEXT,
-            media_type TEXT,
-            title TEXT,
-            season_num INTEGER,
-            episode_num INTEGER,
-            item_id TEXT,
-            file_name TEXT,
-            file_path TEXT,
-            resolution TEXT,
-            bitrate INTEGER,
-            size_bytes REAL,
-            video_codec TEXT,
-            audio_codec TEXT,
-            has_hdr INTEGER,
-            has_dovi INTEGER,
-            has_chi_sub INTEGER,
-            has_ass_sub INTEGER,
-            score INTEGER,
-            is_recommended_del INTEGER DEFAULT 0,
-            is_exempt INTEGER DEFAULT 0,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )''')
-        
-        # 增量更新：添加缺失的列
-        c.execute("PRAGMA table_info(dedupe_results)")
-        cols = [col[1] for col in c.fetchall()]
-        if "group_key" not in cols: c.execute("ALTER TABLE dedupe_results ADD COLUMN group_key TEXT")
-        if "tmdb_id" not in cols: c.execute("ALTER TABLE dedupe_results ADD COLUMN tmdb_id TEXT")
-        if "season_num" not in cols: c.execute("ALTER TABLE dedupe_results ADD COLUMN season_num INTEGER")
-        if "episode_num" not in cols: c.execute("ALTER TABLE dedupe_results ADD COLUMN episode_num INTEGER")
-        if "file_name" not in cols: c.execute("ALTER TABLE dedupe_results ADD COLUMN file_name TEXT")
-        if "file_path" not in cols: c.execute("ALTER TABLE dedupe_results ADD COLUMN file_path TEXT")
-        if "resolution" not in cols: c.execute("ALTER TABLE dedupe_results ADD COLUMN resolution TEXT")
-        if "bitrate" not in cols: c.execute("ALTER TABLE dedupe_results ADD COLUMN bitrate INTEGER")
-        if "size_bytes" not in cols: c.execute("ALTER TABLE dedupe_results ADD COLUMN size_bytes REAL")
-        if "video_codec" not in cols: c.execute("ALTER TABLE dedupe_results ADD COLUMN video_codec TEXT")
-        if "audio_codec" not in cols: c.execute("ALTER TABLE dedupe_results ADD COLUMN audio_codec TEXT")
-        if "has_hdr" not in cols: c.execute("ALTER TABLE dedupe_results ADD COLUMN has_hdr INTEGER")
-        if "has_dovi" not in cols: c.execute("ALTER TABLE dedupe_results ADD COLUMN has_dovi INTEGER")
-        if "has_chi_sub" not in cols: c.execute("ALTER TABLE dedupe_results ADD COLUMN has_chi_sub INTEGER")
-        if "has_ass_sub" not in cols: c.execute("ALTER TABLE dedupe_results ADD COLUMN has_ass_sub INTEGER")
-        if "score" not in cols: c.execute("ALTER TABLE dedupe_results ADD COLUMN score INTEGER")
-        if "is_recommended_del" not in cols: c.execute("ALTER TABLE dedupe_results ADD COLUMN is_recommended_del INTEGER DEFAULT 0")
-        if "is_exempt" not in cols: c.execute("ALTER TABLE dedupe_results ADD COLUMN is_exempt INTEGER DEFAULT 0")
-        
-        # 扫描配置表
-        c.execute('''CREATE TABLE IF NOT EXISTS dedupe_config (
-            key TEXT PRIMARY KEY,
-            value TEXT,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )''')
-
-        conn.commit()
-        conn.close()
+        init_dedupe_tables(logger)
         logger.info("[去重引擎] 数据库表初始化完成")
     except Exception as e:
         logger.error(f"[去重引擎] 自动建表失败: {e}")
@@ -245,7 +164,7 @@ def run_dedupe_scan(strategy: str = "quality", custom_weights: dict = None, excl
         scan_state["total_items"] = len(items)
         scan_state["message"] = "阶段三：内存哈希碰撞匹配中..."
         
-        whitelist = [r['group_key'] for r in query_db("SELECT group_key FROM dedupe_whitelist")]
+        whitelist = list_dedupe_whitelist_group_keys()
         groups = defaultdict(list)
         skipped_no_tmdb = 0
         for i in items:
@@ -344,88 +263,75 @@ def run_dedupe_scan(strategy: str = "quality", custom_weights: dict = None, excl
 
         scan_state["duplicate_groups"] = len(dup_groups)
         
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.cursor().execute("DELETE FROM dedupe_results")
-        conn.commit()
-
         total_dups = len(dup_groups); current = 0
-        for g_key, item_list in dup_groups.items():
-            current += 1
-            scan_state["progress"] = int((current / total_dups) * 100)
-            scan_state["message"] = f"阶段四：深层分析视频流 ({current}/{total_dups})"
-            
-            ids = ",".join([i["Id"] for i in item_list])
-            detail_url = f"{host}/emby/Users/{admin_id}/Items?Ids={ids}&Fields=MediaSources,Path&api_key={key}"
-            details = requests.get(detail_url, timeout=10).json().get("Items", [])
-            
-            parsed_items = []
-            for d in details:
-                is_exempt = 1 if d.get("IndexNumberEnd") and d.get("IndexNumberEnd") > d.get("IndexNumber", 0) else 0
-                media_sources = d.get("MediaSources", [])
+        with DedupeResultWriter() as result_writer:
+            for g_key, item_list in dup_groups.items():
+                current += 1
+                scan_state["progress"] = int((current / total_dups) * 100)
+                scan_state["message"] = f"阶段四：深层分析视频流 ({current}/{total_dups})"
                 
-                if not media_sources: continue
+                ids = ",".join([i["Id"] for i in item_list])
+                detail_url = f"{host}/emby/Users/{admin_id}/Items?Ids={ids}&Fields=MediaSources,Path&api_key={key}"
+                details = requests.get(detail_url, timeout=10).json().get("Items", [])
                 
-                # 🔥 修复关键：全面遍历所有媒体源，不再只提取 [0]
-                for idx, src in enumerate(media_sources):
-                    score, tags = calculate_score(src, strategy, custom_weights)
+                parsed_items = []
+                for d in details:
+                    is_exempt = 1 if d.get("IndexNumberEnd") and d.get("IndexNumberEnd") > d.get("IndexNumber", 0) else 0
+                    media_sources = d.get("MediaSources", [])
                     
-                    full_path = src.get("Path", "")
-                    file_name = full_path.split("/")[-1].split("\\")[-1] if full_path else d.get("Name", "未知文件")
-                    # 提取分组键中的ID（兼容多种格式）
-                    if g_key.startswith("movie_tmdb_"):
-                        tmdb_val = g_key.replace("movie_tmdb_", "")
-                    elif g_key.startswith("movie_imdb_"):
-                        tmdb_val = g_key.replace("movie_imdb_", "")
-                    elif g_key.startswith("movie_name_"):
-                        tmdb_val = g_key.replace("movie_name_", "")
-                    elif g_key.startswith("tv_"):
-                        # tv_{tmdb}_sXeY 或 tv_name_{name}_sXeY 或 tv_id_{id}_sXeY
-                        parts = g_key.split("_s")
-                        if len(parts) >= 2:
-                            tmdb_val = parts[0].replace("tv_", "")
+                    if not media_sources: continue
+                    
+                    # 🔥 修复关键：全面遍历所有媒体源，不再只提取 [0]
+                    for idx, src in enumerate(media_sources):
+                        score, tags = calculate_score(src, strategy, custom_weights)
+
+                        full_path = src.get("Path", "")
+                        file_name = full_path.split("/")[-1].split("\\")[-1] if full_path else d.get("Name", "未知文件")
+                        # 提取分组键中的ID（兼容多种格式）
+                        if g_key.startswith("movie_tmdb_"):
+                            tmdb_val = g_key.replace("movie_tmdb_", "")
+                        elif g_key.startswith("movie_imdb_"):
+                            tmdb_val = g_key.replace("movie_imdb_", "")
+                        elif g_key.startswith("movie_name_"):
+                            tmdb_val = g_key.replace("movie_name_", "")
+                        elif g_key.startswith("tv_"):
+                            # tv_{tmdb}_sXeY 或 tv_name_{name}_sXeY 或 tv_id_{id}_sXeY
+                            parts = g_key.split("_s")
+                            if len(parts) >= 2:
+                                tmdb_val = parts[0].replace("tv_", "")
+                            else:
+                                tmdb_val = g_key.replace("tv_", "")
                         else:
-                            tmdb_val = g_key.replace("tv_", "")
-                    else:
-                        tmdb_val = g_key
-                    
-                    # 生成复合定向 ID，确保在多版本合并状态下，能精确且安全地删除副版本，而不伤及主版本
-                    source_id = src.get("Id")
-                    if idx == 0 or not source_id or source_id == d["Id"]:
-                        composite_id = d["Id"]  # 主线本体
-                    else:
-                        composite_id = f"{d['Id']}__{source_id}"  # 隐藏的副本分支
-                    
-                    parsed_items.append({
-                        "g_key": g_key, "tmdb": str(tmdb_val),
-                        "mtype": d.get("Type"), "title": d.get("SeriesName") or d.get("Name", ""),
-                        "season": d.get("ParentIndexNumber", 0), "episode": d.get("IndexNumber", 0),
-                        "item_id": composite_id, "file_name": file_name, "file_path": full_path,
-                        "res": tags["res"], "bitrate": src.get("Bitrate") or 0, "size": src.get("Size") or 0, 
-                        "v_codec": tags["v_codec"], "a_codec": tags["a_codec"],
-                        "hdr": tags["has_hdr"], "dovi": tags["has_dovi"], "chi": tags["has_chi"], "ass": tags["has_ass"],
-                        "score": score, "exempt": is_exempt
-                    })
-            
-            if parsed_items:
-                parsed_items.sort(key=lambda x: x["score"], reverse=True)
-                top_score = parsed_items[0]["score"]
-                for idx, pi in enumerate(parsed_items):
-                    pi["del_mark"] = 1 if idx > 0 and (top_score - pi["score"] >= 10) and pi["exempt"] == 0 else 0
+                            tmdb_val = g_key
+
+                        # 生成复合定向 ID，确保在多版本合并状态下，能精确且安全地删除副版本，而不伤及主版本
+                        source_id = src.get("Id")
+                        if idx == 0 or not source_id or source_id == d["Id"]:
+                            composite_id = d["Id"]  # 主线本体
+                        else:
+                            composite_id = f"{d['Id']}__{source_id}"  # 隐藏的副本分支
                         
-                for pi in parsed_items:
-                    conn.cursor().execute('''INSERT INTO dedupe_results 
-                        (group_key, tmdb_id, media_type, title, season_num, episode_num, item_id, file_name, file_path,
-                         resolution, bitrate, size_bytes, video_codec, audio_codec, has_hdr, has_dovi, 
-                         has_chi_sub, has_ass_sub, score, is_recommended_del, is_exempt) 
-                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
-                        (pi['g_key'], pi['tmdb'], pi['mtype'], pi['title'], pi['season'], pi['episode'], 
-                         pi['item_id'], pi['file_name'], pi['file_path'], pi['res'], pi['bitrate'], pi['size'], pi['v_codec'], 
-                         pi['a_codec'], pi['hdr'], pi['dovi'], pi['chi'], pi['ass'], pi['score'], pi['del_mark'], pi['exempt'])
-                    )
-            conn.commit()
-            time.sleep(0.02)
-            
-        conn.close()
+                        parsed_items.append({
+                            "g_key": g_key, "tmdb": str(tmdb_val),
+                            "mtype": d.get("Type"), "title": d.get("SeriesName") or d.get("Name", ""),
+                            "season": d.get("ParentIndexNumber", 0), "episode": d.get("IndexNumber", 0),
+                            "item_id": composite_id, "file_name": file_name, "file_path": full_path,
+                            "res": tags["res"], "bitrate": src.get("Bitrate") or 0, "size": src.get("Size") or 0,
+                            "v_codec": tags["v_codec"], "a_codec": tags["a_codec"],
+                            "hdr": tags["has_hdr"], "dovi": tags["has_dovi"], "chi": tags["has_chi"], "ass": tags["has_ass"],
+                            "score": score, "exempt": is_exempt
+                        })
+
+                if parsed_items:
+                    parsed_items.sort(key=lambda x: x["score"], reverse=True)
+                    top_score = parsed_items[0]["score"]
+                    for idx, pi in enumerate(parsed_items):
+                        pi["del_mark"] = 1 if idx > 0 and (top_score - pi["score"] >= 10) and pi["exempt"] == 0 else 0
+
+                    for pi in parsed_items:
+                        result_writer.insert_result(pi)
+                result_writer.commit()
+                time.sleep(0.02)
         elapsed = time.time() - start_time
         logger.info(f"✅ [去重引擎] 扫描完成！共遍历 {scan_state['total_items']} 个资源，发现 {scan_state['duplicate_groups']} 组重复。耗时: {elapsed:.2f} 秒。")
         scan_state["message"] = f"✅ 扫描完成！遍历 {scan_state['total_items']} 项，发现 {scan_state['duplicate_groups']} 组重复"
@@ -533,7 +439,7 @@ async def get_results(request: Request):
     # 🔒 管理员专用
     if not is_admin_user(request):
         return {"success": False, "msg": "需要管理员权限"}
-    rows = query_db("SELECT * FROM dedupe_results ORDER BY group_key, score DESC")
+    rows = list_dedupe_results()
     result_tree = defaultdict(list)
     if rows:
         for r in rows: result_tree[r["group_key"]].append(dict(r))
@@ -565,11 +471,7 @@ async def ignore_groups(request: Request, req: IgnoreReq):
     if not is_admin_user(request):
         return {"success": False, "msg": "需要管理员权限"}
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH); c = conn.cursor()
-        for item in req.items:
-            c.execute("INSERT OR REPLACE INTO dedupe_whitelist (group_key, title) VALUES (?, ?)", (item.group_key, item.title))
-            c.execute("DELETE FROM dedupe_results WHERE group_key = ?", (item.group_key,))
-        conn.commit(); conn.close()
+        add_dedupe_whitelist_items(req.items)
         return {"success": True, "msg": "已加入永久白名单"}
     except Exception as e: return {"success": False, "msg": safe_error_message(e)}
 
@@ -578,7 +480,7 @@ async def get_whitelist(request: Request):
     # 🔒 管理员专用
     if not is_admin_user(request):
         return {"success": False, "msg": "需要管理员权限"}
-    rows = query_db("SELECT * FROM dedupe_whitelist ORDER BY created_at DESC")
+    rows = list_dedupe_whitelist()
     return {"success": True, "data": [dict(r) for r in rows] if rows else []}
 
 @router.post("/whitelist/remove")
@@ -587,9 +489,7 @@ async def remove_whitelist(request: Request, req: RemoveWhitelistReq):
     if not is_admin_user(request):
         return {"success": False, "msg": "需要管理员权限"}
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH); c = conn.cursor()
-        for gk in req.group_keys: c.execute("DELETE FROM dedupe_whitelist WHERE group_key = ?", (gk,))
-        conn.commit(); conn.close()
+        remove_dedupe_whitelist_items(req.group_keys)
         return {"success": True, "msg": "已移出白名单"}
     except Exception as e: return {"success": False, "msg": safe_error_message(e)}
 
@@ -619,7 +519,7 @@ async def delete_items(request: Request, req: DeleteReq):
                 
             if res.status_code in [200, 204]:
                 success_count += 1
-                query_db("DELETE FROM dedupe_results WHERE item_id = ?", (composite_id,))
+                delete_dedupe_result_by_item_id(composite_id)
             else: 
                 fail_count += 1
         except: 
@@ -638,14 +538,7 @@ async def get_dedupe_config(request: Request):
         return {"success": False, "msg": "需要管理员权限"}
     """获取保存的扫描配置"""
     try:
-        rows = query_db("SELECT key, value FROM dedupe_config")
-        config = {}
-        if rows:
-            for r in rows:
-                try:
-                    config[r["key"]] = json.loads(r["value"])
-                except:
-                    config[r["key"]] = r["value"]
+        config = get_dedupe_config_values()
         return {"success": True, "data": config}
     except Exception as e:
         return {"success": False, "msg": safe_error_message(e)}
@@ -664,14 +557,7 @@ async def save_dedupe_config(request: Request, req: SaveConfigReq):
         return {"success": False, "msg": "需要管理员权限"}
     """保存扫描配置"""
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        for key, value in req.config.items():
-            value_str = json.dumps(value) if not isinstance(value, str) else value
-            c.execute("INSERT OR REPLACE INTO dedupe_config (key, value, updated_at) VALUES (?, ?, datetime('now', 'localtime'))", 
-                     (key, value_str))
-        conn.commit()
-        conn.close()
+        save_dedupe_config_values(req.config)
         return {"success": True, "msg": "配置已保存"}
     except Exception as e:
         return {"success": False, "msg": safe_error_message(e)}
