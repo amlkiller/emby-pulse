@@ -152,6 +152,18 @@ def list_bindings():
     return [{"tg_user_id": row["tg_user_id"], "emby_user_id": row["emby_user_id"], "emby_username": row["emby_username"]} for row in rows]
 
 
+def count_bindings() -> int:
+    row = system_store.fetch_one("SELECT COUNT(*) as count FROM tg_user_bindings")
+    return row["count"] if row else 0
+
+
+def create_registration_log(tg_user_id, emby_username, emby_user_id, reg_type: str = "open") -> None:
+    system_store.execute(
+        "INSERT INTO tg_reg_logs (tg_user_id, emby_username, emby_user_id, reg_type) VALUES (?, ?, ?, ?)",
+        (str(tg_user_id), emby_username, emby_user_id, reg_type),
+    )
+
+
 def search_whois_bindings(normalized: str):
     select_sql = """
         SELECT

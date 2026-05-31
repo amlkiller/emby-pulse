@@ -6,6 +6,17 @@ def get_invitation_by_code(code: str):
     return system_store.fetch_one("SELECT * FROM invitations WHERE code = ?", (code,))
 
 
+def get_available_registration_invitation(code: str):
+    return system_store.fetch_one(
+        """
+        SELECT days, used_count, max_uses, template_user_id, routes, route_mode
+        FROM invitations
+        WHERE code = ? AND status = 0 AND (type = 'register' OR type IS NULL)
+        """,
+        (code,),
+    )
+
+
 def restore_invitation_code_usage(code: str) -> None:
     system_store.execute(
         """

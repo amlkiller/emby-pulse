@@ -16,7 +16,7 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from app.core.config import cfg
 from app.core.database import DB_PATH, SYSTEM_DB_PATH, query_db
-from app.dao import media_request_dao, user_bot_dao, user_dao
+from app.dao import invitation_dao, media_request_dao, user_bot_dao, user_dao
 from app.queries import stats_queries
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
 from app.core.media_adapter import media_api
@@ -1064,9 +1064,7 @@ def _do_register(chat_id, tg_user_id, custom_name, tg_username="", tg_display_na
         max_reg = int(cfg.get("user_bot_max_reg", 0))
         if max_reg > 0 and quota <= 0:
             try:
-                conn = sqlite3.connect(SYSTEM_DB_PATH)
-                count = conn.execute("SELECT COUNT(*) FROM tg_user_bindings").fetchone()[0]
-                conn.close()
+                count = user_bot_dao.count_bindings()
                 if count >= max_reg:
                     _send(chat_id, "❌ 注册名额已满，请联系管理员")
                     return
@@ -1159,11 +1157,7 @@ def _do_register(chat_id, tg_user_id, custom_name, tg_username="", tg_display_na
                 _bind_user(tg_user_id, uid, safe_name, init_password=password, tg_username=tg_username or tg_display_name, tg_display_name=tg_display_name or str(tg_user_id))
 
                 try:
-                    conn = sqlite3.connect(SYSTEM_DB_PATH)
-                    conn.execute("INSERT INTO tg_reg_logs (tg_user_id, emby_username, emby_user_id, reg_type) VALUES (?, ?, ?, 'open')",
-                                 (str(tg_user_id), safe_name, uid))
-                    conn.commit()
-                    conn.close()
+                    user_bot_dao.create_registration_log(tg_user_id, safe_name, uid, "open")
                 except Exception as e:
                     logger.error(f"记录注册日志失败: {e}")
 
@@ -1211,16 +1205,15 @@ def cmd_code(chat_id, tg_user_id, args):
         return
 
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
         # 🔥 只查询注册码（type = 'register' 或 type 为空），不能使用续期码注册
-        row = conn.execute("SELECT days, used_count, max_uses, template_user_id, routes, route_mode FROM invitations WHERE code = ? AND status = 0 AND (type = 'register' OR type IS NULL)", (code,)).fetchone()
+        row = invitation_dao.get_available_registration_invitation(code)
         if not row:
-            conn.close()
             _send(chat_id, "❌ 注册码无效、已被使用或不是注册码")
             return
-        days, used, max_uses, tpl_id, routes, route_mode = row
+        days, used, max_uses, tpl_id, routes, route_mode = (
+            row["days"], row["used_count"], row["max_uses"], row["template_user_id"], row["routes"], row["route_mode"]
+        )
         if used >= max_uses:
-            conn.close()
             _send(chat_id, "❌ 该注册码已达使用上限")
             return
 
@@ -1228,7 +1221,6 @@ def cmd_code(chat_id, tg_user_id, args):
         _user_state[str(tg_user_id)] = {"action": "code_input_name", "code": code, "days": days, "tpl_id": tpl_id, "routes": routes, "route_mode": route_mode}
         _send(chat_id, "🎟️ <b>注册码验证成功！</b>\n\n请输入你想要的用户名（支持字母、数字、中文、下划线(_)、连字符(-)、@、.）：",
               reply_markup={"inline_keyboard": [[{"text": "❌ 取消", "callback_data": "ub_cancel_state"}]]})
-        conn.close()
         return
     except Exception as e:
         logger.error(f"[注册码] 验证失败: {e}")
@@ -1239,13 +1231,7 @@ def cmd_code(chat_id, tg_user_id, args):
 def _restore_invitation_code(code):
     """Emby 用户创建失败时回滚邀请码消费计数"""
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.execute(
-            "UPDATE invitations SET used_count = MAX(used_count - 1, 0), used_by = NULL, used_at = NULL WHERE code = ?",
-            (code,)
-        )
-        conn.commit()
-        conn.close()
+        invitation_dao.restore_invitation_code_usage(code)
     except Exception:
         pass
 

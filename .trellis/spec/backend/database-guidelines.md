@@ -71,6 +71,7 @@
 - `app.dao.calendar_dao.list_ended_series_tmdb_ids() -> set`
 - `app.dao.calendar_dao.save_series_status(tmdb_id, series_name, status, checked_at: str) -> None`
 - `app.dao.invitation_dao.get_invitation_by_code(code: str) -> DataRow | None`
+- `app.dao.invitation_dao.get_available_registration_invitation(code: str) -> DataRow | None`
 - `app.dao.invitation_dao.restore_invitation_code_usage(code: str) -> None`
 - `app.dao.invitation_dao.create_invitation_codes(codes, days, created_at: str, template_user_id, code_type: str, routes: str, route_mode: str, req_free, req_free_count) -> None`
 - `app.dao.invitation_dao.list_admin_invitations(code_type: str = "all") -> list[DataRow]`
@@ -104,6 +105,8 @@
 - `app.dao.user_bot_dao.bind_channel(channel_id, tg_user_id, channel_title: str = "") -> None`
 - `app.dao.user_bot_dao.unbind_channel(channel_id) -> None`
 - `app.dao.user_bot_dao.list_bindings() -> list[dict]`
+- `app.dao.user_bot_dao.count_bindings() -> int`
+- `app.dao.user_bot_dao.create_registration_log(tg_user_id, emby_username, emby_user_id, reg_type: str = "open") -> None`
 - `app.dao.user_bot_dao.record_bot_user(tg_user_id, tg_name: str = "") -> None`
 - `app.dao.user_bot_dao.list_bot_users() -> list[dict]`
 - `app.dao.user_bot_dao.bind_user(tg_user_id, emby_user_id, emby_username, init_password: str = "", tg_username: str = "", tg_display_name: str = "") -> None`
@@ -284,7 +287,7 @@
 - Good: `messages.py` keeps permission checks, Emby user lookups, content sanitization, bot notification delivery, and response assembly in the route while delegating message, mute, notification-block, announcement, and related user lookup tables to `message_dao`.
 - Good: `media_request.py` keeps request validation, Emby/TMDB/MoviePilot calls, cache assembly, notification delivery, and response shaping in the route while delegating request, feedback, update, invitation, point, gap-cache, and user metadata persistence to `media_request_dao`.
 - Good: `points.py` keeps admin/session checks, Emby user enrichment, pagination payload assembly, and later game workflows in the route while delegating point config, point schema bootstrap, point balances, batch updates, point log reads, red-packet log reads, point ranking reads, and daily check-in transactions to `point_dao`.
-- Good: `user_bot_service.py` keeps Telegram API calls, in-memory caches, registration queueing, profile/request rendering, and bot command flow in the service while delegating binding, channel-binding, blacklist, bot-user, profile/request reads, playback read queries, and base table bootstrap SQL to DAO/query boundaries.
+- Good: `user_bot_service.py` keeps Telegram API calls, Emby account creation, in-memory caches, registration queueing, profile/request rendering, and bot command flow in the service while delegating invitation checks, binding, channel-binding, blacklist, bot-user, registration logs, profile/request reads, playback read queries, and base table bootstrap SQL to DAO/query boundaries.
 - Bad: a router imports `query_db`, `SYSTEM_DB_PATH`, or `sqlite3` only to run route-local SQL.
 
 ### 6. Tests Required
