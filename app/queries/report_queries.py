@@ -54,3 +54,34 @@ def list_report_ranked_items(where_sql: str, exclude_sql: str, exclude_types, li
         """,
         params,
     ) or []
+
+
+def count_report_distinct_users(where_sql: str, params):
+    rows = playback_store.query(f"SELECT COUNT(DISTINCT UserId) as c FROM PlaybackActivity {where_sql}", params)
+    return rows[0]["c"] if rows else 0
+
+
+def list_report_top_users(where_sql: str, params, limit: int):
+    return playback_store.query(
+        f"""
+        SELECT UserId, SUM(PlayDuration) as t
+        FROM PlaybackActivity {where_sql}
+        GROUP BY UserId
+        ORDER BY t DESC
+        LIMIT ?
+        """,
+        list(params) + [limit],
+    ) or []
+
+
+def list_report_content_items(where_sql: str, params, limit: int):
+    return playback_store.query(
+        f"""
+        SELECT ItemName, ItemId, ItemType, COUNT(*) as C, COALESCE(SUM(PlayDuration), 0) as Duration
+        FROM PlaybackActivity {where_sql}
+        GROUP BY ItemName
+        ORDER BY Duration DESC
+        LIMIT ?
+        """,
+        list(params) + [limit],
+    ) or []

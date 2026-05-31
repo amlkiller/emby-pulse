@@ -12,8 +12,14 @@ from fastapi import Request
 from fastapi.responses import Response
 from app.plugins.base import PluginBase
 from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
-from app.core.database import query_db
 from app.core.config import cfg
+from app.queries.report_queries import (
+    count_report_distinct_users,
+    count_report_plays,
+    list_report_content_items,
+    list_report_top_users,
+    sum_report_duration,
+)
 
 logger = logging.getLogger("uvicorn")
 
@@ -457,6 +463,8 @@ class ViewReportPlugin(PluginBase):
             hidden_placeholders = ', '.join(['?' for _ in hidden_users])
             exclude_sql += f" AND UserId NOT IN ({hidden_placeholders})"
             exclude_params.extend(hidden_users)
+        report_where = f"{where}{exclude_sql}"
+        report_params = tuple(exclude_params) if exclude_params else ()
         
         # 计算天数（用于日均播放量）- 使用统一的时间计算
         from app.services.time_utils import get_period_days, get_period_from_report_config
@@ -492,27 +500,15 @@ class ViewReportPlugin(PluginBase):
             content_limit = min(content_limit, 10)
         
         # 总播放量（排除指定类型和黑名单用户）
-        plays_res = query_db(
-            f"SELECT COUNT(*) as c FROM PlaybackActivity {where}{exclude_sql}",
-            tuple(exclude_params) if exclude_params else ()
-        )
-        total_plays = plays_res[0]['c'] if plays_res else 0
+        total_plays = count_report_plays(report_where, report_params)
         
         # 总播放时长（排除指定类型和黑名单用户）
-        dur_res = query_db(
-            f"SELECT SUM(PlayDuration) as c FROM PlaybackActivity {where}{exclude_sql}",
-            tuple(exclude_params) if exclude_params else ()
-        )
-        total_duration = dur_res[0]['c'] if dur_res and dur_res[0]['c'] else 0
+        total_duration = sum_report_duration(report_where, report_params)
         # 🔥 使用标准四舍五入（与 JavaScript toFixed 一致）
         total_hours = round(total_duration / 3600, 1)
         
         # 活跃用户数（排除指定类型和黑名单用户）
-        users_res = query_db(
-            f"SELECT COUNT(DISTINCT UserId) as c FROM PlaybackActivity {where}{exclude_sql}",
-            tuple(exclude_params) if exclude_params else ()
-        )
-        active_users = users_res[0]['c'] if users_res else 0
+        active_users = count_report_distinct_users(report_where, report_params)
         
         # 日均播放量
         avg_daily_plays = round(total_plays / days, 1) if days > 0 else total_plays
@@ -521,10 +517,7 @@ class ViewReportPlugin(PluginBase):
         user_map = self._get_user_map()
         
         # 活跃用户排行（排除指定类型和黑名单用户）
-        top_users_res = query_db(
-            f"SELECT UserId, SUM(PlayDuration) as t FROM PlaybackActivity {where}{exclude_sql} GROUP BY UserId ORDER BY t DESC LIMIT ?",
-            tuple(exclude_params) + (users_limit,) if exclude_params else (users_limit,)
-        )
+        top_users_res = list_report_top_users(report_where, report_params, users_limit)
         top_users_list = []
         for i, u in enumerate(top_users_res or []):
             # 🔥 使用批量获取的映射表
@@ -539,10 +532,7 @@ class ViewReportPlugin(PluginBase):
         # 热门内容 - 区分剧集和电影（按时长排序，排除指定类型和黑名单用户）
         # 🔥 增加查询数量，为媒体库过滤预留空间
         query_limit = max(200, content_limit * 10)
-        all_content = query_db(
-            f"SELECT ItemName, ItemId, ItemType, COUNT(*) as C, COALESCE(SUM(PlayDuration), 0) as Duration FROM PlaybackActivity {where}{exclude_sql} GROUP BY ItemName ORDER BY Duration DESC LIMIT ?",
-            tuple(exclude_params) + (query_limit,) if exclude_params else (query_limit,)
-        )
+        all_content = list_report_content_items(report_where, report_params, query_limit)
         
         # 🔥 获取排除的媒体库配置
         exclude_libraries = config.get('exclude_libraries', [])
