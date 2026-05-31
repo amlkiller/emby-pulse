@@ -16,7 +16,7 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from app.core.config import cfg
 from app.core.database import DB_PATH, SYSTEM_DB_PATH, query_db
-from app.dao import invitation_dao, media_request_dao, user_bot_dao, user_dao
+from app.dao import invitation_dao, media_request_dao, point_dao, user_bot_dao, user_dao
 from app.queries import stats_queries
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
 from app.core.media_adapter import media_api
@@ -1276,28 +1276,9 @@ def _do_code_register(chat_id, tg_user_id, custom_name, code, days, tpl_id, rout
                     return
 
                 # 原子抢占注册码（防 TOCTOU 竞态）
-                conn = sqlite3.connect(SYSTEM_DB_PATH)
-                try:
-                    conn.execute("BEGIN IMMEDIATE")
-                    cur = conn.execute(
-                        """UPDATE invitations
-                           SET used_count = used_count + 1,
-                               used_at = datetime('now','localtime'),
-                               used_by = ?
-                           WHERE code = ? AND status != 1 AND used_count < max_uses""",
-                        (safe_name, code)
-                    )
-                    if cur.rowcount == 0:
-                        conn.rollback()
-                        conn.close()
-                        _send(chat_id, "❌ 注册码已失效或已达到使用上限")
-                        return
-                    conn.commit()
-                except Exception:
-                    conn.rollback()
-                    conn.close()
-                    raise
-                conn.close()
+                if not invitation_dao.claim_invitation_usage(code, safe_name):
+                    _send(chat_id, "❌ 注册码已失效或已达到使用上限")
+                    return
 
                 create_res = media_api.post("/Users/New", json={"Name": safe_name}, timeout=10)
                 if create_res.status_code not in [200, 201]:
@@ -1336,15 +1317,13 @@ def _do_code_register(chat_id, tg_user_id, custom_name, code, days, tpl_id, rout
                     else:
                         block_routes = routes
 
-                conn = sqlite3.connect(SYSTEM_DB_PATH)
-                conn.execute("""INSERT OR REPLACE INTO users_meta
-                    (user_id, expire_date, allow_routes, block_routes, created_at)
-                    VALUES (?, ?, ?, ?, datetime('now','localtime'))""",
-                    (uid, expire, allow_routes, block_routes))
-                # 标记注册码已用完（如果到达上限）
-                conn.execute("UPDATE invitations SET status = 1 WHERE code = ? AND used_count >= max_uses", (code,))
-                conn.commit()
-                conn.close()
+                invitation_dao.save_code_registration_meta_and_finish_invitation(
+                    code,
+                    uid,
+                    expire,
+                    allow_routes,
+                    block_routes,
+                )
 
                 # 清除用户列表缓存
                 try:
@@ -1386,70 +1365,32 @@ def cmd_renew(chat_id, tg_user_id, args):
         _send(chat_id, "❌ 请先绑定账号：/bind 用户名")
         return
     code = args.strip()
-    conn = None
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.execute("BEGIN IMMEDIATE")
-        # 🔥 原子抢占续期码（防 TOCTOU 竞态）
-        cur = conn.execute(
-            """UPDATE invitations
-               SET used_count = used_count + 1,
-                   used_at = datetime('now','localtime'),
-                   used_by = ?
-               WHERE code = ? AND status != 1 AND used_count < max_uses
-               AND type = 'renew'""",
-            (binding['emby_username'], code)
+        renew_result, renew_error = invitation_dao.renew_user_with_invitation_code(
+            code,
+            binding['emby_username'],
+            binding['emby_user_id'],
         )
-        if cur.rowcount == 0:
-            conn.rollback()
-            conn.close()
+        if renew_error == "invalid":
             _send(chat_id, "❌ 续期码无效、已被使用、不是续期码或已达使用上限")
             return
-
-        row = conn.execute("SELECT days FROM invitations WHERE code = ?", (code,)).fetchone()
-        days = row[0]
-
-        uid = binding['emby_user_id']
-        exp_row = conn.execute("SELECT expire_date FROM users_meta WHERE user_id = ?", (uid,)).fetchone()
-        current_exp = exp_row[0] if exp_row and exp_row[0] else ""
-
-        # 永久有效用户不需要续费
-        if current_exp and ("2099" in current_exp or "3000" in current_exp or "永久" in current_exp):
-            conn.rollback()
-            conn.close()
+        if renew_error == "permanent":
             _send(chat_id, "❌ 您的账号为永久有效，无需续费！")
             return
 
+        days = renew_result["days"]
+        new_exp = renew_result["new_exp"]
         # 处理永久续期码：days = -1 或 days = 0 或 days >= 36500
         if days == -1 or days == 0 or days >= 36500:
-            new_exp = "2099-12-31"  # 永久有效
             days_display = "永久"
         else:
-            today = datetime.date.today()
-            try:
-                exp_date = datetime.datetime.strptime(current_exp, "%Y-%m-%d").date() if current_exp else today
-                if exp_date < today: exp_date = today
-            except: exp_date = today
-            new_exp = (exp_date + datetime.timedelta(days=days)).strftime("%Y-%m-%d")
             days_display = f"{days} 天"
-
-        conn.execute("UPDATE users_meta SET expire_date = ? WHERE user_id = ?", (new_exp, uid))
-        # 标记续期码已用完（如果到达上限）
-        conn.execute("UPDATE invitations SET status = 1 WHERE code = ? AND used_count >= max_uses", (code,))
-        conn.commit()
-        conn.close()
 
         # 续期不自动解除禁用状态，保留管理员设置的禁用状态
 
         _send(chat_id, f"✅ <b>续期成功！</b>\n\n📅 新到期日：{new_exp}\n⏳ 延长了 {days_display}")
     except Exception as e:
         logger.error(f"[续期] 执行失败: {e}")
-        if conn is not None:
-            try:
-                conn.rollback()
-            except Exception:
-                pass
-            conn.close()
         _send(chat_id, f"❌ 续期失败：{safe_error_message(e, '续期操作异常，请联系管理员')}")
 
 
@@ -1491,11 +1432,8 @@ def cmd_checkin(chat_id, tg_user_id, msg_id=None, is_group=False, group_name="",
     uid = binding['emby_user_id']
     uname = binding['emby_username']
     try:
-        import random
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        if c.execute("SELECT 1 FROM point_logs WHERE user_id = ? AND action LIKE '每日签到%' AND date(created_at, 'localtime') = date('now', 'localtime')", (uid,)).fetchone():
-            conn.close()
+        checkin_result = point_dao.perform_user_checkin(uid, uname)
+        if checkin_result.get("status") == "error":
             result = _reply(chat_id, "😊 今天已经签到过了，明天再来吧！", reply_markup={"inline_keyboard": [[{"text": "🔙 主菜单", "callback_data": "ub_back_menu"}]]} if not is_group else None, msg_id=msg_id)
             # 群聊30秒后删除消息
             if is_group and result and user_msg_id:
@@ -1503,61 +1441,11 @@ def cmd_checkin(chat_id, tg_user_id, msg_id=None, is_group=False, group_name="",
                 if bot_msg_id:
                     _delete_messages_later(chat_id, [bot_msg_id, user_msg_id], 30)
             return
-        config = {r[0]: r[1] for r in c.execute("SELECT key, value FROM point_config").fetchall()}
-        reward = random.randint(int(config.get('checkin_min', 10)), int(config.get('checkin_max', 30)))
-        
-        # 连续签到奖励
-        streak_bonus = 0
-        streak_count = 0
-        import datetime
-        if int(config.get('enable_streak_bonus', 0)) == 1:
-            today = datetime.date.today()
-            yesterday = today - datetime.timedelta(days=1)
-            
-            # 获取连续签到记录
-            streak_row = c.execute("SELECT streak_count, last_checkin FROM point_checkin_streak WHERE user_id = ?", (uid,)).fetchone()
-            
-            if streak_row:
-                last_checkin = streak_row[1]
-                if last_checkin == str(yesterday):
-                    # 连续签到
-                    streak_count = streak_row[0] + 1
-                elif last_checkin == str(today):
-                    # 今天已签到（理论上不会走到这里）
-                    streak_count = streak_row[0]
-                else:
-                    # 断签
-                    if int(config.get('streak_reset_on_miss', 1)) == 1:
-                        streak_count = 1
-                    else:
-                        streak_count = streak_row[0] + 1
-            else:
-                streak_count = 1
-            
-            # 计算连续签到奖励
-            if streak_count >= 7 and streak_count % 7 == 0:
-                streak_bonus = int(config.get('streak_7_days', 100))
-            if streak_count >= 30 and streak_count % 30 == 0:
-                streak_bonus += int(config.get('streak_30_days', 500))
-            
-            # 更新连续签到记录
-            c.execute("INSERT OR REPLACE INTO point_checkin_streak (user_id, streak_count, last_checkin) VALUES (?, ?, ?)", 
-                     (uid, streak_count, str(today)))
-        
-        total_reward = reward + streak_bonus
-        
-        row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (uid,)).fetchone()
-        new_pts = (row[0] or 0) + total_reward if row else total_reward
-        if row: c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (new_pts, uid))
-        else: c.execute("INSERT INTO users_meta (user_id, points) VALUES (?, ?)", (uid, new_pts))
-        
-        action_desc = "每日签到"
-        if streak_bonus > 0:
-            action_desc += f" (连续{streak_count}天奖励+{streak_bonus})"
-        
-        c.execute("INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)", (uid, uname, action_desc, total_reward, new_pts))
-        conn.commit()
-        conn.close()
+
+        reward = checkin_result["reward"]
+        streak_bonus = checkin_result["streak_bonus"]
+        streak_count = checkin_result["streak_count"]
+        new_pts = checkin_result["balance"]
         
         # 构建签到消息
         msg_lines = [f"🎉 签到成功！", f"", f"🎲 获得 <b>{reward}</b> 积分"]
@@ -1623,10 +1511,7 @@ def cmd_points(chat_id, tg_user_id, msg_id=None, is_group=False):
                           reply_markup=_main_menu_keyboard(None), msg_id=msg_id)
     
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        row = conn.execute("SELECT points FROM users_meta WHERE user_id = ?", (binding['emby_user_id'],)).fetchone()
-        pts = row[0] if row and row[0] else 0
-        conn.close()
+        pts = point_dao.get_user_points_balance(binding['emby_user_id'])
         if is_group:
             return _reply(chat_id, f"💰 <b>{binding['emby_username']}</b> 的积分余额：<b>{pts}</b>", msg_id=msg_id)
         else:
@@ -1650,36 +1535,29 @@ def cmd_rank(chat_id, tg_user_id, is_group=False):
             emby_user_ids = set()
             emby_name_map = {}
         
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        c.execute("SELECT user_id, points FROM users_meta WHERE points > 0 ORDER BY points DESC LIMIT 20")
-        rows = c.fetchall()
+        rows = point_dao.list_point_rank(limit=20)
         
         if not rows:
-            conn.close()
             return _send(chat_id, "📭 暂无积分数据")
         
         # 过滤掉不存在的用户
-        valid_rows = [(uid, pts) for uid, pts in rows if uid in emby_user_ids]
+        valid_rows = [(row["user_id"], row["points"]) for row in rows if row["user_id"] in emby_user_ids]
         
         if not valid_rows:
-            conn.close()
             return _send(chat_id, "📭 暂无积分数据")
         
         # 只取前10个有效用户
         valid_rows = valid_rows[:10]
         
         # 获取 TG 用户名和显示名称映射
-        c.execute("SELECT emby_user_id, tg_username, tg_display_name FROM tg_user_bindings")
-        tg_rows = c.fetchall()
+        tg_rows = user_bot_dao.list_tg_binding_names()
         tg_name_map = {}
         for row in tg_rows:
             # 优先使用显示名称，其次使用 @username
-            if row[2]:  # tg_display_name
-                tg_name_map[row[0]] = row[2]
-            elif row[1]:  # tg_username
-                tg_name_map[row[0]] = f"@{row[1]}"
-        conn.close()
+            if row["tg_display_name"]:
+                tg_name_map[row["emby_user_id"]] = row["tg_display_name"]
+            elif row["tg_username"]:
+                tg_name_map[row["emby_user_id"]] = f"@{row['tg_username']}"
         
         msg = "🏆 <b>积分排行榜 Top 10</b>\n\n"
         medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]

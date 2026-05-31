@@ -73,6 +73,9 @@
 - `app.dao.invitation_dao.get_invitation_by_code(code: str) -> DataRow | None`
 - `app.dao.invitation_dao.get_available_registration_invitation(code: str) -> DataRow | None`
 - `app.dao.invitation_dao.restore_invitation_code_usage(code: str) -> None`
+- `app.dao.invitation_dao.claim_invitation_usage(code: str, used_by: str) -> bool`
+- `app.dao.invitation_dao.save_code_registration_meta_and_finish_invitation(code: str, user_id: str, expire_date, allow_routes: str, block_routes: str) -> None`
+- `app.dao.invitation_dao.renew_user_with_invitation_code(code: str, used_by: str, user_id: str) -> tuple[dict | None, str | None]`
 - `app.dao.invitation_dao.create_invitation_codes(codes, days, created_at: str, template_user_id, code_type: str, routes: str, route_mode: str, req_free, req_free_count) -> None`
 - `app.dao.invitation_dao.list_admin_invitations(code_type: str = "all") -> list[DataRow]`
 - `app.dao.invitation_dao.list_invitation_usage_stats() -> list[DataRow]`
@@ -108,6 +111,7 @@
 - `app.dao.user_bot_dao.bind_channel(channel_id, tg_user_id, channel_title: str = "") -> None`
 - `app.dao.user_bot_dao.unbind_channel(channel_id) -> None`
 - `app.dao.user_bot_dao.list_bindings() -> list[dict]`
+- `app.dao.user_bot_dao.list_tg_binding_names() -> list[DataRow]`
 - `app.dao.user_bot_dao.count_bindings() -> int`
 - `app.dao.user_bot_dao.create_registration_log(tg_user_id, emby_username, emby_user_id, reg_type: str = "open") -> None`
 - `app.dao.user_bot_dao.record_bot_user(tg_user_id, tg_name: str = "") -> None`
@@ -208,6 +212,7 @@
 - `app.dao.point_dao.ensure_points_schema() -> None`
 - `app.dao.point_dao.save_point_config_values(configs: dict) -> None`
 - `app.dao.point_dao.list_user_points() -> list[DataRow]`
+- `app.dao.point_dao.get_user_points_balance(user_id: str) -> int`
 - `app.dao.point_dao.batch_update_user_points(user_ids, amount: int, reason: str, name_map: dict) -> int`
 - `app.dao.point_dao.list_point_logs(user_id: str = None, page: int = 1, page_size: int = 50, action_type: str = None) -> dict`
 - `app.dao.point_dao.get_user_points_info(user_id: str) -> dict`

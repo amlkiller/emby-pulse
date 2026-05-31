@@ -264,6 +264,11 @@ def list_user_points():
     return system_store.fetch_all("SELECT user_id, points FROM users_meta")
 
 
+def get_user_points_balance(user_id: str) -> int:
+    row = system_store.fetch_one("SELECT points FROM users_meta WHERE user_id = ?", (user_id,))
+    return row["points"] if row and row["points"] else 0
+
+
 def batch_update_user_points(user_ids, amount: int, reason: str, name_map: dict) -> int:
     with system_store.connect() as conn:
         cursor = conn.cursor()
