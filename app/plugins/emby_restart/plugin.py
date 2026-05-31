@@ -11,7 +11,7 @@ from fastapi import Request
 from app.plugins.base import PluginBase
 from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
 from app.core.config import cfg
-from app.core.database import SYSTEM_DB_PATH
+from app.dao.emby_restart_dao import create_emby_restart_history, list_emby_restart_history
 
 logger = logging.getLogger("uvicorn")
 
@@ -37,47 +37,20 @@ class EmbyRestartPlugin(PluginBase):
     def _load_history(self):
         """从数据库加载重启历史"""
         try:
-            import sqlite3
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            c = conn.cursor()
-            # 创建表（如果不存在）
-            c.execute('''CREATE TABLE IF NOT EXISTS emby_restart_history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                time TEXT NOT NULL,
-                mode TEXT,
-                success INTEGER,
-                detail TEXT
-            )''')
-            # 加载最近 20 条记录
-            c.execute("SELECT time, mode, success, detail FROM emby_restart_history ORDER BY id DESC LIMIT 20")
-            rows = c.fetchall()
+            rows = list_emby_restart_history(20)
             self.restart_history = [{
-                "time": row[0],
-                "mode": row[1],
-                "success": bool(row[2]),
-                "detail": row[3]
+                "time": row["time"],
+                "mode": row["mode"],
+                "success": bool(row["success"]),
+                "detail": row["detail"]
             } for row in reversed(rows)]  # 反转使最新的在最后
-            conn.close()
         except Exception as e:
             logger.error(f"[{self.name}] 加载历史失败: {e}")
 
     def _save_history(self, record):
         """保存重启历史到数据库"""
         try:
-            import sqlite3
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            c = conn.cursor()
-            c.execute('''CREATE TABLE IF NOT EXISTS emby_restart_history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                time TEXT NOT NULL,
-                mode TEXT,
-                success INTEGER,
-                detail TEXT
-            )''')
-            c.execute('''INSERT INTO emby_restart_history (time, mode, success, detail) VALUES (?, ?, ?, ?)''',
-                      (record["time"], record.get("mode", ""), 1 if record["success"] else 0, record.get("detail", "")))
-            conn.commit()
-            conn.close()
+            create_emby_restart_history(record)
         except Exception as e:
             logger.error(f"[{self.name}] 保存历史失败: {e}")
 
