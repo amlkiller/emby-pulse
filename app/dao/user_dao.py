@@ -54,6 +54,10 @@ def get_user_req_permission(user_id: str) -> dict:
     return {"req_free": 0, "req_free_count": -1}
 
 
+def list_users_with_expire_date():
+    return system_store.fetch_all("SELECT user_id, expire_date FROM users_meta WHERE expire_date IS NOT NULL AND expire_date != ''")
+
+
 def list_user_tags():
     return system_store.fetch_all("SELECT id, name, color FROM user_tags ORDER BY name")
 

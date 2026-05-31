@@ -15,6 +15,7 @@ from app.core.config import cfg, REPORT_COVER_URL, FALLBACK_IMAGE_URL
 from app.core.database import query_db, get_base_filter, add_sys_notification, DB_PATH, SYSTEM_DB_PATH
 from app.dao import bot_service_dao, media_request_dao
 from app.dao import notify_admin_dao, notify_rule_dao
+from app.dao import user_dao
 from app.utils.proxy_helper import get_safe_proxies, get_safe_wecom_base  # 🔒 SSRF 安全代理读取
 from app.services.report_service import report_gen, HAS_PIL
 from app.core.event_bus import bus
@@ -862,7 +863,7 @@ class SystemDaemon:
 
     def _check_user_expiration(self):
         try:
-            users = query_db("SELECT user_id, expire_date FROM users_meta WHERE expire_date IS NOT NULL AND expire_date != ''")
+            users = user_dao.list_users_with_expire_date()
             if not users: return
             today = datetime.datetime.now().strftime("%Y-%m-%d")
             key = cfg.get("emby_api_key"); host = cfg.get("emby_host")

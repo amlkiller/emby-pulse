@@ -88,6 +88,7 @@
 - `app.dao.user_dao.set_user_pinned(user_id: str, pinned: bool, created_at: str) -> None`
 - `app.dao.user_dao.save_user_req_permission(user_id: str, req_free: int, req_free_count: int, created_at: str) -> None`
 - `app.dao.user_dao.get_user_req_permission(user_id: str) -> dict`
+- `app.dao.user_dao.list_users_with_expire_date() -> list[DataRow]`
 - `app.dao.user_dao.list_user_tags() -> list[DataRow]`
 - `app.dao.user_dao.create_user_tag(name: str, color: str) -> int`
 - `app.dao.user_dao.delete_user_tag(tag_id: int) -> None`
@@ -263,7 +264,7 @@
 - Good: `db_tools.py` keeps admin permission checks, audit logging, and restore path validation in the route while delegating database health, migration, backup, restore, and deep-check operations to `migration_service`.
 - Good: `gaps.py` keeps Emby/TMDB scanning, download handoff, and in-memory scan-state updates in the route while delegating gap tables, config, and scan cache persistence to `gap_dao`.
 - Good: `bot.py` keeps bot settings validation, Telegram/WeCom HTTP calls, and admin response assembly in the route while delegating user-bot admin tables, registration logs, TG bindings, lottery, and scratch-card persistence to `bot_admin_dao`.
-- Good: `bot_service.py` keeps Emby availability checks, Telegram message editing, notification dispatch, and text rendering in the service while delegating request-admin message sync persistence, notify-rule/mute reads/bootstrap, and media request completion status persistence to DAO boundaries.
+- Good: `bot_service.py` keeps Emby availability/Policy checks, Telegram message editing, notification dispatch, and text rendering in the service while delegating request-admin message sync persistence, notify-rule/mute reads/bootstrap, media request completion status persistence, and user expiration metadata reads to DAO boundaries.
 - Good: `stats.py` keeps chart aggregation, media-server enrichment, and permission filtering in the route while delegating playback SQL execution and base user filters to `stats_queries`.
 - Good: `auth.py` keeps password hashing, local/Emby login decisions, TOTP validation, session updates, and audit logging in the route while delegating login failure and `local_users` persistence to `auth_dao`.
 - Good: `messages.py` keeps permission checks, Emby user lookups, content sanitization, bot notification delivery, and response assembly in the route while delegating message, mute, notification-block, announcement, and related user lookup tables to `message_dao`.
