@@ -1199,6 +1199,116 @@ def grab_red_packet(packet_id: int, user_id: str, user_name: str, allow_creator:
             raise
 
 
+def count_today_point_logs(user_id: str, action: str = None, action_like: str = None) -> int:
+    conditions = ["user_id = ?", "date(created_at, 'localtime') = date('now', 'localtime')"]
+    params = [user_id]
+    if action is not None:
+        conditions.append("action = ?")
+        params.append(action)
+    if action_like is not None:
+        conditions.append("action LIKE ?")
+        params.append(action_like)
+
+    row = system_store.fetch_one(
+        f"SELECT COUNT(*) AS count FROM point_logs WHERE {' AND '.join(conditions)}",
+        tuple(params),
+    )
+    return row["count"] if row else 0
+
+
+def apply_game_point_change(
+    user_id: str,
+    username: str,
+    action: str,
+    amount: int,
+    require_min_points: int = None,
+) -> dict:
+    with system_store.connect() as conn:
+        cursor = conn.cursor()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            row = cursor.execute("SELECT points FROM users_meta WHERE user_id = ?", (user_id,)).fetchone()
+            current_points = row[0] if row else 0
+            if require_min_points is not None and current_points < require_min_points:
+                conn.rollback()
+                return {"status": "error", "message": f"积分不足（需要 {require_min_points} 积分）", "points": current_points}
+
+            new_points = current_points + amount
+            if row:
+                cursor.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (new_points, user_id))
+            else:
+                cursor.execute("INSERT INTO users_meta (user_id, points) VALUES (?, ?)", (user_id, new_points))
+
+            cursor.execute(
+                "INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
+                (user_id, username, action, amount, new_points),
+            )
+            conn.commit()
+            return {"status": "success", "points": new_points}
+        except Exception:
+            conn.rollback()
+            raise
+
+
+def insert_point_log(user_id: str, username: str, action: str, amount: int, balance: int) -> None:
+    system_store.execute(
+        "INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
+        (user_id, username, action, amount, balance),
+    )
+
+
+def buy_scratch_card(user_id: str, username: str, cost: int) -> dict:
+    with system_store.connect() as conn:
+        cursor = conn.cursor()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            row = cursor.execute("SELECT points FROM users_meta WHERE user_id = ?", (user_id,)).fetchone()
+            current_points = row[0] if row else 0
+            if current_points < cost:
+                conn.rollback()
+                return {"status": "error", "message": f"积分不足（需要 {cost} 积分）"}
+
+            new_points = current_points - cost
+            if row:
+                cursor.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (new_points, user_id))
+            else:
+                cursor.execute("INSERT INTO users_meta (user_id, points) VALUES (?, ?)", (user_id, new_points))
+
+            cursor.execute(
+                "INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
+                (user_id, username, "刮刮乐-购买", -cost, new_points),
+            )
+            conn.commit()
+            return {"status": "success", "new_points": new_points}
+        except Exception:
+            conn.rollback()
+            raise
+
+
+def reveal_scratch_reward(user_id: str, username: str, reward: int) -> dict:
+    with system_store.connect() as conn:
+        cursor = conn.cursor()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            row = cursor.execute("SELECT points FROM users_meta WHERE user_id = ?", (user_id,)).fetchone()
+            current_points = row[0] if row else 0
+            new_points = current_points + reward
+            if row:
+                cursor.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (new_points, user_id))
+            else:
+                cursor.execute("INSERT INTO users_meta (user_id, points) VALUES (?, ?)", (user_id, new_points))
+
+            cursor.execute(
+                "INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
+                (user_id, username, "刮刮乐-中奖", reward, new_points),
+            )
+            conn.commit()
+            return {"status": "success", "new_points": new_points}
+        except Exception:
+            conn.rollback()
+            raise
+
+
 def perform_user_checkin(user_id: str, username: str) -> dict:
     with system_store.connect() as conn:
         cursor = conn.cursor()

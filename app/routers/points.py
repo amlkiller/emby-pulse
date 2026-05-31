@@ -757,25 +757,10 @@ def get_slot_usage(request: Request):
         return {"status": "error", "message": "未登录"}
     
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        
-        # 使用 SQLite 本地时间函数，与 CURRENT_TIMESTAMP (UTC) 对齐
-        row = c.execute(
-            "SELECT COUNT(*) FROM point_logs WHERE user_id = ? AND action = '老虎机' AND date(created_at, 'localtime') = date('now', 'localtime')",
-            (user['Id'],)
-        ).fetchone()
-        
-        conn.close()
-        return {"status": "success", "used_today": row[0] if row else 0}
+        return {"status": "success", "used_today": point_dao.count_today_point_logs(user['Id'], action='老虎机')}
 
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 
 @router.post("/api/slot/spin")
@@ -786,16 +771,11 @@ def slot_spin(request: Request):
         return {"status": "error", "message": "未登录"}
     
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        conn.execute("BEGIN IMMEDIATE")
-
         # 获取配置
-        config = {r[0]: r[1] for r in c.execute("SELECT key, value FROM point_config").fetchall()}
+        config = get_point_config()
 
         # 检查是否启用
         if config.get('enable_slot') != '1':
-            conn.rollback(); conn.close()
             return {"status": "error", "message": "老虎机功能未启用"}
         
         # 解析配置
@@ -808,19 +788,14 @@ def slot_spin(request: Request):
         win_rate_modifier = float(config.get('slot_win_rate_modifier', 1.0))  # 中奖概率调节 (0-1)
         
         # 获取今日使用次数（使用 SQLite 本地时间函数）
-        used_row = c.execute(
-            "SELECT COUNT(*) FROM point_logs WHERE user_id = ? AND action = '老虎机' AND date(created_at, 'localtime') = date('now', 'localtime')",
-            (user['Id'],)
-        ).fetchone()
-        used_today = used_row[0] if used_row else 0
+        used_today = point_dao.count_today_point_logs(user['Id'], action='老虎机')
         
         # 检查每日次数限制
         if used_today >= max_per_day:
-            conn.rollback(); conn.close()
             return {"status": "error", "message": f"今日次数已用完（{max_per_day}次/天）"}
 
         # 获取用户积分
-        points_row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (user['Id'],)).fetchone()
+        points_row = point_dao.get_user_points_row(user['Id'])
         current_points = points_row[0] if points_row else 0
 
         # 🔥 修复：当 daily_free = 0 时，永远不免费
@@ -831,7 +806,6 @@ def slot_spin(request: Request):
         
         # 检查积分（非免费时需要足够积分）
         if not is_free and current_points < cost:
-            conn.close()
             return {"status": "error", "message": f"积分不足（需要 {cost} 积分）"}
         
         # 解析图案配置
@@ -959,9 +933,6 @@ def slot_spin(request: Request):
         if win:
             current_points += reward
         
-        # 更新积分
-        c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (current_points, user['Id']))
-        
         # 记录日志
         action_desc = f"老虎机抽奖: {result_emojis[0]} {result_emojis[1]} {result_emojis[2]}"
         if win:
@@ -970,13 +941,10 @@ def slot_spin(request: Request):
             action_desc += " 未中奖"
         
         amount_change = reward if win else (-cost if not is_free else 0)
-        c.execute(
-            "INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-            (user['Id'], user['Name'], '老虎机', amount_change, current_points)
-        )
-        
-        conn.commit()
-        conn.close()
+        point_result = point_dao.apply_game_point_change(user['Id'], user['Name'], '老虎机', amount_change)
+        if point_result.get("status") != "success":
+            return {"status": "error", "message": point_result.get("message", "积分更新失败")}
+        current_points = point_result["points"]
         
         return {
             "status": "success",
@@ -989,12 +957,7 @@ def slot_spin(request: Request):
         }
 
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 
 # ===================== 🎫 刮刮乐 API =====================
@@ -1010,15 +973,10 @@ def buy_scratch_card(request: Request):
         return {"status": "error", "message": "未登录"}
     
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        
-        # 获取配置
-        config = {r[0]: r[1] for r in c.execute("SELECT key, value FROM point_config").fetchall()}
+        config = get_point_config()
         
         # 检查是否启用
         if config.get('enable_web_scratch') != '1':
-            conn.close()
             return {"status": "error", "message": "刮刮乐功能未启用"}
         
         # 解析配置
@@ -1031,37 +989,23 @@ def buy_scratch_card(request: Request):
         max_per_day = int(config.get('web_scratch_max_per_day', 20))  # 🔥 每日次数限制
         
         # 🔥 检查今日使用次数（使用 SQLite 本地时间函数）
-        used_today = c.execute(
-            "SELECT COUNT(*) FROM point_logs WHERE user_id = ? AND action LIKE '刮刮乐%' AND date(created_at, 'localtime') = date('now', 'localtime')",
-            (user['Id'],)
-        ).fetchone()[0]
+        used_today = point_dao.count_today_point_logs(user['Id'], action_like='刮刮乐%')
         
         if used_today >= max_per_day:
-            conn.close()
             return {"status": "error", "message": f"今日次数已用完（{max_per_day}次/天）"}
         
         # 获取用户积分
-        points_row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (user['Id'],)).fetchone()
+        points_row = point_dao.get_user_points_row(user['Id'])
         current_points = points_row[0] if points_row else 0
         
         # 检查积分
         if current_points < cost:
-            conn.close()
             return {"status": "error", "message": f"积分不足（需要 {cost} 积分）"}
         
-        # 扣除积分
-        conn.execute("BEGIN IMMEDIATE")
-        current_points -= cost
-        c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (current_points, user['Id']))
-
-        # 记录日志
-        c.execute(
-            "INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-            (user['Id'], user['Name'], '刮刮乐-购买', -cost, current_points)
-        )
-        
-        conn.commit()
-        conn.close()
+        buy_result = point_dao.buy_scratch_card(user['Id'], user['Name'], cost)
+        if buy_result.get("status") != "success":
+            return {"status": "error", "message": buy_result.get("message", "积分更新失败")}
+        current_points = buy_result["new_points"]
         
         # 生成中奖数字（随机 3 个不重复的数字 1-50）
         import random
@@ -1111,12 +1055,7 @@ def buy_scratch_card(request: Request):
         }
 
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 
 @router.post("/api/scratch/reveal")
@@ -1146,26 +1085,10 @@ async def reveal_scratch_cell(request: Request):
 
         # 如果匹配，发放奖励
         if cell['matched'] and cell['reward'] > 0:
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            c = conn.cursor()
-            conn.execute("BEGIN IMMEDIATE")
-
-            # 获取当前积分
-            points_row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (user['Id'],)).fetchone()
-            current_points = points_row[0] if points_row else 0
-
-            # 增加积分
-            current_points += cell['reward']
-            c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (current_points, user['Id']))
-
-            # 记录日志
-            c.execute(
-                "INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-                (user['Id'], user['Name'], '刮刮乐-中奖', cell['reward'], current_points)
-            )
-
-            conn.commit()
-            conn.close()
+            reward_result = point_dao.reveal_scratch_reward(user['Id'], user['Name'], cell['reward'])
+            if reward_result.get("status") != "success":
+                return {"status": "error", "message": reward_result.get("message", "积分更新失败")}
+            current_points = reward_result["new_points"]
 
             cell['revealed'] = True
 
@@ -1189,12 +1112,7 @@ async def reveal_scratch_cell(request: Request):
             }
 
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 # 🎡 幸运转盘
 wheel_usage = {}  # 用户使用次数缓存
@@ -1210,14 +1128,7 @@ async def get_wheel_usage(request: Request):
     config = get_point_config()
     max_per_day = int(config.get('wheel_max_per_day', 20))
     
-    # 查询今日使用次数（使用 SQLite 本地时间函数）
-    conn = sqlite3.connect(SYSTEM_DB_PATH)
-    c = conn.cursor()
-    count = c.execute(
-        "SELECT COUNT(*) FROM point_logs WHERE user_id = ? AND action = '幸运转盘' AND date(created_at, 'localtime') = date('now', 'localtime')",
-        (user['Id'],)
-    ).fetchone()[0]
-    conn.close()
+    count = point_dao.count_today_point_logs(user['Id'], action='幸运转盘')
     
     return {
         "status": "success",
@@ -1250,22 +1161,14 @@ async def spin_wheel(request: Request):
             weight = int(config.get(f'wheel_weight_{i}', [5, 10, 15, 20, 25, 25][i-1]))
             sectors.append({'reward': reward, 'weight': weight})
         
-        # 查询今日使用次数（使用 SQLite 本地时间函数）
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        conn.execute("BEGIN IMMEDIATE")
-        used_today = c.execute(
-            "SELECT COUNT(*) FROM point_logs WHERE user_id = ? AND action = '幸运转盘' AND date(created_at, 'localtime') = date('now', 'localtime')",
-            (user['Id'],)
-        ).fetchone()[0]
+        used_today = point_dao.count_today_point_logs(user['Id'], action='幸运转盘')
         
         # 检查次数限制
         if used_today >= max_per_day:
-            conn.close()
             return {"status": "error", "message": "今日次数已用完"}
         
         # 获取当前积分
-        points_row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (user['Id'],)).fetchone()
+        points_row = point_dao.get_user_points_row(user['Id'])
         current_points = points_row[0] if points_row else 0
         
         # 🔥 修复：当 daily_free = 0 时，永远不免费
@@ -1276,10 +1179,8 @@ async def spin_wheel(request: Request):
         # 扣除积分
         if not is_free:
             if current_points < cost:
-                conn.rollback(); conn.close()
                 return {"status": "error", "message": "积分不足"}
             current_points -= cost
-            c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (current_points, user['Id']))
 
 
         # 根据权重随机选择扇区
@@ -1299,18 +1200,13 @@ async def spin_wheel(request: Request):
         reward = selected_sector['reward']
         if reward > 0:
             current_points += reward
-            c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (current_points, user['Id']))
-        
         
         # 记录日志
         used_today += 1
-        c.execute(
-            "INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-            (user['Id'], user['Name'], '幸运转盘', reward - (0 if is_free else cost), current_points)
-        )
-        
-        conn.commit()
-        conn.close()
+        point_result = point_dao.apply_game_point_change(user['Id'], user['Name'], '幸运转盘', reward - (0 if is_free else cost))
+        if point_result.get("status") != "success":
+            return {"status": "error", "message": point_result.get("message", "积分更新失败")}
+        current_points = point_result["points"]
         
         # 返回结果
         message = f"🎉 恭喜获得 {reward} 积分！" if reward > 0 else "😢 谢谢参与，再接再厉！"
@@ -1333,12 +1229,7 @@ async def spin_wheel(request: Request):
         }
 
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 # 🎲 猜数字
 guess_games = {}  # 用户游戏状态缓存
@@ -1364,40 +1255,22 @@ async def start_guess_game(request: Request):
         max_num = int(range_parts[1]) if len(range_parts) > 1 else 100
         max_per_day = int(config.get('guess_max_per_day', 20))  # 🔥 每日次数限制
         
-        # 获取当前积分
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        
-        # 🔥 检查今日使用次数（使用 SQLite 本地时间函数）
-        used_today = c.execute(
-            "SELECT COUNT(*) FROM point_logs WHERE user_id = ? AND action LIKE '猜数字%' AND date(created_at, 'localtime') = date('now', 'localtime')",
-            (user['Id'],)
-        ).fetchone()[0]
+        used_today = point_dao.count_today_point_logs(user['Id'], action_like='猜数字%')
         
         if used_today >= max_per_day:
-            conn.close()
             return {"status": "error", "message": f"今日次数已用完（{max_per_day}次/天）"}
         
-        points_row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (user['Id'],)).fetchone()
+        points_row = point_dao.get_user_points_row(user['Id'])
         current_points = points_row[0] if points_row else 0
 
         # 扣除积分
         if current_points < cost:
-            conn.close()
             return {"status": "error", "message": "积分不足"}
 
-        conn.execute("BEGIN IMMEDIATE")
-        current_points -= cost
-        c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (current_points, user['Id']))
-
-        # 记录扣分日志
-        c.execute(
-            "INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-            (user['Id'], user['Name'], '猜数字-开始', -cost, current_points)
-        )
-
-        conn.commit()
-        conn.close()
+        start_result = point_dao.apply_game_point_change(user['Id'], user['Name'], '猜数字-开始', -cost, require_min_points=cost)
+        if start_result.get("status") != "success":
+            return {"status": "error", "message": start_result.get("message", "积分更新失败")}
+        current_points = start_result["points"]
         
         # 生成目标数字
         target_number = random.randint(min_num, max_num)
@@ -1416,12 +1289,7 @@ async def start_guess_game(request: Request):
         }
 
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 @router.post("/api/guess/submit")
 async def submit_guess(request: Request):
@@ -1461,19 +1329,10 @@ async def submit_guess(request: Request):
             reward = int(base_reward * multiplier)
             
             # 发放奖励
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            c = conn.cursor()
-            conn.execute("BEGIN IMMEDIATE")
-            points_row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (user['Id'],)).fetchone()
-            current_points = points_row[0] if points_row else 0
-            current_points += reward
-            c.execute("UPDATE users_meta SET points = ? WHERE user_id = ?", (current_points, user['Id']))
-            c.execute(
-                "INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-                (user['Id'], user['Name'], '猜数字-猜中', reward, current_points)
-            )
-            conn.commit()
-            conn.close()
+            reward_result = point_dao.apply_game_point_change(user['Id'], user['Name'], '猜数字-猜中', reward)
+            if reward_result.get("status") != "success":
+                return {"status": "error", "message": reward_result.get("message", "积分更新失败")}
+            current_points = reward_result["points"]
             
             # 清理游戏状态
             del guess_games[user['Id']]
@@ -1488,17 +1347,8 @@ async def submit_guess(request: Request):
         
         elif game['tries_left'] <= 0:
             # 次数用完，游戏结束
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            c = conn.cursor()
-            # 获取当前积分用于记录
-            points_row = c.execute("SELECT points FROM users_meta WHERE user_id = ?", (user['Id'],)).fetchone()
-            current_pts = points_row[0] if points_row else 0
-            c.execute(
-                "INSERT INTO point_logs (user_id, username, action, amount, balance) VALUES (?, ?, ?, ?, ?)",
-                (user['Id'], user['Name'], '猜数字-失败', 0, current_pts)
-            )
-            conn.commit()
-            conn.close()
+            current_pts = point_dao.get_user_points_balance(user['Id'])
+            point_dao.insert_point_log(user['Id'], user['Name'], '猜数字-失败', 0, current_pts)
             
             answer = game['target_number']
             del guess_games[user['Id']]
@@ -1522,12 +1372,7 @@ async def submit_guess(request: Request):
             }
 
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 # 🎟️ 彩票
 @router.get("/api/lottery/my_tickets")
