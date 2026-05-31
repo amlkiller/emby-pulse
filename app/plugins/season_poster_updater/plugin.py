@@ -6,7 +6,6 @@ import logging
 import threading
 import time
 import datetime
-import sqlite3
 import requests
 import base64
 import json
@@ -16,9 +15,19 @@ from fastapi import Request
 from app.plugins.base import PluginBase
 from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
 from app.core.config import cfg
-from app.core.database import SYSTEM_DB_PATH
 from app.core.event_bus import bus
 from app.core.media_adapter import media_api
+from app.dao.season_poster_dao import (
+    clear_plugin_logs,
+    clear_season_poster_cache,
+    clear_season_poster_logs,
+    count_updated_series,
+    ensure_season_poster_tables,
+    get_cached_season_poster,
+    list_season_poster_logs,
+    save_cached_season_poster,
+    save_season_poster_log,
+)
 
 logger = logging.getLogger("uvicorn")
 
@@ -40,30 +49,7 @@ class SeasonPosterUpdaterPlugin(PluginBase):
     def _ensure_db(self):
         """确保数据库表存在"""
         try:
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            c = conn.cursor()
-            # 更新日志表
-            c.execute('''CREATE TABLE IF NOT EXISTS season_poster_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                time TEXT NOT NULL,
-                series_id TEXT,
-                series_name TEXT,
-                season_number INTEGER,
-                old_poster TEXT,
-                new_poster TEXT,
-                success INTEGER,
-                message TEXT
-            )''')
-            # 已处理剧集缓存表（用于快速跳过）
-            c.execute('''CREATE TABLE IF NOT EXISTS season_poster_cache (
-                series_id TEXT PRIMARY KEY,
-                series_name TEXT,
-                season_count INTEGER,
-                last_season_number INTEGER,
-                last_updated TEXT
-            )''')
-            conn.commit()
-            conn.close()
+            ensure_season_poster_tables()
         except Exception as e:
             logger.error(f"[{self.name}] 创建数据库表失败: {e}")
 
@@ -201,22 +187,17 @@ class SeasonPosterUpdaterPlugin(PluginBase):
                 return {"status": "error", "message": "需要管理员权限"}
             
             try:
-                conn = sqlite3.connect(SYSTEM_DB_PATH)
-                c = conn.cursor()
-                c.execute("SELECT time, series_name, season_number, old_poster, new_poster, success, message FROM season_poster_logs ORDER BY id DESC LIMIT 100")
-                rows = c.fetchall()
-                conn.close()
-                
+                rows = list_season_poster_logs(100)
                 logs = []
                 for row in rows:
                     logs.append({
-                        "time": row[0],
-                        "series_name": row[1],
-                        "season_number": row[2],
-                        "old_poster": row[3],
-                        "new_poster": row[4],
-                        "success": bool(row[5]),
-                        "message": row[6]
+                        "time": row["time"],
+                        "series_name": row["series_name"],
+                        "season_number": row["season_number"],
+                        "old_poster": row["old_poster"],
+                        "new_poster": row["new_poster"],
+                        "success": bool(row["success"]),
+                        "message": row["message"]
                     })
                 
                 return {"status": "success", "data": logs}
@@ -233,14 +214,8 @@ class SeasonPosterUpdaterPlugin(PluginBase):
                 return {"status": "error", "message": "需要管理员权限"}
             
             try:
-                conn = sqlite3.connect(SYSTEM_DB_PATH)
-                c = conn.cursor()
-                # 清空更新日志表
-                c.execute("DELETE FROM season_poster_logs")
-                # 清空插件运行日志表
-                c.execute("DELETE FROM plugin_logs WHERE plugin_id = ?", (self.id,))
-                conn.commit()
-                conn.close()
+                clear_season_poster_logs()
+                clear_plugin_logs(self.id)
                 return {"status": "success", "message": "日志已清空"}
             except Exception as e:
                 logger.error(f"[{self.name}] 清空日志失败: {e}")
@@ -572,46 +547,36 @@ class SeasonPosterUpdaterPlugin(PluginBase):
                   old_poster: str, new_poster: str, success: bool, message: str):
         """保存更新日志"""
         try:
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            c = conn.cursor()
-            c.execute('''INSERT INTO season_poster_logs 
-                (time, series_id, series_name, season_number, old_poster, new_poster, success, message)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
-                (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                 series_id, series_name, season_number, old_poster, new_poster, 
-                 1 if success else 0, message))
-            conn.commit()
-            conn.close()
+            save_season_poster_log(
+                datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                series_id,
+                series_name,
+                season_number,
+                old_poster,
+                new_poster,
+                success,
+                message,
+            )
         except Exception as e:
             logger.error(f"[{self.name}] 保存日志失败: {e}")
 
     def _get_total_updated(self) -> int:
         """获取已更新的剧集数量"""
         try:
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            c = conn.cursor()
-            c.execute("SELECT COUNT(DISTINCT series_id) FROM season_poster_logs WHERE success = 1")
-            count = c.fetchone()[0]
-            conn.close()
-            return count
+            return count_updated_series()
         except:
             return 0
 
     def _get_cached_series(self, series_id: str) -> dict:
         """获取已缓存的剧集信息"""
         try:
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            conn.row_factory = sqlite3.Row
-            c = conn.cursor()
-            c.execute("SELECT series_name, season_count, last_season_number, last_updated FROM season_poster_cache WHERE series_id = ?", (series_id,))
-            row = c.fetchone()
-            conn.close()
+            row = get_cached_season_poster(series_id)
             if row:
                 return {
-                    "series_name": row[0],
-                    "season_count": row[1],
-                    "last_season_number": row[2],
-                    "last_updated": row[3]
+                    "series_name": row["series_name"],
+                    "season_count": row["season_count"],
+                    "last_season_number": row["last_season_number"],
+                    "last_updated": row["last_updated"]
                 }
             return None
         except:
@@ -620,25 +585,19 @@ class SeasonPosterUpdaterPlugin(PluginBase):
     def _save_cached_series(self, series_id: str, series_name: str, season_count: int, last_season_number: int):
         """保存剧集缓存信息"""
         try:
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            c = conn.cursor()
-            c.execute('''INSERT OR REPLACE INTO season_poster_cache 
-                (series_id, series_name, season_count, last_season_number, last_updated)
-                VALUES (?, ?, ?, ?, ?)''',
-                (series_id, series_name, season_count, last_season_number, 
-                 datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-            conn.commit()
-            conn.close()
+            save_cached_season_poster(
+                series_id,
+                series_name,
+                season_count,
+                last_season_number,
+                datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            )
         except Exception as e:
             logger.error(f"[{self.name}] 保存缓存失败: {e}")
 
     def _clear_cache(self):
         """清空缓存（用于强制重新扫描）"""
         try:
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            c = conn.cursor()
-            c.execute("DELETE FROM season_poster_cache")
-            conn.commit()
-            conn.close()
+            clear_season_poster_cache()
         except Exception as e:
             logger.error(f"[{self.name}] 清空缓存失败: {e}")
