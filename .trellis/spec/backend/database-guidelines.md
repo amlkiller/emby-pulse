@@ -71,6 +71,11 @@
 - `app.dao.calendar_dao.save_series_status(tmdb_id, series_name, status, checked_at: str) -> None`
 - `app.dao.invitation_dao.get_invitation_by_code(code: str) -> DataRow | None`
 - `app.dao.invitation_dao.restore_invitation_code_usage(code: str) -> None`
+- `app.dao.invitation_dao.create_invitation_codes(codes, days, created_at: str, template_user_id, code_type: str, routes: str, route_mode: str, req_free, req_free_count) -> None`
+- `app.dao.invitation_dao.list_admin_invitations(code_type: str = "all") -> list[DataRow]`
+- `app.dao.invitation_dao.list_invitation_usage_stats() -> list[DataRow]`
+- `app.dao.invitation_dao.list_invitation_export_rows(code_type: str = "all") -> list[DataRow]`
+- `app.dao.invitation_dao.delete_invitation_codes(codes) -> None`
 - `app.dao.invitation_dao.claim_registration_invitation(code: str, used_by: str) -> tuple[DataRow | None, str | None]`
 - `app.dao.invitation_dao.save_registered_user_meta(...) -> None`
 - `app.dao.task_dao.ensure_task_config_defaults() -> None`
@@ -210,6 +215,7 @@
 - Good: `pwa.py` keeps its legacy `True`/`False` helper return behavior while delegating table creation and writes to `pwa_dao`.
 - Good: `audit.py` keeps audit log merge/normalization in the route and delegates only `user_audit_logs` SQL to `audit_dao`.
 - Good: `users.py` keeps admin/session checks and response payload assembly in the route while delegating `user_audit_logs` create/list/stats/delete/cleanup SQL to `audit_dao`.
+- Good: `users.py` keeps invitation code generation, CSV rendering, invite-link assembly, and audit-log writes in the route while delegating `invitations` table CRUD/list/export reads to `invitation_dao`.
 - Good: `risk.py` keeps Emby API control and config updates in the route/service layer while delegating `risk_logs` and `users_meta` summary reads to `risk_dao`.
 - Good: `clients.py` keeps media server device control and response assembly in the route while delegating blacklist/whitelist tables to `client_dao` and playback aggregates to `client_queries`.
 - Good: `calendar_notify.py` keeps notification sending, scheduling, and channel-specific HTTP calls in the route/service layer while delegating `calendar_notify_config` reads/writes to `calendar_notify_dao`.

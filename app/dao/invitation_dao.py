@@ -19,6 +19,57 @@ def restore_invitation_code_usage(code: str) -> None:
     )
 
 
+def create_invitation_codes(
+    codes,
+    days,
+    created_at: str,
+    template_user_id,
+    code_type: str,
+    routes: str,
+    route_mode: str,
+    req_free,
+    req_free_count,
+) -> None:
+    with system_store.connect() as conn:
+        cursor = conn.cursor()
+        cursor.executemany(
+            """
+            INSERT INTO invitations
+            (code, days, created_at, template_user_id, type, routes, route_mode, req_free, req_free_count)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (code, days, created_at, template_user_id, code_type, routes, route_mode, req_free, req_free_count)
+                for code in codes
+            ],
+        )
+        conn.commit()
+
+
+def list_admin_invitations(code_type: str = "all"):
+    if code_type in ("register", "renew"):
+        return system_store.fetch_all("SELECT * FROM invitations WHERE type = ? ORDER BY created_at DESC", (code_type,))
+    return system_store.fetch_all("SELECT * FROM invitations ORDER BY created_at DESC")
+
+
+def list_invitation_usage_stats():
+    return system_store.fetch_all("SELECT type, used_count, used_by FROM invitations")
+
+
+def list_invitation_export_rows(code_type: str = "all"):
+    fields = "code, type, days, used_count, max_uses, used_by, status, created_at, used_at, req_free, req_free_count"
+    if code_type in ("register", "renew"):
+        return system_store.fetch_all(f"SELECT {fields} FROM invitations WHERE type = ? ORDER BY created_at DESC", (code_type,))
+    return system_store.fetch_all(f"SELECT {fields} FROM invitations ORDER BY created_at DESC")
+
+
+def delete_invitation_codes(codes) -> None:
+    with system_store.connect() as conn:
+        cursor = conn.cursor()
+        cursor.executemany("DELETE FROM invitations WHERE code = ?", [(code,) for code in codes])
+        conn.commit()
+
+
 def claim_registration_invitation(code: str, used_by: str):
     with system_store.connect() as conn:
         cursor = conn.cursor()

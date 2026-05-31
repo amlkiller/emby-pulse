@@ -4,6 +4,7 @@ from typing import Optional, List
 from app.core.config import cfg
 from app.core.database import query_db, SYSTEM_DB_PATH
 from app.dao import audit_dao
+from app.dao import invitation_dao
 from app.core.media_adapter import media_api
 
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
@@ -910,13 +911,19 @@ def api_gen_invite(data: InviteGenModelLocal, request: Request):
         route_mode = data.route_mode if data.route_mode in ("allow", "block") else "block"
         req_free = data.req_free if data.req_free else 0
         req_free_count = data.req_free_count if data.req_free_count is not None else -1
-        codes = []
+        codes = [secrets.token_hex(4) for _ in range(count)]
         created_at = datetime.datetime.now().isoformat()
-        for _ in range(count):
-            code = secrets.token_hex(4)  # 8位随机码
-            query_db("INSERT INTO invitations (code, days, created_at, template_user_id, type, routes, route_mode, req_free, req_free_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                     (code, data.days, created_at, data.template_user_id, code_type, routes, route_mode, req_free, req_free_count))
-            codes.append(code)
+        invitation_dao.create_invitation_codes(
+            codes,
+            data.days,
+            created_at,
+            data.template_user_id,
+            code_type,
+            routes,
+            route_mode,
+            req_free,
+            req_free_count,
+        )
 
         # 记录审计日志
         type_str = "注册码" if code_type == "register" else "续费码"
@@ -940,10 +947,7 @@ def api_get_invites(request: Request, code_type: str = "all"):
     if not request.session.get("user"): return {"status": "error"}
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
-        if code_type in ("register", "renew"):
-            rows = query_db("SELECT * FROM invitations WHERE type = ? ORDER BY created_at DESC", (code_type,))
-        else:
-            rows = query_db("SELECT * FROM invitations ORDER BY created_at DESC")
+        rows = invitation_dao.list_admin_invitations(code_type)
         data = [dict(r) for r in rows] if rows else []
         # 添加邀请链接
         portal_url = cfg.get("user_portal_url", "").rstrip('/')
@@ -953,7 +957,7 @@ def api_get_invites(request: Request, code_type: str = "all"):
 
         # 计算统计数据(按类型分组)
         stats = {"all": {"total": 0, "used": 0, "unused": 0}, "register": {"total": 0, "used": 0, "unused": 0}, "renew": {"total": 0, "used": 0, "unused": 0}}
-        all_rows = query_db("SELECT type, used_count, used_by FROM invitations")
+        all_rows = invitation_dao.list_invitation_usage_stats()
         if all_rows:
             for r in all_rows:
                 t = r['type'] or 'register'
@@ -976,10 +980,7 @@ def api_export_invites(request: Request, code_type: str = "all"):
     if not request.session.get("user"): return {"status": "error"}
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
-        if code_type in ("register", "renew"):
-            rows = query_db("SELECT code, type, days, used_count, max_uses, used_by, status, created_at, used_at, req_free, req_free_count FROM invitations WHERE type = ? ORDER BY created_at DESC", (code_type,))
-        else:
-            rows = query_db("SELECT code, type, days, used_count, max_uses, used_by, status, created_at, used_at, req_free, req_free_count FROM invitations ORDER BY created_at DESC")
+        rows = invitation_dao.list_invitation_export_rows(code_type)
         if not rows:
             return {"status": "error", "message": "无数据"}
         portal_url = cfg.get("user_portal_url", "").rstrip('/')
@@ -1007,7 +1008,7 @@ def api_manage_invites_batch(data: InviteBatchModelLocal, request: Request):
         ip_address = get_client_ip(request)
 
         if data.action == "delete":
-            for code in data.codes: query_db("DELETE FROM invitations WHERE code = ?", (code,))
+            invitation_dao.delete_invitation_codes(data.codes)
             # 记录审计日志
             add_audit_log(
                 admin_id=admin_user.get("id", ""),
