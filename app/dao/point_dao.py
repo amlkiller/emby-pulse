@@ -415,6 +415,26 @@ def list_point_rank(limit: int = 10):
     )
 
 
+def get_lottery_winning_numbers(draw_date: str):
+    return system_store.fetch_one("SELECT winning_numbers FROM lottery_results WHERE draw_date = ?", (draw_date,))
+
+
+def list_expired_pending_pk_invites_with_messages():
+    return system_store.fetch_all(
+        """
+        SELECT id, chat_id, message_id, challenger_tg_name, target_tg_name
+        FROM pk_invitations
+        WHERE expires_at < datetime('now', 'localtime')
+          AND status = 'pending'
+          AND message_id IS NOT NULL
+        """
+    )
+
+
+def mark_pk_invitation_expired(invite_id) -> None:
+    system_store.execute("UPDATE pk_invitations SET status = 'expired' WHERE id = ?", (invite_id,))
+
+
 def perform_user_checkin(user_id: str, username: str) -> dict:
     with system_store.connect() as conn:
         cursor = conn.cursor()

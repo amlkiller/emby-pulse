@@ -117,6 +117,7 @@
 - `app.dao.user_bot_dao.record_bot_user(tg_user_id, tg_name: str = "") -> None`
 - `app.dao.user_bot_dao.list_bot_users() -> list[dict]`
 - `app.dao.user_bot_dao.bind_user(tg_user_id, emby_user_id, emby_username, init_password: str = "", tg_username: str = "", tg_display_name: str = "") -> None`
+- `app.dao.user_bot_dao.update_binding_init_password(tg_user_id, init_password: str) -> None`
 - `app.dao.user_bot_dao.is_blacklisted(tg_user_id) -> bool`
 - `app.dao.user_bot_dao.add_to_blacklist(tg_user_id, reason: str = "") -> None`
 - `app.dao.user_bot_dao.search_whois_bindings(normalized: str) -> list[DataRow]`
@@ -219,6 +220,9 @@
 - `app.dao.point_dao.list_user_point_logs(user_id: str, page: int = 1, page_size: int = 20) -> dict`
 - `app.dao.point_dao.list_red_packet_logs(packet_id: int) -> list[dict]`
 - `app.dao.point_dao.list_point_rank(limit: int = 10) -> list[DataRow]`
+- `app.dao.point_dao.get_lottery_winning_numbers(draw_date: str) -> DataRow | None`
+- `app.dao.point_dao.list_expired_pending_pk_invites_with_messages() -> list[DataRow]`
+- `app.dao.point_dao.mark_pk_invitation_expired(invite_id) -> None`
 - `app.dao.point_dao.perform_user_checkin(user_id: str, username: str) -> dict`
 - `app.infra.db.local_playback_store.insert_webhook_playback_ip_record(...) -> None`
 - `app.infra.db.local_playback_store.insert_bot_playback_history_record(...) -> None`

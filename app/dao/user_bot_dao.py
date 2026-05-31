@@ -250,6 +250,13 @@ def bind_user(tg_user_id, emby_user_id, emby_username, init_password: str = "", 
         conn.commit()
 
 
+def update_binding_init_password(tg_user_id, init_password: str) -> None:
+    system_store.execute(
+        "UPDATE tg_user_bindings SET init_password = ? WHERE tg_user_id = ?",
+        (init_password, str(tg_user_id)),
+    )
+
+
 def is_blacklisted(tg_user_id) -> bool:
     row = system_store.fetch_one("SELECT 1 FROM tg_user_blacklist WHERE tg_user_id = ?", (str(tg_user_id),))
     return bool(row)

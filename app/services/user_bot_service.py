@@ -4333,10 +4333,7 @@ def cmd_password(chat_id, tg_user_id, args):
         if res.status_code in [200, 204]:
             # 如果是初始化密码，更新绑定记录
             if binding.get('init_password'):
-                conn = sqlite3.connect(SYSTEM_DB_PATH)
-                conn.execute("UPDATE tg_user_bindings SET init_password = ? WHERE tg_user_id = ?", (new_pwd, str(tg_user_id)))
-                conn.commit()
-                conn.close()
+                user_bot_dao.update_binding_init_password(tg_user_id, new_pwd)
 
             _send(chat_id, f"✅ <b>密码修改成功！</b>\n\n新密码：<code>{new_pwd}</code>\n\n请妥善保管你的密码",
                   reply_markup={"inline_keyboard": [[{"text": "🔙 返回", "callback_data": "ub_back_menu"}]]})
@@ -4541,9 +4538,7 @@ class UserBot:
         while self.running:
             try:
                 # 检查是否需要执行彩票开奖
-                conn = sqlite3.connect(SYSTEM_DB_PATH)
-                config = {r[0]: r[1] for r in conn.execute("SELECT key, value FROM point_config").fetchall()}
-                conn.close()
+                config = point_dao.get_point_config()
                 
                 if int(config.get('enable_lottery', 0)) == 1:
                     draw_hour = int(config.get('lottery_draw_hour', 20))
@@ -4555,29 +4550,23 @@ class UserBot:
                     if current_hour == draw_hour and current_minute < 5:
                         # 检查今天是否已开奖
                         today = now.strftime('%Y-%m-%d')
-                        conn = sqlite3.connect(SYSTEM_DB_PATH)
-                        result = conn.execute("SELECT winning_numbers FROM lottery_results WHERE draw_date = ?", (today,)).fetchone()
-                        conn.close()
+                        result = point_dao.get_lottery_winning_numbers(today)
                         
-                        if not result or not result[0]:
+                        if not result or not result["winning_numbers"]:
                             logger.info(f"[彩票] 到达开奖时间 {draw_hour}:00，执行自动开奖...")
                             do_lottery_draw()
                 
                 # 🔥 处理过期的 PK 邀请
                 try:
-                    conn = sqlite3.connect(SYSTEM_DB_PATH)
-                    c = conn.cursor()
                     # 获取刚过期的邀请（有消息ID的）
-                    expired_invites = c.execute(
-                        "SELECT id, chat_id, message_id, challenger_tg_name, target_tg_name FROM pk_invitations WHERE expires_at < datetime('now', 'localtime') AND status = 'pending' AND message_id IS NOT NULL"
-                    ).fetchall()
+                    expired_invites = point_dao.list_expired_pending_pk_invites_with_messages()
                     
                     for invite in expired_invites:
-                        invite_id = invite[0]
-                        chat_id = invite[1]
-                        msg_id = invite[2]
-                        challenger_name = invite[3] or '用户'
-                        target_name = invite[4] or '用户'
+                        invite_id = invite["id"]
+                        chat_id = invite["chat_id"]
+                        msg_id = invite["message_id"]
+                        challenger_name = invite["challenger_tg_name"] or '用户'
+                        target_name = invite["target_tg_name"] or '用户'
                         
                         # 编辑消息显示已过期
                         try:
@@ -4591,12 +4580,10 @@ class UserBot:
                             pass
                         
                         # 更新状态
-                        c.execute("UPDATE pk_invitations SET status = 'expired' WHERE id = ?", (invite_id,))
+                        point_dao.mark_pk_invitation_expired(invite_id)
                     
-                    conn.commit()
                     if expired_invites:
                         logger.info(f"[PK] 已处理 {len(expired_invites)} 个过期邀请")
-                    conn.close()
                 except Exception as e:
                     logger.error(f"[PK] 处理过期邀请失败: {e}")
                 
