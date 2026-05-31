@@ -3,7 +3,8 @@ import sqlite3
 import threading
 import time
 
-from app.core.config import CONFIG_DIR, FONT_DIR, SYSTEM_DB_PATH
+from app.dao.session_dao import clear_sessions_if_table_exists
+from app.core.config import CONFIG_DIR, FONT_DIR
 
 _original_connect = sqlite3.connect
 _patched = False
@@ -41,17 +42,11 @@ def ensure_runtime_directories() -> None:
 def clear_system_sessions() -> None:
     """Clear persisted sessions on startup to force a clean login."""
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'")
-        if c.fetchone():
-            c.execute("DELETE FROM sessions")
-            deleted_count = c.rowcount
-            conn.commit()
+        deleted_count = clear_sessions_if_table_exists()
+        if deleted_count is not None:
             print(f"🔒 [安全] 已清空 {deleted_count} 个 Session，所有用户需要重新登录")
         else:
             print("🔒 [安全] Session 表不存在，跳过清理")
-        conn.close()
     except Exception as e:
         print(f"⚠️ [安全] 清空 Session 失败: {e}")
 
@@ -65,4 +60,3 @@ def start_weather_cache_preload() -> None:
         preload_weather_cache()
 
     threading.Thread(target=_start_weather_service, daemon=True).start()
-

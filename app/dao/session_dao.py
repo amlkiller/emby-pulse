@@ -56,5 +56,18 @@ def delete_session(session_id: str) -> None:
     system_store.execute(f"DELETE FROM {SESSION_TABLE} WHERE session_id = ?", (session_id,))
 
 
+def clear_sessions_if_table_exists():
+    with system_store.connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (SESSION_TABLE,))
+        if not cursor.fetchone():
+            return None
+
+        cursor.execute(f"DELETE FROM {SESSION_TABLE}")
+        deleted_count = cursor.rowcount
+        conn.commit()
+        return deleted_count
+
+
 def cleanup_expired_sessions(now: float) -> int:
     return system_store.execute(f"DELETE FROM {SESSION_TABLE} WHERE expires_at < ?", (now,))
