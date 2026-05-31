@@ -3,14 +3,9 @@ from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 from fastapi.responses import RedirectResponse
 from app.core.config import cfg, templates
 from app.plugins import get_all_plugins, set_plugin_enabled, get_plugin_config, save_plugin_config, update_plugin_config, get_plugin, get_plugin_logs, clear_plugin_logs, _registry
-from app.core.database import DB_PATH, SYSTEM_DB_PATH
 from app.routers.auth import check_permission, is_admin_user  # 🔒 引入管理员权限检查
-from app.routers.views import get_common_vars
-import os
-import sqlite3
 
 router = APIRouter()
-from app.main import APP_VERSION
 
 
 def is_pro_user() -> bool:
@@ -28,6 +23,8 @@ def set_app(app):
 
 @router.get("/plugins")
 async def plugins_page(request: Request):
+    from app.routers.views import get_common_vars
+
     if not request.session.get("user"):
         return RedirectResponse("/login", status_code=303)
     

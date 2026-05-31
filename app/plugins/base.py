@@ -1,14 +1,7 @@
-"""
-EmbyPulse 插件基类
-所有插件必须继承 PluginBase 并实现必要属性
-"""
-import sqlite3
-import json
 import threading
 import logging
-from datetime import datetime
 from fastapi import APIRouter, Request, HTTPException, Depends
-from app.core.database import SYSTEM_DB_PATH
+from app.dao import plugin_dao
 
 logger = logging.getLogger("uvicorn")
 
@@ -73,27 +66,7 @@ class PluginBase:
     def _init_logs_table(self):
         """初始化插件日志表"""
         try:
-            # 确保 data 目录存在
-            import os
-            db_dir = os.path.dirname(SYSTEM_DB_PATH)
-            if db_dir and not os.path.exists(db_dir):
-                os.makedirs(db_dir, exist_ok=True)
-            
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            conn.execute(f"""
-                CREATE TABLE IF NOT EXISTS plugin_logs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    plugin_id TEXT NOT NULL,
-                    level TEXT DEFAULT 'info',
-                    message TEXT NOT NULL,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_plugin_logs_plugin_id ON plugin_logs(plugin_id)
-            """)
-            conn.commit()
-            conn.close()
+            plugin_dao.ensure_plugin_tables()
         except Exception as e:
             import logging
             logging.getLogger("uvicorn").error(f"[{self.name}] 初始化日志表失败: {e}")
@@ -137,12 +110,8 @@ class PluginBase:
         """从数据库加载配置到缓存"""
         global _config_cache
         try:
-            conn = sqlite3.connect(SYSTEM_DB_PATH, timeout=10)
-            conn.execute("PRAGMA journal_mode=WAL")
-            row = conn.execute("SELECT config FROM plugin_state WHERE plugin_id = ?", (self.id,)).fetchone()
-            conn.close()
             with _config_cache_lock:
-                _config_cache[self.id] = json.loads(row[0]) if row and row[0] else {}
+                _config_cache[self.id] = plugin_dao.get_plugin_config(self.id)
         except Exception:
             with _config_cache_lock:
                 _config_cache[self.id] = {}
@@ -179,13 +148,7 @@ class PluginBase:
 
         # 写入本地日志表
         try:
-            conn = sqlite3.connect(SYSTEM_DB_PATH, timeout=10)
-            conn.execute(
-                "INSERT INTO plugin_logs (plugin_id, level, message, created_at) VALUES (?, ?, ?, ?)",
-                (self.id, level, message, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-            )
-            conn.commit()
-            conn.close()
+            plugin_dao.add_plugin_log(self.id, level, message)
         except Exception as e:
             logger.error(f"[{self.name}] 写入日志失败: {e}")
 
@@ -209,23 +172,10 @@ class PluginBase:
     def get_logs(self, limit: int = 50):
         """获取插件日志"""
         try:
-            conn = sqlite3.connect(SYSTEM_DB_PATH, timeout=10)
-            conn.row_factory = sqlite3.Row
-            rows = conn.execute(
-                """SELECT level, message, created_at FROM plugin_logs
-                   WHERE plugin_id = ? ORDER BY id DESC LIMIT ?""",
-                (self.id, limit)
-            ).fetchall()
-            conn.close()
-            # 手动构建字典，确保字段名正确
-            result = []
-            for row in rows:
-                result.append({
-                    "level": row["level"],
-                    "message": row["message"],
-                    "created_at": row["created_at"]
-                })
-            return result
+            return [
+                {"level": row["level"], "message": row["message"], "created_at": row["created_at"]}
+                for row in plugin_dao.list_plugin_logs(self.id, limit)
+            ]
         except Exception as e:
             logger.error(f"[{self.name}] 获取日志失败: {e}")
             return []
@@ -233,10 +183,7 @@ class PluginBase:
     def clear_logs(self):
         """清空插件日志"""
         try:
-            conn = sqlite3.connect(SYSTEM_DB_PATH)
-            conn.execute("DELETE FROM plugin_logs WHERE plugin_id = ?", (self.id,))
-            conn.commit()
-            conn.close()
+            plugin_dao.clear_plugin_logs(self.id)
             return True
         except Exception:
             return False

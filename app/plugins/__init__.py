@@ -4,13 +4,10 @@ EmbyPulse 插件加载器
 """
 import os
 import importlib
-import sqlite3
-import json
 import logging
-import threading
 from typing import Dict, List, Optional
 from app.plugins.base import PluginBase, _config_cache, _config_cache_lock
-from app.core.database import SYSTEM_DB_PATH
+from app.dao import plugin_dao
 
 logger = logging.getLogger("uvicorn")
 
@@ -20,22 +17,8 @@ _registry: Dict[str, PluginBase] = {}
 
 def _ensure_plugin_table():
     try:
-        # 确保 data 目录存在
-        db_dir = os.path.dirname(SYSTEM_DB_PATH)
-        if db_dir and not os.path.exists(db_dir):
-            os.makedirs(db_dir, exist_ok=True)
-            print(f"[🧩 插件] 创建数据库目录: {db_dir}")
-        
-        conn = sqlite3.connect(SYSTEM_DB_PATH, timeout=10)
-        conn.execute("PRAGMA journal_mode=WAL")  # 使用 WAL 模式减少锁等待
-        conn.execute("""CREATE TABLE IF NOT EXISTS plugin_state (
-            plugin_id TEXT PRIMARY KEY,
-            enabled INTEGER DEFAULT 0,
-            config TEXT DEFAULT '{}'
-        )""")
-        conn.commit()
-        conn.close()
-        print(f"[🧩 插件] 数据库表初始化成功: {SYSTEM_DB_PATH}")
+        plugin_dao.ensure_plugin_tables()
+        print("[🧩 插件] 数据库表初始化成功")
     except Exception as e:
         print(f"[🧩 插件] 初始化数据库表失败: {e}")
         import traceback
@@ -86,16 +69,18 @@ def discover_plugins():
 
 def _restore_states():
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH, timeout=10)
-        conn.execute("PRAGMA journal_mode=WAL")
-        rows = conn.execute("SELECT plugin_id, enabled, config FROM plugin_state").fetchall()
-        conn.close()
+        rows = plugin_dao.list_plugin_states()
         print(f"[🧩 插件] 从数据库恢复状态，发现 {len(rows)} 条记录")
-        for pid, enabled, config_json in rows:
+        for row in rows:
+            pid = row["plugin_id"]
+            enabled = row["enabled"]
+            config_json = row["config"]
             print(f"[🧩 插件] 检查插件 {pid}: enabled={enabled}, in_registry={pid in _registry}")
             
             # 🔥 加载配置到缓存
             try:
+                import json
+
                 config = json.loads(config_json) if config_json else {}
                 with _config_cache_lock:
                     _config_cache[pid] = config
@@ -132,15 +117,7 @@ def set_plugin_enabled(plugin_id: str, enabled: bool) -> bool:
     else:
         plugin.disable()
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH, timeout=10)
-        conn.execute("PRAGMA journal_mode=WAL")
-        # 🔥 修复：保留原有配置，只更新 enabled 字段
-        conn.execute("""
-            INSERT OR REPLACE INTO plugin_state (plugin_id, enabled, config) 
-            VALUES (?, ?, COALESCE((SELECT config FROM plugin_state WHERE plugin_id = ?), '{}'))
-        """, (plugin_id, 1 if enabled else 0, plugin_id))
-        conn.commit()
-        conn.close()
+        plugin_dao.set_plugin_enabled(plugin_id, enabled)
     except Exception:
         pass
     return True
@@ -148,11 +125,7 @@ def set_plugin_enabled(plugin_id: str, enabled: bool) -> bool:
 
 def get_plugin_config(plugin_id: str) -> dict:
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH, timeout=10)
-        conn.execute("PRAGMA journal_mode=WAL")  # 使用 WAL 模式减少锁等待
-        row = conn.execute("SELECT config FROM plugin_state WHERE plugin_id = ?", (plugin_id,)).fetchone()
-        conn.close()
-        return json.loads(row[0]) if row and row[0] else {}
+        return plugin_dao.get_plugin_config(plugin_id)
     except Exception:
         return {}
 
@@ -161,12 +134,7 @@ def save_plugin_config(plugin_id: str, config: dict):
     """保存插件配置并刷新缓存"""
     global _config_cache
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH, timeout=10)
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("INSERT OR REPLACE INTO plugin_state (plugin_id, enabled, config) VALUES (?, COALESCE((SELECT enabled FROM plugin_state WHERE plugin_id = ?), 0), ?)",
-                     (plugin_id, plugin_id, json.dumps(config, ensure_ascii=False)))
-        conn.commit()
-        conn.close()
+        plugin_dao.save_plugin_config(plugin_id, config)
         # 刷新缓存
         with _config_cache_lock:
             _config_cache[plugin_id] = config
