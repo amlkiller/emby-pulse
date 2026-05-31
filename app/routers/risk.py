@@ -1,11 +1,15 @@
 from fastapi import APIRouter, HTTPException, Request
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 from pydantic import BaseModel
-import sqlite3
 import requests
 import json
-from app.core.config import cfg, DB_PATH, save_config
-from app.core.database import SYSTEM_DB_PATH
+from app.core.config import cfg, save_config
+from app.dao.risk_dao import (
+    count_recent_risk_actions,
+    count_vip_users,
+    list_risk_logs,
+    list_top_risk_offenders,
+)
 from app.services.risk_service import ban_user, unban_user, log_risk_action, get_user_concurrent_limit
 from app.core.security_utils import safe_error_message
 
@@ -196,12 +200,7 @@ def get_risk_logs(request: Request):
         return {"error": "需要管理员权限"}
     
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM risk_logs ORDER BY created_at DESC LIMIT 200")
-        rows = cur.fetchall()
-        conn.close()
+        rows = list_risk_logs()
         return {"data": [dict(r) for r in rows]}
     except: return {"data": []}
 
@@ -247,26 +246,17 @@ def get_risk_summary(request: Request):
         return {"error": "需要管理员权限"}
     
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-
         # 1. 统计近 24 小时的拦截数据
-        cur.execute("SELECT action, COUNT(*) as cnt FROM risk_logs WHERE datetime(created_at) >= datetime('now', '-1 day') GROUP BY action")
         today_stats = {"warn": 0, "kick": 0, "ban": 0}
-        for row in cur.fetchall():
+        for row in count_recent_risk_actions():
             today_stats[row['action']] = row['cnt']
 
         # 2. 统计历史高危账号排行榜 (违规次数最多的前 5 名)
-        cur.execute("SELECT username, COUNT(*) as total_violations FROM risk_logs GROUP BY username ORDER BY total_violations DESC LIMIT 5")
-        top_offenders = [dict(r) for r in cur.fetchall()]
+        top_offenders = [dict(r) for r in list_top_risk_offenders()]
 
         # 3. 统计有多少人拥有"专属并发特权"
-        cur.execute("SELECT COUNT(*) as vip_count FROM users_meta WHERE is_vip = 1")
-        vip_row = cur.fetchone()
-        vip_count = vip_row['vip_count'] if vip_row else 0
+        vip_count = count_vip_users()
 
-        conn.close()
         return {
             "status": "success",
             "today_stats": today_stats,

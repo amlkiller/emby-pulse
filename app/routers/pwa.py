@@ -1,7 +1,6 @@
 """
 PWA 自定义图标和主题 API
 """
-import sqlite3
 import os
 import io
 import hashlib
@@ -12,6 +11,12 @@ from fastapi.responses import JSONResponse
 from typing import Optional, List
 import glob
 from app.core.security_utils import safe_error_message
+from app.dao.pwa_dao import (
+    get_pwa_config_values,
+    get_user_pwa_icon,
+    save_pwa_config_value,
+    set_user_pwa_icon,
+)
 from app.routers.auth import is_admin_user
 
 router = APIRouter()
@@ -24,44 +29,14 @@ DEFAULT_ICONS = [
 def get_pwa_config():
     """获取 PWA 配置"""
     try:
-        from app.core.database import SYSTEM_DB_PATH
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        
-        # 确保表存在
-        c.execute('''
-            CREATE TABLE IF NOT EXISTS pwa_config (
-                key TEXT PRIMARY KEY,
-                value TEXT
-            )
-        ''')
-        
-        c.execute("SELECT key, value FROM pwa_config")
-        rows = c.fetchall()
-        conn.close()
-        
-        config = {row[0]: row[1] for row in rows}
-        return config
+        return get_pwa_config_values()
     except:
         return {}
 
 def save_pwa_config(key: str, value: str):
     """保存 PWA 配置"""
     try:
-        from app.core.database import SYSTEM_DB_PATH
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        
-        c.execute('''
-            CREATE TABLE IF NOT EXISTS pwa_config (
-                key TEXT PRIMARY KEY,
-                value TEXT
-            )
-        ''')
-        
-        c.execute("INSERT OR REPLACE INTO pwa_config (key, value) VALUES (?, ?)", (key, value))
-        conn.commit()
-        conn.close()
+        save_pwa_config_value(key, value)
         return True
     except Exception as e:
         print(f"保存 PWA 配置失败: {e}")
@@ -113,42 +88,14 @@ async def get_available_icons():
 def get_user_icon(user_id: str) -> str:
     """获取用户选择的图标"""
     try:
-        from app.core.database import SYSTEM_DB_PATH
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        
-        c.execute('''
-            CREATE TABLE IF NOT EXISTS user_pwa_icons (
-                user_id TEXT PRIMARY KEY,
-                icon_id TEXT
-            )
-        ''')
-        
-        c.execute("SELECT icon_id FROM user_pwa_icons WHERE user_id = ?", (user_id,))
-        row = c.fetchone()
-        conn.close()
-        
-        return row[0] if row else None
+        return get_user_pwa_icon(user_id)
     except:
         return None
 
 def set_user_icon(user_id: str, icon_id: str):
     """保存用户选择的图标"""
     try:
-        from app.core.database import SYSTEM_DB_PATH
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        c = conn.cursor()
-        
-        c.execute('''
-            CREATE TABLE IF NOT EXISTS user_pwa_icons (
-                user_id TEXT PRIMARY KEY,
-                icon_id TEXT
-            )
-        ''')
-        
-        c.execute("INSERT OR REPLACE INTO user_pwa_icons (user_id, icon_id) VALUES (?, ?)", (user_id, icon_id))
-        conn.commit()
-        conn.close()
+        set_user_pwa_icon(user_id, icon_id)
         return True
     except Exception as e:
         print(f"保存用户图标失败: {e}")

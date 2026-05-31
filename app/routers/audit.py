@@ -5,6 +5,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from app.core.audit_logger import get_audit_logs, get_audit_stats, AUDIT_ACTIONS
+from app.dao.audit_dao import list_user_audit_logs_since
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 import time
 import os
@@ -49,9 +50,7 @@ async def api_get_audit_logs(
     if not is_admin_user(request):
         return JSONResponse(status_code=403, content={"error": "需要管理员权限"})
     
-    import sqlite3
     import json
-    from app.core.config import SYSTEM_DB_PATH
     
     # 计算时间范围
     end_time = time.time()
@@ -80,19 +79,8 @@ async def api_get_audit_logs(
     
     # 2. 从 user_audit_logs 表获取数据
     try:
-        conn = sqlite3.connect(SYSTEM_DB_PATH)
-        conn.row_factory = sqlite3.Row
-        
-        # 查询用户审计日志
-        query = """
-            SELECT * FROM user_audit_logs
-            WHERE datetime(created_at) >= datetime(?, 'localtime')
-            ORDER BY created_at DESC
-            LIMIT ?
-        """
         start_datetime = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_time))
-        rows = conn.execute(query, (start_datetime, limit)).fetchall()
-        conn.close()
+        rows = list_user_audit_logs_since(start_datetime, limit)
         
         # 用户操作类型映射
         user_action_map = {

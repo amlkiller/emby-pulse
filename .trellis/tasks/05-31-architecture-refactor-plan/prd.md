@@ -57,6 +57,9 @@ Define the architecture refactor target for EmbyPulse-Pro and implement the firs
 - [x] `app/routers/notify_rules.py` no longer imports `query_db` or opens direct SQLite connections.
 - [x] `app/routers/pro.py` no longer imports `app.core.database` or opens direct SQLite connections.
 - [x] `app/routers/notify_admin.py` delegates `notify_rules` table access to a DAO.
+- [x] `app/routers/pwa.py` delegates PWA config/icon tables to a DAO.
+- [x] `app/routers/audit.py` delegates `user_audit_logs` access to a DAO.
+- [x] `app/routers/risk.py` delegates risk log and summary reads to a DAO.
 - [x] Existing tests or import checks pass.
 
 ## Out of Scope
