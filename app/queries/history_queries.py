@@ -1,6 +1,4 @@
-import os
-import sqlite3
-
+from app.infra.db.local_playback_store import fetch_playback_ip_rows
 from app.infra.db.playback_store import get_playback_column_name, playback_store
 
 
@@ -78,13 +76,7 @@ def count_total_plays(filter_sql: str, params):
 
 def fetch_local_ip_data(rows):
     local_ip_data = {}
-    if os.path.exists("/workspace"):
-        data_dir = "/workspace/data"
-    else:
-        data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
-    local_db_path = os.path.join(data_dir, "playback.db")
-
-    if not os.path.exists(local_db_path) or not rows:
+    if not rows:
         return local_ip_data
 
     try:
@@ -93,21 +85,7 @@ def fetch_local_ip_data(rows):
         if not item_ids or not user_ids:
             return local_ip_data
 
-        conn = sqlite3.connect(local_db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        placeholders = ",".join(["?" for _ in item_ids])
-        user_placeholders = ",".join(["?" for _ in user_ids])
-        cursor.execute(
-            f"""
-            SELECT UserId, ItemId, RemoteEndPoint, Location, ISP
-            FROM PlaybackActivity
-            WHERE ItemId IN ({placeholders}) AND UserId IN ({user_placeholders})
-            AND RemoteEndPoint IS NOT NULL AND RemoteEndPoint != ''
-            """,
-            item_ids + user_ids,
-        )
-        for row in cursor.fetchall():
+        for row in fetch_playback_ip_rows(item_ids, user_ids):
             key = str(row["UserId"]) + "_" + str(row["ItemId"])
             if key not in local_ip_data:
                 local_ip_data[key] = {
@@ -115,7 +93,6 @@ def fetch_local_ip_data(rows):
                     "location": row["Location"] or "",
                     "isp": row["ISP"] or "",
                 }
-        conn.close()
     except Exception as exc:
         print(f"[IP补充] 加载本地IP数据失败: {exc}")
     return local_ip_data

@@ -2,6 +2,7 @@ import os
 import sqlite3
 
 from app.core.config import DB_PATH
+from app.infra.db.row import to_data_row
 
 
 WEBHOOK_PLAYBACK_SCHEMA = """CREATE TABLE IF NOT EXISTS PlaybackActivity (
@@ -34,6 +35,34 @@ def _ensure_playback_ip_columns(cursor) -> None:
             cursor.execute(f"ALTER TABLE PlaybackActivity ADD COLUMN {column_name} TEXT")
         except Exception:
             pass
+
+
+def fetch_playback_ip_rows(item_ids, user_ids):
+    if not item_ids or not user_ids:
+        return []
+
+    local_db_path = get_local_playback_db_path()
+    if not os.path.exists(local_db_path):
+        return []
+
+    conn = sqlite3.connect(local_db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        cursor = conn.cursor()
+        placeholders = ",".join(["?"] * len(item_ids))
+        user_placeholders = ",".join(["?"] * len(user_ids))
+        cursor.execute(
+            f"""
+            SELECT UserId, ItemId, RemoteEndPoint, Location, ISP
+            FROM PlaybackActivity
+            WHERE ItemId IN ({placeholders}) AND UserId IN ({user_placeholders})
+            AND RemoteEndPoint IS NOT NULL AND RemoteEndPoint != ''
+            """,
+            list(item_ids) + list(user_ids),
+        )
+        return [to_data_row(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
 
 
 def insert_webhook_playback_ip_record(
