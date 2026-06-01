@@ -2,9 +2,14 @@ import logging
 import time
 import threading
 import datetime
-from app.core.config import cfg
 from app.core.event_bus import bus
 from app.infra.clients.media_server_client import media_api
+from app.infra.config.risk_settings import (
+    get_default_max_concurrent,
+    get_violation_action,
+    is_risk_control_enabled,
+    is_risk_sys_notification_enabled,
+)
 from app.dao.notification_dao import add_system_notification
 from app.dao.risk_dao import (
     create_risk_log,
@@ -94,7 +99,7 @@ def get_user_concurrent_limit(user_id: str) -> tuple:
             if row["max_concurrent"] is not None:
                 return (int(row["max_concurrent"]), False)
     except Exception: pass
-    return (int(cfg.get("default_max_concurrent", 2)), False)
+    return (get_default_max_concurrent(), False)
 
 _alerted_sessions = set()
 # 🔥 核心更新：状态记忆体，用于记录上一次扫描的并发情况，防刷屏
@@ -172,7 +177,7 @@ def scan_playbacks_and_alert():
     try:
         _last_scan_time = now
         
-        if not cfg.get("enable_risk_control", True): return
+        if not is_risk_control_enabled(): return
 
         try:
             res = media_api.get("/Sessions", timeout=10)
@@ -238,7 +243,7 @@ def scan_playbacks_and_alert():
                     devices_text = "\n".join([f"  🔸 {d}" for d in devices_info])
                     
                     # 获取违规处理方式
-                    violation_action = cfg.get("violation_action", "warn_only")
+                    violation_action = get_violation_action()
                     logger.warning(f"🚨 [风控执行] 发现越界！用户: {username}, 处理方式: {violation_action}")
                     
                     # 根据处理方式执行不同操作
@@ -295,7 +300,7 @@ def _risk_monitor_loop():
 
 def _on_risk_alert_for_web(data):
     # 检查是否开启全局通知中心
-    if not cfg.get("enable_risk_sys_notification", True):
+    if not is_risk_sys_notification_enabled():
         return
     
     username = data.get("username", "未知")
