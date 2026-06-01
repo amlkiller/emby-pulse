@@ -8,6 +8,7 @@ from app.dao import user_dao
 from app.dao import user_bot_dao
 from app.infra.clients.media_server_client import media_api
 from app.infra.clients.network_client import network_client
+from app.infra.config.request_portal_settings import get_user_portal_url
 
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 from app.core.security import validate_password_strength  # 🔒 统一密码强度校验
@@ -841,7 +842,7 @@ def api_gen_invite(data: InviteGenModelLocal, request: Request):
         )
 
         # 构建邀请链接
-        portal_url = cfg.get("user_portal_url", "").rstrip('/')
+        portal_url = get_user_portal_url().rstrip('/')
         links = [f"{portal_url}/invite/{code}" for code in codes] if portal_url and code_type == "register" else []
         return {"status": "success", "codes": codes, "type": code_type, "links": links, "portal_url": portal_url}
     except Exception as e: return {"status": "error", "message": safe_error_message(e)}
@@ -854,7 +855,7 @@ def api_get_invites(request: Request, code_type: str = "all"):
         rows = invitation_dao.list_admin_invitations(code_type)
         data = [dict(r) for r in rows] if rows else []
         # 添加邀请链接
-        portal_url = cfg.get("user_portal_url", "").rstrip('/')
+        portal_url = get_user_portal_url().rstrip('/')
         for item in data:
             if item.get('type') == 'register' and item.get('code'):
                 item['invite_link'] = f"{portal_url}/invite/{item['code']}" if portal_url else ""
@@ -887,7 +888,7 @@ def api_export_invites(request: Request, code_type: str = "all"):
         rows = invitation_dao.list_invitation_export_rows(code_type)
         if not rows:
             return {"status": "error", "message": "无数据"}
-        portal_url = cfg.get("user_portal_url", "").rstrip('/')
+        portal_url = get_user_portal_url().rstrip('/')
         lines = ["码,类型,天数,已用次数,最大次数,使用者,状态,生成时间,使用时间,求片权限,免费次数,邀请链接"]
         for r in rows:
             d = dict(r)

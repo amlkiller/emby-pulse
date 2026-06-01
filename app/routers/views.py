@@ -18,6 +18,11 @@ from app.infra.clients.media_server_client import media_api
 from app.core.security_utils import validate_redirect_url
 from app.core.security import validate_password_strength
 from app.infra.clients.tmdb_client import tmdb_client
+from app.infra.config.request_portal_settings import (
+    get_client_download_url_or_default,
+    get_user_portal_url,
+    is_redirect_to_community_enabled,
+)
 from app.routers.auth import check_permission, PAGE_PERMISSION_MAP
 import logging
 import random
@@ -435,8 +440,8 @@ async def invite_page(code: str, request: Request):
     if invite and invite['used_count'] < invite['max_uses']: valid = True; days = invite['days']
     
     # 🔥 检查是否启用用户社区注册重定向
-    redirect_to_community = cfg.get("register_redirect_to_community", "false").lower() == "true"
-    user_portal_url = cfg.get("user_portal_url", "")
+    redirect_to_community = is_redirect_to_community_enabled()
+    user_portal_url = get_user_portal_url()
     
     if redirect_to_community and user_portal_url:
         # 🔥 安全修复：验证重定向URL
@@ -446,7 +451,7 @@ async def invite_page(code: str, request: Request):
             return RedirectResponse(f"{safe_url}?code={code}")
     
     # 原来的独立注册页面
-    client_url = cfg.get("client_download_url") or "https://emby.media/download.html"
+    client_url = get_client_download_url_or_default()
     return templates.TemplateResponse("register.html", {"request": request, "code": code, "valid": valid, "days": days, "client_download_url": client_url, "version": APP_VERSION})
 
 
@@ -608,7 +613,7 @@ async def api_register(data: RegisterModel, request: Request):
                     user_routes = [{"name": "默认推荐节点", "url": server_url, "is_main": True}]
             
             welcome_message = cfg.get("welcome_message", "")
-            user_portal_url = cfg.get("user_portal_url", "")
+            user_portal_url = get_user_portal_url()
             
             return {
                 "status": "success",

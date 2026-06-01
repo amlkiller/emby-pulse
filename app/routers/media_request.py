@@ -14,6 +14,7 @@ import threading
 from app.core.config import cfg, REPORT_COVER_URL
 from app.infra.clients.moviepilot_client import moviepilot_client
 from app.infra.clients.tmdb_client import tmdb_client
+from app.infra.config.request_portal_settings import get_pulse_url
 from app.dao.notification_dao import add_sys_notification
 from app.dao.media_request_dao import (
     claim_registration_invitation,
@@ -634,7 +635,7 @@ async def submit_media_request(request: Request):
             season_str = f" 第 {','.join(str(s) for s in seasons)} 季" if media_type == "tv" and any(s > 0 for s in seasons) else ""
             msg = f"🎬 <b>收到新求片心愿</b>\n\n👤 <b>用户：</b>{uname}\n📺 <b>内容：</b>{title} ({year}){season_str}\n\n请及时前往后台审批处理。"
             
-            admin_url = cfg.get("pulse_url") or cfg.get_main_public_url() or "http://127.0.0.1:10307"
+            admin_url = get_pulse_url() or cfg.get_main_public_url() or "http://127.0.0.1:10307"
             # 构建季数字符串用于回调（多季用逗号分隔）
             season_str_cb = ",".join(str(s) for s in seasons) if media_type == "tv" and any(s > 0 for s in seasons) else "0"
             # 标题需要编码以便在 callback_data 中使用（替换下划线）
@@ -974,7 +975,7 @@ def submit_feedback(data: FeedbackSubmitModel, request: Request):
     
     actual_poster = data.poster_path
     if actual_poster and actual_poster.startswith("/"):
-        base_url = cfg.get("pulse_url") or str(request.base_url).rstrip('/')
+        base_url = get_pulse_url() or str(request.base_url).rstrip('/')
         actual_poster = f"{base_url}{actual_poster}"
         
     if not actual_poster or 'undefined' in actual_poster:
@@ -991,7 +992,7 @@ def submit_feedback(data: FeedbackSubmitModel, request: Request):
            f"🏷️ <b>问题</b>：{data.issue_type}\n"
            f"📝 <b>描述</b>：{data.description or '无'}")
     
-    admin_url = cfg.get("pulse_url") or str(request.base_url).rstrip('/')
+    admin_url = get_pulse_url() or str(request.base_url).rstrip('/')
     keyboard = {"inline_keyboard": [
         [{"text": "🛠️ 标记修复中", "callback_data": f"feed_fix_{feed_id}"},
          {"text": "✅ 标记已修复", "callback_data": f"feed_done_{feed_id}"}],
@@ -1661,7 +1662,7 @@ async def submit_update_request(request: Request):
             
             msg = f"🔄 <b>收到追新请求</b>\n\n👤 <b>用户：</b>{uname}\n📺 <b>内容：</b>{title}{year_display}\n📀 <b>季集：</b>第 {season} 季 E{episodes_str.replace(',', '-')}集\n\n请及时处理。"
             
-            admin_url = cfg.get("pulse_url") or cfg.get_main_public_url() or "http://127.0.0.1:10307"
+            admin_url = get_pulse_url() or cfg.get_main_public_url() or "http://127.0.0.1:10307"
             keyboard = {"inline_keyboard": [
                 [{"text": "🔍 影巢搜索", "callback_data": f"req_hdhive_ep_{tmdb_id}_{season}_{episodes_str}_{title.replace('_', '-').replace(':', '').replace('：', '').replace(' ', '-')}"}],
                 [{"text": "✋ 手动接单", "callback_data": f"req_manual_{tmdb_id}_{season}"}, {"text": "💻 网页审批", "url": f"{admin_url.rstrip('/')}/requests_admin"}]
@@ -1759,7 +1760,7 @@ async def submit_update_request_batch(request: Request):
             
             msg = f"🔄 <b>收到批量追新请求</b>\n\n👤 <b>用户：</b>{uname}\n📺 <b>内容：</b>{series_name}{year_display}\n\n📀 <b>季集详情：</b>\n{season_detail_str}\n\n请及时处理。"
             
-            admin_url = cfg.get("pulse_url") or cfg.get_main_public_url() or "http://127.0.0.1:10307"
+            admin_url = get_pulse_url() or cfg.get_main_public_url() or "http://127.0.0.1:10307"
             
             # 🔥 简化按钮：影巢搜索（标题）+ 手动接单 + 网页审批
             keyboard = {"inline_keyboard": [

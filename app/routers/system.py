@@ -17,6 +17,16 @@ from app.infra.clients.media_server_client import media_api
 from app.infra.clients.tmdb_client import tmdb_client
 from app.infra.clients.moviepilot_client import moviepilot_client
 from app.infra.clients.network_client import network_client
+from app.infra.config.request_portal_settings import (
+    get_client_download_url,
+    get_pulse_url,
+    get_redirect_to_community_value,
+    get_user_portal_url,
+    set_client_download_url,
+    set_pulse_url,
+    set_redirect_to_community_enabled,
+    set_user_portal_url,
+)
 
 logger = logging.getLogger("uvicorn")
 
@@ -172,11 +182,11 @@ def api_get_settings(request: Request):
         "hidden_users": cfg.get("hidden_users") or [],
         "emby_public_url": cfg.get("emby_public_url", ""),
         "welcome_message": cfg.get("welcome_message", ""),
-        "client_download_url": cfg.get("client_download_url", ""),
+        "client_download_url": get_client_download_url(),
         "moviepilot_url": cfg.get("moviepilot_url", ""),
-        "pulse_url": cfg.get("pulse_url", ""),
-        "user_portal_url": cfg.get("user_portal_url", ""),
-        "register_redirect_to_community": cfg.get("register_redirect_to_community", "false"),
+        "pulse_url": get_pulse_url(),
+        "user_portal_url": get_user_portal_url(),
+        "register_redirect_to_community": get_redirect_to_community_value(),
         "playback_data_mode": cfg.get("playback_data_mode", "sqlite"),
         "notify_user_login": cfg.get("notify_user_login", False),
         "notify_item_deleted": cfg.get("notify_item_deleted", False),
@@ -362,11 +372,11 @@ def api_update_settings(data: SettingsModel, request: Request):
     cfg["hidden_users"] = data.hidden_users
     cfg["emby_public_url"] = data.emby_public_url
     cfg["welcome_message"] = data.welcome_message
-    cfg["client_download_url"] = data.client_download_url
+    set_client_download_url(data.client_download_url)
     cfg["moviepilot_url"] = data.moviepilot_url
-    cfg["pulse_url"] = data.pulse_url
-    cfg["user_portal_url"] = getattr(data, "user_portal_url", "")
-    cfg["register_redirect_to_community"] = getattr(data, "register_redirect_to_community", "false")
+    set_pulse_url(data.pulse_url)
+    set_user_portal_url(getattr(data, "user_portal_url", ""))
+    set_redirect_to_community_enabled(getattr(data, "register_redirect_to_community", "false"))
     cfg["playback_data_mode"] = getattr(data, "playback_data_mode", "sqlite")
     cfg["notify_user_login"] = getattr(data, "notify_user_login", False)
     cfg["notify_item_deleted"] = getattr(data, "notify_item_deleted", False)
