@@ -47,6 +47,7 @@ class ViewReportPlugin(PluginBase):
         super().__init__()
         self.scheduler_thread = None
         self.scheduler_running = False
+        self._stop_event = threading.Event()
         self.last_check = {}  # 记录每种报告类型上次检查的时间
 
     def on_enable(self):
@@ -135,18 +136,27 @@ class ViewReportPlugin(PluginBase):
 
     def _start_scheduler(self):
         """启动调度器"""
-        if self.scheduler_running:
+        if self.scheduler_thread and self.scheduler_thread.is_alive():
             return
+        self._stop_event.clear()
         self.scheduler_running = True
-        self.scheduler_thread = threading.Thread(target=self._scheduler_loop, daemon=True)
+        self.scheduler_thread = threading.Thread(
+            target=self._scheduler_loop,
+            daemon=True,
+            name="view-report-scheduler",
+        )
         self.scheduler_thread.start()
         logger.info(f"[{self.name}] 调度器已启动")
 
     def _stop_scheduler(self):
         """停止调度器"""
         self.scheduler_running = False
-        if self.scheduler_thread:
-            self.scheduler_thread.join(timeout=5)
+        self._stop_event.set()
+        thread = self.scheduler_thread
+        if thread and thread.is_alive():
+            thread.join(timeout=1)
+        if not thread or not thread.is_alive():
+            self.scheduler_thread = None
         logger.info(f"[{self.name}] 调度器已停止")
 
     def _scheduler_loop(self):
@@ -165,10 +175,12 @@ class ViewReportPlugin(PluginBase):
                             self.log(f"触发 {self._get_report_name(report_type)} 推送", notify=False)
                             self._send_report_async(report_type)
                 
-                time.sleep(60)  # 每分钟检查一次
+                if self._stop_event.wait(60):  # 每分钟检查一次
+                    return
             except Exception as e:
                 logger.error(f"[{self.name}] 调度器异常: {e}")
-                time.sleep(60)
+                if self._stop_event.wait(60):
+                    return
 
     def _get_default_cron(self, report_type: str) -> str:
         """获取默认 cron 表达式"""

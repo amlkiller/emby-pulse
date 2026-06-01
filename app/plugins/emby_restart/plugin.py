@@ -4,7 +4,6 @@ Emby 服务器自动重启插件 (Pro 专享)
 """
 import logging
 import threading
-import time
 import datetime
 from fastapi import Request
 from app.plugins.base import PluginBase
@@ -29,6 +28,7 @@ class EmbyRestartPlugin(PluginBase):
         super().__init__()
         self.scheduler_thread = None
         self.scheduler_running = False
+        self._stop_event = threading.Event()
         self.last_restart = None
         self.restart_history = []
         self._load_history()  # 🔥 从数据库加载历史
@@ -69,18 +69,27 @@ class EmbyRestartPlugin(PluginBase):
 
     def _start_scheduler(self):
         """启动调度器"""
-        if self.scheduler_running:
+        if self.scheduler_thread and self.scheduler_thread.is_alive():
             return
+        self._stop_event.clear()
         self.scheduler_running = True
-        self.scheduler_thread = threading.Thread(target=self._scheduler_loop, daemon=True)
+        self.scheduler_thread = threading.Thread(
+            target=self._scheduler_loop,
+            daemon=True,
+            name="emby-restart-scheduler",
+        )
         self.scheduler_thread.start()
         logger.info(f"[{self.name}] 调度器已启动")
 
     def _stop_scheduler(self):
         """停止调度器"""
         self.scheduler_running = False
-        if self.scheduler_thread:
-            self.scheduler_thread.join(timeout=5)
+        self._stop_event.set()
+        thread = self.scheduler_thread
+        if thread and thread.is_alive():
+            thread.join(timeout=1)
+        if not thread or not thread.is_alive():
+            self.scheduler_thread = None
         logger.info(f"[{self.name}] 调度器已停止")
 
     def _scheduler_loop(self):
@@ -94,7 +103,8 @@ class EmbyRestartPlugin(PluginBase):
                 current_minute = now.hour * 60 + now.minute
                 
                 if current_minute == last_check_minute:
-                    time.sleep(30)
+                    if self._stop_event.wait(30):
+                        return
                     continue
                 last_check_minute = current_minute
                 
@@ -162,10 +172,12 @@ class EmbyRestartPlugin(PluginBase):
                     self.log(f"触发定时重启，模式: {mode}", notify=False)
                     self._do_restart()
                 
-                time.sleep(30)
+                if self._stop_event.wait(30):
+                    return
             except Exception as e:
                 logger.error(f"[{self.name}] 调度器异常: {e}")
-                time.sleep(60)
+                if self._stop_event.wait(60):
+                    return
 
     def _do_restart(self):
         """执行重启"""

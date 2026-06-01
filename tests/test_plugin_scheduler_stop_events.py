@@ -40,6 +40,7 @@ PLUGIN_CASES = [
         "app.plugins.auto_expire.plugin",
         "AutoExpirePlugin",
         "_thread",
+        "_running",
         "_check_loop",
         "auto-expire-check",
     ),
@@ -47,6 +48,7 @@ PLUGIN_CASES = [
         "app.plugins.temp_account.plugin",
         "TempAccountPlugin",
         "_thread",
+        "_running",
         "_check_loop",
         "temp-account-check",
     ),
@@ -54,6 +56,7 @@ PLUGIN_CASES = [
         "app.plugins.keep_alive.plugin",
         "KeepAlivePlugin",
         "_thread",
+        "_running",
         "_check_loop",
         "keep-alive-check",
     ),
@@ -61,8 +64,25 @@ PLUGIN_CASES = [
         "app.plugins.smart_collections.plugin",
         "SmartCollectionsPlugin",
         "_sync_thread",
+        "_running",
         "_sync_loop",
         "smart-collections-sync",
+    ),
+    (
+        "app.plugins.view_report.plugin",
+        "ViewReportPlugin",
+        "scheduler_thread",
+        "scheduler_running",
+        "_scheduler_loop",
+        "view-report-scheduler",
+    ),
+    (
+        "app.plugins.emby_restart.plugin",
+        "EmbyRestartPlugin",
+        "scheduler_thread",
+        "scheduler_running",
+        "_scheduler_loop",
+        "emby-restart-scheduler",
     ),
 ]
 
@@ -75,9 +95,12 @@ def _build_plugin(monkeypatch, module_path, class_name):
 
     module = importlib.import_module(module_path)
     plugin_class = getattr(module, class_name)
-    monkeypatch.setattr(plugin_class, "_setup_routes", lambda self: None)
+    if hasattr(plugin_class, "_setup_routes"):
+        monkeypatch.setattr(plugin_class, "_setup_routes", lambda self: None)
     if hasattr(plugin_class, "_init_db"):
         monkeypatch.setattr(plugin_class, "_init_db", lambda self: None)
+    if hasattr(plugin_class, "_load_history"):
+        monkeypatch.setattr(plugin_class, "_load_history", lambda self: None)
 
     plugin = plugin_class()
     plugin._enabled = True
@@ -86,11 +109,11 @@ def _build_plugin(monkeypatch, module_path, class_name):
 
 
 @pytest.mark.parametrize(
-    "module_path,class_name,thread_attr,loop_name,thread_name",
+    "module_path,class_name,thread_attr,running_attr,loop_name,thread_name",
     PLUGIN_CASES,
 )
 def test_plugin_scheduler_start_is_idempotent_and_disable_clears_thread(
-    monkeypatch, module_path, class_name, thread_attr, loop_name, thread_name
+    monkeypatch, module_path, class_name, thread_attr, running_attr, loop_name, thread_name
 ):
     module, plugin = _build_plugin(monkeypatch, module_path, class_name)
     FakeThread.instances = []
@@ -109,23 +132,23 @@ def test_plugin_scheduler_start_is_idempotent_and_disable_clears_thread(
     assert thread.name == thread_name
     assert thread.target == getattr(plugin, loop_name)
     assert getattr(plugin, thread_attr) is thread
-    assert plugin._running is True
+    assert getattr(plugin, running_attr) is True
     assert not plugin._stop_event.is_set()
 
     plugin.on_disable()
 
-    assert plugin._running is False
+    assert getattr(plugin, running_attr) is False
     assert plugin._stop_event.is_set()
     assert thread.join_timeout == 1
     assert getattr(plugin, thread_attr) is None
 
 
 @pytest.mark.parametrize(
-    "module_path,class_name,thread_attr,loop_name,thread_name",
+    "module_path,class_name,thread_attr,running_attr,loop_name,thread_name",
     PLUGIN_CASES,
 )
 def test_plugin_scheduler_loops_use_interruptible_waits(
-    monkeypatch, module_path, class_name, thread_attr, loop_name, thread_name
+    monkeypatch, module_path, class_name, thread_attr, running_attr, loop_name, thread_name
 ):
     _, plugin = _build_plugin(monkeypatch, module_path, class_name)
 
