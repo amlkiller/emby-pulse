@@ -153,7 +153,7 @@ def ensure_db_schema():
 
 ensure_db_schema()
 
-def get_emby_admin(host, key):
+def get_emby_admin():
     try:
         users = media_api.get("/Users", timeout=5).json()
         for u in users:
@@ -162,10 +162,9 @@ def get_emby_admin(host, key):
     except: return None
 
 def check_emby_exists(tmdb_id, media_type, season=0):
-    host = cfg.get("emby_host"); key = cfg.get("emby_api_key")
-    if not host or not key: return False
+    if not media_api.host or not media_api.api_key: return False
     try:
-        admin_id = get_emby_admin(host, key)
+        admin_id = get_emby_admin()
         if not admin_id: return False
         type_filter = "Movie" if media_type == "movie" else "Series"
         res = media_api.get(f"/Users/{admin_id}/Items", params={
@@ -385,10 +384,8 @@ def get_item_info(item_id: str, request: Request):
     # 🔒 安全检查：管理员或已绑定 Emby 的报片用户
     if not (is_admin_user(request) or request.session.get("req_user")):
         return {"status": "error", "message": "请先登录"}
-    key = cfg.get("emby_api_key")
-    host = (cfg.get("emby_host") or "").rstrip('/') 
     try:
-        admin_id = get_emby_admin(host, key)
+        admin_id = get_emby_admin()
         if not admin_id: return {"status": "error"}
         
         res = media_api.get(f"/Users/{admin_id}/Items/{item_id}", timeout=5)
@@ -540,10 +537,9 @@ def get_tv_details(tmdb_id: int, request: Request):
         return {"status": "error", "message": "请先登录"}
     proxies = get_safe_proxies()
     try:
-        emby_host = cfg.get("emby_host"); emby_key = cfg.get("emby_api_key")
         local_seasons_map = {} 
         
-        admin_id = get_emby_admin(emby_host, emby_key)
+        admin_id = get_emby_admin()
         if admin_id:
             s_res = media_api.get(f"/Users/{admin_id}/Items", params={
                 "AnyProviderIdEquals": f"tmdb.{tmdb_id}",
@@ -1223,7 +1219,7 @@ def _refresh_community_cache():
         return
     try:
         # 获取 admin 用户 ID
-        admin_id = get_emby_admin(cfg.get("emby_host"), cfg.get("emby_api_key"))
+        admin_id = get_emby_admin()
         if not admin_id:
             logger.warning("缓存刷新失败: 无法获取 admin 用户")
             return
@@ -1369,7 +1365,7 @@ def _get_local_episodes(series_id: str, season: int) -> set:
     """获取库里某剧集某季已有的集数"""
     try:
         from app.infra.clients.media_server_client import media_api
-        admin_id = get_emby_admin(cfg.get("emby_host"), cfg.get("emby_api_key"))
+        admin_id = get_emby_admin()
         if not admin_id:
             return set()
         
