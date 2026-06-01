@@ -513,7 +513,7 @@ class KeepAlivePlugin(PluginBase):
                 self._log(f"⚠️ 未配置任何通知渠道 (tg_bot_token 或企业微信)", level="warning")
             else:
                 # 使用 bot.send_message 统一发送，让 bot_service 处理 TG 和企业微信
-                from app.services.bot_service import bot
+                from app.domains.notifications.bot_service import bot
                 bot.send_message("sys_notify", report_msg, platform="all")
                 self._log(f"✅ 管理员通知已发送")
         except Exception as e:

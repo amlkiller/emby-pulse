@@ -583,7 +583,7 @@ async def api_register(data: RegisterModel, request: Request):
             
             # 7. 发送通知
             try:
-                from app.services.bot_service import bot
+                from app.domains.notifications.bot_service import bot
                 days_display = "永久" if (days == 0 or days >= 36500) else f"{days} 天"
                 msg = f"🎟️ <b>新用户注册</b>\n\n👤 {safe_name}\n📅 有效期：{days_display}\n🔗 邀请码：{data.code}\n📱 注册渠道：管理后台"
                 bot.send_message("sys_notify", msg, platform="all")

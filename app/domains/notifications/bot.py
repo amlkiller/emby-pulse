@@ -44,7 +44,7 @@ from app.domains.notifications.bot_admin_dao import (
     reset_lottery_draw,
     update_tg_binding_names,
 )
-from app.services.bot_service import bot
+from app.domains.notifications.bot_service import bot
 from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
 import threading
 import base64

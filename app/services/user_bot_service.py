@@ -249,7 +249,7 @@ def _send_open_reg_closed_notify(reason=""):
     # 发送到群聊
     if notify_group:
         try:
-            from app.services.bot_service import bot
+            from app.domains.notifications.bot_service import bot
             allowed_groups = get_user_bot_allowed_groups()
             if allowed_groups:
                 group_ids = [g.strip() for g in allowed_groups.replace('，', ',').split('\n') if g.strip()]
@@ -1370,7 +1370,7 @@ def _do_code_register(chat_id, tg_user_id, custom_name, code, days, tpl_id, rout
                 _send(chat_id, f"🎉 <b>注册码激活成功！</b>\n\n👤 用户名：<code>{safe_name}</code>\n🔑 密码：<code>{password}</code>\n📅 有效期：{expire_display}\n\n💡 密码可在「个人中心」随时查看")
 
                 try:
-                    from app.services.bot_service import bot
+                    from app.domains.notifications.bot_service import bot
                     from app.infra.db.notification_dao import add_sys_notification
                     days_display = "永久" if (days == -1 or days == 0 or days >= 36500) else f"{days} 天"
                     msg = f"🎟️ <b>新用户注册</b>\n\n👤 {safe_name}\n📅 有效期：{days_display}\n🔗 邀请码：{code}\n📱 注册渠道：TG机器人\n🆔 TG：{tg_user_id}"
@@ -2374,7 +2374,7 @@ def cmd_grab(chat_id, tg_user_id, text, is_group=False, tg_name="", user_msg_id=
                     if message_id:
                         _delete_messages_later(int(packet_chat_id), [message_id], 15)
                 else:
-                    from app.services.bot_service import bot
+                    from app.domains.notifications.bot_service import bot
                     bot.send_message("sys_notify", notify_msg, platform="all")
             except Exception as e:
                 logger.error(f"[红包] 发送抢完通知失败: {e}")
@@ -3012,7 +3012,7 @@ def cmd_redeem_callback(chat_id, tg_user_id, item_id, cq_id):
         _send(chat_id, f"✅ <b>兑换成功！</b>\n\n🛒 {target_name}\n💰 花费 {cost} 积分，余额 {new_pts}\n{result_msg}")
 
         try:
-            from app.services.bot_service import bot
+            from app.domains.notifications.bot_service import bot
             from app.infra.db.notification_dao import add_sys_notification
             notify_msg = f"🎁 <b>积分商城兑换</b>\n\n👤 {uname}\n🛒 {target_name}\n💰 {cost} 积分\n📱 来源：TG 用户机器人"
             if target_type == "random_renew":
@@ -3163,7 +3163,7 @@ def _submit_request(chat_id, tg_user_id, media_type, tmdb_id, season):
               reply_markup={"inline_keyboard": [[{"text": "📋 我的求片", "callback_data": "ub_menu_myrequests"}, {"text": "🔙 主菜单", "callback_data": "ub_back_menu"}]]})
 
         try:
-            from app.services.bot_service import bot
+            from app.domains.notifications.bot_service import bot
             from app.infra.db.notification_dao import add_sys_notification
             from app.core.config import REPORT_COVER_URL
             from app.domains.notifications.notify_admin import get_notify_rule

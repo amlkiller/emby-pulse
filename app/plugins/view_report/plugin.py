@@ -773,7 +773,7 @@ class ViewReportPlugin(PluginBase):
         
         # 发送
         try:
-            from app.services.bot_service import bot
+            from app.domains.notifications.bot_service import bot
             self.log(f"bot 实例: {bot}, 类型: {type(bot)}", notify=False)
             
             # 判断是否需要发送到企微和TG

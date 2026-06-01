@@ -487,7 +487,7 @@ class Cloud115Plugin(PluginBase):
 
     def _notify(self, chat_id, text, platform, reply_markup=None):
         try:
-            from app.services.bot_service import bot
+            from app.domains.notifications.bot_service import bot
             if reply_markup:
                 bot.send_message(chat_id, text, reply_markup=reply_markup, platform=platform)
             else:
@@ -514,7 +514,7 @@ def handle_115_callback(data, chat_id, cq_id, platform):
     links = _transfer_cache.pop(link_key, None)
     if not links:
         try:
-            from app.services.bot_service import bot
+            from app.domains.notifications.bot_service import bot
             bot.send_message(chat_id, "⚠️ 链接已过期，请重新发送", platform=platform)
         except:
             pass
@@ -556,7 +556,7 @@ def handle_115_offline_callback(data, chat_id, cq_id, platform):
     cache_data = _offline_cache.pop(link_key, None)
     if not cache_data:
         try:
-            from app.services.bot_service import bot
+            from app.domains.notifications.bot_service import bot
             bot.send_message(chat_id, "⚠️ 链接已过期，请重新发送", platform=platform)
         except:
             pass

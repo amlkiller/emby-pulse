@@ -2,7 +2,7 @@ from fastapi import APIRouter, Request, Response
 from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
 from app.schemas.models import PushRequestModel
 from app.domains.reports.report_service import report_gen, HAS_PIL
-from app.services.bot_service import bot
+from app.domains.notifications.bot_service import bot
 import io
 
 router = APIRouter()

@@ -13,7 +13,7 @@ from app.domains.system.task_dao import (
     set_task_notify_enabled,
 )
 from app.infra.clients.media_server_client import media_api
-from app.services.bot_service import bot
+from app.domains.notifications.bot_service import bot
 from app.core.security_utils import safe_error_message
 
 router = APIRouter()

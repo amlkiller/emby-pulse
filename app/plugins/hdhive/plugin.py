@@ -1188,7 +1188,7 @@ class HDHivePlugin(PluginBase):
             message_id: 消息ID（如果提供则编辑消息）
         """
         try:
-            from app.services.bot_service import bot
+            from app.domains.notifications.bot_service import bot
             if message_id and platform == "tg":
                 # 编辑已有消息
                 logger.info(f"[_notify] 编辑消息: chat_id={chat_id}, message_id={message_id}, platform={platform}")
@@ -1306,7 +1306,7 @@ class HDHivePlugin(PluginBase):
                                 
                                 msg = "\n".join(msg_lines)
                                 try:
-                                    from app.services.bot_service import bot
+                                    from app.domains.notifications.bot_service import bot
                                     bot.send_message("sys_notify", msg, platform="all")
                                 except Exception as e:
                                     logger.error(f"[影巢] 发送签到通知失败: {e}")
@@ -1712,7 +1712,7 @@ def handle_request_hdhive_search(data, chat_id, cq_id, platform):
     if not plugin or not plugin.enabled:
         # 编辑原消息提示插件未启用
         try:
-            from app.services.bot_service import bot
+            from app.domains.notifications.bot_service import bot
             bot.send_message(chat_id, "⚠️ 影巢插件未启用，请先在后台配置影巢 API Key", platform=platform)
         except:
             pass

@@ -1007,7 +1007,7 @@ class HDHiveSignPlugin(PluginBase):
         msg_lines.append(f"💬 {message}")
         
         try:
-            from app.services.bot_service import bot
+            from app.domains.notifications.bot_service import bot
             bot.send_message("sys_notify", "\n".join(msg_lines), platform="all")
         except Exception as e:
             logger.error(f"[影巢签到] 发送通知失败: {e}")

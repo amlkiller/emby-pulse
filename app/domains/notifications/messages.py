@@ -1046,7 +1046,7 @@ def mark_announcement_read(ann_id: int, request: Request):
 def _send_bot_notify_for_user_message(user_id: str, username: str, content: str, conv_id: int):
     """用户发消息时，发送机器人通知给管理员"""
     try:
-        from app.services.bot_service import bot
+        from app.domains.notifications.bot_service import bot
         
         # 检查是否启用机器人消息通知
         if not is_message_bot_notify_enabled():

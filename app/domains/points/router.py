@@ -12,7 +12,7 @@ from app.infra.db.notification_dao import add_sys_notification
 from app.domains.system import invitation_dao
 from app.domains.points import point_dao
 from app.infra.clients.media_server_client import media_api
-from app.services.bot_service import bot
+from app.domains.notifications.bot_service import bot
 
 from app.domains.users.auth import check_permission
 

@@ -49,7 +49,7 @@ from app.domains.media_requests.media_request_dao import (
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
 # 🔥 补回丢失的这一行：引入基础数据模型
 from app.schemas.models import MediaRequestSubmitModel as BaseSubmitModel
-from app.services.bot_service import bot
+from app.domains.notifications.bot_service import bot
 # 🔥 引入媒体适配器用于创建用户
 from app.infra.clients.media_server_client import media_api
 from app.infra.config.media_server_settings import (
@@ -2016,7 +2016,7 @@ async def user_community_register(data: UserRegisterModel, request: Request):
             # 8. 发送通知
             try:
                 from app.infra.db.notification_dao import add_sys_notification
-                from app.services.bot_service import bot
+                from app.domains.notifications.bot_service import bot
                 from app.domains.notifications.notify_admin import get_notify_rule
                 
                 rule = get_notify_rule('user_register')
