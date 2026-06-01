@@ -42,7 +42,7 @@ def api_perf_status(request: Request):
 
     image_cache = {"files": 0, "bytes": 0}
     try:
-        from app.routers import proxy
+        from app.domains.proxy import router as proxy
         if os.path.exists(proxy.IMAGE_CACHE_DIR):
             for name in os.listdir(proxy.IMAGE_CACHE_DIR):
                 path = os.path.join(proxy.IMAGE_CACHE_DIR, name)
