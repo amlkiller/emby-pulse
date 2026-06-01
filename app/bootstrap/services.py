@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import secrets
 import threading
@@ -33,10 +32,9 @@ def audit_proxy_config() -> None:
 
 
 def start_dashboard_cache_tasks() -> None:
-    from app.domains.playback.stats import preload_dashboard_cache, start_dashboard_cache_refresh_loop
+    from app.domains.playback.stats import start_dashboard_cache_tasks as playback_start_dashboard_cache_tasks
 
-    asyncio.create_task(preload_dashboard_cache())
-    asyncio.create_task(start_dashboard_cache_refresh_loop())
+    playback_start_dashboard_cache_tasks()
 
 
 def start_community_cache_refresh() -> None:

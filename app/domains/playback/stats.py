@@ -1373,6 +1373,12 @@ async def api_preload_status(request: Request):
         }
     }
 
+
+def start_dashboard_cache_tasks() -> None:
+    asyncio.create_task(preload_dashboard_cache())
+    asyncio.create_task(start_dashboard_cache_refresh_loop())
+
+
 @router.get("/api/dashboard/init")
 async def api_dashboard_init(request: Request, user_id: Optional[str] = None):
     # 🔒 管理后台首屏聚合接口，仅管理员可访问
