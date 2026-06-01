@@ -6,12 +6,12 @@ import logging
 import threading
 import time
 import datetime
-import requests
 from fastapi import Request
 from app.plugins.base import PluginBase
 from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
 from app.core.config import cfg
 from app.dao.emby_restart_dao import create_emby_restart_history, list_emby_restart_history
+from app.infra.clients.media_server_client import media_api
 
 logger = logging.getLogger("uvicorn")
 
@@ -228,11 +228,7 @@ class EmbyRestartPlugin(PluginBase):
             return {"success": False, "message": "配置不完整"}
         
         try:
-            host = host.rstrip('/')
-            res = requests.post(
-                f"{host}/emby/System/Restart?api_key={api_key}",
-                timeout=10
-            )
+            res = media_api.restart_server(host, api_key, timeout=10)
             if res.status_code == 204:
                 return {"success": True, "message": "重启命令已发送"}
             else:

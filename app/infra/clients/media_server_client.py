@@ -137,6 +137,12 @@ class MediaServerAdapter:
         headers = self._get_headers_for(api_key, server_type)
         return self.session.get(url, headers=headers, timeout=timeout)
 
+    def restart_server(self, host: str, api_key: str, server_type: str = "emby", *, timeout: float = 10):
+        """Send a restart command using explicit media server settings."""
+        url = self._build_url_for(host, server_type, "/System/Restart")
+        headers = self._get_headers_for(api_key, server_type)
+        return self.session.post(url, headers=headers, params={"api_key": api_key}, timeout=timeout)
+
     def health_check(self, timeout: float = 3.0) -> bool:
         """探活 Emby/Jellyfin。结果带 5 秒 TTL 缓存，避免批量场景放大请求。
 
