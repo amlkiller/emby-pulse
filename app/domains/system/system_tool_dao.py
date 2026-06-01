@@ -6,8 +6,35 @@ import json
 import sqlite3
 
 from app.core.security_utils import safe_error_message
-from app.infra.db.schema_registry import SYSTEM_TABLES
+from app.infra.db.schema_registry import PLAYBACK_SCHEMA, SYSTEM_TABLES, TABLE_ALTERS, TABLE_SCHEMAS
 from app.infra.db.system_store import system_store
+
+
+REPAIR_TABLE_MESSAGES = {
+    "PlaybackActivity": "已修复: 播放活动主表",
+    "users_meta": "已修复: 用户元数据表",
+    "invitations": "已修复: 邀请码表",
+    "tv_calendar_cache": "已修复: 追剧日历缓存表",
+    "media_requests": "已修复: 求片主表",
+    "request_users": "已修复: 求片关联表",
+    "insight_ignores": "已修复: 盘点忽略表",
+    "gap_records": "已修复: 缺集记录表",
+}
+
+UPGRADE_TABLE_LABELS = {
+    "PlaybackActivity": "播放活动主表",
+    "users_meta": "用户元数据表",
+    "invitations": "邀请码表",
+    "tv_calendar_cache": "追剧日历缓存表",
+    "media_requests": "求片主表",
+    "request_users": "求片关联表",
+    "insight_ignores": "盘点忽略表",
+    "gap_records": "缺集记录表",
+}
+
+UPGRADE_COLUMN_MESSAGES = {
+    ("invitations", "template_user_id"): "已升级: 邀请码模板字段",
+}
 
 
 def check_system_table_integrity():
@@ -62,145 +89,49 @@ def system_database_exists() -> bool:
     return os.path.exists(system_store.db_path)
 
 
+def _schema_sql_for_repair_table(table_name: str) -> str:
+    if table_name == "PlaybackActivity":
+        return PLAYBACK_SCHEMA
+    return TABLE_SCHEMAS[table_name]
+
+
+def _column_name_from_add_column(alter_sql: str) -> str:
+    parts = alter_sql.split("ADD COLUMN ", 1)
+    if len(parts) == 1:
+        return ""
+    return parts[1].split()[0].strip('"`[]')
+
+
+def _upgrade_message(table_name: str, column_name: str) -> str:
+    mapped = UPGRADE_COLUMN_MESSAGES.get((table_name, column_name))
+    if mapped:
+        return mapped
+    table_label = UPGRADE_TABLE_LABELS.get(table_name, table_name)
+    return f"已升级: {table_label}字段 {column_name}"
+
+
 def repair_core_system_tables():
     results = []
     with system_store.connect() as conn:
         cursor = conn.cursor()
 
-        try:
-            cursor.execute("SELECT 1 FROM PlaybackActivity LIMIT 1")
-        except sqlite3.OperationalError:
-            cursor.execute(
-                """CREATE TABLE IF NOT EXISTS PlaybackActivity (
-                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    UserId TEXT,
-                    UserName TEXT,
-                    ItemId TEXT,
-                    ItemName TEXT,
-                    PlayDuration INTEGER,
-                    DateCreated DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    Client TEXT,
-                    DeviceName TEXT
-                )"""
-            )
-            results.append("已修复: 播放活动主表")
-
-        try:
-            cursor.execute("SELECT 1 FROM users_meta LIMIT 1")
-        except sqlite3.OperationalError:
-            cursor.execute(
-                """CREATE TABLE IF NOT EXISTS users_meta (
-                    user_id TEXT PRIMARY KEY,
-                    expire_date TEXT,
-                    note TEXT,
-                    created_at TEXT
-                )"""
-            )
-            results.append("已修复: 用户元数据表")
-
-        try:
-            cursor.execute("SELECT 1 FROM invitations LIMIT 1")
+        for table_name, repair_message in REPAIR_TABLE_MESSAGES.items():
             try:
-                cursor.execute("SELECT template_user_id FROM invitations LIMIT 1")
+                cursor.execute(f"SELECT 1 FROM {table_name} LIMIT 1")
             except sqlite3.OperationalError:
-                cursor.execute("ALTER TABLE invitations ADD COLUMN template_user_id TEXT")
-                results.append("已升级: 邀请码模板字段")
-        except sqlite3.OperationalError:
-            cursor.execute(
-                """CREATE TABLE IF NOT EXISTS invitations (
-                    code TEXT PRIMARY KEY,
-                    days INTEGER,
-                    used_count INTEGER DEFAULT 0,
-                    max_uses INTEGER DEFAULT 1,
-                    created_at TEXT,
-                    used_at DATETIME,
-                    used_by TEXT,
-                    status INTEGER DEFAULT 0,
-                    template_user_id TEXT
-                )"""
-            )
-            results.append("已修复: 邀请码表")
+                cursor.execute(_schema_sql_for_repair_table(table_name))
+                results.append(repair_message)
 
-        try:
-            cursor.execute("SELECT 1 FROM tv_calendar_cache LIMIT 1")
-        except sqlite3.OperationalError:
-            cursor.execute(
-                """CREATE TABLE IF NOT EXISTS tv_calendar_cache (
-                    id TEXT PRIMARY KEY,
-                    series_id TEXT,
-                    season INTEGER,
-                    episode INTEGER,
-                    air_date TEXT,
-                    status TEXT,
-                    data_json TEXT
-                )"""
-            )
-            results.append("已修复: 追剧日历缓存表")
+            for alter_sql in TABLE_ALTERS.get(table_name, []):
+                try:
+                    cursor.execute(alter_sql)
+                except sqlite3.OperationalError as exc:
+                    if "duplicate column" not in str(exc).lower():
+                        raise
+                    continue
 
-        try:
-            cursor.execute("SELECT 1 FROM media_requests LIMIT 1")
-        except sqlite3.OperationalError:
-            cursor.execute(
-                """CREATE TABLE IF NOT EXISTS media_requests (
-                    tmdb_id INTEGER,
-                    media_type TEXT,
-                    title TEXT,
-                    year TEXT,
-                    poster_path TEXT,
-                    status INTEGER DEFAULT 0,
-                    season INTEGER DEFAULT 0,
-                    reject_reason TEXT,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    PRIMARY KEY (tmdb_id, season)
-                )"""
-            )
-            results.append("已修复: 求片主表")
-
-        try:
-            cursor.execute("SELECT 1 FROM request_users LIMIT 1")
-        except sqlite3.OperationalError:
-            cursor.execute(
-                """CREATE TABLE IF NOT EXISTS request_users (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    tmdb_id INTEGER,
-                    user_id TEXT,
-                    username TEXT,
-                    season INTEGER DEFAULT 0,
-                    requested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(tmdb_id, user_id, season)
-                )"""
-            )
-            results.append("已修复: 求片关联表")
-
-        try:
-            cursor.execute("SELECT 1 FROM insight_ignores LIMIT 1")
-        except sqlite3.OperationalError:
-            cursor.execute(
-                """CREATE TABLE IF NOT EXISTS insight_ignores (
-                    item_id TEXT PRIMARY KEY,
-                    item_name TEXT,
-                    ignored_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )"""
-            )
-            results.append("已修复: 盘点忽略表")
-
-        try:
-            cursor.execute("SELECT 1 FROM gap_records LIMIT 1")
-        except sqlite3.OperationalError:
-            cursor.execute(
-                """CREATE TABLE IF NOT EXISTS gap_records (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    series_id TEXT,
-                    series_name TEXT,
-                    season_number INTEGER,
-                    episode_number INTEGER,
-                    status INTEGER DEFAULT 0,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(series_id, season_number, episode_number)
-                )"""
-            )
-            results.append("已修复: 缺集记录表")
+                column_name = _column_name_from_add_column(alter_sql)
+                results.append(_upgrade_message(table_name, column_name))
 
         conn.commit()
     return results

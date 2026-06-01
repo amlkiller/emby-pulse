@@ -420,20 +420,24 @@ tokens = list_api_tokens(user_id)
 - `app.infra.db.schema_registry` owns schema metadata and is the only implementation import point for schema metadata.
 - During the transition, `app.core.db_schemas` may re-export values from `schema_registry` for compatibility; other app modules must not import `app.core.db_schemas` directly.
 - Runtime modules must not keep local copies of `SYSTEM_TABLES` or `PLAYBACK_TABLES`; use the registry object so table lists cannot drift.
+- Repair helpers for registry-owned tables must create tables from `TABLE_SCHEMAS` / `PLAYBACK_SCHEMA` and apply compatible entries from `TABLE_ALTERS`; do not keep a second handwritten DDL copy in the repair path.
 - This boundary does not authorize behavior changes to DDL, ALTER order, migration mode, or repair semantics.
 
 ### 4. Validation & Error Matrix
 
 - New direct `from app.core.db_schemas import ...` outside `app/core/db_schemas.py` itself -> fail the schema boundary regression test.
 - New local `SYSTEM_TABLES = [...]` / `PLAYBACK_TABLES = [...]` in `app/infra/db/database.py` -> fail the schema boundary regression test.
+- New multiline `CREATE TABLE` copy for a registry-owned repair table in `app.domains.system.system_tool_dao.repair_core_system_tables()` -> fail focused repair/schema registry tests.
 - Need a new schema metadata value -> add/export it through `schema_registry`, then update focused tests.
 
 ### 5. Good/Base/Bad Cases
 
 - Good: `app.infra.db.database` imports `SYSTEM_TABLES` from `app.infra.db.schema_registry`.
 - Good: `app.domains.system.system_tool_dao` imports `SYSTEM_TABLES` from `app.infra.db.schema_registry`.
+- Good: `app.domains.system.system_tool_dao.repair_core_system_tables()` creates repaired registry-owned tables from `TABLE_SCHEMAS` / `PLAYBACK_SCHEMA` and applies `TABLE_ALTERS`.
 - Base: `app.core.db_schemas` temporarily re-exports values from `app.infra.db.schema_registry`.
 - Bad: `app.infra.db.db_manager` imports `TABLE_SCHEMAS` directly from `app.core.db_schemas`.
+- Bad: `repair_core_system_tables()` contains a second hand-written `CREATE TABLE IF NOT EXISTS media_requests (...)` definition.
 - Bad: `app.infra.db.database` defines its own `SYSTEM_TABLES` list.
 
 ### 6. Tests Required
@@ -441,6 +445,7 @@ tokens = list_api_tokens(user_id)
 - Focused boundary test: assert no implementation module imports `app.core.db_schemas`; `app/core/db_schemas.py` remains only as a compatibility re-export from `app.infra.db.schema_registry`.
 - Focused ownership test: assert `app.infra.db.schema_registry` contains the schema metadata definitions and does not import `app.core.db_schemas`.
 - Focused identity test: assert `app.infra.db.database.SYSTEM_TABLES is app.infra.db.schema_registry.SYSTEM_TABLES`.
+- Focused repair test: run `repair_core_system_tables()` against a temporary database and assert registry-backed table creation plus registered ALTER application.
 - Compile/import check changed database modules with `uv run --with-requirements requirements.txt`.
 - Run the full pytest suite before completing a schema boundary batch.
 
@@ -465,6 +470,7 @@ from app.infra.db.schema_registry import SYSTEM_TABLES
 - Do not import removed compatibility modules such as `app.core.database` or `app.core.db_manager`.
 - Do not import `app.core.db_schemas` directly outside its compatibility module; implementation code should import schema metadata from `app.infra.db.schema_registry`.
 - Do not copy schema metadata lists such as `SYSTEM_TABLES` into runtime modules.
+- Do not copy registry-owned `CREATE TABLE` SQL into repair helpers; use `TABLE_SCHEMAS`, `TABLE_ALTERS`, and `PLAYBACK_SCHEMA`.
 - Do not add new `query_db()` usage in migrated modules.
 - Do not hide playback API passthrough inside system database helpers.
 - Do not mix route response changes into database access migration.
