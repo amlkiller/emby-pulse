@@ -6,7 +6,6 @@ import time
 import logging
 import threading
 import datetime
-import requests
 import secrets
 import string
 import json
@@ -14,6 +13,7 @@ from fastapi import Request
 from app.plugins.base import PluginBase
 from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
 from app.core.config import cfg
+from app.infra.clients.media_server_client import media_api
 from app.infra.clients.telegram_client import telegram_client
 from app.infra.clients.wecom_client import wecom_client
 from app.dao.temp_account_dao import (
@@ -350,16 +350,10 @@ class TempAccountPlugin(PluginBase):
             if not is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             try:
-                emby_host = cfg.get("emby_host", "")
-                emby_key = cfg.get("emby_api_key", "")
-                if not emby_host or not emby_key:
+                if not media_api.host or not media_api.api_key:
                     return {"status": "error", "message": "Emby API 未配置"}
                 
-                res = requests.get(
-                    f"{emby_host}/Users",
-                    headers={"X-Emby-Token": emby_key},
-                    timeout=10
-                )
+                res = media_api.get("/Users", timeout=10)
                 if res.status_code != 200:
                     return {"status": "error", "message": "获取用户列表失败"}
                 
@@ -449,9 +443,7 @@ class TempAccountPlugin(PluginBase):
                                remark: str = "临时账号", tags: str = "") -> dict:
         """创建单个临时账号"""
         try:
-            emby_host = cfg.get("emby_host", "")
-            emby_key = cfg.get("emby_api_key", "")
-            if not emby_host or not emby_key:
+            if not media_api.host or not media_api.api_key:
                 return {"success": False, "error": "Emby API 未配置"}
             
             # 检查用户名是否已存在
@@ -462,10 +454,9 @@ class TempAccountPlugin(PluginBase):
             password = self._generate_password()
             
             # 创建 Emby 用户
-            create_res = requests.post(
-                f"{emby_host}/Users/New",
+            create_res = media_api.post(
+                "/Users/New",
                 params={"Name": username},
-                headers={"X-Emby-Token": emby_key},
                 timeout=10
             )
             if create_res.status_code != 200:
@@ -482,19 +473,18 @@ class TempAccountPlugin(PluginBase):
             emby_user_id = emby_user.get("Id")
             
             # 设置密码
-            requests.post(
-                f"{emby_host}/Users/{emby_user_id}/Password",
+            media_api.post(
+                f"/Users/{emby_user_id}/Password",
                 json={"Id": emby_user_id, "CurrentPw": "", "NewPw": password},
-                headers={"X-Emby-Token": emby_key},
                 timeout=10
             )
             
             # 应用权限模板（包含线路权限）
             if template_user_id:
-                self._apply_policy_template_with_routes(emby_user_id, template_user_id, allow_routes, block_routes, emby_host, emby_key)
+                self._apply_policy_template_with_routes(emby_user_id, template_user_id, allow_routes, block_routes)
             elif allow_routes or block_routes:
                 # 如果没有模板，只应用线路权限
-                self._apply_route_policy(emby_user_id, allow_routes, block_routes, emby_host, emby_key)
+                self._apply_route_policy(emby_user_id, allow_routes, block_routes)
             
             # 发送创建成功通知
             if notify_tg:
@@ -539,16 +529,11 @@ class TempAccountPlugin(PluginBase):
     PARENTAL_POLICY_KEYS = {'MaxParentalRating', 'BlockUnratedItems', 'BlockedTags', 'AllowedTags'}
 
     def _apply_policy_template_with_routes(self, target_user_id: str, template_user_id: str,
-                                           allow_routes: str, block_routes: str,
-                                           emby_host: str, emby_key: str):
+                                           allow_routes: str, block_routes: str):
         """应用权限模板并合并线路权限（一次性操作，避免覆盖）"""
         try:
             # 获取模板用户信息
-            template_res = requests.get(
-                f"{emby_host}/Users/{template_user_id}",
-                headers={"X-Emby-Token": emby_key},
-                timeout=10
-            )
+            template_res = media_api.get(f"/Users/{template_user_id}", timeout=10)
             if template_res.status_code != 200:
                 logger.error(f"[临时账号] 获取模板用户失败: {template_res.status_code}")
                 return
@@ -557,11 +542,7 @@ class TempAccountPlugin(PluginBase):
             template_policy = template_data.get("Policy", {})
             
             # 获取目标用户当前策略
-            target_res = requests.get(
-                f"{emby_host}/Users/{target_user_id}",
-                headers={"X-Emby-Token": emby_key},
-                timeout=10
-            )
+            target_res = media_api.get(f"/Users/{target_user_id}", timeout=10)
             if target_res.status_code != 200:
                 logger.error(f"[临时账号] 获取目标用户失败: {target_res.status_code}")
                 return
@@ -578,11 +559,7 @@ class TempAccountPlugin(PluginBase):
             # 2. 如果有线路权限，覆盖媒体库设置
             if allow_routes or block_routes:
                 # 获取所有媒体库
-                lib_res = requests.get(
-                    f"{emby_host}/Library/VirtualFolders",
-                    headers={"X-Emby-Token": emby_key},
-                    timeout=10
-                )
+                lib_res = media_api.get("/Library/VirtualFolders", timeout=10)
                 if lib_res.status_code == 200:
                     libraries = lib_res.json()
                     allow_list = [r.strip() for r in (allow_routes or "").split(",") if r.strip()]
@@ -610,10 +587,9 @@ class TempAccountPlugin(PluginBase):
                         target_policy["ExcludedSubFolders"] = excluded_folders
             
             # 更新策略
-            update_res = requests.post(
-                f"{emby_host}/Users/{target_user_id}/Policy",
+            update_res = media_api.post(
+                f"/Users/{target_user_id}/Policy",
                 json=target_policy,
-                headers={"X-Emby-Token": emby_key},
                 timeout=10
             )
             if update_res.status_code == 200:
@@ -623,16 +599,11 @@ class TempAccountPlugin(PluginBase):
         except Exception as e:
             logger.error(f"[临时账号] 应用权限模板失败: {e}")
 
-    def _apply_policy_template(self, target_user_id: str, template_user_id: str,
-                               emby_host: str, emby_key: str):
+    def _apply_policy_template(self, target_user_id: str, template_user_id: str):
         """应用权限模板（与用户管理一致）"""
         try:
             # 获取模板用户信息
-            template_res = requests.get(
-                f"{emby_host}/Users/{template_user_id}",
-                headers={"X-Emby-Token": emby_key},
-                timeout=10
-            )
+            template_res = media_api.get(f"/Users/{template_user_id}", timeout=10)
             if template_res.status_code != 200:
                 logger.error(f"[临时账号] 获取模板用户失败: {template_res.status_code}")
                 return
@@ -641,11 +612,7 @@ class TempAccountPlugin(PluginBase):
             template_policy = template_data.get("Policy", {})
             
             # 获取目标用户当前策略
-            target_res = requests.get(
-                f"{emby_host}/Users/{target_user_id}",
-                headers={"X-Emby-Token": emby_key},
-                timeout=10
-            )
+            target_res = media_api.get(f"/Users/{target_user_id}", timeout=10)
             if target_res.status_code != 200:
                 logger.error(f"[临时账号] 获取目标用户失败: {target_res.status_code}")
                 return
@@ -660,10 +627,9 @@ class TempAccountPlugin(PluginBase):
                 target_policy[k] = v
             
             # 更新策略
-            update_res = requests.post(
-                f"{emby_host}/Users/{target_user_id}/Policy",
+            update_res = media_api.post(
+                f"/Users/{target_user_id}/Policy",
                 json=target_policy,
-                headers={"X-Emby-Token": emby_key},
                 timeout=10
             )
             if update_res.status_code == 200:
@@ -676,33 +642,21 @@ class TempAccountPlugin(PluginBase):
     def _delete_emby_user(self, user_id: str):
         """删除 Emby 用户"""
         try:
-            emby_host = cfg.get("emby_host", "")
-            emby_key = cfg.get("emby_api_key", "")
-            if not emby_host or not emby_key:
+            if not media_api.host or not media_api.api_key:
                 return
             
-            requests.delete(
-                f"{emby_host}/Users/{user_id}",
-                headers={"X-Emby-Token": emby_key},
-                timeout=10
-            )
+            media_api.delete(f"/Users/{user_id}", timeout=10)
         except Exception as e:
             logger.error(f"[临时账号] 删除Emby用户失败: {e}")
 
     def _set_emby_user_enabled(self, user_id: str, enabled: int):
         """设置 Emby 用户启用/禁用状态"""
         try:
-            emby_host = cfg.get("emby_host", "")
-            emby_key = cfg.get("emby_api_key", "")
-            if not emby_host or not emby_key:
+            if not media_api.host or not media_api.api_key:
                 return
             
             # 获取用户当前策略
-            user_res = requests.get(
-                f"{emby_host}/Users/{user_id}",
-                headers={"X-Emby-Token": emby_key},
-                timeout=10
-            )
+            user_res = media_api.get(f"/Users/{user_id}", timeout=10)
             if user_res.status_code != 200:
                 return
             
@@ -711,25 +665,19 @@ class TempAccountPlugin(PluginBase):
             policy["IsDisabled"] = not enabled
             
             # 更新策略
-            requests.post(
-                f"{emby_host}/Users/{user_id}/Policy",
+            media_api.post(
+                f"/Users/{user_id}/Policy",
                 json=policy,
-                headers={"X-Emby-Token": emby_key},
                 timeout=10
             )
         except Exception as e:
             logger.error(f"[临时账号] 设置用户状态失败: {e}")
 
-    def _apply_route_policy(self, user_id: str, allow_routes: str, block_routes: str,
-                            emby_host: str, emby_key: str):
+    def _apply_route_policy(self, user_id: str, allow_routes: str, block_routes: str):
         """应用线路权限到 Emby Policy"""
         try:
             # 获取用户当前策略
-            user_res = requests.get(
-                f"{emby_host}/Users/{user_id}",
-                headers={"X-Emby-Token": emby_key},
-                timeout=10
-            )
+            user_res = media_api.get(f"/Users/{user_id}", timeout=10)
             if user_res.status_code != 200:
                 return
             
@@ -737,11 +685,7 @@ class TempAccountPlugin(PluginBase):
             policy = user_data.get("Policy", {})
             
             # 获取所有媒体库
-            lib_res = requests.get(
-                f"{emby_host}/Library/VirtualFolders",
-                headers={"X-Emby-Token": emby_key},
-                timeout=10
-            )
+            lib_res = media_api.get("/Library/VirtualFolders", timeout=10)
             if lib_res.status_code != 200:
                 return
             
@@ -777,10 +721,9 @@ class TempAccountPlugin(PluginBase):
                 policy["ExcludedSubFolders"] = excluded_folders
             
             # 更新策略
-            requests.post(
-                f"{emby_host}/Users/{user_id}/Policy",
+            media_api.post(
+                f"/Users/{user_id}/Policy",
                 json=policy,
-                headers={"X-Emby-Token": emby_key},
                 timeout=10
             )
             logger.info(f"[临时账号] 已应用线路权限: allow={allow_routes}, block={block_routes}")
@@ -806,18 +749,12 @@ class TempAccountPlugin(PluginBase):
             new_password = self._generate_password()
             
             # 更新 Emby 密码
-            emby_host = cfg.get("emby_host", "")
-            emby_key = cfg.get("emby_api_key", "")
-            
-            if emby_host and emby_key and emby_user_id:
+            if media_api.host and media_api.api_key and emby_user_id:
                 # Emby 密码更新 API - 管理员重置不需要 CurrentPw
                 # 注意：需要使用 /emby 前缀
-                pwd_url = f"{emby_host.rstrip('/')}/emby/Users/{emby_user_id}/Password"
-                pwd_res = requests.post(
-                    pwd_url,
+                pwd_res = media_api.post(
+                    f"/Users/{emby_user_id}/Password",
                     json={"Id": emby_user_id, "NewPw": new_password},
-                    headers={"X-Emby-Token": emby_key},
-                    params={"api_key": emby_key},
                     timeout=10
                 )
                 # 204 No Content 也是成功
