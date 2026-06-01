@@ -390,6 +390,7 @@ tokens = list_api_tokens(user_id)
 
 ## Migrations
 
+- The `app.core.database` and `app.core.db_manager` compatibility shells have been removed; imports must target `app.infra.db.database`, `app.infra.db.db_manager`, DAO modules, or query service modules directly.
 - `app.infra.db.schema_registry` is the new import point for schema metadata during migration.
 - Existing schema definitions still delegate to `app.core.db_schemas` until ownership is fully moved.
 - `app.infra.db.migration_service` is the new boundary for migration, health, backup, restore, and database-tool deep-check orchestration and currently delegates to existing implementations.
@@ -398,6 +399,7 @@ tokens = list_api_tokens(user_id)
 
 ## Common Mistakes
 
+- Do not import removed compatibility modules such as `app.core.database` or `app.core.db_manager`.
 - Do not add new `query_db()` usage in migrated modules.
 - Do not hide playback API passthrough inside system database helpers.
 - Do not mix route response changes into database access migration.
