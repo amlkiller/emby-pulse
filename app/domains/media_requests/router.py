@@ -72,6 +72,8 @@ _community_cache = {}
 _community_cache_lock = threading.Lock()
 _COMMUNITY_CACHE_MAX_SIZE = 64
 _community_refresh_lock = threading.Lock()
+_community_refresh_started = False
+_community_refresh_start_lock = threading.Lock()
 
 # 缓存 TTL 配置（秒）
 COMMUNITY_CACHE_TTL = 300  # 默认 5 分钟
@@ -1329,6 +1331,12 @@ def _refresh_community_cache():
 
 
 def start_community_cache_refresh_loop() -> None:
+    global _community_refresh_started
+    with _community_refresh_start_lock:
+        if _community_refresh_started:
+            return
+        _community_refresh_started = True
+
     def _refresh_loop():
         time.sleep(15)
         _refresh_community_cache()

@@ -1262,6 +1262,7 @@ async def _fetch_trend(user_id: str) -> dict:
 
 # 预热状态标记
 _preload_started = False
+_dashboard_cache_tasks_started = False
 _last_refresh_log_time = 0  # 上次打印刷新日志的时间
 
 async def preload_dashboard_cache(silent: bool = False, cache_key: str = _DASHBOARD_PRELOAD_KEY, user_id=None):
@@ -1375,6 +1376,10 @@ async def api_preload_status(request: Request):
 
 
 def start_dashboard_cache_tasks() -> None:
+    global _dashboard_cache_tasks_started
+    if _dashboard_cache_tasks_started:
+        return
+    _dashboard_cache_tasks_started = True
     asyncio.create_task(preload_dashboard_cache())
     asyncio.create_task(start_dashboard_cache_refresh_loop())
 
