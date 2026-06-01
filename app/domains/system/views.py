@@ -12,7 +12,7 @@ from app.domains.system.invitation_dao import (
     restore_invitation_code_usage,
     save_registered_user_meta,
 )
-from app.dao.notification_dao import add_system_notification
+from app.infra.db.notification_dao import add_system_notification
 from app.infra.clients.media_server_client import media_api
 from app.core.security_utils import validate_redirect_url
 from app.core.security import validate_password_strength

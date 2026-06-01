@@ -14,7 +14,7 @@ from app.core.config import REPORT_COVER_URL
 from app.infra.clients.moviepilot_client import moviepilot_client
 from app.infra.clients.tmdb_client import tmdb_client
 from app.infra.config.request_portal_settings import get_pulse_url
-from app.dao.notification_dao import add_sys_notification
+from app.infra.db.notification_dao import add_sys_notification
 from app.dao.media_request_dao import (
     claim_registration_invitation,
     create_media_feedback,
@@ -2015,7 +2015,7 @@ async def user_community_register(data: UserRegisterModel, request: Request):
             
             # 8. 发送通知
             try:
-                from app.dao.notification_dao import add_sys_notification
+                from app.infra.db.notification_dao import add_sys_notification
                 from app.services.bot_service import bot
                 from app.domains.notifications.notify_admin import get_notify_rule
                 

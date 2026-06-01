@@ -1369,7 +1369,7 @@ def _do_code_register(chat_id, tg_user_id, custom_name, code, days, tpl_id, rout
 
                 try:
                     from app.services.bot_service import bot
-                    from app.dao.notification_dao import add_sys_notification
+                    from app.infra.db.notification_dao import add_sys_notification
                     days_display = "永久" if (days == -1 or days == 0 or days >= 36500) else f"{days} 天"
                     msg = f"🎟️ <b>新用户注册</b>\n\n👤 {safe_name}\n📅 有效期：{days_display}\n🔗 邀请码：{code}\n📱 注册渠道：TG机器人\n🆔 TG：{tg_user_id}"
                     bot.send_message("sys_notify", msg, platform="all")
@@ -3011,7 +3011,7 @@ def cmd_redeem_callback(chat_id, tg_user_id, item_id, cq_id):
 
         try:
             from app.services.bot_service import bot
-            from app.dao.notification_dao import add_sys_notification
+            from app.infra.db.notification_dao import add_sys_notification
             notify_msg = f"🎁 <b>积分商城兑换</b>\n\n👤 {uname}\n🛒 {target_name}\n💰 {cost} 积分\n📱 来源：TG 用户机器人"
             if target_type == "random_renew":
                 notify_msg += f"\n🎲 随机结果：{actual_days}天"
@@ -3162,7 +3162,7 @@ def _submit_request(chat_id, tg_user_id, media_type, tmdb_id, season):
 
         try:
             from app.services.bot_service import bot
-            from app.dao.notification_dao import add_sys_notification
+            from app.infra.db.notification_dao import add_sys_notification
             from app.core.config import REPORT_COVER_URL
             from app.domains.notifications.notify_admin import get_notify_rule
             msg = f"🎬 <b>收到新求片心愿</b>\n\n👤 <b>用户：</b>{uname}\n📺 <b>内容：</b>{title} ({year}){season_str}\n📱 <b>来源：</b>TG 用户机器人\n\n请及时前往后台审批处理。"

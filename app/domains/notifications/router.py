@@ -5,7 +5,7 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from app.core.security_utils import safe_error_message
-from app.dao.notification_dao import (
+from app.infra.db.notification_dao import (
     add_system_notification,
     clear_notifications as clear_notifications_data,
     count_unread_notifications,

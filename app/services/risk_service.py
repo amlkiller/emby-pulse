@@ -10,7 +10,7 @@ from app.infra.config.risk_settings import (
     is_risk_control_enabled,
     is_risk_sys_notification_enabled,
 )
-from app.dao.notification_dao import add_system_notification
+from app.infra.db.notification_dao import add_system_notification
 from app.domains.risk.risk_dao import (
     create_risk_log,
     get_tg_user_id_for_emby_user,
