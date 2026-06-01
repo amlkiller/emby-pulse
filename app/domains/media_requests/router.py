@@ -158,8 +158,6 @@ def get_tmdb_season_info(tmdb_id: int, season: int) -> tuple:
 def ensure_db_schema():
     ensure_media_request_schema()
 
-ensure_db_schema()
-
 def get_emby_admin():
     try:
         users = media_api.get("/Users", timeout=5).json()
@@ -1339,6 +1337,11 @@ def start_community_cache_refresh_loop() -> None:
             _refresh_community_cache()
 
     threading.Thread(target=_refresh_loop, daemon=True).start()
+
+
+def start_media_request_services() -> None:
+    ensure_db_schema()
+    start_community_cache_refresh_loop()
 
 
 @router.post("/api/requests/refresh_cache")
