@@ -23,7 +23,7 @@ from app.infra.clients.network_client import network_client
 from app.infra.clients.telegram_client import telegram_client
 from app.infra.clients.wecom_client import wecom_client
 from app.infra.clients.tmdb_client import tmdb_client
-from app.queries import stats_queries
+from app.domains.playback import stats_queries
 from app.utils.proxy_helper import get_safe_proxies, get_safe_wecom_base  # 🔒 SSRF 安全代理读取
 from app.services.report_service import report_gen, HAS_PIL
 from app.core.event_bus import bus

@@ -25,7 +25,7 @@ from app.dao.keep_alive_dao import (
 )
 from app.dao.user_bot_dao import get_binding_by_emby_id
 from app.dao.user_dao import list_permanent_user_expire_records
-from app.queries.stats_queries import get_user_play_summary
+from app.domains.playback.stats_queries import get_user_play_summary
 
 logger = logging.getLogger("uvicorn")
 

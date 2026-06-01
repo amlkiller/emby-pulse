@@ -13,7 +13,7 @@ import random
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from app.dao import invitation_dao, media_request_dao, point_dao, user_bot_dao, user_dao
-from app.queries import stats_queries
+from app.domains.playback import stats_queries
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
 from app.infra.clients.media_server_client import media_api
 from app.infra.clients.network_client import network_client

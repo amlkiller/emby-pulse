@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Request
 from typing import Optional
-from app.queries.stats_queries import build_stats_base_filter, get_playback_column_name, query_stats
+from app.domains.playback.stats_queries import build_stats_base_filter, get_playback_column_name, query_stats
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
 # 🔥 引入核心适配器
 from app.infra.clients.media_server_client import media_api
