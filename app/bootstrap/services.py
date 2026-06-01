@@ -20,7 +20,7 @@ from app.core.session import start_session_services, stop_session_services
 from app.utils.proxy_helper import audit_existing_proxy_config
 
 from .service_registry import BootstrapServiceRegistry
-from .user_portal import start_user_portal_thread
+from .user_portal import start_user_portal_thread, stop_user_portal_thread
 
 _bootstrap_registry = None
 
@@ -60,7 +60,7 @@ def build_bootstrap_registry(app, request_port: int) -> BootstrapServiceRegistry
     registry.register("webhook-token", ensure_strong_webhook_token)
     registry.register("proxy-audit", audit_proxy_config)
     registry.register("notifications", start_notification_services, stop_notification_services)
-    registry.register("user-portal", lambda: start_user_portal_thread(app, request_port))
+    registry.register("user-portal", lambda: start_user_portal_thread(app, request_port), stop_user_portal_thread)
     registry.register("risk-monitor", start_risk_monitor, stop_risk_monitor)
     registry.register("dashboard-cache", start_dashboard_cache_tasks)
     registry.register("media-requests", start_media_request_services, stop_media_request_services)

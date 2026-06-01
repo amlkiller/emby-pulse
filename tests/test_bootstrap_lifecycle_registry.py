@@ -59,6 +59,7 @@ def test_bootstrap_services_use_registry_and_skip_duplicate_starts(monkeypatch):
     monkeypatch.setattr(services, "start_notification_services", record("notifications"))
     monkeypatch.setattr(services, "stop_notification_services", record("stop:notifications"))
     monkeypatch.setattr(services, "start_user_portal_thread", lambda app, port: calls.append(f"user-portal:{port}"))
+    monkeypatch.setattr(services, "stop_user_portal_thread", record("stop:user-portal"))
     monkeypatch.setattr(services, "start_risk_monitor", record("risk-monitor"))
     monkeypatch.setattr(services, "stop_risk_monitor", record("stop:risk-monitor"))
     monkeypatch.setattr(services, "start_dashboard_cache_tasks", record("dashboard-cache"))
@@ -109,7 +110,7 @@ def test_bootstrap_services_use_registry_and_skip_duplicate_starts(monkeypatch):
 
     services.stop_bootstrap_services()
 
-    assert calls[-8:] == [
+    assert calls[-9:] == [
         "stop:session",
         "stop:system-tasks",
         "stop:auth-domain",
@@ -117,6 +118,7 @@ def test_bootstrap_services_use_registry_and_skip_duplicate_starts(monkeypatch):
         "stop:calendar",
         "stop:media-requests",
         "stop:risk-monitor",
+        "stop:user-portal",
         "stop:notifications",
     ]
     services.reset_bootstrap_registry()

@@ -136,6 +136,11 @@ flags. Replace long `time.sleep(...)` calls in lifecycle loops with
 This lets `stop_bootstrap_services()` shut down and then restart services in the
 same process during reloads or tests.
 
+Bootstrap-started server threads, such as the isolated user portal uvicorn
+server, should save both the thread handle and the server handle. Their stop
+hook should request shutdown through the server handle, join briefly, and clear
+stopped handles without changing routing or socket binding behavior.
+
 ## Scenario: External Client Adapter Boundary
 
 ### 1. Scope / Trigger

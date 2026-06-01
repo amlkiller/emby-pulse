@@ -5,6 +5,10 @@ import threading
 
 import uvicorn
 
+_user_portal_lock = threading.Lock()
+_user_portal_thread = None
+_user_portal_server = None
+
 
 def build_user_portal_app(app, request_port: int):
     """Wrap the main app to enforce the user-portal path restrictions."""
@@ -111,6 +115,7 @@ def build_user_portal_app(app, request_port: int):
 
 def start_user_portal_server(app, request_port: int) -> None:
     """Start the isolated user portal on the secondary port."""
+    global _user_portal_server
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -129,11 +134,47 @@ def start_user_portal_server(app, request_port: int) -> None:
     config = uvicorn.Config(app=build_user_portal_app(app, request_port), log_level="error")
     server = uvicorn.Server(config)
     server.install_signal_handlers = lambda: None
+    with _user_portal_lock:
+        _user_portal_server = server
     try:
         loop.run_until_complete(server.serve(sockets=[sock]))
     except BaseException:
         pass
+    finally:
+        loop.close()
+        with _user_portal_lock:
+            if _user_portal_server is server:
+                _user_portal_server = None
+            if threading.current_thread() is _user_portal_thread:
+                globals()["_user_portal_thread"] = None
 
 
 def start_user_portal_thread(app, request_port: int) -> None:
-    threading.Thread(target=start_user_portal_server, args=(app, request_port), daemon=True).start()
+    global _user_portal_thread
+    with _user_portal_lock:
+        if _user_portal_thread and _user_portal_thread.is_alive():
+            return
+        _user_portal_thread = threading.Thread(
+            target=start_user_portal_server,
+            args=(app, request_port),
+            daemon=True,
+            name="user-portal-server",
+        )
+        _user_portal_thread.start()
+
+
+def stop_user_portal_thread() -> None:
+    global _user_portal_thread, _user_portal_server
+    with _user_portal_lock:
+        thread = _user_portal_thread
+        server = _user_portal_server
+        if server:
+            server.should_exit = True
+
+    if thread and thread.is_alive():
+        thread.join(timeout=1)
+
+    with _user_portal_lock:
+        if thread is _user_portal_thread and (thread is None or not thread.is_alive()):
+            _user_portal_thread = None
+            _user_portal_server = None
