@@ -116,7 +116,7 @@ async def emby_webhook(request: Request):
 
         # 🔥 2. 定时检查黑名单设备（防止漏网之鱼）
         try:
-            from app.routers.clients import check_and_block_blacklist_devices
+            from app.domains.system.clients import check_and_block_blacklist_devices
             check_and_block_blacklist_devices()
         except Exception as e:
             logger.debug(f"[定时检查黑名单] 跳过: {e}")
