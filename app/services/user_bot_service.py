@@ -1351,7 +1351,7 @@ def _do_code_register(chat_id, tg_user_id, custom_name, code, days, tpl_id, rout
 
                 # 清除用户列表缓存
                 try:
-                    from app.routers.users import invalidate_emby_users_cache
+                    from app.domains.users.router import invalidate_emby_users_cache
                     invalidate_emby_users_cache()
                 except:
                     pass

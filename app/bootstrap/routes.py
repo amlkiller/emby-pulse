@@ -31,7 +31,9 @@ def register_routes(app: FastAPI) -> None:
     from app.domains.risk import router as risk
     from app.domains.system import api_tokens, audit, clients, db_tools, pro, router as system, system_tools, tasks, views, webhook
     from app.domains.users import auth
-    from app.routers import gaps, history, users
+    from app.domains.media_requests import gaps
+    from app.domains.playback import router as history
+    from app.domains.users import router as users
     from .plugin_routes import register_calendar_notify_routes, register_plugin_routes
 
     app.include_router(views.router)
