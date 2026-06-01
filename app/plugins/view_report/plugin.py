@@ -7,12 +7,12 @@ import datetime
 import threading
 import time
 import re
-import requests
 from fastapi import Request
 from fastapi.responses import Response
 from app.plugins.base import PluginBase
 from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
 from app.core.config import cfg
+from app.infra.clients.media_server_client import media_api
 from app.queries.report_queries import (
     count_report_distinct_users,
     count_report_plays,
@@ -328,14 +328,8 @@ class ViewReportPlugin(PluginBase):
         if _user_map_cache and _user_map_cache_time and (now - _user_map_cache_time) < USER_MAP_CACHE_TTL:
             return _user_map_cache
         
-        # 缓存过期或不存在，重新获取
-        key = cfg.get("emby_api_key")
-        host = cfg.get("emby_host")
-        if not key or not host:
-            return {}
-        
         try:
-            res = requests.get(f"{host}/emby/Users?api_key={key}", timeout=3)
+            res = media_api.get("/Users", timeout=3)
             if res.status_code == 200:
                 user_map = {u['Id']: u['Name'] for u in res.json()}
                 _user_map_cache = user_map
@@ -356,14 +350,8 @@ class ViewReportPlugin(PluginBase):
         if _libraries_cache and _libraries_cache_time and (now - _libraries_cache_time) < LIBRARIES_CACHE_TTL:
             return _libraries_cache
         
-        # 缓存过期或不存在，重新获取
-        key = cfg.get("emby_api_key")
-        host = cfg.get("emby_host")
-        if not key or not host:
-            return []
-        
         try:
-            res = requests.get(f"{host}/emby/Library/VirtualFolders?api_key={key}", timeout=5)
+            res = media_api.get("/Library/VirtualFolders", timeout=5)
             if res.status_code == 200:
                 libraries = []
                 for lib in res.json():
@@ -391,14 +379,9 @@ class ViewReportPlugin(PluginBase):
         if not item_id or not libraries:
             return None
         
-        key = cfg.get("emby_api_key")
-        host = cfg.get("emby_host")
-        if not key or not host:
-            return None
-        
         try:
             # 获取用户ID
-            res = requests.get(f"{host}/emby/Users?api_key={key}", timeout=3)
+            res = media_api.get("/Users", timeout=3)
             if res.status_code != 200:
                 return None
             users = res.json()
@@ -407,7 +390,7 @@ class ViewReportPlugin(PluginBase):
                 return None
             
             # 获取媒体项详情
-            item_res = requests.get(f"{host}/emby/Users/{user_id}/Items/{item_id}?api_key={key}", timeout=3)
+            item_res = media_api.get(f"/Users/{user_id}/Items/{item_id}", timeout=3)
             if item_res.status_code != 200:
                 return None
             
