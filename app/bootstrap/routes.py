@@ -32,7 +32,6 @@ def register_routes(app: FastAPI) -> None:
         notify_rules,
         points,
         pwa,
-        pro,
         proxy,
         report,
         risk,
@@ -45,7 +44,7 @@ def register_routes(app: FastAPI) -> None:
         views,
         webhook,
     )
-    from app.domains.system import audit
+    from app.domains.system import audit, pro
     from .plugin_routes import register_calendar_notify_routes, register_plugin_routes
 
     app.include_router(views.router)
