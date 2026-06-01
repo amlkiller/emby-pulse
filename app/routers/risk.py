@@ -2,7 +2,6 @@ from fastapi import APIRouter, HTTPException, Request
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 from pydantic import BaseModel
 import json
-from app.core.config import cfg, save_config
 from app.dao.risk_dao import (
     count_recent_risk_actions,
     count_vip_users,
@@ -10,6 +9,17 @@ from app.dao.risk_dao import (
     list_top_risk_offenders,
 )
 from app.infra.clients.media_server_client import media_api
+from app.infra.config.risk_settings import (
+    get_default_max_concurrent,
+    get_max_devices,
+    get_violation_action,
+    is_risk_control_enabled,
+    is_risk_sys_notification_enabled,
+    set_default_max_concurrent,
+    set_risk_control_enabled,
+    set_risk_sys_notification_enabled,
+    set_violation_action,
+)
 from app.services.risk_service import ban_user, unban_user, log_risk_action, get_user_concurrent_limit
 from app.core.security_utils import safe_error_message
 
@@ -107,7 +117,7 @@ def get_online_status(request: Request):
         result_list.sort(key=lambda x: x["is_warning"], reverse=True)
         
         # 获取全局最大设备数配置
-        max_devices = cfg.get("max_devices", 10)
+        max_devices = get_max_devices()
         
         return {"data": result_list, "max_devices": max_devices}
     except Exception as e:
@@ -206,10 +216,10 @@ def get_risk_config(request: Request):
         return {"error": "需要管理员权限"}
     
     return {
-        "enable_risk_control": cfg.get("enable_risk_control", False),
-        "default_max_concurrent": cfg.get("default_max_concurrent", 2),
-        "violation_action": cfg.get("violation_action", "warn_only"),
-        "enable_sys_notification": cfg.get("enable_risk_sys_notification", True)
+        "enable_risk_control": is_risk_control_enabled(),
+        "default_max_concurrent": get_default_max_concurrent(),
+        "violation_action": get_violation_action(),
+        "enable_sys_notification": is_risk_sys_notification_enabled()
     }
 
 @router.post("/config")
@@ -221,11 +231,10 @@ def update_risk_config(req: ConfigRequest, request: Request):
     if not is_admin_user(request):
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
-    cfg["enable_risk_control"] = req.enable_risk_control
-    cfg["default_max_concurrent"] = req.default_max_concurrent
-    cfg["violation_action"] = req.violation_action
-    cfg["enable_risk_sys_notification"] = req.enable_sys_notification
-    save_config()
+    set_risk_control_enabled(req.enable_risk_control)
+    set_default_max_concurrent(req.default_max_concurrent)
+    set_violation_action(req.violation_action)
+    set_risk_sys_notification_enabled(req.enable_sys_notification)
     return {"message": "配置已生效"}
 
 @router.get("/summary")
@@ -254,7 +263,7 @@ def get_risk_summary(request: Request):
             "today_stats": today_stats,
             "top_offenders": top_offenders,
             "vip_count": vip_count,
-            "global_limit": cfg.get("default_max_concurrent", 2)
+            "global_limit": get_default_max_concurrent()
         }
     except Exception as e:
         return {"error": safe_error_message(e)}
