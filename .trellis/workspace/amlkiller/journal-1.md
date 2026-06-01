@@ -354,3 +354,36 @@ Routed users_meta bootstrap and remaining non-plugin users_meta column consumers
 ### Next Steps
 
 - None - task complete
+
+
+## Session 11: Calendar Notify Schema Registry Bootstrap
+
+**Date**: 2026-06-02
+**Task**: Calendar Notify Schema Registry Bootstrap
+**Branch**: `main`
+
+### Summary
+
+Registered calendar_notify_config in the schema registry, routed its DAO bootstrap through the shared schema helper, restored database PLAYBACK_TABLES compatibility, and added focused regression coverage.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `163202d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
