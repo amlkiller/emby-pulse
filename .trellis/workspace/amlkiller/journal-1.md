@@ -387,3 +387,36 @@ Registered calendar_notify_config in the schema registry, routed its DAO bootstr
 ### Next Steps
 
 - None - task complete
+
+
+## Session 12: PWA schema registry bootstrap
+
+**Date**: 2026-06-02
+**Task**: PWA schema registry bootstrap
+**Branch**: `main`
+
+### Summary
+
+Registered PWA config/icon tables in schema_registry, routed PWA DAO bootstraps through schema_bootstrap, added focused regression coverage, and updated backend database schema-boundary guidance.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d562c0c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
