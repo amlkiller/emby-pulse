@@ -15,7 +15,7 @@ from app.infra.clients.moviepilot_client import moviepilot_client
 from app.infra.clients.tmdb_client import tmdb_client
 from app.infra.config.request_portal_settings import get_pulse_url
 from app.infra.db.notification_dao import add_sys_notification
-from app.dao.media_request_dao import (
+from app.domains.media_requests.media_request_dao import (
     claim_registration_invitation,
     create_media_feedback,
     decode_gap_cache,
