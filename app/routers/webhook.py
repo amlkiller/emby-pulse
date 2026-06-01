@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Request, HTTPException
-from app.core.config import cfg
 from app.dao.client_dao import list_client_blacklist_names, list_client_whitelist_user_ids
 from app.dao.webhook_playback_dao import save_webhook_playback_ip_data
 # 🔥 引入事件总线
 from app.core.event_bus import bus
 from app.infra.clients.media_server_client import media_api
+from app.infra.config.bot_settings import get_webhook_token
 import json
 import logging
 import secrets
@@ -94,7 +94,7 @@ async def emby_webhook(request: Request):
         raise HTTPException(status_code=401, detail="缺少 Webhook Token，请使用 X-Webhook-Token Header 或 ?token=URL 参数")
 
     # 🔒 常量时间比对，防止时序攻击
-    expected = cfg.get("webhook_token") or ""
+    expected = get_webhook_token() or ""
     if not expected or not secrets.compare_digest(str(token), str(expected)):
         raise HTTPException(status_code=403, detail="Invalid Token")
 
