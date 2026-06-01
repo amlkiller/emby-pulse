@@ -1,7 +1,7 @@
 import requests
 from typing import Optional
 
-from app.core.config import cfg
+from app.infra.config.tmdb_settings import get_tmdb_api_key
 
 
 class TmdbClient:
@@ -10,7 +10,7 @@ class TmdbClient:
 
     @property
     def api_key(self):
-        return cfg.get("tmdb_api_key", "")
+        return get_tmdb_api_key()
 
     def _get(self, path: str, *, params=None, proxies=None, timeout: float = 10):
         request_params = dict(params or {})
