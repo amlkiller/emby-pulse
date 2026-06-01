@@ -23,7 +23,7 @@ os.environ.setdefault("PYTHONIOENCODING", "utf-8")
 
 def _patch_module_for_test(monkeypatch_like_setattr):
     """把模块里的 media_api / _send_open_reg_closed_notify 替换成可控 mock"""
-    from app.services import user_bot_service as ub
+    from app.domains.notifications import user_bot_service as ub
     from app.infra.config import user_bot_settings as ubs
 
     # 模拟 cfg：内存字典

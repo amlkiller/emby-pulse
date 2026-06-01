@@ -658,7 +658,7 @@ async def api_reset_reg_batch(request: Request):
     set_user_bot_registration_batch_used(0)
     # 同步重置内存中的 batch_used，避免后台线程把旧值写回
     try:
-        from app.services import user_bot_service
+        from app.domains.notifications import user_bot_service
         with user_bot_service._batch_used_lock:
             user_bot_service._batch_used_mem = 0
             user_bot_service._batch_used_dirty = 0
@@ -671,7 +671,7 @@ async def api_reset_reg_batch(request: Request):
 async def api_get_reg_quota_status(request: Request):
     """获取名额状态（用于前端显示）"""
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    from app.services import user_bot_service
+    from app.domains.notifications import user_bot_service
 
     quota_mode = get_user_bot_reg_quota_mode()
     quota = get_user_bot_reg_quota()
