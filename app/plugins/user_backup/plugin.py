@@ -8,7 +8,6 @@ import os
 import json
 import logging
 import hashlib
-import requests
 import time
 import threading
 from datetime import datetime, timedelta
@@ -31,6 +30,7 @@ from app.plugins.base import PluginBase
 from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
 from app.core.config import cfg
 from app.infra.clients.media_server_client import media_api
+from app.infra.clients.webdav_client import webdav_client
 
 logger = logging.getLogger("uvicorn")
 
@@ -118,7 +118,7 @@ class UserBackupPlugin(PluginBase):
             # 使用 MKCOL 创建目录（只在首次创建时记录日志）
             if not self._webdav_dir_created:
                 try:
-                    mkcol_resp = requests.request('MKCOL', dir_url.rstrip("/"), auth=auth, timeout=10)
+                    mkcol_resp = webdav_client.request('MKCOL', dir_url.rstrip("/"), auth=auth, timeout=10)
                     if mkcol_resp.status_code in [200, 201, 204]:
                         self.log(f"📁 WebDAV 创建目录成功: {path}")
                         self._webdav_dir_created = True
@@ -132,7 +132,7 @@ class UserBackupPlugin(PluginBase):
             
             # 上传文件
             file_url = dir_url + filename
-            resp = requests.put(file_url, data=file_data, auth=auth, timeout=30)
+            resp = webdav_client.put(file_url, data=file_data, auth=auth, timeout=30)
             
             if resp.status_code in [200, 201, 204]:
                 self.log(f"✅ WebDAV 上传成功: {filename}")
@@ -140,8 +140,8 @@ class UserBackupPlugin(PluginBase):
             elif resp.status_code == 409:
                 # 409 Conflict - 可能是目录不存在，再次尝试创建后上传
                 self.log(f"⚠️ WebDAV 409 冲突，尝试重新创建目录")
-                requests.request('MKCOL', dir_url.rstrip("/"), auth=auth, timeout=10)
-                retry_resp = requests.put(file_url, data=file_data, auth=auth, timeout=30)
+                webdav_client.request('MKCOL', dir_url.rstrip("/"), auth=auth, timeout=10)
+                retry_resp = webdav_client.put(file_url, data=file_data, auth=auth, timeout=30)
                 if retry_resp.status_code in [200, 201, 204]:
                     self.log(f"✅ WebDAV 重试上传成功: {filename}")
                     return True
@@ -1038,10 +1038,14 @@ class UserBackupPlugin(PluginBase):
                 auth = (webdav["user"], webdav["password"]) if webdav["user"] else None
                 
                 # 使用 PROPFIND 获取目录列表
-                resp = requests.request('PROPFIND', dir_url, auth=auth,
+                resp = webdav_client.request(
+                    'PROPFIND',
+                    dir_url,
+                    auth=auth,
                     headers={'Content-Type': 'application/xml', 'Depth': '1'},
                     data='<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:displayname/><d:getlastmodified/><d:getcontentlength/></d:prop></d:propfind>',
-                    timeout=30)
+                    timeout=30,
+                )
                 
                 if resp.status_code not in [200, 207]:
                     return {"status": "error", "message": f"WebDAV 请求失败: HTTP {resp.status_code}"}
@@ -1125,7 +1129,7 @@ class UserBackupPlugin(PluginBase):
                 auth = (webdav["user"], webdav["password"]) if webdav["user"] else None
                 
                 # 下载文件
-                resp = requests.get(file_url, auth=auth, timeout=60)
+                resp = webdav_client.get(file_url, auth=auth, timeout=60)
                 
                 if resp.status_code != 200:
                     return {"status": "error", "message": f"下载失败: HTTP {resp.status_code}"}
@@ -1171,7 +1175,7 @@ class UserBackupPlugin(PluginBase):
                 test_url = url.rstrip("/") + "/"
                 
                 # 使用 OPTIONS 方法测试 WebDAV 连接（WebDAV 标准方法）
-                resp = requests.options(test_url, auth=auth, timeout=10)
+                resp = webdav_client.options(test_url, auth=auth, timeout=10)
                 
                 # 检查是否支持 WebDAV 方法
                 allow_header = resp.headers.get('Allow', '')
@@ -1185,10 +1189,14 @@ class UserBackupPlugin(PluginBase):
                         return {"status": "success", "message": "WebDAV 连接成功"}
                     else:
                         # 尝试 PROPFIND 方法作为备用测试
-                        propfind_resp = requests.request('PROPFIND', test_url, auth=auth, 
+                        propfind_resp = webdav_client.request(
+                            'PROPFIND',
+                            test_url,
+                            auth=auth,
                             headers={'Content-Type': 'application/xml', 'Depth': '0'},
                             data='<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop/></d:propfind>',
-                            timeout=10)
+                            timeout=10,
+                        )
                         if propfind_resp.status_code in [200, 207, 401]:
                             if propfind_resp.status_code == 401:
                                 return {"status": "error", "message": "认证失败，请检查用户名密码"}
@@ -1196,7 +1204,7 @@ class UserBackupPlugin(PluginBase):
                         return {"status": "error", "message": "该服务器不支持 WebDAV"}
                 else:
                     return {"status": "error", "message": f"连接失败: HTTP {resp.status_code}"}
-            except requests.exceptions.Timeout:
+            except webdav_client.Timeout:
                 return {"status": "error", "message": "连接超时"}
             except Exception as e:
                 return {"status": "error", "message": str(e)}
