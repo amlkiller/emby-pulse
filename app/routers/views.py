@@ -6,7 +6,6 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
-from app.core.config import cfg
 from app.dao.invitation_dao import (
     claim_registration_invitation,
     get_invitation_by_code,
@@ -18,6 +17,11 @@ from app.infra.clients.media_server_client import media_api
 from app.core.security_utils import validate_redirect_url
 from app.core.security import validate_password_strength
 from app.infra.clients.tmdb_client import tmdb_client
+from app.infra.config.media_server_settings import (
+    get_media_server_main_public_or_host,
+    get_media_server_routes,
+    get_media_server_welcome_message,
+)
 from app.infra.config.request_portal_settings import (
     get_client_download_url_or_default,
     get_user_portal_url,
@@ -309,9 +313,7 @@ def check_page_permission(request: Request, path: str):
 
 def get_common_vars(request: Request, active_page: str, extra_vars: dict = None):
     # 优先用 get_main_public_url 解析多线路配置
-    emby_url = cfg.get_main_public_url()
-    if not emby_url:
-        emby_url = cfg.get("emby_host") or ""
+    emby_url = get_media_server_main_public_or_host()
     emby_url = emby_url.strip().rstrip('/')
     
     server_id = ""
@@ -591,7 +593,7 @@ async def api_register(data: RegisterModel, request: Request):
             
             # 9. 构建返回数据 - 获取用户可访问的线路
             # 获取全局线路配置
-            all_routes = cfg.get_all_routes()
+            all_routes = get_media_server_routes()
             user_routes = []
             
             if allow_routes:
@@ -608,11 +610,11 @@ async def api_register(data: RegisterModel, request: Request):
             
             # 如果没有任何线路，使用默认服务器地址
             if not user_routes:
-                server_url = cfg.get_main_public_url() or cfg.get("emby_host", "")
+                server_url = get_media_server_main_public_or_host()
                 if server_url:
                     user_routes = [{"name": "默认推荐节点", "url": server_url, "is_main": True}]
             
-            welcome_message = cfg.get("welcome_message", "")
+            welcome_message = get_media_server_welcome_message()
             user_portal_url = get_user_portal_url()
             
             return {

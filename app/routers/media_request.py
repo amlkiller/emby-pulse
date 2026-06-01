@@ -10,7 +10,8 @@ from pydantic import BaseModel
 from typing import Optional, List
 import threading
 
-from app.core.config import cfg, REPORT_COVER_URL
+from app.core.config import cfg  # 兼容旧测试/旧 monkeypatch
+from app.core.config import REPORT_COVER_URL
 from app.infra.clients.moviepilot_client import moviepilot_client
 from app.infra.clients.tmdb_client import tmdb_client
 from app.infra.config.request_portal_settings import get_pulse_url
@@ -52,6 +53,13 @@ from app.schemas.models import MediaRequestSubmitModel as BaseSubmitModel
 from app.services.bot_service import bot
 # 🔥 引入媒体适配器用于创建用户
 from app.infra.clients.media_server_client import media_api
+from app.infra.config.media_server_settings import (
+    get_media_server_main_public_url,
+    get_media_server_main_public_or_host,
+    get_media_server_user_routes,
+    get_media_server_welcome_message,
+)
+from app.infra.config.moviepilot_settings import get_moviepilot_token, get_moviepilot_url
 import logging
 from app.core.security_utils import safe_error_message
 
@@ -223,7 +231,7 @@ def request_system_login(data: RequestLoginModel, request: Request):
     if is_admin_port:
         return {"status": "error", "message": "请从用户社区端口(10308)登录"}
     
-    host = cfg.get("emby_host")
+    host = get_media_server_main_public_or_host()
     if not host: return {"status": "error", "message": "未配置 Emby 服务器"}
     
     # 先获取用户列表，找到匹配的用户
@@ -364,8 +372,8 @@ def check_auth(request: Request):
             except Exception: pass
             
         # 返回用户可见的线路（根据权限过滤）
-        user_routes = cfg.get_user_routes(user.get("Id"))
-        server_url = json.dumps(user_routes) if user_routes else (cfg.get("emby_host") or "")
+        user_routes = get_media_server_user_routes(user.get("Id"))
+        server_url = json.dumps(user_routes) if user_routes else get_media_server_main_public_or_host()
         return {
             "status": "success",
             "user": {**user, "expire_date": expire_date, "expired": is_expired},
@@ -415,7 +423,7 @@ def get_hub_data(request: Request):
     if cached:
         return {"status": "success", "data": cached, "from_cache": True}
     
-    key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
+    host = get_media_server_main_public_or_host()
     uid = user['Id']
     
     top_rated = []; genres_data = []
@@ -634,7 +642,7 @@ async def submit_media_request(request: Request):
             season_str = f" 第 {','.join(str(s) for s in seasons)} 季" if media_type == "tv" and any(s > 0 for s in seasons) else ""
             msg = f"🎬 <b>收到新求片心愿</b>\n\n👤 <b>用户：</b>{uname}\n📺 <b>内容：</b>{title} ({year}){season_str}\n\n请及时前往后台审批处理。"
             
-            admin_url = get_pulse_url() or cfg.get_main_public_url() or "http://127.0.0.1:10307"
+            admin_url = get_pulse_url() or get_media_server_main_public_url() or "http://127.0.0.1:10307"
             # 构建季数字符串用于回调（多季用逗号分隔）
             season_str_cb = ",".join(str(s) for s in seasons) if media_type == "tv" and any(s > 0 for s in seasons) else "0"
             # 标题需要编码以便在 callback_data 中使用（替换下划线）
@@ -814,7 +822,7 @@ def batch_manage_action(data: BulkAdminActionModel, request: Request):
         if data.action == "approve":
             row = get_media_request(tid, sn)
             
-            mp_url = cfg.get("moviepilot_url"); mp_token = cfg.get("moviepilot_token")
+            mp_url = get_moviepilot_url(); mp_token = get_moviepilot_token()
             if mp_url and mp_token and row:
                 payload = { "name": row["title"], "tmdbid": int(tid), "year": str(row["year"]), "type": "电影" if row["media_type"]=="movie" else "电视剧" }
                 if row["media_type"] == "tv": payload["season"] = sn
@@ -1661,7 +1669,7 @@ async def submit_update_request(request: Request):
             
             msg = f"🔄 <b>收到追新请求</b>\n\n👤 <b>用户：</b>{uname}\n📺 <b>内容：</b>{title}{year_display}\n📀 <b>季集：</b>第 {season} 季 E{episodes_str.replace(',', '-')}集\n\n请及时处理。"
             
-            admin_url = get_pulse_url() or cfg.get_main_public_url() or "http://127.0.0.1:10307"
+            admin_url = get_pulse_url() or get_media_server_main_public_url() or "http://127.0.0.1:10307"
             keyboard = {"inline_keyboard": [
                 [{"text": "🔍 影巢搜索", "callback_data": f"req_hdhive_ep_{tmdb_id}_{season}_{episodes_str}_{title.replace('_', '-').replace(':', '').replace('：', '').replace(' ', '-')}"}],
                 [{"text": "✋ 手动接单", "callback_data": f"req_manual_{tmdb_id}_{season}"}, {"text": "💻 网页审批", "url": f"{admin_url.rstrip('/')}/requests_admin"}]
@@ -1759,7 +1767,7 @@ async def submit_update_request_batch(request: Request):
             
             msg = f"🔄 <b>收到批量追新请求</b>\n\n👤 <b>用户：</b>{uname}\n📺 <b>内容：</b>{series_name}{year_display}\n\n📀 <b>季集详情：</b>\n{season_detail_str}\n\n请及时处理。"
             
-            admin_url = get_pulse_url() or cfg.get_main_public_url() or "http://127.0.0.1:10307"
+            admin_url = get_pulse_url() or get_media_server_main_public_url() or "http://127.0.0.1:10307"
             
             # 🔥 简化按钮：影巢搜索（标题）+ 手动接单 + 网页审批
             keyboard = {"inline_keyboard": [
@@ -2035,10 +2043,10 @@ async def user_community_register(data: UserRegisterModel, request: Request):
                 logger.error(f"[用户社区注册] 发送通知失败: {e}")
             
             # 9. 🔥 获取用户可访问的线路（使用 get_user_routes 根据权限过滤）
-            user_routes = cfg.get_user_routes(uid)
+            user_routes = get_media_server_user_routes(uid)
             if not user_routes:
                 # 如果没有线路，使用默认服务器地址
-                server_url = cfg.get_main_public_url() or cfg.get("emby_host", "")
+                server_url = get_media_server_main_public_or_host()
                 if server_url:
                     user_routes = [{"name": "默认推荐节点", "url": server_url, "is_main": True}]
             
@@ -2048,7 +2056,7 @@ async def user_community_register(data: UserRegisterModel, request: Request):
             request.session["req_user"] = {"Id": uid, "Name": safe_name}
             
             # 11. 获取欢迎消息
-            welcome_message = cfg.get("welcome_message", "")
+            welcome_message = get_media_server_welcome_message()
             
             return {
                 "status": "success",
