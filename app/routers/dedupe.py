@@ -2,13 +2,13 @@ import logging
 import re
 import threading
 import time
-import requests
 from collections import defaultdict
 from fastapi import APIRouter, BackgroundTasks, Request
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 
 from app.core.config import cfg
+from app.infra.clients.media_server_client import media_api
 from app.dao.dedupe_dao import (
     DedupeResultWriter,
     add_dedupe_whitelist_items,
@@ -108,17 +108,15 @@ def run_dedupe_scan(strategy: str = "quality", custom_weights: dict = None, excl
     scan_state["progress"] = 0
     scan_state["message"] = "阶段一：构建剧集映射树..."
 
-    key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
     excluded_libs = set(excluded_libraries or [])
     try:
-        admin_res = requests.get(f"{host}/emby/Users?api_key={key}", timeout=5).json()
+        admin_res = media_api.get("/Users", timeout=5).json()
         admin_id = next((u['Id'] for u in admin_res if u.get("Policy", {}).get("IsAdministrator")), admin_res[0]['Id'])
 
         # 获取所有媒体库（使用 /Library/VirtualFolders API 更可靠）
         all_libraries = []
         try:
-            lib_url = f"{host}/emby/Library/VirtualFolders?api_key={key}"
-            lib_res = requests.get(lib_url, timeout=10)
+            lib_res = media_api.get("/Library/VirtualFolders", timeout=10)
             if lib_res.status_code == 200:
                 all_libraries = lib_res.json()
         except Exception as e:
@@ -135,9 +133,12 @@ def run_dedupe_scan(strategy: str = "quality", custom_weights: dict = None, excl
         for lib in active_libraries:
             lib_id = lib.get("Guid") or lib.get("Id")
             try:
-                s_url = f"{host}/emby/Users/{admin_id}/Items"
-                s_params = { "ParentId": lib_id, "IncludeItemTypes": "Series", "Recursive": "true", "Fields": "ProviderIds", "api_key": key }
-                s_res = requests.get(s_url, params=s_params, timeout=15).json().get("Items", [])
+                s_res = media_api.get(f"/Users/{admin_id}/Items", params={
+                    "ParentId": lib_id,
+                    "IncludeItemTypes": "Series",
+                    "Recursive": "true",
+                    "Fields": "ProviderIds",
+                }, timeout=15).json().get("Items", [])
                 for s in s_res:
                     tmdb_id = s.get("ProviderIds", {}).get("Tmdb")
                     if tmdb_id: series_map[s["Id"]] = tmdb_id
@@ -152,9 +153,14 @@ def run_dedupe_scan(strategy: str = "quality", custom_weights: dict = None, excl
             start = 0; limit = 10000
             lib_items = []
             while True:
-                url = f"{host}/emby/Users/{admin_id}/Items"
-                params = { "ParentId": lib_id, "IncludeItemTypes": "Movie,Episode", "Recursive": "true", "Fields": "ProviderIds,ParentIndexNumber,IndexNumber,IndexNumberEnd,SeriesId,MediaSources", "StartIndex": start, "Limit": limit, "api_key": key }
-                chunk = requests.get(url, params=params, timeout=30).json().get("Items", [])
+                chunk = media_api.get(f"/Users/{admin_id}/Items", params={
+                    "ParentId": lib_id,
+                    "IncludeItemTypes": "Movie,Episode",
+                    "Recursive": "true",
+                    "Fields": "ProviderIds,ParentIndexNumber,IndexNumber,IndexNumberEnd,SeriesId,MediaSources",
+                    "StartIndex": start,
+                    "Limit": limit,
+                }, timeout=30).json().get("Items", [])
                 lib_items.extend(chunk)
                 if len(chunk) < limit: break
                 start += limit
@@ -271,8 +277,10 @@ def run_dedupe_scan(strategy: str = "quality", custom_weights: dict = None, excl
                 scan_state["message"] = f"阶段四：深层分析视频流 ({current}/{total_dups})"
                 
                 ids = ",".join([i["Id"] for i in item_list])
-                detail_url = f"{host}/emby/Users/{admin_id}/Items?Ids={ids}&Fields=MediaSources,Path&api_key={key}"
-                details = requests.get(detail_url, timeout=10).json().get("Items", [])
+                details = media_api.get(f"/Users/{admin_id}/Items", params={
+                    "Ids": ids,
+                    "Fields": "MediaSources,Path",
+                }, timeout=10).json().get("Items", [])
                 
                 parsed_items = []
                 for d in details:
@@ -379,11 +387,8 @@ async def get_dedupe_libraries(request: Request):
         return {"success": False, "msg": "需要管理员权限"}
     """获取所有媒体库列表（用于去重管理）"""
     try:
-        key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
-        
         # 使用 /Library/VirtualFolders API 获取媒体库（更可靠）
-        lib_url = f"{host}/emby/Library/VirtualFolders?api_key={key}"
-        lib_res = requests.get(lib_url, timeout=10)
+        lib_res = media_api.get("/Library/VirtualFolders", timeout=10)
         
         if lib_res.status_code != 200:
             logger.error(f"[去重管理] 获取媒体库失败: HTTP {lib_res.status_code}")
@@ -393,7 +398,7 @@ async def get_dedupe_libraries(request: Request):
         logger.info(f"[去重管理] 获取到 {len(libraries)} 个媒体库: {[lib.get('Name') for lib in libraries]}")
 
         # 获取管理员用户ID用于统计项目数量
-        admin_res = requests.get(f"{host}/emby/Users?api_key={key}", timeout=5).json()
+        admin_res = media_api.get("/Users", timeout=5).json()
         admin_id = next((u['Id'] for u in admin_res if u.get("Policy", {}).get("IsAdministrator")), admin_res[0]['Id'] if admin_res else None)
 
         result = []
@@ -405,12 +410,11 @@ async def get_dedupe_libraries(request: Request):
             total_count = 0
             if admin_id and lib_id:
                 try:
-                    count_res = requests.get(f"{host}/emby/Users/{admin_id}/Items", params={
+                    count_res = media_api.get(f"/Users/{admin_id}/Items", params={
                         "ParentId": lib_id,
                         "IncludeItemTypes": "Movie,Episode",
                         "Recursive": "true",
                         "Limit": 1,
-                        "api_key": key
                     }, timeout=5).json()
                     total_count = count_res.get("TotalRecordCount", 0)
                 except:
@@ -449,14 +453,13 @@ async def get_results(request: Request):
     
     server_id = ""
     try:
-        host = cfg.get("emby_host"); key = cfg.get("emby_api_key")
-        info_res = requests.get(f"{host}/emby/System/Info?api_key={key}", timeout=2).json()
+        info_res = media_api.get("/System/Info", timeout=2).json()
         raw_id = info_res.get("Id", "")
         if raw_id:
             server_id = str(raw_id).replace('\r', '').replace('\n', '').strip()
             
         if not server_id:
-            item_res = requests.get(f"{host}/emby/Items?Limit=1&api_key={key}", timeout=2).json()
+            item_res = media_api.get("/Items", params={"Limit": 1}, timeout=2).json()
             if item_res.get("Items"): 
                 raw_id_2 = item_res["Items"][0].get("ServerId", "")
                 if raw_id_2:
@@ -498,10 +501,8 @@ async def delete_items(request: Request, req: DeleteReq):
     # 🔒 管理员专用
     if not is_admin_user(request):
         return {"success": False, "msg": "需要管理员权限"}
-    key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
     try:
-        auth_url = f"{host}/emby/Users/AuthenticateByName?api_key={key}"
-        auth_res = requests.post(auth_url, json={"Username": req.username, "Pw": req.password}, timeout=5)
+        auth_res = media_api.authenticate_by_name(req.username, req.password, timeout=5)
         if auth_res.status_code != 200: return {"success": False, "msg": "🚫 权限被拒绝：Emby 管理员账号或密码错误！"}
         user_info = auth_res.json().get("User", {})
         if not user_info.get("Policy", {}).get("IsAdministrator"): return {"success": False, "msg": "🚫 权限被拒绝：该账号不具备管理员权限！"}
@@ -513,9 +514,9 @@ async def delete_items(request: Request, req: DeleteReq):
             # 🔥 修复关键：调用专用的 AlternateSources 删除接口，安全抹除副版本物理文件
             if "__" in composite_id:
                 item_id, source_id = composite_id.split("__")
-                res = requests.delete(f"{host}/emby/Videos/{item_id}/AlternateSources?AlternateSourceId={source_id}&api_key={key}", timeout=10)
+                res = media_api.delete(f"/Videos/{item_id}/AlternateSources", params={"AlternateSourceId": source_id}, timeout=10)
             else:
-                res = requests.delete(f"{host}/emby/Items/{composite_id}?api_key={key}", timeout=10)
+                res = media_api.delete(f"/Items/{composite_id}", timeout=10)
                 
             if res.status_code in [200, 204]:
                 success_count += 1
