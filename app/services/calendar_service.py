@@ -4,8 +4,9 @@ import threading
 import time
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from app.core.config import cfg
 from app.infra.config.calendar_settings import get_calendar_cache_ttl
+from app.infra.config.media_server_settings import get_media_server_public_url
+from app.infra.config.tmdb_settings import get_tmdb_api_key
 from app.dao.calendar_dao import (
     delete_calendar_cache_for_series,
     list_cached_calendar_series_ids,
@@ -106,7 +107,7 @@ class CalendarService:
                 if cached_item and (now - cached_item['time'] < cache_ttl):
                     return cached_item['data']
 
-        api_key = cfg.get("tmdb_api_key")
+        api_key = get_tmdb_api_key()
         if not api_key:
             return {"error": "未配置 TMDB API Key，请在设置中配置"}
 
@@ -248,7 +249,7 @@ class CalendarService:
             })
         
         # 获取 Emby 基本地址
-        emby_url = (cfg.get("emby_public_url") or cfg.get("emby_host") or "").rstrip('/')
+        emby_url = get_media_server_public_url().rstrip('/')
 
         # 动态获取当前 Emby 的 ServerId 用于前端跳转播放
         server_id = ""

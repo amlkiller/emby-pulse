@@ -11,8 +11,8 @@ from fastapi import Request
 from fastapi.responses import Response
 from app.plugins.base import PluginBase
 from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
-from app.core.config import cfg
 from app.infra.clients.media_server_client import media_api
+from app.infra.config.user_visibility_settings import get_hidden_users
 from app.queries.report_queries import (
     count_report_distinct_users,
     count_report_plays,
@@ -428,7 +428,7 @@ class ViewReportPlugin(PluginBase):
             exclude_types = []
         
         # 🔥 获取排行黑名单用户（与机器人命令一致）
-        hidden_users = cfg.get("hidden_users") or []
+        hidden_users = get_hidden_users()
         
         # 调试日志
         logger.info(f"[观影报告] exclude_types 配置: {exclude_types}, hidden_users: {hidden_users}")
