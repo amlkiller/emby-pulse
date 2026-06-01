@@ -1,4 +1,6 @@
 from typing import Any
+import logging
+import secrets
 
 from app.core.config import cfg
 
@@ -31,6 +33,13 @@ def get_webhook_token() -> str:
 
 def set_webhook_token(value: str) -> None:
     cfg.set("webhook_token", value)
+
+
+def ensure_strong_webhook_token() -> None:
+    weak_tokens = {"embypulse", "emby", "test", "123456", "password", ""}
+    if get_webhook_token() in weak_tokens:
+        set_webhook_token(secrets.token_urlsafe(32))
+        logging.getLogger("uvicorn").warning("[安全] Webhook Token 已自动生成（原为弱 token），请更新 Emby Webhook 配置")
 
 
 def get_tg_bot_token() -> str:

@@ -1,6 +1,7 @@
 import asyncio
 import json
 import socket
+import threading
 
 import uvicorn
 
@@ -132,3 +133,7 @@ def start_user_portal_server(app, request_port: int) -> None:
         loop.run_until_complete(server.serve(sockets=[sock]))
     except BaseException:
         pass
+
+
+def start_user_portal_thread(app, request_port: int) -> None:
+    threading.Thread(target=start_user_portal_server, args=(app, request_port), daemon=True).start()

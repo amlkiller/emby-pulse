@@ -1,9 +1,5 @@
-import logging
-import secrets
-import threading
-
 from app.core.session import start_session_cleanup_loop
-from app.infra.config.bot_settings import get_webhook_token, set_webhook_token
+from app.infra.config.bot_settings import ensure_strong_webhook_token
 from app.domains.notifications.bot_service import (
     is_user_bot_running,
     start_notification_services,
@@ -11,15 +7,11 @@ from app.domains.notifications.bot_service import (
 )
 from app.domains.risk.risk_service import start_risk_monitor
 
-from .user_portal import start_user_portal_server
+from .user_portal import start_user_portal_thread
 
 
 def ensure_webhook_token() -> None:
-    weak_tokens = {"embypulse", "emby", "test", "123456", "password", ""}
-    if get_webhook_token() in weak_tokens:
-        new_token = secrets.token_urlsafe(32)
-        set_webhook_token(new_token)
-        logging.getLogger("uvicorn").warning("[安全] Webhook Token 已自动生成（原为弱 token），请更新 Emby Webhook 配置")
+    ensure_strong_webhook_token()
 
 
 def audit_proxy_config() -> None:
@@ -68,7 +60,7 @@ def start_bootstrap_services(app, request_port: int) -> None:
     audit_proxy_config()
 
     start_notification_services()
-    threading.Thread(target=start_user_portal_server, args=(app, request_port), daemon=True).start()
+    start_user_portal_thread(app, request_port)
     start_risk_monitor()
 
     start_dashboard_cache_tasks()
