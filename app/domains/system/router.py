@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Request
 from app.schemas.models import SettingsModel
-from app.core.config import cfg, save_config
+from app.core.config import save_config
 from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
 from app.domains.system.system_tool_dao import (
     get_dashboard_layout,
@@ -9,7 +9,6 @@ from app.domains.system.system_tool_dao import (
     system_database_exists,
 )
 from app.domains.system.system_tool_queries import diagnose_playback_database
-import os
 import logging
 from app.core.security_utils import safe_error_message
 from app.core.rate_limiter import get_client_ip
@@ -58,6 +57,14 @@ from app.infra.config.notification_settings import (
 from app.infra.config.proxy_settings import get_proxy_url_raw, set_proxy_url
 from app.infra.config.tmdb_settings import get_tmdb_api_key, set_tmdb_api_key
 from app.infra.config.user_visibility_settings import get_hidden_users, set_hidden_users
+from app.infra.config.system_diagnostics_settings import (
+    get_config_env_source,
+    get_config_value,
+    get_env_value,
+    get_sensitive_env_fields,
+    get_system_settings_sensitive_fields,
+    should_update_sensitive_setting,
+)
 from app.infra.config.weather_settings import (
     get_weather_amap_key,
     get_weather_greeting,
@@ -88,22 +95,12 @@ def api_diag_config(request: Request):
     }
     
     # 检查敏感字段
-    sensitive_fields = {
-        "tg_bot_token": "TG_BOT_TOKEN",
-        "tg_user_bot_token": "TG_USER_BOT_TOKEN",
-        "emby_api_key": "EMBY_API_KEY",
-        "tmdb_api_key": "TMDB_API_KEY",
-        "webhook_token": "WEBHOOK_TOKEN",
-        "moviepilot_token": "MOVIEPILOT_TOKEN",
-        "wecom_corpsecret": "WECOM_CORPSECRET",
-        "wecom_token": "WECOM_TOKEN",
-        "wecom_aeskey": "WECOM_AESKEY",
-    }
+    sensitive_fields = get_sensitive_env_fields()
     
     for config_key, env_key in sensitive_fields.items():
-        env_val = os.getenv(env_key, "")
-        config_val = cfg.get(config_key, "")
-        source = cfg.get_env_source(config_key)
+        env_val = get_env_value(env_key)
+        config_val = get_config_value(config_key, "")
+        source = get_config_env_source(config_key)
         
         result["env_values"][env_key] = {
             "set": bool(env_val),
@@ -130,20 +127,8 @@ def api_diag_env(request: Request):
     # 🔒 安全检查：必须管理员
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     
-    import os
-
     # 检查敏感字段的环境变量
-    sensitive_fields = {
-        "tg_bot_token": "TG_BOT_TOKEN",
-        "tg_user_bot_token": "TG_USER_BOT_TOKEN",
-        "emby_api_key": "EMBY_API_KEY",
-        "tmdb_api_key": "TMDB_API_KEY",
-        "moviepilot_token": "MOVIEPILOT_TOKEN",
-        "wecom_corpsecret": "WECOM_CORPSECRET",
-        "wecom_token": "WECOM_TOKEN",
-        "wecom_aeskey": "WECOM_AESKEY",
-        "webhook_token": "WEBHOOK_TOKEN",
-    }
+    sensitive_fields = get_sensitive_env_fields()
     
     result = {
         "env_vars": {},
@@ -153,9 +138,9 @@ def api_diag_env(request: Request):
     }
     
     for config_key, env_key in sensitive_fields.items():
-        env_val = os.getenv(env_key, "")
-        config_val = cfg.get(config_key, "")
-        source = cfg.get_env_source(config_key)
+        env_val = get_env_value(env_key)
+        config_val = get_config_value(config_key, "")
+        source = get_config_env_source(config_key)
         
         # 🔒 安全：只返回是否设置和长度，不返回任何实际值
         result["env_vars"][env_key] = {
@@ -210,10 +195,7 @@ def api_get_settings(request: Request):
         return value[:show_len] + "****" + value[-show_len:]
     
     # 🔒 敏感字段列表
-    SENSITIVE_FIELDS = [
-        "emby_api_key", "tmdb_api_key", "moviepilot_token",
-        "weather_qweather_key", "weather_amap_key"
-    ]
+    SENSITIVE_FIELDS = get_system_settings_sensitive_fields()
     
     # 构建返回数据
     result_data = {
@@ -239,8 +221,8 @@ def api_get_settings(request: Request):
     # 🔒 脱敏并标记敏感字段来源
     env_override_fields = []
     for field in SENSITIVE_FIELDS:
-        value = cfg.get(field, "")
-        source = cfg.get_env_source(field)
+        value = get_config_value(field, "")
+        source = get_config_env_source(field)
         
         if source == "env":
             # 来自环境变量：返回标记，不返回实际值
@@ -256,7 +238,7 @@ def api_get_settings(request: Request):
     
     # 🔥 Webhook Token 特殊处理
     webhook_token = get_webhook_token()
-    webhook_source = cfg.get_env_source("webhook_token")
+    webhook_source = get_config_env_source("webhook_token")
     
     if webhook_source == "env":
         result_data["webhook_token"] = "****（由环境变量设置）"
@@ -284,24 +266,6 @@ def api_get_settings(request: Request):
 def api_update_settings(data: SettingsModel, request: Request):
     # 🔒 安全检查：必须管理员
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    
-    # 🔒 安全：检查是否应该更新敏感字段
-    def should_update_sensitive(field, value):
-        """检查敏感字段是否应该更新
-        - 环境变量设置的字段不更新
-        - 空值不更新（前端禁用时发送空字符串）
-        - 包含脱敏标记 **** 的值不更新
-        """
-        # 检查是否来自环境变量
-        if cfg.get_env_source(field) == "env":
-            return False
-        # 检查是否为空值（前端禁用时发送空字符串）
-        if not value or value.strip() == "":
-            return False
-        # 检查是否包含脱敏标记
-        if "****" in str(value):
-            return False
-        return True
     
     # 🔒 安全：URL 验证
     from app.utils.url_validator import validate_url, validate_emby_host
@@ -347,11 +311,11 @@ def api_update_settings(data: SettingsModel, request: Request):
     # 🔒 安全：敏感字段仅在非环境变量且非脱敏时更新
     # 提前获取需要验证连接的值
     emby_api_key_to_use = None
-    if should_update_sensitive("emby_api_key", data.emby_api_key):
+    if should_update_sensitive_setting("emby_api_key", data.emby_api_key):
         emby_api_key_to_use = (data.emby_api_key or "").strip()
     else:
         emby_api_key_to_use = get_media_server_api_key()
-        env_source = cfg.get_env_source("emby_api_key")
+        env_source = get_config_env_source("emby_api_key")
         
         # 如果环境变量设置了但值为空，说明环境变量没有正确加载
         if env_source == "env" and not emby_api_key_to_use:
@@ -383,17 +347,17 @@ def api_update_settings(data: SettingsModel, request: Request):
     set_media_server_host(data.emby_host)
     
     # 🔒 敏感字段：仅在非环境变量且非脱敏时更新
-    if should_update_sensitive("emby_api_key", data.emby_api_key):
+    if should_update_sensitive_setting("emby_api_key", data.emby_api_key):
         set_media_server_api_key((data.emby_api_key or "").strip())
-    if should_update_sensitive("tmdb_api_key", data.tmdb_api_key):
+    if should_update_sensitive_setting("tmdb_api_key", data.tmdb_api_key):
         set_tmdb_api_key((data.tmdb_api_key or "").strip())
-    if should_update_sensitive("webhook_token", data.webhook_token):
+    if should_update_sensitive_setting("webhook_token", data.webhook_token):
         set_webhook_token((data.webhook_token or "").strip())
-    if should_update_sensitive("moviepilot_token", data.moviepilot_token):
+    if should_update_sensitive_setting("moviepilot_token", data.moviepilot_token):
         set_moviepilot_token((data.moviepilot_token or "").strip())
-    if should_update_sensitive("weather_qweather_key", data.weather_qweather_key):
+    if should_update_sensitive_setting("weather_qweather_key", data.weather_qweather_key):
         set_weather_qweather_key((data.weather_qweather_key or "").strip())
-    if should_update_sensitive("weather_amap_key", data.weather_amap_key):
+    if should_update_sensitive_setting("weather_amap_key", data.weather_amap_key):
         set_weather_amap_key((data.weather_amap_key or "").strip())
     
     # 非敏感字段直接保存
