@@ -13,10 +13,10 @@ Delete the temporary compatibility files left after the database boundary refact
 
 ## Acceptance Criteria
 
-- [ ] `app/core/database.py` no longer exists.
-- [ ] `app/core/db_manager.py` no longer exists.
-- [ ] `rg` finds no references to `app.core.database` or `app.core.db_manager` in `app` or `tests`.
-- [ ] Tests still pass.
+- [x] `app/core/database.py` no longer exists.
+- [x] `app/core/db_manager.py` no longer exists.
+- [x] `rg` finds no references to `app.core.database` or `app.core.db_manager` in `app` or `tests`.
+- [x] Tests still pass.
 
 ## Definition of Done
 
@@ -30,6 +30,6 @@ Delete the temporary compatibility files left after the database boundary refact
 
 ## Technical Notes
 
-- `app/core/database.py` currently contains only `from app.infra.db.database import *`.
-- `app/core/db_manager.py` currently contains only `from app.infra.db.db_manager import *`.
-- Initial search found no references in `app` or `tests`.
+- `app/core/database.py` and `app/core/db_manager.py` have already been removed from the current worktree.
+- `rg -n "app\.core\.database|app\.core\.db_manager" app tests --glob "*.py"` returned no matches.
+- `uv run --with-requirements requirements.txt --with pytest pytest tests/ -v` passed with `68 passed, 2 warnings`.
