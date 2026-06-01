@@ -3265,7 +3265,7 @@ class NotificationBot:
             
             # 尝试通过用户机器人发送通知
             try:
-                from app.routers.messages import _send_bot_reply_to_user
+                from app.domains.notifications.messages import _send_bot_reply_to_user
                 _send_bot_reply_to_user(user_id, text, "管理员")
             except Exception: pass
             
