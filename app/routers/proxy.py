@@ -5,11 +5,9 @@ from app.core.security import require_login, require_any_login, is_admin_session
 from app.core.config import cfg
 from app.infra.clients.tmdb_client import tmdb_client
 from app.infra.clients.media_server_client import media_api  # 🔥 引入媒体服务器客户端
+from app.infra.clients.image_proxy_client import image_proxy_client
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
-import requests
 import logging
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 import re
 import os
 import hashlib
@@ -19,12 +17,6 @@ from app.core.security_utils import safe_error_message
 # 初始化日志
 logger = logging.getLogger("uvicorn")
 router = APIRouter()
-
-# 🔥 保留一个专门用于外部请求 (如 TMDB) 的 Session
-ext_session = requests.Session()
-retries = Retry(total=2, backoff_factor=0.3, status_forcelist=[500, 502, 503, 504])
-ext_session.mount('http://', HTTPAdapter(max_retries=retries, pool_connections=100, pool_maxsize=100))
-ext_session.mount('https://', HTTPAdapter(max_retries=retries, pool_connections=100, pool_maxsize=100))
 
 # 图片 ID 映射缓存（限制大小，避免内存泄漏）
 smart_image_cache = {}
@@ -304,7 +296,7 @@ def proxy_smart_image(request: Request, item_id: str, name: str = "", year: str 
     if cached_result and str(cached_result).startswith('http'):
         try:
             proxies = get_safe_proxies()
-            resp = ext_session.get(cached_result, proxies=proxies, timeout=10, stream=True)
+            resp = image_proxy_client.get(cached_result, proxies=proxies, timeout=10, stream=True)
             if resp.status_code == 200:
                 return streaming_response_from_requests(resp, "image/jpeg", cache_headers(86400))
         except Exception as e:
@@ -323,7 +315,7 @@ def proxy_smart_image(request: Request, item_id: str, name: str = "", year: str 
         resp = media_api.get(f"/Items/{target_id}/Images/{img_type}", params=params, timeout=5, stream=True)
         if resp.status_code == 200:
             return streaming_response_from_requests(resp, resp.headers.get("Content-Type", "image/jpeg"), cache_headers(86400))
-    except requests.exceptions.RequestException as e: 
+    except image_proxy_client.RequestException as e:
         logger.debug(f"媒体库图片请求超时或断开: {e}")
 
     # 3. 第 2 级防御：洗版名字搜索兜底 (使用 media_api)
@@ -343,7 +335,7 @@ def proxy_smart_image(request: Request, item_id: str, name: str = "", year: str 
                     n_resp = media_api.get(f"/Items/{new_id}/Images/{img_type}", params=params, timeout=5, stream=True)
                     if n_resp.status_code == 200:
                         return streaming_response_from_requests(n_resp, n_resp.headers.get("Content-Type", "image/jpeg"), cache_headers(86400))
-        except requests.exceptions.RequestException: pass
+        except image_proxy_client.RequestException: pass
 
     # 4. 第 3 级防御：TMDB 终极兜底 (外部请求，保留 ext_session)
     season_num = extract_season_number(name)
@@ -366,7 +358,7 @@ def proxy_smart_image(request: Request, item_id: str, name: str = "", year: str 
                                 final_url = f"https://image.tmdb.org/t/p/w500{s_data['poster_path']}"
                                 smart_image_cache[item_id] = final_url
                                 _cleanup_smart_image_cache()
-                                final_resp = ext_session.get(final_url, proxies=proxies, timeout=8, stream=True)
+                                final_resp = image_proxy_client.get(final_url, proxies=proxies, timeout=8, stream=True)
                                 if final_resp.status_code == 200:
                                     return streaming_response_from_requests(final_resp, "image/jpeg", cache_headers(86400))
 
@@ -379,11 +371,11 @@ def proxy_smart_image(request: Request, item_id: str, name: str = "", year: str 
                             # 🔥 检查缓存大小
                             _cleanup_smart_image_cache()
                             
-                            final_resp = ext_session.get(tmdb_img_url, proxies=proxies, timeout=8, stream=True)
+                            final_resp = image_proxy_client.get(tmdb_img_url, proxies=proxies, timeout=8, stream=True)
                             if final_resp.status_code == 200:
                                 return streaming_response_from_requests(final_resp, "image/jpeg", cache_headers(86400))
                         break
-        except requests.exceptions.RequestException as e:
+        except image_proxy_client.RequestException as e:
             logger.error(f"TMDB 兜底网络异常 [{clean_name}]: {e}")
             
     return Response(status_code=404)
