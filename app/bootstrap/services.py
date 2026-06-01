@@ -5,10 +5,12 @@ import threading
 
 from app.core.session import start_session_cleanup_loop
 from app.infra.config.bot_settings import get_webhook_token, set_webhook_token
-from app.infra.config.user_bot_settings import get_user_bot_token
-from app.domains.notifications.bot_service import bot
+from app.domains.notifications.bot_service import (
+    is_user_bot_running,
+    start_notification_services,
+    stop_notification_services,
+)
 from app.domains.risk.risk_service import start_risk_monitor
-from app.domains.notifications.user_bot_service import user_bot
 
 from .user_portal import start_user_portal_server
 
@@ -28,14 +30,6 @@ def audit_proxy_config() -> None:
         audit_existing_proxy_config()
     except Exception as e:
         print(f"⚠️ proxy_helper 启动自检失败（忽略）: {e}")
-
-
-def start_user_bot_if_configured() -> None:
-    try:
-        if get_user_bot_token():
-            user_bot.start()
-    except Exception as e:
-        print(f"⚠️ 用户机器人启动异常: {e}")
 
 
 def start_dashboard_cache_tasks() -> None:
@@ -66,7 +60,7 @@ def print_startup_panel(request_port: int) -> None:
     print(f"🌍 [核心后台] 管理员仪表盘运行在端口: {PORT}")
     print(f"🎈 [用户中心] 独立求片门户运行在端口: {request_port}")
     print("✅ [系统状态] 物理隔离架构已启动，安全防护中！")
-    if user_bot.running:
+    if is_user_bot_running():
         print("🤖 [Pro专属] 用户 TG 机器人已上线！")
     print("=" * 55 + "\n")
 
@@ -75,8 +69,7 @@ def start_bootstrap_services(app, request_port: int) -> None:
     ensure_webhook_token()
     audit_proxy_config()
 
-    bot.start()
-    start_user_bot_if_configured()
+    start_notification_services()
     threading.Thread(target=start_user_portal_server, args=(app, request_port), daemon=True).start()
     start_risk_monitor()
 
@@ -89,7 +82,6 @@ def start_bootstrap_services(app, request_port: int) -> None:
 def stop_bootstrap_services() -> None:
     print("\n" + "=" * 55)
     print("🛑 [系统关闭] 正在停止 EmbyPulse 服务...")
-    bot.stop()
-    user_bot.stop()
+    stop_notification_services()
     print("💤 [系统关闭] 所有服务已安全退出。")
     print("=" * 55 + "\n")

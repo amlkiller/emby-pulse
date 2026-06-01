@@ -3323,3 +3323,30 @@ class EmbyPulseOrchestrator:
         self.notifier.send_to_channels(photo_io, caption, keyboard)
 
 bot = EmbyPulseOrchestrator()
+
+
+def start_notification_services() -> None:
+    bot.start()
+
+    try:
+        from app.infra.config.user_bot_settings import get_user_bot_token
+        from app.domains.notifications.user_bot_service import user_bot
+
+        if get_user_bot_token():
+            user_bot.start()
+    except Exception as e:
+        print(f"⚠️ 用户机器人启动异常: {e}")
+
+
+def stop_notification_services() -> None:
+    bot.stop()
+
+    from app.domains.notifications.user_bot_service import user_bot
+
+    user_bot.stop()
+
+
+def is_user_bot_running() -> bool:
+    from app.domains.notifications.user_bot_service import user_bot
+
+    return user_bot.running
