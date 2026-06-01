@@ -13,7 +13,7 @@ from app.infra.clients.media_server_client import media_api
 from app.infra.clients.telegram_client import telegram_client
 from app.infra.config.notification_settings import get_notify_bot_runtime_config
 from app.infra.config.user_bot_settings import get_user_bot_token_or_empty
-from app.dao.keep_alive_dao import (
+from app.plugins.keep_alive.keep_alive_dao import (
     count_keep_alive_disabled,
     count_keep_alive_unique_users,
     count_keep_alive_violations,
