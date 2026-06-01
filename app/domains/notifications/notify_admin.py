@@ -3,7 +3,7 @@ from fastapi import APIRouter, Request
 from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from app.dao.notify_admin_dao import (
+from app.domains.notifications.notify_admin_dao import (
     ensure_notify_rules_table as ensure_notify_rules_table_data,
     get_notify_rule_row,
     list_notify_rule_rows,

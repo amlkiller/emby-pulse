@@ -18,7 +18,7 @@ from app.infra.config.notification_settings import (
     get_notification_channels_runtime_config,
     get_wecom_runtime_config,
 )
-from app.dao.calendar_notify_dao import (
+from app.domains.notifications.calendar_notify_dao import (
     ensure_calendar_notify_config_table,
     get_calendar_notify_config,
     mark_calendar_notify_sent,

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request
-from app.dao.notify_rule_dao import (
+from app.domains.notifications.notify_rule_dao import (
     ensure_bot_notify_mutes_table,
     list_bot_notify_mutes,
     replace_bot_notify_mutes,
