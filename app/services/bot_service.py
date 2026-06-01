@@ -3051,7 +3051,7 @@ class NotificationBot:
     def _cmd_calendar(self, cid, platform):
         """今日剧集更新"""
         try:
-            from app.routers.calendar_notify import get_today_updates, format_notify_message
+            from app.domains.notifications.calendar_notify import get_today_updates, format_notify_message
             updates = get_today_updates()
             message = format_notify_message(updates)
             self.send_message(cid, message, platform=platform)

@@ -14,7 +14,7 @@ def start_calendar_notify_service():
     """启动日历通知服务"""
     global calendar_notify_service
     try:
-        from app.routers.calendar_notify import calendar_notify_service as service
+        from app.domains.notifications.calendar_notify import calendar_notify_service as service
         calendar_notify_service = service
         service.start()
     except Exception as e:

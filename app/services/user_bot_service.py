@@ -3538,7 +3538,7 @@ def cmd_calendar(chat_id, tg_user_id, msg_id=None):
         return
     
     try:
-        from app.routers.calendar_notify import get_today_updates, format_notify_message
+        from app.domains.notifications.calendar_notify import get_today_updates, format_notify_message
         updates = get_today_updates()
         message = format_notify_message(updates)
         _reply(chat_id, message, 
