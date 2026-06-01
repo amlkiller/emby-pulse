@@ -21,12 +21,18 @@ from app.infra.clients.network_client import network_client
 from app.infra.clients.telegram_client import telegram_client
 from app.infra.config.user_bot_settings import (
     get_user_bot_allowed_groups,
+    get_user_bot_allow_routes,
+    get_user_bot_block_routes,
+    get_user_bot_max_reg,
     get_user_bot_notify_group_enabled,
     get_user_bot_notify_user_enabled,
     get_user_bot_open_reg_enabled,
+    get_user_bot_portal_url,
+    get_user_bot_reg_days,
     get_user_bot_reg_quota,
     get_user_bot_reg_quota_mode,
     get_user_bot_restriction_cache_ttl,
+    get_user_bot_template_user,
     get_user_bot_token,
     get_user_bot_worker_count,
     get_user_bot_registration_batch_used,
@@ -452,8 +458,8 @@ _user_state = {}  # tg_user_id -> {"action": "register_name", ...}
 
 def _send_open_reg_closed_notify(reason=""):
     """发送开放注册关闭通知（名额已满等场景）"""
-    notify_user = cfg.get("user_bot_open_reg_notify_user", False)
-    notify_group = cfg.get("user_bot_open_reg_notify_group", False)
+    notify_user = get_user_bot_notify_user_enabled()
+    notify_group = get_user_bot_notify_group_enabled()
     
     if not notify_user and not notify_group:
         return
@@ -482,7 +488,7 @@ def _send_open_reg_closed_notify(reason=""):
     # 发送到群聊（使用用户机器人）
     if notify_group:
         try:
-            allowed_groups = cfg.get("user_bot_allowed_groups", "")
+            allowed_groups = get_user_bot_allowed_groups()
             if allowed_groups:
                 group_ids = [g.strip() for g in allowed_groups.replace('，', ',').split('\n') if g.strip()]
                 for gid in group_ids:
@@ -712,7 +718,7 @@ def _main_menu_keyboard(binding=None):
         [{"text": "🔓 解绑账号", "callback_data": "ub_menu_unbind"}],
     ]
     # 用户中心网页链接
-    portal_url = cfg.get("user_bot_portal_url")
+    portal_url = get_user_bot_portal_url()
     if portal_url:
         rows.append([{"text": "🌐 网页版用户中心", "url": portal_url}])
     return {"inline_keyboard": rows}
@@ -785,7 +791,7 @@ def cmd_bind(chat_id, tg_user_id, args, tg_username="", tg_display_name=""):
 
 
 def cmd_register(chat_id, tg_user_id, tg_name):
-    if not cfg.get("user_bot_open_reg"):
+    if not get_user_bot_open_reg_enabled():
         _send(chat_id, "❌ 开放注册未开启，请联系管理员获取注册码后使用 /code 注册码")
         return
     if _get_binding(tg_user_id):
@@ -1058,7 +1064,7 @@ def _do_register(chat_id, tg_user_id, custom_name, tg_username="", tg_display_na
                 return
             reserved = True
 
-        max_reg = int(cfg.get("user_bot_max_reg", 0))
+        max_reg = get_user_bot_max_reg()
         if max_reg > 0 and quota <= 0:
             try:
                 count = user_bot_dao.count_bindings()
@@ -1112,7 +1118,7 @@ def _do_register(chat_id, tg_user_id, custom_name, tg_username="", tg_display_na
                 uid = new_user.get("Id")
                 media_api.post(f"/Users/{uid}/Password", json={"NewPw": password}, timeout=5)
 
-                template_id = cfg.get("user_bot_template_user") or cfg.get("default_user_template_id")
+                template_id = get_user_bot_template_user()
                 if template_id:
                     try:
                         tpl = media_api.get(f"/Users/{template_id}", timeout=5).json()
@@ -1127,11 +1133,11 @@ def _do_register(chat_id, tg_user_id, custom_name, tg_username="", tg_display_na
                         media_api.post(f"/Users/{uid}/Policy", json={"IsDisabled": False}, timeout=3)
                     except Exception: pass
 
-                reg_days = int(cfg.get("user_bot_reg_days", 30))
+                reg_days = get_user_bot_reg_days()
                 expire = (datetime.date.today() + datetime.timedelta(days=reg_days)).strftime("%Y-%m-%d")
 
-                allow_routes = cfg.get("user_bot_allow_routes", "")
-                block_routes = cfg.get("user_bot_block_routes", "")
+                allow_routes = get_user_bot_allow_routes()
+                block_routes = get_user_bot_block_routes()
 
                 if allow_routes or block_routes:
                     user_dao.save_user_expire_routes(uid, expire, allow_routes, block_routes)

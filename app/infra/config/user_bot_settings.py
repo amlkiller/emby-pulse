@@ -105,8 +105,8 @@ def get_user_bot_template_user() -> str:
 
 
 def get_user_bot_notify_user_enabled() -> bool:
-    return cfg.get("user_bot_open_reg_notify_user", False)
+    return is_user_bot_open_reg_notify_user_enabled()
 
 
 def get_user_bot_notify_group_enabled() -> bool:
-    return cfg.get("user_bot_open_reg_notify_group", False)
+    return is_user_bot_open_reg_notify_group_enabled()
