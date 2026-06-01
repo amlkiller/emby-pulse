@@ -44,7 +44,7 @@ def test_notify_rule_respects_saved_disabled_rule(monkeypatch):
 
 
 def test_dashboard_context_cache_keys_are_isolated():
-    from app.routers import stats
+    from app.domains.playback import stats
 
     admin_req = SimpleNamespace(session={"user": {"auth_type": "emby"}})
     filtered_admin_req = SimpleNamespace(session={"user": {"role": "admin"}})
@@ -56,7 +56,7 @@ def test_dashboard_context_cache_keys_are_isolated():
 
 
 def test_dashboard_cache_is_per_context(monkeypatch):
-    from app.routers import stats
+    from app.domains.playback import stats
 
     monkeypatch.setattr(stats, "_DASHBOARD_CACHE_TTL", 300)
     stats._dashboard_cache.clear()
@@ -71,7 +71,7 @@ def test_dashboard_cache_is_per_context(monkeypatch):
 
 
 def test_webhook_token_accepts_url_query_param():
-    from app.routers import webhook
+    from app.domains.system import webhook
 
     request = SimpleNamespace(headers={}, query_params={"token": "url-token"})
 
@@ -79,7 +79,7 @@ def test_webhook_token_accepts_url_query_param():
 
 
 def test_webhook_token_prefers_header_over_url_query_param():
-    from app.routers import webhook
+    from app.domains.system import webhook
 
     request = SimpleNamespace(
         headers={"X-Webhook-Token": "header-token"},
@@ -91,7 +91,7 @@ def test_webhook_token_prefers_header_over_url_query_param():
 
 @pytest.mark.parametrize("is_admin", [True, False])
 def test_request_login_rejects_passwordless_emby_users(monkeypatch, is_admin):
-    from app.routers import media_request
+    from app.domains.media_requests import router as media_request
 
     class FakeMediaResponse:
         status_code = 200
