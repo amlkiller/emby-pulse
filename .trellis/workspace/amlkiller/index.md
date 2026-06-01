@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 1
-- **Last Active**: 2026-05-31
+- **Total Sessions**: 2
+- **Last Active**: 2026-06-01
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~42 | Active |
+| `journal-1.md` | ~92 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 2 | 2026-06-01 | Database boundary refactor wrap-up | `e632c2b`, `0b6fb0a`, `f1338d6`, `de62860`, `112b5c7`, `2f5372f`, `d3f2756`, `cf093c3`, `cb9f08b`, `6379ed1`, `d1315e0`, `5a4468d` | `main` |
 | 1 | 2026-05-31 | Backend modular refactor | `4113e66` | `main` |
 <!-- @@@/auto:session-history -->
 
