@@ -18,7 +18,6 @@ def register_routes(app: FastAPI) -> None:
         auth,
         bot as bot_router,
         clients,
-        dedupe,
         gaps,
         history,
         media_request,
@@ -36,7 +35,7 @@ def register_routes(app: FastAPI) -> None:
         users,
         views,
     )
-    from app.domains.playback import calendar, insight, search
+    from app.domains.playback import calendar, dedupe, insight, search
     from app.domains.proxy import router as proxy
     from app.domains.reports import router as report
     from app.domains.system import api_tokens, audit, db_tools, pro, webhook
