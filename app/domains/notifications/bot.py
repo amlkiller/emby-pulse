@@ -905,7 +905,7 @@ def api_lottery_pool(request: Request):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
 
     try:
-        from app.routers.points import get_point_config
+        from app.domains.points.router import get_point_config
 
         today = datetime.datetime.now().strftime('%Y-%m-%d')
         tomorrow = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime('%Y-%m-%d')

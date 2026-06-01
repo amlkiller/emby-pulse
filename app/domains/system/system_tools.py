@@ -56,12 +56,12 @@ def api_perf_status(request: Request):
 
     caches = {}
     try:
-        from app.routers import media_request
+        from app.domains.media_requests import router as media_request
         caches["community_cache"] = len(media_request._community_cache)
     except Exception:
         pass
     try:
-        from app.routers import stats
+        from app.domains.playback import stats
         caches["dashboard_cached"] = stats._dashboard_cache.get("data") is not None
         caches["dashboard_cache_age"] = int(time.time() - stats._dashboard_cache.get("ts", 0)) if stats._dashboard_cache.get("ts") else None
     except Exception:
