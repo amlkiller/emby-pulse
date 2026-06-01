@@ -79,6 +79,7 @@ router = APIRouter()
 
 _LOGIN_MAX_FAILURES = 5  # 最大失败次数
 _LOGIN_LOCK_DURATION = 300  # 锁定时长（秒）= 5分钟
+_lock_cleanup_started = False
 
 def _check_login_locked(lock_key: str) -> tuple:
     """检查是否被锁定，返回 (is_locked, remaining_seconds)
@@ -150,15 +151,19 @@ def _cleanup_expired_locks():
 
 # 定期清理过期锁定记录（每 10 分钟）
 def _start_lock_cleanup():
+    global _lock_cleanup_started
+    if _lock_cleanup_started:
+        return
+    _lock_cleanup_started = True
+
     import threading
+
     def cleanup():
         _cleanup_expired_locks()
         timer = threading.Timer(600, cleanup)
         timer.daemon = True
         timer.start()
     cleanup()
-
-_start_lock_cleanup()
 
 # ==================== 权限常量 ====================
 
@@ -277,10 +282,6 @@ def ensure_local_users_table():
     except Exception as e:
         print(f"[本地认证] 表结构检查失败: {e}")
 
-# 启动时确保表存在
-ensure_local_users_table()
-
-
 # ==================== 环境变量初始化本地管理员 ====================
 
 def ensure_env_local_admin():
@@ -326,8 +327,10 @@ def ensure_env_local_admin():
         print(f"[本地认证] 环境变量创建管理员失败: {e}")
 
 
-# 启动时检查环境变量并创建管理员
-ensure_env_local_admin()
+def start_auth_domain_services():
+    _start_lock_cleanup()
+    ensure_local_users_table()
+    ensure_env_local_admin()
 
 
 # ==================== 认证设置 API ====================
