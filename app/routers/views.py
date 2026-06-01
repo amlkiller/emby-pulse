@@ -1,5 +1,4 @@
 import os
-import requests
 import json
 import re
 import datetime
@@ -312,7 +311,7 @@ def get_common_vars(request: Request, active_page: str, extra_vars: dict = None)
     
     server_id = ""
     try:
-        sys_res = requests.get(f"{cfg.get('emby_host')}/emby/System/Info?api_key={cfg.get('emby_api_key')}", timeout=2)
+        sys_res = media_api.get("/System/Info", timeout=2)
         if sys_res.status_code == 200: 
             raw_id = sys_res.json().get("Id", "")
             if raw_id:
