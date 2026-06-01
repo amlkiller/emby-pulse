@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 5
+- **Total Sessions**: 6
 - **Last Active**: 2026-06-02
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~191 | Active |
+| `journal-1.md` | ~224 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 6 | 2026-06-02 | User bot schema registry bootstrap | `e9ea546` | `main` |
 | 5 | 2026-06-02 | Notification schema bootstraps registry | `edfae01` | `main` |
 | 4 | 2026-06-02 | Dedupe schema bootstrap registry | `0a4342f` | `main` |
 | 3 | 2026-06-02 | Gap schema bootstrap registry | `4e4aa55` | `main` |

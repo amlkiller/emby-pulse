@@ -189,3 +189,36 @@ Routed selected notification and message schema bootstraps through schema_regist
 ### Next Steps
 
 - None - task complete
+
+
+## Session 6: User bot schema registry bootstrap
+
+**Date**: 2026-06-02
+**Task**: User bot schema registry bootstrap
+**Branch**: `main`
+
+### Summary
+
+Routed user-bot registry-owned tables through schema_registry, added tg_user_bindings ALTER coverage, preserved local helper tables, and verified with focused schema tests plus full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e9ea546` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
