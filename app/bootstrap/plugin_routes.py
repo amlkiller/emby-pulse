@@ -6,8 +6,8 @@ def register_calendar_notify_routes(app) -> None:
 
 
 def register_plugin_routes(app) -> None:
+    from app.domains.plugins import router as plugins_router
     from app.plugins import discover_plugins, get_enabled_plugins
-    from app.routers import plugins as plugins_router
 
     discover_plugins()
     for plugin in get_enabled_plugins():
