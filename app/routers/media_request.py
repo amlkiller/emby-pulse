@@ -1,4 +1,4 @@
-import requests
+import requests  # 兼容测试/补丁挂钩，实际 Emby 请求已迁移到 media_api
 import json
 import time
 import re
@@ -12,6 +12,8 @@ from typing import Optional, List
 import threading
 
 from app.core.config import cfg, REPORT_COVER_URL
+from app.infra.clients.moviepilot_client import moviepilot_client
+from app.infra.clients.tmdb_client import tmdb_client
 from app.dao.notification_dao import add_sys_notification
 from app.dao.media_request_dao import (
     claim_registration_invitation,
@@ -49,7 +51,7 @@ from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读
 from app.schemas.models import MediaRequestSubmitModel as BaseSubmitModel
 from app.services.bot_service import bot
 # 🔥 引入媒体适配器用于创建用户
-from app.core.media_adapter import media_api
+from app.infra.clients.media_server_client import media_api
 import logging
 from app.core.security_utils import safe_error_message
 
@@ -109,7 +111,7 @@ def _check_user_exists(user_id: str) -> bool:
     if not user_id:
         return False
     try:
-        from app.core.media_adapter import media_api
+        from app.infra.clients.media_server_client import media_api
         if media_api and media_api.host and media_api.api_key:
             res = media_api.get(f"/Users/{user_id}", timeout=5)
             return res.status_code == 200
@@ -126,14 +128,10 @@ def get_tmdb_season_info(tmdb_id: int, season: int) -> tuple:
     if not tmdb_id or not season:
         return 0, []
     try:
-        tmdb_key = cfg.get("tmdb_api_key")
-        if not tmdb_key:
+        if not tmdb_client.api_key:
             return 0, []
         proxies = get_safe_proxies()
-        season_data = requests.get(
-            f"https://api.themoviedb.org/3/tv/{tmdb_id}/season/{season}?api_key={tmdb_key}&language=zh-CN",
-            proxies=proxies, timeout=8
-        ).json()
+        season_data = tmdb_client.get_tv_season(tmdb_id, season, proxies=proxies, timeout=8).json()
         episodes = season_data.get("episodes", [])
         total = len(episodes)
         
@@ -157,7 +155,7 @@ ensure_db_schema()
 
 def get_emby_admin(host, key):
     try:
-        users = requests.get(f"{host}/emby/Users?api_key={key}", timeout=5).json()
+        users = media_api.get("/Users", timeout=5).json()
         for u in users:
             if u.get("Policy", {}).get("IsAdministrator"): return u['Id']
         return users[0]['Id'] if users else None
@@ -170,13 +168,15 @@ def check_emby_exists(tmdb_id, media_type, season=0):
         admin_id = get_emby_admin(host, key)
         if not admin_id: return False
         type_filter = "Movie" if media_type == "movie" else "Series"
-        url = f"{host}/emby/Users/{admin_id}/Items?AnyProviderIdEquals=tmdb.{tmdb_id}&IncludeItemTypes={type_filter}&Recursive=true&api_key={key}"
-        res = requests.get(url, timeout=5).json()
+        res = media_api.get(f"/Users/{admin_id}/Items", params={
+            "AnyProviderIdEquals": f"tmdb.{tmdb_id}",
+            "IncludeItemTypes": type_filter,
+            "Recursive": "true",
+        }, timeout=5).json()
         if not res.get("Items"): return False
         if media_type == "movie": return True
         sid = res["Items"][0]["Id"]
-        season_url = f"{host}/emby/Shows/{sid}/Seasons?api_key={key}&UserId={admin_id}"
-        s_res = requests.get(season_url, timeout=5).json()
+        s_res = media_api.get(f"/Shows/{sid}/Seasons", params={"UserId": admin_id}, timeout=5).json()
         local_seasons = [s.get("IndexNumber") for s in s_res.get("Items", [])]
         return season in local_seasons
     except: return False
@@ -226,10 +226,8 @@ def request_system_login(data: RequestLoginModel, request: Request):
     
     host = cfg.get("emby_host")
     if not host: return {"status": "error", "message": "未配置 Emby 服务器"}
-    headers = {"X-Emby-Authorization": 'MediaBrowser Client="EmbyPulse", Device="Web", DeviceId="PulseRequestApp", Version="2.0"'}
     
     # 先获取用户列表，找到匹配的用户
-    from app.core.media_adapter import media_api
     from datetime import date as date_module
     
     matched_user = None
@@ -303,7 +301,7 @@ def request_system_login(data: RequestLoginModel, request: Request):
         else:
             # 正常账号：通过 Emby API 验证密码
             try:
-                res = requests.post(f"{host}/emby/Users/AuthenticateByName", json={"Username": data.username, "Pw": data.password}, headers=headers, timeout=8)
+                res = media_api.authenticate_by_name(data.username, data.password, timeout=8)
                 password_valid = res.status_code == 200
             except Exception as e:
                 print(f"[用户社区登录] 验证密码失败: {e}")
@@ -393,8 +391,7 @@ def get_item_info(item_id: str, request: Request):
         admin_id = get_emby_admin(host, key)
         if not admin_id: return {"status": "error"}
         
-        url = f"{host}/emby/Users/{admin_id}/Items/{item_id}?api_key={key}"
-        res = requests.get(url, timeout=5)
+        res = media_api.get(f"/Users/{admin_id}/Items/{item_id}", timeout=5)
         if res.status_code == 200:
             d = res.json()
             return {"status": "success", "data": {
@@ -428,9 +425,14 @@ def get_hub_data(request: Request):
     try:
         import random 
         # 🔥 使用 /Items API 而不是 /Users/{uid}/Items
-        tr_url = f"{host}/emby/Items?IncludeItemTypes=Movie,Series&Recursive=true&SortBy=CommunityRating&SortOrder=Descending&Limit=100&Fields=CommunityRating&api_key={key}"
-        logger.debug(f"[hub_data] 镇站之宝 URL: {tr_url[:150]}...")
-        tr_res = requests.get(tr_url, timeout=5).json()
+        tr_res = media_api.get("/Items", params={
+            "IncludeItemTypes": "Movie,Series",
+            "Recursive": "true",
+            "SortBy": "CommunityRating",
+            "SortOrder": "Descending",
+            "Limit": 100,
+            "Fields": "CommunityRating",
+        }, timeout=5).json()
         logger.debug(f"[hub_data] 镇站之宝返回: {len(tr_res.get('Items', []))} 条")
         
         valid_items = []
@@ -447,9 +449,14 @@ def get_hub_data(request: Request):
         logger.debug(f"[hub_data] 镇站之宝筛选后: {len(top_rated)} 条")
                 
         # 🔥 使用 /Items API
-        g_url = f"{host}/emby/Items?IncludeItemTypes=Movie,Series&Recursive=true&SortBy=DateCreated&SortOrder=Descending&Limit=200&Fields=Genres&api_key={key}"
-        logger.debug(f"[hub_data] 流派分析 URL: {g_url[:150]}...")
-        g_res = requests.get(g_url, timeout=5).json()
+        g_res = media_api.get("/Items", params={
+            "IncludeItemTypes": "Movie,Series",
+            "Recursive": "true",
+            "SortBy": "DateCreated",
+            "SortOrder": "Descending",
+            "Limit": 200,
+            "Fields": "Genres",
+        }, timeout=5).json()
         logger.debug(f"[hub_data] 流派分析返回: {len(g_res.get('Items', []))} 条")
         genre_counts = {}
         total_items = 0
@@ -484,9 +491,9 @@ def search_tmdb(query: str, request: Request):
         request.session.pop("req_user", None)
         return {"status": "error", "message": "账号已被删除", "account_deleted": True}
     
-    tmdb_key = cfg.get("tmdb_api_key"); proxies = get_safe_proxies()
+    proxies = get_safe_proxies()
     try:
-        res = requests.get(f"https://api.themoviedb.org/3/search/multi?api_key={tmdb_key}&language=zh-CN&query={query}", proxies=proxies, timeout=10).json()
+        res = tmdb_client.search_multi(query, proxies=proxies, timeout=10).json()
         results = []
         for i in res.get("results", []):
             if i.get("media_type") in ["movie", "tv"]:
@@ -505,12 +512,11 @@ def get_tmdb_trending(request: Request):
         request.session.pop("req_user", None)
         return {"status": "error", "message": "账号已被删除", "account_deleted": True}
     
-    tmdb_key = cfg.get("tmdb_api_key")
     proxies = get_safe_proxies()
     try:
         results = []
         for page in [1, 2]:
-            res = requests.get(f"https://api.themoviedb.org/3/trending/all/week?api_key={tmdb_key}&language=zh-CN&page={page}", proxies=proxies, timeout=10).json()
+            res = tmdb_client.get_trending(media_type="all", time_window="week", page=page, proxies=proxies, timeout=10).json()
             for i in res.get("results", []):
                 if i.get("media_type") in ["movie", "tv"] and i.get("poster_path"):
                     results.append({
@@ -532,7 +538,6 @@ def get_tv_details(tmdb_id: int, request: Request):
     # 🔒 安全检查：管理员或已绑定 Emby 的报片用户
     if not (is_admin_user(request) or request.session.get("req_user")):
         return {"status": "error", "message": "请先登录"}
-    tmdb_key = cfg.get("tmdb_api_key")
     proxies = get_safe_proxies()
     try:
         emby_host = cfg.get("emby_host"); emby_key = cfg.get("emby_api_key")
@@ -540,16 +545,25 @@ def get_tv_details(tmdb_id: int, request: Request):
         
         admin_id = get_emby_admin(emby_host, emby_key)
         if admin_id:
-            s_res = requests.get(f"{emby_host}/emby/Users/{admin_id}/Items?AnyProviderIdEquals=tmdb.{tmdb_id}&IncludeItemTypes=Series&Recursive=true&api_key={emby_key}", timeout=5).json()
+            s_res = media_api.get(f"/Users/{admin_id}/Items", params={
+                "AnyProviderIdEquals": f"tmdb.{tmdb_id}",
+                "IncludeItemTypes": "Series",
+                "Recursive": "true",
+            }, timeout=5).json()
             if s_res.get("Items"):
                 sid = s_res["Items"][0]["Id"]
-                ep_res = requests.get(f"{emby_host}/emby/Users/{admin_id}/Items?ParentId={sid}&IncludeItemTypes=Episode&Recursive=true&Fields=ParentIndexNumber&api_key={emby_key}", timeout=5).json()
+                ep_res = media_api.get(f"/Users/{admin_id}/Items", params={
+                    "ParentId": sid,
+                    "IncludeItemTypes": "Episode",
+                    "Recursive": "true",
+                    "Fields": "ParentIndexNumber",
+                }, timeout=5).json()
                 for ep in ep_res.get("Items", []):
                     sn = ep.get("ParentIndexNumber")
                     if sn is not None:
                         local_seasons_map[sn] = local_seasons_map.get(sn, 0) + 1
 
-        tmdb_res = requests.get(f"https://api.themoviedb.org/3/tv/{tmdb_id}?api_key={tmdb_key}&language=zh-CN", proxies=proxies, timeout=10).json()
+        tmdb_res = tmdb_client.get_tv_details(tmdb_id, proxies=proxies, timeout=10).json()
         seasons = []
         for s in tmdb_res.get("seasons", []):
             if s["season_number"] > 0: 
@@ -723,14 +737,10 @@ def get_all_requests(request: Request):
     tmdb_posters = {}
     if tmdb_ids_to_fetch:
         from concurrent.futures import ThreadPoolExecutor, as_completed
-        tmdb_key = cfg.get("tmdb_api_key")
         proxies = get_safe_proxies()
         def fetch_tmdb_poster(tid):
             try:
-                tmdb_info = requests.get(
-                    f"https://api.themoviedb.org/3/tv/{tid}?api_key={tmdb_key}",
-                    proxies=proxies, timeout=3
-                ).json()
+                tmdb_info = tmdb_client.get_tv_details(tid, proxies=proxies, timeout=3).json()
                 return (tid, tmdb_info.get("poster_path"))
             except:
                 return (tid, None)
@@ -812,7 +822,7 @@ def batch_manage_action(data: BulkAdminActionModel, request: Request):
             if mp_url and mp_token and row:
                 payload = { "name": row["title"], "tmdbid": int(tid), "year": str(row["year"]), "type": "电影" if row["media_type"]=="movie" else "电视剧" }
                 if row["media_type"] == "tv": payload["season"] = sn
-                try: requests.post(f"{mp_url.rstrip('/')}/api/v1/subscribe/", json=payload, headers={"X-API-KEY": mp_token.strip().strip("'\"")}, timeout=10)
+                try: moviepilot_client.subscribe(mp_url, mp_token, payload, timeout=10)
                 except Exception: pass
             update_media_request_status(tid, sn, 1)
             
@@ -1107,21 +1117,14 @@ def get_safe_top_media(category: str, request: Request):
         item_ids = ",".join([str(i["ItemId"]) for i in candidate_items])
         logger.debug(f"[热播榜] 待过滤 ItemIds 数量: {len(candidate_items)}, 总长度: {len(item_ids)}")
         
-        host = (cfg.get("emby_host") or "").rstrip('/')
-        key = cfg.get("emby_api_key")
-        
         # 🔥 尝试不同的 API 调用方式
         # 方式1: 不带 Recursive 参数
-        test_url1 = f"{host}/emby/Users/{uid}/Items?Ids={item_ids}&api_key={key}"
-        logger.debug(f"[热播榜] 方式1 URL (不带Recursive): {test_url1[:200]}...")
-        res1 = requests.get(test_url1, timeout=5)
+        res1 = media_api.get(f"/Users/{uid}/Items", params={"Ids": item_ids}, timeout=5)
         items1 = res1.json().get("Items", [])
         logger.debug(f"[热播榜] 方式1 结果: 状态码 {res1.status_code}, Items 数量 {len(items1)}")
         
         # 方式2: 使用 /Items 而不是 /Users/{uid}/Items
-        test_url2 = f"{host}/emby/Items?Ids={item_ids}&UserId={uid}&api_key={key}"
-        logger.debug(f"[热播榜] 方式2 URL (带UserId参数): {test_url2[:200]}...")
-        res2 = requests.get(test_url2, timeout=5)
+        res2 = media_api.get("/Items", params={"Ids": item_ids, "UserId": uid}, timeout=5)
         items2 = res2.json().get("Items", [])
         logger.debug(f"[热播榜] 方式2 结果: 状态码 {res2.status_code}, Items 数量 {len(items2)}")
         
@@ -1179,19 +1182,14 @@ def get_safe_latest(limit: int = 15, request: Request = None):
         item_ids = ",".join([str(i.get("Id") or i.get("ItemId")) for i in global_items])
         logger.debug(f"[最新收录] 待过滤 ItemIds 数量: {len(global_items)}")
         
-        host = (cfg.get("emby_host") or "").rstrip('/')
-        key = cfg.get("emby_api_key")
-        
         # 🔥 尝试不同的 API 调用方式
         # 方式1: 不带 Recursive
-        emby_url1 = f"{host}/emby/Users/{uid}/Items?Ids={item_ids}&api_key={key}"
-        emby_res1 = requests.get(emby_url1, timeout=5).json()
+        emby_res1 = media_api.get(f"/Users/{uid}/Items", params={"Ids": item_ids}, timeout=5).json()
         items1 = emby_res1.get("Items", [])
         logger.debug(f"[最新收录] 方式1 结果: {len(items1)} 条")
         
         # 方式2: 带 UserId 参数
-        emby_url2 = f"{host}/emby/Items?Ids={item_ids}&UserId={uid}&api_key={key}"
-        emby_res2 = requests.get(emby_url2, timeout=5).json()
+        emby_res2 = media_api.get("/Items", params={"Ids": item_ids, "UserId": uid}, timeout=5).json()
         items2 = emby_res2.get("Items", [])
         logger.debug(f"[最新收录] 方式2 结果: {len(items2)} 条")
         
@@ -1224,10 +1222,8 @@ def _refresh_community_cache():
         logger.info("用户社区缓存正在刷新，跳过本次请求")
         return
     try:
-        host = cfg.get("emby_host")
-        key = cfg.get("emby_api_key")
         # 获取 admin 用户 ID
-        admin_id = get_emby_admin(host, key)
+        admin_id = get_emby_admin(cfg.get("emby_host"), cfg.get("emby_api_key"))
         if not admin_id:
             logger.warning("缓存刷新失败: 无法获取 admin 用户")
             return
@@ -1236,9 +1232,14 @@ def _refresh_community_cache():
         try:
             import random
             # 🔥 使用 /Items API 而不是 /Users/{uid}/Items，避免权限问题
-            tr_url = f"{host}/emby/Items?IncludeItemTypes=Movie,Series&Recursive=true&SortBy=CommunityRating&SortOrder=Descending&Limit=100&Fields=CommunityRating&api_key={key}"
-            logger.debug(f"[后台刷新] 镇站之宝 URL: {tr_url[:150]}...")
-            tr_res = requests.get(tr_url, timeout=10).json()
+            tr_res = media_api.get("/Items", params={
+                "IncludeItemTypes": "Movie,Series",
+                "Recursive": "true",
+                "SortBy": "CommunityRating",
+                "SortOrder": "Descending",
+                "Limit": 100,
+                "Fields": "CommunityRating",
+            }, timeout=10).json()
             items = tr_res.get("Items", [])
             logger.debug(f"[后台刷新] 镇站之宝返回: {len(items)} 条")
             
@@ -1259,9 +1260,14 @@ def _refresh_community_cache():
             logger.debug(f"[后台刷新] 镇站之宝筛选后: {len(top_rated)} 条")
             
             # 🔥 使用 /Items API
-            g_url = f"{host}/emby/Items?IncludeItemTypes=Movie,Series&Recursive=true&SortBy=DateCreated&SortOrder=Descending&Limit=200&Fields=Genres&api_key={key}"
-            logger.debug(f"[后台刷新] 流派分析 URL: {g_url[:150]}...")
-            g_res = requests.get(g_url, timeout=10).json()
+            g_res = media_api.get("/Items", params={
+                "IncludeItemTypes": "Movie,Series",
+                "Recursive": "true",
+                "SortBy": "DateCreated",
+                "SortOrder": "Descending",
+                "Limit": 200,
+                "Fields": "Genres",
+            }, timeout=10).json()
             g_items = g_res.get("Items", [])
             logger.debug(f"[后台刷新] 流派分析返回: {len(g_items)} 条")
             
@@ -1362,7 +1368,7 @@ class UpdateRequestModel(BaseModel):
 def _get_local_episodes(series_id: str, season: int) -> set:
     """获取库里某剧集某季已有的集数"""
     try:
-        from app.core.media_adapter import media_api
+        from app.infra.clients.media_server_client import media_api
         admin_id = get_emby_admin(cfg.get("emby_host"), cfg.get("emby_api_key"))
         if not admin_id:
             return set()
@@ -1389,14 +1395,10 @@ def _get_local_episodes(series_id: str, season: int) -> set:
 
 def _get_tmdb_season_episodes(tmdb_id: int, season: int) -> dict:
     """获取 TMDB 某季的集数信息"""
-    tmdb_key = cfg.get("tmdb_api_key")
     proxies = get_safe_proxies()
     
     try:
-        res = requests.get(
-            f"https://api.themoviedb.org/3/tv/{tmdb_id}/season/{season}?api_key={tmdb_key}&language=zh-CN",
-            proxies=proxies, timeout=10
-        ).json()
+        res = tmdb_client.get_tv_season(tmdb_id, season, proxies=proxies, timeout=10).json()
         
         episodes = []
         for ep in res.get("episodes", []):
@@ -1423,9 +1425,6 @@ def get_user_series(request: Request):
         return {"status": "error", "message": "未登录"}
     
     uid = user['Id']
-    host = cfg.get("emby_host")
-    key = cfg.get("emby_api_key")
-    tmdb_key = cfg.get("tmdb_api_key")
     proxies = get_safe_proxies()
     
     try:
@@ -1445,9 +1444,15 @@ def get_user_series(request: Request):
                 cache_expired = True
         
         # 4. 获取用户最近播放的剧集（用于匹配缓存）
-        eps_url = f"{host}/emby/Users/{uid}/Items?IncludeItemTypes=Episode&Recursive=true&SortBy=DatePlayed&SortOrder=Descending&Limit=50&Fields=SeriesId,SeriesName&api_key={key}"
         try:
-            eps_res = requests.get(eps_url, timeout=10).json()
+            eps_res = media_api.get(f"/Users/{uid}/Items", params={
+                "IncludeItemTypes": "Episode",
+                "Recursive": "true",
+                "SortBy": "DatePlayed",
+                "SortOrder": "Descending",
+                "Limit": 50,
+                "Fields": "SeriesId,SeriesName",
+            }, timeout=10).json()
         except:
             eps_res = {"Items": []}
         
@@ -1646,12 +1651,8 @@ async def submit_update_request(request: Request):
             actual_year = year
             if not actual_year or actual_year == "":
                 try:
-                    tmdb_key = cfg.get("tmdb_api_key")
                     proxies = get_safe_proxies()
-                    tmdb_info = requests.get(
-                        f"https://api.themoviedb.org/3/tv/{tmdb_id}?api_key={tmdb_key}",
-                        proxies=proxies, timeout=5
-                    ).json()
+                    tmdb_info = tmdb_client.get_tv_details(tmdb_id, proxies=proxies, timeout=5).json()
                     first_air_date = tmdb_info.get("first_air_date", "")
                     actual_year = first_air_date[:4] if first_air_date else ""
                 except:
@@ -1675,12 +1676,8 @@ async def submit_update_request(request: Request):
             if poster_path and poster_path.startswith("/api/"):
                 # 本地 API 路径，从 TMDB 获取封面
                 try:
-                    tmdb_key = cfg.get("tmdb_api_key")
                     proxies = get_safe_proxies()
-                    tmdb_info = requests.get(
-                        f"https://api.themoviedb.org/3/tv/{tmdb_id}?api_key={tmdb_key}",
-                        proxies=proxies, timeout=5
-                    ).json()
+                    tmdb_info = tmdb_client.get_tv_details(tmdb_id, proxies=proxies, timeout=5).json()
                     tmdb_poster = tmdb_info.get("poster_path")
                     if tmdb_poster:
                         poster_url = f"https://image.tmdb.org/t/p/w500{tmdb_poster}"
@@ -1754,12 +1751,8 @@ async def submit_update_request_batch(request: Request):
             # 🔥 从 TMDB 获取封面
             poster_url = REPORT_COVER_URL
             try:
-                tmdb_key = cfg.get("tmdb_api_key")
                 proxies = get_safe_proxies()
-                tmdb_info = requests.get(
-                    f"https://api.themoviedb.org/3/tv/{tmdb_id}?api_key={tmdb_key}",
-                    proxies=proxies, timeout=5
-                ).json()
+                tmdb_info = tmdb_client.get_tv_details(tmdb_id, proxies=proxies, timeout=5).json()
                 tmdb_poster = tmdb_info.get("poster_path")
                 first_air_date = tmdb_info.get("first_air_date", "")
                 year_display = f" ({first_air_date[:4]})" if first_air_date else ""
