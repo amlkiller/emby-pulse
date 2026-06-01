@@ -27,6 +27,29 @@ from app.infra.config.request_portal_settings import (
     set_redirect_to_community_enabled,
     set_user_portal_url,
 )
+from app.infra.config.media_server_settings import get_media_server_routes
+from app.infra.config.moviepilot_settings import get_moviepilot_token
+from app.infra.config.system_settings import (
+    get_system_emby_api_key,
+    get_system_emby_host,
+    get_system_emby_public_or_host,
+    get_system_emby_public_url,
+    get_system_hidden_users,
+    get_system_moviepilot_url,
+    get_system_notify_item_deleted,
+    get_system_notify_user_login,
+    get_system_playback_data_mode,
+    get_system_proxy_url,
+    get_system_server_type,
+    get_system_tmdb_api_key,
+    get_system_weather_amap_key,
+    get_system_weather_greeting,
+    get_system_weather_qweather_host,
+    get_system_weather_qweather_key,
+    get_system_weather_source,
+    get_system_webhook_token,
+    get_system_welcome_message,
+)
 
 logger = logging.getLogger("uvicorn")
 
@@ -151,7 +174,7 @@ def api_get_routes(request: Request):
     """获取所有线路列表"""
     # 🔒 安全检查：必须管理员
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    routes = cfg.get_all_routes()
+    routes = get_media_server_routes()
     # 返回线路名称和URL用于展示
     return {"status": "success", "data": routes}
 
@@ -176,23 +199,23 @@ def api_get_settings(request: Request):
     
     # 构建返回数据
     result_data = {
-        "server_type": cfg.get("server_type", "emby"),
-        "emby_host": cfg.get("emby_host"),
-        "proxy_url": cfg.get("proxy_url"),
-        "hidden_users": cfg.get("hidden_users") or [],
-        "emby_public_url": cfg.get("emby_public_url", ""),
-        "welcome_message": cfg.get("welcome_message", ""),
+        "server_type": get_system_server_type(),
+        "emby_host": get_system_emby_host(),
+        "proxy_url": get_system_proxy_url(),
+        "hidden_users": get_system_hidden_users(),
+        "emby_public_url": get_system_emby_public_url(),
+        "welcome_message": get_system_welcome_message(),
         "client_download_url": get_client_download_url(),
-        "moviepilot_url": cfg.get("moviepilot_url", ""),
+        "moviepilot_url": get_system_moviepilot_url(),
         "pulse_url": get_pulse_url(),
         "user_portal_url": get_user_portal_url(),
         "register_redirect_to_community": get_redirect_to_community_value(),
-        "playback_data_mode": cfg.get("playback_data_mode", "sqlite"),
-        "notify_user_login": cfg.get("notify_user_login", False),
-        "notify_item_deleted": cfg.get("notify_item_deleted", False),
-        "weather_greeting": cfg.get("weather_greeting", ""),
-        "weather_source": cfg.get("weather_source", "wttr"),
-        "weather_qweather_host": cfg.get("weather_qweather_host", ""),
+        "playback_data_mode": get_system_playback_data_mode(),
+        "notify_user_login": get_system_notify_user_login(),
+        "notify_item_deleted": get_system_notify_item_deleted(),
+        "weather_greeting": get_system_weather_greeting(),
+        "weather_source": get_system_weather_source(),
+        "weather_qweather_host": get_system_weather_qweather_host(),
     }
     
     # 🔒 脱敏并标记敏感字段来源
@@ -214,7 +237,7 @@ def api_get_settings(request: Request):
             result_data[f"{field}_readonly"] = False
     
     # 🔥 Webhook Token 特殊处理
-    webhook_token = cfg.get("webhook_token", "")
+    webhook_token = get_system_webhook_token()
     webhook_source = cfg.get_env_source("webhook_token")
     
     if webhook_source == "env":
@@ -234,7 +257,7 @@ def api_get_settings(request: Request):
     if webhook_source == "env":
         result_data["webhook_url"] = "（Webhook Token 由环境变量管理，请在 Emby 中配置 Header）"
     else:
-        result_data["webhook_url"] = f"{cfg.get('emby_public_url', '') or cfg.get('emby_host', '')}/api/v1/webhook"
+        result_data["webhook_url"] = f"{get_system_emby_public_or_host()}/api/v1/webhook"
     result_data["webhook_header_name"] = "X-Webhook-Token"
     result_data["webhook_token_available"] = bool(webhook_token and webhook_token != "embypulse" and webhook_token not in ("emby", "test", "123456", "password"))
     
@@ -294,14 +317,14 @@ def api_update_settings(data: SettingsModel, request: Request):
     
     # 记录变更前的值（用于审计日志）
     old_values = {
-        "emby_host": cfg.get("emby_host"),
-        "emby_api_key": cfg.get("emby_api_key"),
-        "tmdb_api_key": cfg.get("tmdb_api_key"),
-        "webhook_token": cfg.get("webhook_token"),
-        "moviepilot_token": cfg.get("moviepilot_token"),
-        "weather_qweather_key": cfg.get("weather_qweather_key"),
-        "weather_amap_key": cfg.get("weather_amap_key"),
-        "emby_public_url": cfg.get("emby_public_url"),
+        "emby_host": get_system_emby_host(),
+        "emby_api_key": get_system_emby_api_key(),
+        "tmdb_api_key": get_system_tmdb_api_key(),
+        "webhook_token": get_system_webhook_token(),
+        "moviepilot_token": get_moviepilot_token(),
+        "weather_qweather_key": get_system_weather_qweather_key(),
+        "weather_amap_key": get_system_weather_amap_key(),
+        "emby_public_url": get_system_emby_public_url(),
     }
     
     # 🔒 安全：敏感字段仅在非环境变量且非脱敏时更新
@@ -310,7 +333,7 @@ def api_update_settings(data: SettingsModel, request: Request):
     if should_update_sensitive("emby_api_key", data.emby_api_key):
         emby_api_key_to_use = (data.emby_api_key or "").strip()
     else:
-        emby_api_key_to_use = cfg.get("emby_api_key")
+        emby_api_key_to_use = get_system_emby_api_key()
         env_source = cfg.get_env_source("emby_api_key")
         
         # 如果环境变量设置了但值为空，说明环境变量没有正确加载
@@ -449,7 +472,7 @@ async def test_moviepilot(request: Request):
 
     # 🔒 如果前端发送的是脱敏值，从配置中读取真实值
     if not mp_token or "****" in mp_token:
-        mp_token = cfg.get("moviepilot_token", "")
+        mp_token = get_moviepilot_token()
 
     if not mp_url or not mp_token: return {"status": "error", "message": "请填写 MoviePilot 信息"}
 
@@ -476,7 +499,7 @@ async def test_tmdb(request: Request):
     
     # 🔒 如果前端发送的是脱敏值，从配置中读取真实值
     if not api_key or "****" in api_key:
-        api_key = cfg.get("tmdb_api_key", "")
+        api_key = get_system_tmdb_api_key() or ""
     
     if not api_key: return {"status": "error", "message": "请填写 TMDB API Key"}
     

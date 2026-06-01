@@ -8,7 +8,6 @@ import re
 import time
 import logging
 
-from app.core.config import cfg
 from app.dao.gap_dao import (
     add_gap_perfect_series,
     delete_gap_perfect_series,
@@ -29,7 +28,7 @@ from app.dao.gap_dao import (
     save_gap_record_status,
     save_gap_scan_cache,
 )
-from app.routers.search import get_emby_sys_info, is_new_emby_router
+from app.routers.search import is_new_emby_router
 from app.routers.auth import is_admin_user
 # 🔥 引入核心适配器
 from app.infra.clients.media_server_client import media_api
@@ -37,6 +36,9 @@ from app.infra.clients.moviepilot_client import moviepilot_client
 from app.infra.clients.qbittorrent_client import qbittorrent_client
 from app.infra.clients.transmission_client import transmission_client
 from app.infra.clients.tmdb_client import tmdb_client
+from app.infra.config.media_server_settings import get_media_server_host, get_media_server_main_public_or_host
+from app.infra.config.moviepilot_settings import get_moviepilot_token, get_moviepilot_url
+from app.infra.config.tmdb_settings import get_tmdb_api_key
 
 logger = logging.getLogger("uvicorn")
 
@@ -107,7 +109,7 @@ def process_single_series(series, lock_map, host, tmdb_key, proxies, today, glob
     
     update_progress(series_name) 
     if series_gaps:
-        public_host = (cfg.get_main_public_url() or cfg.get("emby_host") or host).rstrip('/')
+        public_host = (get_media_server_main_public_or_host() or host).rstrip('/')
         emby_url = f"{public_host}/web/index.html#!/item?id={series_id}&serverId={server_id}" if use_new_route else f"{public_host}/web/index.html#!/item/details.html?id={series_id}&serverId={server_id}"
         return {"series_id": series_id, "series_name": series_name, "tmdb_id": tmdb_id, "tmdb_status": tmdb_status, "poster": f"/api/library/image/{series_id}?type=Primary&width=300", "emby_url": emby_url, "gaps": series_gaps}
     else:
@@ -162,7 +164,7 @@ _delayed_start_background_sync()
 def run_scan_task():
     try:
         logger.info("[缺集扫描] 开始扫描任务...")
-        host = cfg.get("emby_host"); tmdb_key = cfg.get("tmdb_api_key"); admin_id = get_admin_user_id()
+        host = get_media_server_host(); tmdb_key = get_tmdb_api_key(); admin_id = get_admin_user_id()
         proxies = _get_proxies(); today = datetime.now().strftime("%Y-%m-%d")
         
         if not admin_id:
@@ -201,8 +203,6 @@ def run_scan_task():
         all_libraries = lib_res.json() if lib_res.status_code == 200 else []
         logger.info(f"[缺集扫描] 获取到 {len(all_libraries)} 个媒体库")
         
-        library_ids = {lib.get("Guid") or lib.get("Id") for lib in all_libraries}
-
         # 递归获取每个媒体库下的所有Series
         all_series = []
         for lib in all_libraries:
@@ -730,7 +730,7 @@ def search_mp_for_gap(request: Request = None, payload: dict = None):
     series_name = payload.get("series_name") if payload else None
     season = payload.get("season") if payload else None
     episodes = payload.get("episodes", []) if payload else []
-    mp_url = cfg.get("moviepilot_url"); mp_token = cfg.get("moviepilot_token")
+    mp_url = get_moviepilot_url(); mp_token = get_moviepilot_token()
     if not mp_url or not mp_token: return {"status": "error", "message": "未配置 MP"}
     
     logger.info(f"[缺集搜索] 开始MP搜索: {series_name} S{season}E{episodes}")
@@ -1230,7 +1230,7 @@ def download_gap_item(request: Request = None, payload: dict = None):
     episodes = payload.get("episodes", []) if payload else []
     torrent_info = payload.get("torrent_info", {}) if payload else {}
 
-    mp_url = cfg.get("moviepilot_url"); mp_token = cfg.get("moviepilot_token")
+    mp_url = get_moviepilot_url(); mp_token = get_moviepilot_token()
     ui_conf = get_gap_config_map()
     
     client_type = ui_conf.get("client_type", ""); client_url = ui_conf.get("client_url", "")

@@ -7,8 +7,8 @@ from fastapi import APIRouter, BackgroundTasks, Request
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 
-from app.core.config import cfg
 from app.infra.clients.media_server_client import media_api
+from app.infra.config.media_server_settings import get_media_server_main_public_or_host
 from app.dao.dedupe_dao import (
     DedupeResultWriter,
     add_dedupe_whitelist_items,
@@ -448,7 +448,7 @@ async def get_results(request: Request):
     if rows:
         for r in rows: result_tree[r["group_key"]].append(dict(r))
         
-    base_url = cfg.get_main_public_url() or cfg.get("emby_host") or ""
+    base_url = get_media_server_main_public_or_host()
     if base_url.endswith('/'): base_url = base_url[:-1]
     
     server_id = ""
