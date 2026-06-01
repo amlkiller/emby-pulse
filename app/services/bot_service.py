@@ -664,7 +664,7 @@ class SystemDaemon:
 
             gap_dao.delete_gap_record_by_series_episode(series_id, season, episode)
             try:
-                from app.routers.gaps import state_lock, scan_state
+                from app.domains.media_requests.gaps import state_lock, scan_state
                 with state_lock:
                     if scan_state.get("results"):
                         for s in scan_state["results"]:

@@ -1586,7 +1586,7 @@ def refresh_my_series_cache(request: Request, bg_tasks: BackgroundTasks):
     # 触发缺集管理重新扫描
     try:
         # 调用 gaps 模块的扫描功能
-        from app.routers.gaps import scan_state, state_lock, run_scan_task
+        from app.domains.media_requests.gaps import scan_state, state_lock, run_scan_task
         
         with state_lock:
             if scan_state["is_scanning"]:
@@ -1807,7 +1807,7 @@ def search_episodes_for_update(payload: dict, request: Request):
     
     # 调用缺集搜索 API - 传递完整参数
     try:
-        from app.routers.gaps import search_mp_for_gap
+        from app.domains.media_requests.gaps import search_mp_for_gap
         result = search_mp_for_gap({
             "series_name": series_name,
             "series_id": series_id,
@@ -1865,7 +1865,7 @@ def download_episodes_for_update(payload: dict, request: Request):
     
     # 调用缺集下载 API
     try:
-        from app.routers.gaps import download_gap_item
+        from app.domains.media_requests.gaps import download_gap_item
         result = download_gap_item({
             "series_id": series_id or "",
             "series_name": series_name,
