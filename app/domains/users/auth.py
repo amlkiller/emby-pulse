@@ -14,6 +14,7 @@ import time
 import logging
 import re
 import os
+import threading
 from io import BytesIO
 from fastapi import APIRouter, Request, Depends
 from fastapi.responses import RedirectResponse
@@ -80,6 +81,9 @@ router = APIRouter()
 _LOGIN_MAX_FAILURES = 5  # 最大失败次数
 _LOGIN_LOCK_DURATION = 300  # 锁定时长（秒）= 5分钟
 _lock_cleanup_started = False
+_lock_cleanup_lock = threading.Lock()
+_lock_cleanup_stop_event = threading.Event()
+_lock_cleanup_thread = None
 
 def _check_login_locked(lock_key: str) -> tuple:
     """检查是否被锁定，返回 (is_locked, remaining_seconds)
@@ -151,19 +155,34 @@ def _cleanup_expired_locks():
 
 # 定期清理过期锁定记录（每 10 分钟）
 def _start_lock_cleanup():
-    global _lock_cleanup_started
-    if _lock_cleanup_started:
-        return
-    _lock_cleanup_started = True
+    global _lock_cleanup_started, _lock_cleanup_thread
+    with _lock_cleanup_lock:
+        if _lock_cleanup_started:
+            return
+        _lock_cleanup_started = True
+        _lock_cleanup_stop_event.clear()
 
-    import threading
+    _cleanup_expired_locks()
 
-    def cleanup():
-        _cleanup_expired_locks()
-        timer = threading.Timer(600, cleanup)
-        timer.daemon = True
-        timer.start()
-    cleanup()
+    def cleanup_loop():
+        while not _lock_cleanup_stop_event.wait(600):
+            _cleanup_expired_locks()
+
+    _lock_cleanup_thread = threading.Thread(target=cleanup_loop, daemon=True, name="login-lock-cleanup")
+    _lock_cleanup_thread.start()
+
+
+def _stop_lock_cleanup():
+    global _lock_cleanup_started, _lock_cleanup_thread
+    with _lock_cleanup_lock:
+        if not _lock_cleanup_started:
+            return
+        _lock_cleanup_stop_event.set()
+        thread = _lock_cleanup_thread
+        _lock_cleanup_started = False
+        _lock_cleanup_thread = None
+    if thread and thread.is_alive():
+        thread.join(timeout=1)
 
 # ==================== 权限常量 ====================
 
@@ -331,6 +350,10 @@ def start_auth_domain_services():
     _start_lock_cleanup()
     ensure_local_users_table()
     ensure_env_local_admin()
+
+
+def stop_auth_domain_services():
+    _stop_lock_cleanup()
 
 
 # ==================== 认证设置 API ====================

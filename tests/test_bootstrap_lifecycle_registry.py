@@ -65,14 +65,18 @@ def test_bootstrap_services_use_registry_and_skip_duplicate_starts(monkeypatch):
     monkeypatch.setattr(services, "start_calendar_service", record("calendar"))
     monkeypatch.setattr(services, "start_notifications_router_services", record("notifications-router"))
     monkeypatch.setattr(services, "start_calendar_notify_services", record("calendar-notify"))
+    monkeypatch.setattr(services, "stop_calendar_notify_services", record("stop:calendar-notify"))
     monkeypatch.setattr(services, "start_dedupe_services", record("dedupe"))
     monkeypatch.setattr(services, "start_gap_services", record("gaps"))
     monkeypatch.setattr(services, "start_auth_domain_services", record("auth-domain"))
+    monkeypatch.setattr(services, "stop_auth_domain_services", record("stop:auth-domain"))
     monkeypatch.setattr(services, "start_user_domain_services", record("user-domain"))
     monkeypatch.setattr(services, "start_pro_services", record("pro-domain"))
     monkeypatch.setattr(services, "start_system_task_services", record("system-tasks"))
+    monkeypatch.setattr(services, "stop_system_task_services", record("stop:system-tasks"))
     monkeypatch.setattr(services, "start_audit_services", record("audit"))
     monkeypatch.setattr(services, "start_session_services", record("session"))
+    monkeypatch.setattr(services, "stop_session_services", record("stop:session"))
     monkeypatch.setattr(services, "print_startup_panel", lambda port: calls.append(f"startup-panel:{port}"))
 
     services.start_bootstrap_services(object(), 10308)
@@ -102,5 +106,11 @@ def test_bootstrap_services_use_registry_and_skip_duplicate_starts(monkeypatch):
 
     services.stop_bootstrap_services()
 
-    assert calls[-1] == "stop:notifications"
+    assert calls[-5:] == [
+        "stop:session",
+        "stop:system-tasks",
+        "stop:auth-domain",
+        "stop:calendar-notify",
+        "stop:notifications",
+    ]
     services.reset_bootstrap_registry()

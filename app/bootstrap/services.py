@@ -5,18 +5,18 @@ from app.domains.notifications.bot_service import (
     stop_notification_services,
 )
 from app.domains.playback.calendar_service import start_calendar_service
-from app.domains.notifications.calendar_notify import start_calendar_notify_services
+from app.domains.notifications.calendar_notify import start_calendar_notify_services, stop_calendar_notify_services
 from app.domains.notifications.router import start_notifications_router_services
 from app.domains.playback.dedupe import start_dedupe_services
 from app.domains.risk.risk_service import start_risk_monitor
 from app.domains.media_requests.gaps import start_gap_services
 from app.domains.media_requests.router import start_media_request_services
 from app.domains.system.pro import start_pro_services
-from app.domains.system.tasks import start_system_task_services
-from app.domains.users.auth import start_auth_domain_services
+from app.domains.system.tasks import start_system_task_services, stop_system_task_services
+from app.domains.users.auth import start_auth_domain_services, stop_auth_domain_services
 from app.domains.users.router import start_user_domain_services
 from app.core.audit_logger import start_audit_services
-from app.core.session import start_session_services
+from app.core.session import start_session_services, stop_session_services
 from app.utils.proxy_helper import audit_existing_proxy_config
 
 from .service_registry import BootstrapServiceRegistry
@@ -66,15 +66,15 @@ def build_bootstrap_registry(app, request_port: int) -> BootstrapServiceRegistry
     registry.register("media-requests", start_media_request_services)
     registry.register("calendar", start_calendar_service)
     registry.register("notifications-router", start_notifications_router_services)
-    registry.register("calendar-notify", start_calendar_notify_services)
+    registry.register("calendar-notify", start_calendar_notify_services, stop_calendar_notify_services)
     registry.register("dedupe", start_dedupe_services)
     registry.register("gaps", start_gap_services)
-    registry.register("auth-domain", start_auth_domain_services)
+    registry.register("auth-domain", start_auth_domain_services, stop_auth_domain_services)
     registry.register("user-domain", start_user_domain_services)
     registry.register("pro-domain", start_pro_services)
-    registry.register("system-tasks", start_system_task_services)
+    registry.register("system-tasks", start_system_task_services, stop_system_task_services)
     registry.register("audit", start_audit_services)
-    registry.register("session", start_session_services)
+    registry.register("session", start_session_services, stop_session_services)
     registry.register("startup-panel", lambda: print_startup_panel(request_port))
     return registry
 

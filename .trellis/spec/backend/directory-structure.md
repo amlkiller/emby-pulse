@@ -127,6 +127,13 @@ and, where practical, a matching stop callback so lifespan shutdown can
 eventually become complete. Keep direct ad hoc `start_*()` calls out of
 `start_bootstrap_services()`; add them to the registry instead.
 
+When adding a stop hook for a bootstrap service, keep it next to the matching
+start function and make it reset the module's started state. Thread loops should
+use a module-level `threading.Event` plus a saved thread handle; asyncio pollers
+should cancel the saved task and clear the task/started flags. This lets
+`stop_bootstrap_services()` shut down and then restart services in the same
+process during reloads or tests.
+
 ## Scenario: External Client Adapter Boundary
 
 ### 1. Scope / Trigger

@@ -303,11 +303,13 @@ class CalendarNotifyService:
     def __init__(self):
         self.running = False
         self.thread = None
+        self._stop_event = threading.Event()
     
     def start(self):
         """启动定时服务"""
         if self.running:
             return
+        self._stop_event.clear()
         self.running = True
         self.thread = threading.Thread(target=self._loop, daemon=True)
         self.thread.start()
@@ -316,6 +318,9 @@ class CalendarNotifyService:
     def stop(self):
         """停止定时服务"""
         self.running = False
+        self._stop_event.set()
+        if self.thread and self.thread.is_alive():
+            self.thread.join(timeout=1)
         logger.info("[日历通知] 定时服务已停止")
     
     def restart(self):
@@ -351,7 +356,7 @@ class CalendarNotifyService:
                 logger.error(f"[日历通知] 定时检查异常: {e}")
             
             # 每分钟检查一次
-            time.sleep(60)
+            self._stop_event.wait(60)
 
 # 全局实例
 calendar_notify_service = CalendarNotifyService()
@@ -370,3 +375,7 @@ def init_calendar_notify_service():
 def start_calendar_notify_services():
     _ensure_table()
     init_calendar_notify_service()
+
+
+def stop_calendar_notify_services():
+    calendar_notify_service.stop()

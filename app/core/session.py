@@ -19,6 +19,8 @@ SESSION_MAX_AGE = 24 * 3600  # 24小时（空闲超时）
 SESSION_ABSOLUTE_MAX_AGE = 7 * 24 * 3600  # 7天（绝对超时）
 _session_cleanup_started = False
 _session_cleanup_lock = threading.Lock()
+_session_cleanup_stop_event = threading.Event()
+_session_cleanup_thread = None
 
 
 def init_session_table():
@@ -61,11 +63,12 @@ def cleanup_expired_sessions():
 
 
 def start_session_cleanup_loop(interval_seconds: int = 3600) -> None:
-    global _session_cleanup_started
+    global _session_cleanup_started, _session_cleanup_thread
     with _session_cleanup_lock:
         if _session_cleanup_started:
             return
         _session_cleanup_started = True
+        _session_cleanup_stop_event.clear()
 
     try:
         deleted = cleanup_expired_sessions()
@@ -76,16 +79,29 @@ def start_session_cleanup_loop(interval_seconds: int = 3600) -> None:
 
     def _session_cleanup_loop():
         logger = logging.getLogger("uvicorn")
-        while True:
+        while not _session_cleanup_stop_event.wait(interval_seconds):
             try:
                 deleted = cleanup_expired_sessions()
                 if deleted > 0:
                     logger.info(f"[Session] 已清理 {deleted} 个过期会话")
             except Exception as e:
                 logger.error(f"[Session] 清理失败: {e}")
-            threading.Event().wait(interval_seconds)
 
-    threading.Thread(target=_session_cleanup_loop, daemon=True).start()
+    _session_cleanup_thread = threading.Thread(target=_session_cleanup_loop, daemon=True, name="session-cleanup")
+    _session_cleanup_thread.start()
+
+
+def stop_session_cleanup_loop() -> None:
+    global _session_cleanup_started, _session_cleanup_thread
+    with _session_cleanup_lock:
+        if not _session_cleanup_started:
+            return
+        _session_cleanup_stop_event.set()
+        thread = _session_cleanup_thread
+        _session_cleanup_started = False
+        _session_cleanup_thread = None
+    if thread and thread.is_alive():
+        thread.join(timeout=1)
 
 
 class SessionDict:
@@ -196,3 +212,7 @@ session_manager = SessionManager()
 def start_session_services() -> None:
     session_manager.initialize()
     start_session_cleanup_loop()
+
+
+def stop_session_services() -> None:
+    stop_session_cleanup_loop()

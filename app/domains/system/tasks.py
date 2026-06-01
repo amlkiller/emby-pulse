@@ -205,9 +205,22 @@ def start_task_poller():
     _task_poller_started = True
 
 
+def stop_task_poller():
+    global _poller_initialized, _poller_task, _task_poller_started
+    if _poller_task and not _poller_task.done():
+        _poller_task.cancel()
+    _poller_task = None
+    _task_poller_started = False
+    _poller_initialized = False
+
+
 def start_system_task_services():
     init_task_config_defaults()
     start_task_poller()
+
+
+def stop_system_task_services():
+    stop_task_poller()
 
 
 # ==========================================
