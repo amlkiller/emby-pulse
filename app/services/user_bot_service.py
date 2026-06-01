@@ -27,6 +27,21 @@ from app.infra.config.user_bot_settings import (
     get_user_bot_notify_group_enabled,
     get_user_bot_notify_user_enabled,
     get_user_bot_open_reg_enabled,
+    set_user_bot_open_reg_enabled,
+    set_user_bot_token,
+    set_user_bot_allowed_groups,
+    set_user_bot_allow_routes,
+    set_user_bot_block_routes,
+    set_user_bot_group_commands,
+    set_user_bot_group_enabled,
+    set_user_bot_open_reg_notify_group_enabled,
+    set_user_bot_open_reg_notify_user_enabled,
+    set_user_bot_portal_url,
+    set_user_bot_reg_quota_mode,
+    set_user_bot_registration_batch_used,
+    set_user_bot_route_mode,
+    set_user_bot_template_user,
+    set_user_bot_welcome_msg,
     get_user_bot_portal_url,
     get_user_bot_reg_days,
     get_user_bot_reg_quota,
@@ -36,6 +51,9 @@ from app.infra.config.user_bot_settings import (
     get_user_bot_token,
     get_user_bot_worker_count,
     get_user_bot_registration_batch_used,
+    get_user_bot_group_commands,
+    get_user_bot_group_enabled,
+    get_user_bot_welcome_msg,
 )
 from app.infra.config.user_visibility_settings import get_hidden_users
 from app.core.security import validate_password_strength  # 🔒 统一密码强度校验
@@ -816,7 +834,7 @@ def _load_batch_used_from_cfg():
     with _batch_used_lock:
         if _batch_used_mem is None:
             try:
-                _batch_used_mem = int(cfg.get("user_bot_reg_batch_used", 0) or 0)
+                _batch_used_mem = int(get_user_bot_registration_batch_used() or 0)
             except Exception:
                 _batch_used_mem = 0
             _batch_used_dirty = 0
@@ -831,7 +849,7 @@ def _flush_batch_used(force=False):
         if not force and _batch_used_dirty == 0:
             return
         try:
-            cfg.set("user_bot_reg_batch_used", _batch_used_mem)
+            set_user_bot_registration_batch_used(_batch_used_mem)
             _batch_used_dirty = 0
         except Exception:
             logger.exception("[UserBot] batch_used 落盘失败")
@@ -982,7 +1000,7 @@ def _release_quota_slot(committed, quota_mode, quota):
                 cnt = _refresh_user_count_cache_locked(force=True, quota=quota)
             if cnt is not None and cnt >= quota:
                 try:
-                    cfg.set("user_bot_open_reg", False)
+                    set_user_bot_open_reg_enabled(False)
                     logger.info(f"[UserBot] 用户总数已达上限({cnt}/{quota})，开放注册已自动关闭")
                     _send_open_reg_closed_notify("用户总数已达上限")
                 except Exception:
@@ -996,7 +1014,7 @@ def _inc_batch_used(quota):
     with _batch_used_lock:
         if _batch_used_mem is None:
             try:
-                _batch_used_mem = int(cfg.get("user_bot_reg_batch_used", 0) or 0)
+                _batch_used_mem = int(get_user_bot_registration_batch_used() or 0)
             except Exception:
                 _batch_used_mem = 0
             _batch_used_dirty = 0
@@ -1008,13 +1026,13 @@ def _inc_batch_used(quota):
             should_flush = True
         if should_flush:
             try:
-                cfg.set("user_bot_reg_batch_used", _batch_used_mem)
+                set_user_bot_registration_batch_used(_batch_used_mem)
                 _batch_used_dirty = 0
             except Exception:
                 logger.exception("[UserBot] batch_used 落盘失败")
     if closed_now:
         try:
-            cfg.set("user_bot_open_reg", False)
+            set_user_bot_open_reg_enabled(False)
             logger.info(f"[UserBot] 批次注册名额已用完({_batch_used_mem}/{quota})，开放注册已自动关闭")
             _send_open_reg_closed_notify("批次名额已满")
         except Exception:
@@ -1048,14 +1066,14 @@ def _do_register(chat_id, tg_user_id, custom_name, tg_username="", tg_display_na
                 if reason == "batch_full":
                     _send(chat_id, "❌ 本次开放注册名额已用完，请联系管理员")
                     try:
-                        cfg.set("user_bot_open_reg", False)
+                        set_user_bot_open_reg_enabled(False)
                     except Exception:
                         pass
                     _send_open_reg_closed_notify("批次名额已满")
                 elif reason == "total_full":
                     _send(chat_id, "❌ 用户数量已达上限，开放注册已自动关闭")
                     try:
-                        cfg.set("user_bot_open_reg", False)
+                        set_user_bot_open_reg_enabled(False)
                     except Exception:
                         pass
                     _send_open_reg_closed_notify("用户总数已达上限")
@@ -1479,7 +1497,7 @@ def _delete_messages_later(chat_id, message_ids, delay_seconds=30):
     def delete_messages():
         import time
         time.sleep(delay_seconds)
-        token = cfg.get("tg_user_bot_token")
+        token = get_user_bot_token()
         if not token:
             return
         for msg_id in message_ids:
@@ -3143,7 +3161,7 @@ def _submit_request(chat_id, tg_user_id, media_type, tmdb_id, season):
             from app.core.config import REPORT_COVER_URL
             from app.routers.notify_admin import get_notify_rule
             msg = f"🎬 <b>收到新求片心愿</b>\n\n👤 <b>用户：</b>{uname}\n📺 <b>内容：</b>{title} ({year}){season_str}\n📱 <b>来源：</b>TG 用户机器人\n\n请及时前往后台审批处理。"
-            admin_url = cfg.get("pulse_url") or cfg.get_main_public_url() or "http://127.0.0.1:10307"
+            admin_url = get_user_bot_portal_url() or cfg.get_main_public_url() or "http://127.0.0.1:10307"
             keyboard = {"inline_keyboard": [
                 [{"text": "🚀 推送 MP", "callback_data": f"req_approve_{tmdb_id}"}, {"text": "✋ 手动接单", "callback_data": f"req_manual_{tmdb_id}"}],
                 [{"text": "❌ 拒绝求片", "callback_data": f"req_reject_menu_{tmdb_id}"}, {"text": "💻 网页审批", "url": f"{admin_url.rstrip('/')}/requests_admin"}]
@@ -3549,7 +3567,7 @@ class UserBot:
         if not _is_pro():
             logger.info("🤖 [UserBot] 非 Pro 用户，用户机器人未启动")
             return
-        token = cfg.get("tg_user_bot_token")
+        token = get_user_bot_token()
         if not token:
             return
         if self.running:
@@ -3599,7 +3617,7 @@ class UserBot:
         _tg_api("setMyCommands", {"commands": cmds})
 
     def _polling_loop(self):
-        token = cfg.get("tg_user_bot_token")
+        token = get_user_bot_token()
         while self.running:
             try:
                 # 使用 long polling，timeout=30 秒
@@ -3744,18 +3762,18 @@ class UserBot:
         # ========== 群聊处理 ==========
         if chat_type in ["group", "supergroup"]:
             # 检查群聊功能是否启用
-            if not cfg.get("user_bot_group_enabled", False):
+            if not get_user_bot_group_enabled():
                 return
             
             # 检查群是否在白名单中
-            allowed_groups = cfg.get("user_bot_allowed_groups", "")
+            allowed_groups = get_user_bot_allowed_groups()
             if allowed_groups:
                 allowed_list = [g.strip() for g in allowed_groups.split("\n") if g.strip()]
                 if chat_id not in allowed_list and f"@{chat.get('username', '')}" not in allowed_list:
                     return  # 不在白名单，忽略
             
             # 获取群内允许的指令
-            group_commands = cfg.get("user_bot_group_commands", "checkin,help")
+            group_commands = get_user_bot_group_commands()
             allowed_cmds = [c.strip().lower() for c in group_commands.split(",") if c.strip()]
             logger.info(f"[群聊] allowed_cmds={allowed_cmds}, text={text}")
             
@@ -4093,9 +4111,9 @@ class UserBot:
         """处理新成员入群"""
         for member in new_members:
             # 检查是否是机器人自己被加入群
-            if member.get("is_bot") and str(member.get("id")) == str(cfg.get("tg_user_bot_token", "").split(":")[0] if ":" in cfg.get("tg_user_bot_token", "") else ""):
+            if member.get("is_bot") and str(member.get("id")) == str(get_user_bot_token().split(":")[0] if ":" in get_user_bot_token() else ""):
                 # 机器人被加入群，发送欢迎消息
-                welcome_msg = cfg.get("user_bot_welcome_msg", "")
+                welcome_msg = get_user_bot_welcome_msg()
                 if welcome_msg:
                     _send(chat_id, welcome_msg)
                 else:
@@ -4245,7 +4263,7 @@ def do_lottery_draw():
         
         # 🔥 发送开奖结果到群
         # 获取允许彩票的群
-        allowed_groups = cfg.get("user_bot_allowed_groups", "")
+        allowed_groups = get_user_bot_allowed_groups()
         logger.info(f"[彩票] 允许的群: {allowed_groups}")
         if allowed_groups:
             group_list = [g.strip() for g in allowed_groups.split("\n") if g.strip()]

@@ -24,6 +24,7 @@ os.environ.setdefault("PYTHONIOENCODING", "utf-8")
 def _patch_module_for_test(monkeypatch_like_setattr):
     """把模块里的 cfg / media_api / _send_open_reg_closed_notify 替换成可控 mock"""
     from app.services import user_bot_service as ub
+    from app.infra.config import user_bot_settings as ubs
 
     # 模拟 cfg：内存字典
     class FakeCfg:
@@ -79,6 +80,7 @@ def _patch_module_for_test(monkeypatch_like_setattr):
             raise NotImplementedError(path)
 
     monkeypatch_like_setattr(ub, "cfg", fake_cfg)
+    monkeypatch_like_setattr(ubs, "cfg", fake_cfg)
     monkeypatch_like_setattr(ub, "media_api", FakeMediaApi())
     monkeypatch_like_setattr(ub, "_send_open_reg_closed_notify", lambda *a, **kw: None)
 
