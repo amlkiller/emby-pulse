@@ -9,7 +9,7 @@ from typing import Optional, List, Dict, Any
 
 from app.infra.clients.media_server_client import media_api
 from app.infra.config.media_server_settings import get_media_server_main_public_or_host
-from app.dao.dedupe_dao import (
+from app.domains.playback.dedupe_dao import (
     DedupeResultWriter,
     add_dedupe_whitelist_items,
     delete_dedupe_result_by_item_id,
