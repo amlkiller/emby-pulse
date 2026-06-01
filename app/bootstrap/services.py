@@ -2,9 +2,8 @@ import asyncio
 import logging
 import secrets
 import threading
-import time
 
-from app.core.session import cleanup_expired_sessions
+from app.core.session import start_session_cleanup_loop
 from app.infra.config.bot_settings import get_webhook_token, set_webhook_token
 from app.infra.config.user_bot_settings import get_user_bot_token
 from app.domains.notifications.bot_service import bot
@@ -47,38 +46,12 @@ def start_dashboard_cache_tasks() -> None:
 
 
 def start_community_cache_refresh() -> None:
-    def _refresh_loop():
-        from app.domains.media_requests.router import _refresh_community_cache
+    from app.domains.media_requests.router import start_community_cache_refresh_loop
 
-        time.sleep(15)
-        _refresh_community_cache()
-        while True:
-            time.sleep(300)
-            _refresh_community_cache()
-
-    threading.Thread(target=_refresh_loop, daemon=True).start()
-
+    start_community_cache_refresh_loop()
 
 def start_session_cleanup() -> None:
-    try:
-        deleted = cleanup_expired_sessions()
-        if deleted > 0:
-            print(f"[Session] 已清理 {deleted} 个过期会话")
-    except Exception as e:
-        print(f"[Session] 清理失败: {e}")
-
-    def _session_cleanup_loop():
-        logger = logging.getLogger("uvicorn")
-        while True:
-            try:
-                deleted = cleanup_expired_sessions()
-                if deleted > 0:
-                    logger.info(f"[Session] 已清理 {deleted} 个过期会话")
-            except Exception as e:
-                logger.error(f"[Session] 清理失败: {e}")
-            threading.Event().wait(3600)
-
-    threading.Thread(target=_session_cleanup_loop, daemon=True).start()
+    start_session_cleanup_loop()
 
 
 def print_startup_panel(request_port: int) -> None:

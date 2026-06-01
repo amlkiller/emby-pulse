@@ -1,5 +1,7 @@
 import secrets
 import time
+import logging
+import threading
 from typing import Optional, Any, Dict
 
 from app.infra.db.session_dao import (
@@ -54,6 +56,28 @@ def delete_session(session_id: str):
 def cleanup_expired_sessions():
     now = time.time()
     return dao_cleanup_expired_sessions(now)
+
+
+def start_session_cleanup_loop(interval_seconds: int = 3600) -> None:
+    try:
+        deleted = cleanup_expired_sessions()
+        if deleted > 0:
+            print(f"[Session] 已清理 {deleted} 个过期会话")
+    except Exception as e:
+        print(f"[Session] 清理失败: {e}")
+
+    def _session_cleanup_loop():
+        logger = logging.getLogger("uvicorn")
+        while True:
+            try:
+                deleted = cleanup_expired_sessions()
+                if deleted > 0:
+                    logger.info(f"[Session] 已清理 {deleted} 个过期会话")
+            except Exception as e:
+                logger.error(f"[Session] 清理失败: {e}")
+            threading.Event().wait(interval_seconds)
+
+    threading.Thread(target=_session_cleanup_loop, daemon=True).start()
 
 
 class SessionDict:

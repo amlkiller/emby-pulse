@@ -1330,6 +1330,17 @@ def _refresh_community_cache():
             pass
 
 
+def start_community_cache_refresh_loop() -> None:
+    def _refresh_loop():
+        time.sleep(15)
+        _refresh_community_cache()
+        while True:
+            time.sleep(300)
+            _refresh_community_cache()
+
+    threading.Thread(target=_refresh_loop, daemon=True).start()
+
+
 @router.post("/api/requests/refresh_cache")
 def refresh_community_cache_api(request: Request):
     """手动刷新用户社区首页缓存（管理员接口）"""
