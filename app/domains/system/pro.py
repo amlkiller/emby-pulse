@@ -22,9 +22,6 @@ def ensure_pro_schema():
         logger.error(f"授权表初始化失败: {e}")
 
 
-ensure_pro_schema()
-
-
 class ActivateModel(BaseModel):
     license_key: str
 
@@ -80,3 +77,7 @@ async def get_pro_status(request: Request):
             "device": {"max_devices": 10, "current_devices": 0},
         },
     }
+
+
+def start_pro_services() -> None:
+    ensure_pro_schema()
