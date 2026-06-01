@@ -3333,11 +3333,9 @@ def start_notification_services() -> None:
     bot.start()
 
     try:
-        from app.infra.config.user_bot_settings import get_user_bot_token
-        from app.domains.notifications.user_bot_service import user_bot
+        from app.domains.notifications.user_bot_service import start_user_bot_services
 
-        if get_user_bot_token():
-            user_bot.start()
+        start_user_bot_services()
     except Exception as e:
         print(f"⚠️ 用户机器人启动异常: {e}")
 

@@ -268,8 +268,6 @@ def _ensure_user_bot_tables():
     except Exception as e:
         logger.error(f"用户机器人表初始化失败: {e}")
 
-_ensure_user_bot_tables()
-
 
 def _get_proxies():
     return get_safe_proxies()
@@ -4132,6 +4130,12 @@ class UserBot:
 
 
 user_bot = UserBot()
+
+
+def start_user_bot_services():
+    _ensure_user_bot_tables()
+    if get_user_bot_token():
+        user_bot.start()
 
 def do_lottery_draw():
     """执行彩票开奖（由定时任务调用）"""
