@@ -1,4 +1,18 @@
+from typing import Any
+
 from app.core.config import cfg
+
+
+def get_system_config_value(field: str, default: Any = "") -> Any:
+    return cfg.get(field, default)
+
+
+def get_system_config_env_source(field: str) -> str:
+    return cfg.get_env_source(field)
+
+
+def set_system_config_value(field: str, value: Any) -> None:
+    cfg.set(field, value)
 
 
 def get_system_server_type() -> str:

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Request
 from app.schemas.models import SettingsModel
-from app.core.config import cfg, save_config
+from app.core.config import save_config
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 from app.dao.system_tool_dao import (
     get_dashboard_layout,
@@ -30,6 +30,8 @@ from app.infra.config.request_portal_settings import (
 from app.infra.config.media_server_settings import get_media_server_routes
 from app.infra.config.moviepilot_settings import get_moviepilot_token
 from app.infra.config.system_settings import (
+    get_system_config_env_source,
+    get_system_config_value,
     get_system_emby_api_key,
     get_system_emby_host,
     get_system_emby_public_or_host,
@@ -49,6 +51,7 @@ from app.infra.config.system_settings import (
     get_system_weather_source,
     get_system_webhook_token,
     get_system_welcome_message,
+    set_system_config_value,
 )
 
 logger = logging.getLogger("uvicorn")
@@ -83,8 +86,8 @@ def api_diag_config(request: Request):
     
     for config_key, env_key in sensitive_fields.items():
         env_val = os.getenv(env_key, "")
-        config_val = cfg.get(config_key, "")
-        source = cfg.get_env_source(config_key)
+        config_val = get_system_config_value(config_key, "")
+        source = get_system_config_env_source(config_key)
         
         result["env_values"][env_key] = {
             "set": bool(env_val),
@@ -112,8 +115,7 @@ def api_diag_env(request: Request):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     
     import os
-    from app.core.config import cfg
-    
+
     # 检查敏感字段的环境变量
     sensitive_fields = {
         "tg_bot_token": "TG_BOT_TOKEN",
@@ -136,8 +138,8 @@ def api_diag_env(request: Request):
     
     for config_key, env_key in sensitive_fields.items():
         env_val = os.getenv(env_key, "")
-        config_val = cfg.get(config_key, "")
-        source = cfg.get_env_source(config_key)
+        config_val = get_system_config_value(config_key, "")
+        source = get_system_config_env_source(config_key)
         
         # 🔒 安全：只返回是否设置和长度，不返回任何实际值
         result["env_vars"][env_key] = {
@@ -221,8 +223,8 @@ def api_get_settings(request: Request):
     # 🔒 脱敏并标记敏感字段来源
     env_override_fields = []
     for field in SENSITIVE_FIELDS:
-        value = cfg.get(field, "")
-        source = cfg.get_env_source(field)
+        value = get_system_config_value(field, "")
+        source = get_system_config_env_source(field)
         
         if source == "env":
             # 来自环境变量：返回标记，不返回实际值
@@ -238,7 +240,7 @@ def api_get_settings(request: Request):
     
     # 🔥 Webhook Token 特殊处理
     webhook_token = get_system_webhook_token()
-    webhook_source = cfg.get_env_source("webhook_token")
+    webhook_source = get_system_config_env_source("webhook_token")
     
     if webhook_source == "env":
         result_data["webhook_token"] = "****（由环境变量设置）"
@@ -253,7 +255,6 @@ def api_get_settings(request: Request):
         result_data["webhook_token_masked"] = mask_sensitive(webhook_token)
     
     result_data["env_override_fields"] = env_override_fields
-    webhook_source = cfg.get_env_source("webhook_token")
     if webhook_source == "env":
         result_data["webhook_url"] = "（Webhook Token 由环境变量管理，请在 Emby 中配置 Header）"
     else:
@@ -276,7 +277,7 @@ def api_update_settings(data: SettingsModel, request: Request):
         - 包含脱敏标记 **** 的值不更新
         """
         # 检查是否来自环境变量
-        if cfg.get_env_source(field) == "env":
+        if get_system_config_env_source(field) == "env":
             return False
         # 检查是否为空值（前端禁用时发送空字符串）
         if not value or value.strip() == "":
@@ -334,7 +335,7 @@ def api_update_settings(data: SettingsModel, request: Request):
         emby_api_key_to_use = (data.emby_api_key or "").strip()
     else:
         emby_api_key_to_use = get_system_emby_api_key()
-        env_source = cfg.get_env_source("emby_api_key")
+        env_source = get_system_config_env_source("emby_api_key")
         
         # 如果环境变量设置了但值为空，说明环境变量没有正确加载
         if env_source == "env" and not emby_api_key_to_use:
@@ -362,22 +363,22 @@ def api_update_settings(data: SettingsModel, request: Request):
             return {"status": "error", "message": "服务器地址无法访问"}
 
     # 保存所有配置
-    cfg["server_type"] = server_type
-    cfg["emby_host"] = data.emby_host
+    set_system_config_value("server_type", server_type)
+    set_system_config_value("emby_host", data.emby_host)
     
     # 🔒 敏感字段：仅在非环境变量且非脱敏时更新
     if should_update_sensitive("emby_api_key", data.emby_api_key):
-        cfg["emby_api_key"] = (data.emby_api_key or "").strip()
+        set_system_config_value("emby_api_key", (data.emby_api_key or "").strip())
     if should_update_sensitive("tmdb_api_key", data.tmdb_api_key):
-        cfg["tmdb_api_key"] = (data.tmdb_api_key or "").strip()
+        set_system_config_value("tmdb_api_key", (data.tmdb_api_key or "").strip())
     if should_update_sensitive("webhook_token", data.webhook_token):
-        cfg["webhook_token"] = (data.webhook_token or "").strip()
+        set_system_config_value("webhook_token", (data.webhook_token or "").strip())
     if should_update_sensitive("moviepilot_token", data.moviepilot_token):
-        cfg["moviepilot_token"] = (data.moviepilot_token or "").strip()
+        set_system_config_value("moviepilot_token", (data.moviepilot_token or "").strip())
     if should_update_sensitive("weather_qweather_key", data.weather_qweather_key):
-        cfg["weather_qweather_key"] = (data.weather_qweather_key or "").strip()
+        set_system_config_value("weather_qweather_key", (data.weather_qweather_key or "").strip())
     if should_update_sensitive("weather_amap_key", data.weather_amap_key):
-        cfg["weather_amap_key"] = (data.weather_amap_key or "").strip()
+        set_system_config_value("weather_amap_key", (data.weather_amap_key or "").strip())
     
     # 非敏感字段直接保存
     # 🔒 SSRF 防护：校验代理地址，禁止内网/回环
@@ -385,27 +386,27 @@ def api_update_settings(data: SettingsModel, request: Request):
     _proxy_check = validate_proxy_url(data.proxy_url or "")
     if not _proxy_check.get("valid"):
         return {"status": "error", "message": f"代理地址不合法: {_proxy_check.get('error', '')}"}
-    cfg["proxy_url"] = data.proxy_url
+    set_system_config_value("proxy_url", data.proxy_url)
     # 配置变更后失效 proxy_helper 缓存
     try:
         from app.utils.proxy_helper import invalidate_cache as _proxy_cache_invalidate
         _proxy_cache_invalidate()
     except Exception:
         pass
-    cfg["hidden_users"] = data.hidden_users
-    cfg["emby_public_url"] = data.emby_public_url
-    cfg["welcome_message"] = data.welcome_message
+    set_system_config_value("hidden_users", data.hidden_users)
+    set_system_config_value("emby_public_url", data.emby_public_url)
+    set_system_config_value("welcome_message", data.welcome_message)
     set_client_download_url(data.client_download_url)
-    cfg["moviepilot_url"] = data.moviepilot_url
+    set_system_config_value("moviepilot_url", data.moviepilot_url)
     set_pulse_url(data.pulse_url)
     set_user_portal_url(getattr(data, "user_portal_url", ""))
     set_redirect_to_community_enabled(getattr(data, "register_redirect_to_community", "false"))
-    cfg["playback_data_mode"] = getattr(data, "playback_data_mode", "sqlite")
-    cfg["notify_user_login"] = getattr(data, "notify_user_login", False)
-    cfg["notify_item_deleted"] = getattr(data, "notify_item_deleted", False)
-    cfg["weather_greeting"] = getattr(data, "weather_greeting", "")
-    cfg["weather_source"] = getattr(data, "weather_source", "wttr")
-    cfg["weather_qweather_host"] = getattr(data, "weather_qweather_host", "")
+    set_system_config_value("playback_data_mode", getattr(data, "playback_data_mode", "sqlite"))
+    set_system_config_value("notify_user_login", getattr(data, "notify_user_login", False))
+    set_system_config_value("notify_item_deleted", getattr(data, "notify_item_deleted", False))
+    set_system_config_value("weather_greeting", getattr(data, "weather_greeting", ""))
+    set_system_config_value("weather_source", getattr(data, "weather_source", "wttr"))
+    set_system_config_value("weather_qweather_host", getattr(data, "weather_qweather_host", ""))
     
     save_config()
     
@@ -455,7 +456,7 @@ async def api_update_weather_greeting(request: Request):
     
     data = await request.json()
     greeting = data.get("weather_greeting", "") if isinstance(data, dict) else ""
-    cfg["weather_greeting"] = greeting
+    set_system_config_value("weather_greeting", greeting)
     save_config()
     
     return {"status": "success", "message": "问候语已保存"}
