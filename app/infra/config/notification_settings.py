@@ -2,6 +2,10 @@ from app.core.config import cfg
 import json
 
 
+def get_library_notify_channels() -> str:
+    return cfg.get("library_notify_channels", "")
+
+
 def is_message_bot_notify_enabled() -> bool:
     return cfg.get("msg_bot_notify_enabled", True)
 
@@ -16,6 +20,54 @@ def is_user_bot_configured() -> bool:
 
 def get_message_notification_base_url() -> str:
     return cfg.get("base_url", "").strip()
+
+
+def get_notify_channels() -> str:
+    return cfg.get("notify_channels", "")
+
+
+def get_enable_library_notify() -> bool:
+    return cfg.get("enable_library_notify", False)
+
+
+def get_enable_notify() -> bool:
+    return cfg.get("enable_notify", False)
+
+
+def get_notify_user_login() -> bool:
+    return cfg.get("notify_user_login", False)
+
+
+def get_notify_item_deleted() -> bool:
+    return cfg.get("notify_item_deleted", False)
+
+
+def get_tg_bot_token() -> str:
+    return cfg.get("tg_bot_token", "")
+
+
+def get_wecom_corpid() -> str:
+    return cfg.get("wecom_corpid", "")
+
+
+def get_wecom_corpsecret() -> str:
+    return cfg.get("wecom_corpsecret", "")
+
+
+def get_wecom_agentid() -> str:
+    return cfg.get("wecom_agentid", "")
+
+
+def get_wecom_touser() -> str:
+    return cfg.get("wecom_touser", "@all")
+
+
+def get_pulse_url() -> str:
+    return cfg.get("pulse_url", "")
+
+
+def get_wecom_webhook() -> str:
+    return cfg.get("wecom_webhook", cfg.get("wechat_webhook", ""))
 
 
 def _get_notification_channels_config(*, masked: bool) -> dict:

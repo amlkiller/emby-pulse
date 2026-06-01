@@ -3,6 +3,20 @@ from typing import Any
 from app.core.config import cfg
 
 
+def get_bot_worker_count() -> int:
+    try:
+        return max(2, min(int(cfg.get("bot_worker_count") or 8), 32))
+    except Exception:
+        return 8
+
+
+def get_library_notify_queue_max() -> int:
+    try:
+        return max(50, min(int(cfg.get("library_notify_queue_max") or 300), 2000))
+    except Exception:
+        return 300
+
+
 def get_all_bot_settings() -> dict:
     return cfg.get_all()
 
@@ -61,3 +75,7 @@ def get_wecom_aeskey() -> str:
 
 def get_wecom_token() -> str:
     return cfg.get("wecom_token") or ""
+
+
+def is_bot_enabled() -> bool:
+    return cfg.get("enable_bot", False)

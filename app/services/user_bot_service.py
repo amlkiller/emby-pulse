@@ -55,6 +55,10 @@ from app.infra.config.user_bot_settings import (
     get_user_bot_group_enabled,
     get_user_bot_welcome_msg,
 )
+from app.infra.config.media_server_settings import (
+    get_media_server_main_public_url,
+    get_media_server_user_routes,
+)
 from app.infra.config.user_visibility_settings import get_hidden_users
 from app.core.security import validate_password_strength  # 🔒 统一密码强度校验
 from app.core.security_utils import safe_error_message  # 🔒 错误脱敏
@@ -3161,7 +3165,7 @@ def _submit_request(chat_id, tg_user_id, media_type, tmdb_id, season):
             from app.core.config import REPORT_COVER_URL
             from app.routers.notify_admin import get_notify_rule
             msg = f"🎬 <b>收到新求片心愿</b>\n\n👤 <b>用户：</b>{uname}\n📺 <b>内容：</b>{title} ({year}){season_str}\n📱 <b>来源：</b>TG 用户机器人\n\n请及时前往后台审批处理。"
-            admin_url = get_user_bot_portal_url() or cfg.get_main_public_url() or "http://127.0.0.1:10307"
+            admin_url = get_user_bot_portal_url() or get_media_server_main_public_url() or "http://127.0.0.1:10307"
             keyboard = {"inline_keyboard": [
                 [{"text": "🚀 推送 MP", "callback_data": f"req_approve_{tmdb_id}"}, {"text": "✋ 手动接单", "callback_data": f"req_manual_{tmdb_id}"}],
                 [{"text": "❌ 拒绝求片", "callback_data": f"req_reject_menu_{tmdb_id}"}, {"text": "💻 网页审批", "url": f"{admin_url.rstrip('/')}/requests_admin"}]
@@ -3474,7 +3478,7 @@ def cmd_server(chat_id, tg_user_id, msg_id=None):
     
     emby_uid = binding.get("emby_user_id") if binding else None
     try:
-        routes = cfg.get_user_routes(emby_uid)
+        routes = get_media_server_user_routes(emby_uid)
 
         if not routes:
             _send(chat_id, "📡 管理员未配置公网地址")

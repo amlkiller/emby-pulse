@@ -27,16 +27,40 @@ from app.queries import stats_queries
 from app.utils.proxy_helper import get_safe_proxies, get_safe_wecom_base  # 🔒 SSRF 安全代理读取
 from app.services.report_service import report_gen, HAS_PIL
 from app.core.event_bus import bus
+from app.infra.config.bot_settings import (
+    get_bot_worker_count,
+    get_library_notify_queue_max,
+    get_tg_bot_token as get_bot_tg_token,
+    get_tg_chat_id,
+)
+from app.infra.config.media_server_settings import (
+    get_media_server_api_key,
+    get_media_server_host,
+    get_media_server_main_public_or_host,
+    get_media_server_public_url,
+)
+from app.infra.config.moviepilot_settings import get_moviepilot_token, get_moviepilot_url
+from app.infra.config.notification_settings import (
+    get_enable_library_notify,
+    get_enable_notify,
+    get_library_notify_channels,
+    get_notify_channels,
+    get_notify_item_deleted,
+    get_notify_user_login,
+    get_pulse_url,
+    get_tg_bot_token as get_notify_tg_bot_token,
+    get_wecom_agentid,
+    get_wecom_corpid,
+    get_wecom_corpsecret,
+    get_wecom_touser,
+)
 # 🔥 引入共享 IP 归属地工具
 from app.utils.ip_location import get_location, get_isp
 
 logger = logging.getLogger("uvicorn")
 
 def _get_bot_worker_count() -> int:
-    try:
-        return max(2, min(int(cfg.get("bot_worker_count") or 8), 32))
-    except Exception:
-        return 8
+    return get_bot_worker_count()
 
 _BOT_WORKER_COUNT = _get_bot_worker_count()
 _bot_executor = ThreadPoolExecutor(max_workers=_BOT_WORKER_COUNT, thread_name_prefix="notify-bot")
@@ -130,7 +154,7 @@ def get_notify_channels(notify_type: str) -> list:
     # 🔥 入库通知优先从配置文件读取
     if notify_type == "library_new":
         try:
-            channels_str = cfg.get("library_notify_channels", "")
+            channels_str = get_library_notify_channels()
             if channels_str:
                 channels = json.loads(channels_str)
                 if channels:
@@ -657,10 +681,7 @@ class SystemDaemon:
     def add_library_task(self, item):
         with self.library_lock:
             max_queue = 300
-            try:
-                max_queue = max(50, min(int(cfg.get("library_notify_queue_max") or 300), 2000))
-            except Exception:
-                pass
+            max_queue = get_library_notify_queue_max()
             if len(self.library_queue) >= max_queue:
                 dropped = self.library_queue.pop(0)
                 logger.warning(f"[入库通知] 队列已满，丢弃最旧项目: {dropped.get('Name') or dropped.get('Id')}")
@@ -903,11 +924,11 @@ class NotificationBot:
 
     def start(self):
         if self.running: return
-        if not cfg.get("tg_bot_token") and not cfg.get("wecom_corpid"): return
+        if not get_bot_tg_token() and not get_wecom_corpid(): return
         self.running = True
         self._set_commands()
         self._set_wecom_menu() 
-        if cfg.get("tg_bot_token"):
+        if get_bot_tg_token():
             self.poll_thread = threading.Thread(target=self._polling_loop, daemon=True)
             self.poll_thread.start()
         logger.info("🤖 Notification Bot Started")
@@ -941,7 +962,7 @@ class NotificationBot:
         if uid and violation_action != "auto_ban":
             keyboard["inline_keyboard"].append([{"text": "🚫 立即封禁此违规账号", "callback_data": f"risk_ban_{uid}"}])
             
-        admin_url = cfg.get("pulse_url") or cfg.get_main_public_url()
+        admin_url = get_pulse_url() or get_media_server_main_public_or_host()
         if admin_url:
             risk_url = f"{admin_url.rstrip('/')}/risk"
             keyboard["inline_keyboard"].append([{"text": "🛡️ 前往风控大盘拔网线", "url": risk_url}])
@@ -959,7 +980,7 @@ class NotificationBot:
             logger.error(f"写入风控通知失败: {e}")
 
     def on_gap_cleared(self, data):
-        if not cfg.get("enable_library_notify"): return
+        if not get_enable_library_notify(): return
         s_idx = data["s_idx"]; e_idx = data["e_idx"]
         series_name = data.get("series_name", "未知剧集")
         msg = (f"🎉 <b>残卷补全成功！</b>\n\n📺 剧集已入库：<b>《{series_name}》 S{str(s_idx).zfill(2)}E{str(e_idx).zfill(2)}</b>\n"
@@ -967,7 +988,7 @@ class NotificationBot:
         self.send_message("sys_notify", msg, platform="all")
 
     def on_library_new_episode(self, data):
-        if not cfg.get("enable_library_notify"): return
+        if not get_enable_library_notify(): return
         series_id = data["series_id"]; episodes = data["episodes"]; series_info = data["series_info"]
 
         season_groups = defaultdict(list)
@@ -1016,7 +1037,7 @@ class NotificationBot:
             quality_info = get_media_quality_info(ep_id)
             logger.info(f"[媒体质量] 获取结果: {quality_info}")
         
-        base_url = cfg.get_main_public_url() or cfg.get("emby_host")
+        base_url = get_media_server_main_public_or_host() or get_media_server_host()
         if base_url and not base_url.startswith(('http://', 'https://')):
             base_url = 'https://' + base_url
         play_url = f"{base_url}/web/index.html#!/item?id={series_id}&serverId={series_info.get('ServerId','')}"
@@ -1068,7 +1089,7 @@ class NotificationBot:
             self._notify_channels(tg_img, caption, keyboard, "episode", series_info)
 
     def on_library_new_item(self, item):
-        if not cfg.get("enable_library_notify"):
+        if not get_enable_library_notify():
             return
         
         try:
@@ -1088,7 +1109,7 @@ class NotificationBot:
             # 获取媒体质量信息
             quality_info = get_media_quality_info(item.get('Id', ''))
             
-            base_url = cfg.get_main_public_url() or cfg.get("emby_host")
+            base_url = get_media_server_main_public_or_host() or get_media_server_host()
             if base_url and not base_url.startswith(('http://', 'https://')):
                 base_url = 'https://' + base_url
             play_url = f"{base_url}/web/index.html#!/item?id={item['Id']}&serverId={item.get('ServerId','')}"
@@ -1142,7 +1163,7 @@ class NotificationBot:
     def _notify_channels(self, photo_io, caption, keyboard, item_type, item_info):
         """推送入库通知到配置的频道"""
         try:
-            notify_channels_str = cfg.get("notify_channels", "")
+            notify_channels_str = get_notify_channels()
             if not notify_channels_str:
                 return
             
@@ -1186,7 +1207,7 @@ class NotificationBot:
 
     def _send_to_channel(self, chat_id, photo_io, caption, keyboard):
         """发送消息到指定频道"""
-        token = cfg.get("tg_bot_token")
+        token = get_notify_tg_bot_token()
         if not token:
             return
 
@@ -1236,7 +1257,7 @@ class NotificationBot:
             keyboard: 按钮配置，频道通知通常为 None
         """
         try:
-            notify_channels_str = cfg.get("notify_channels", "")
+            notify_channels_str = get_notify_channels()
             if not notify_channels_str:
                 logger.info(f"📢 [频道通知] 未配置频道，跳过推送")
                 return
@@ -1281,7 +1302,7 @@ class NotificationBot:
             return "00:00:00"
 
     def on_playback_event(self, data, action):
-        if not cfg.get("enable_notify"):
+        if not get_enable_notify():
             logger.info(f"🔇 [播放通知] 开关未开启，跳过")
             return
 
@@ -1415,7 +1436,7 @@ class NotificationBot:
             if raw_type == "Episode" and series_id: target_jump_id = series_id
             elif raw_type == "Audio" and item.get("AlbumId"): target_jump_id = item.get("AlbumId")
             
-            base_url = cfg.get_main_public_url() or cfg.get("emby_host")
+            base_url = get_media_server_main_public_or_host() or get_media_server_host()
             if base_url and not base_url.startswith(('http://', 'https://')):
                 base_url = 'https://' + base_url
 
@@ -1447,7 +1468,7 @@ class NotificationBot:
                 return
         except:
             # 兜底：使用旧配置
-            if not cfg.get("notify_user_login"): return
+            if not get_notify_user_login(): return
         
         try:
             user = data.get("User") or {}
@@ -1498,7 +1519,7 @@ class NotificationBot:
         except Exception as e: logger.error(f"登录通知组装异常: {e}")
 
     def on_item_deleted(self, data):
-        if not cfg.get("notify_item_deleted"): return
+        if not get_notify_item_deleted(): return
         try:
             item = data.get("Item") or data
             raw_type = item.get("Type", "")
@@ -1590,12 +1611,12 @@ class NotificationBot:
         1. 如果 tg_chat_id 配置了，检查 chat_id 是否在配置中
         2. 检查用户是否是群组管理员或机器人创建者
         """
-        token = cfg.get("tg_bot_token")
+        token = get_notify_tg_bot_token()
         if not token or not user_id:
             return False
         
         # 获取配置的管理员 chat_id 列表
-        raw_cids = str(cfg.get("tg_chat_id", ""))
+        raw_cids = str(get_tg_chat_id())
         admin_chat_ids = [c.strip() for c in raw_cids.replace('，', ',').split(',') if c.strip()]
         
         # 如果配置了特定的 chat_id，只有这些 chat_id 才能操作
@@ -1676,8 +1697,8 @@ class NotificationBot:
         return None
 
     def _get_wecom_token(self):
-        corpid = cfg.get("wecom_corpid")
-        corpsecret = cfg.get("wecom_corpsecret")
+        corpid = get_wecom_corpid()
+        corpsecret = get_wecom_corpsecret()
         proxy_url = get_safe_wecom_base()
         if not corpid or not corpsecret:
             return None
@@ -1707,7 +1728,7 @@ class NotificationBot:
         return text.strip()
 
     def _set_wecom_menu(self):
-        token = self._get_wecom_token(); agentid = cfg.get("wecom_agentid")
+        token = self._get_wecom_token(); agentid = get_wecom_agentid()
         proxy_url = get_safe_wecom_base()
         if not token or not agentid: return
         
@@ -1752,7 +1773,7 @@ class NotificationBot:
 
     def _send_wecom_message(self, text, inline_keyboard=None, touser="@all"):
         token = self._get_wecom_token()
-        agentid = cfg.get("wecom_agentid")
+        agentid = get_wecom_agentid()
         proxy_url = get_safe_wecom_base()
 
         if not token:
@@ -1786,7 +1807,7 @@ class NotificationBot:
             logger.error(f"[企业微信] 消息发送异常: {e}")
 
     def _send_wecom_photo(self, photo_bytes, html_text, inline_keyboard=None, touser="@all"):
-        token = self._get_wecom_token(); agentid = cfg.get("wecom_agentid")
+        token = self._get_wecom_token(); agentid = get_wecom_agentid()
         proxy_url = get_safe_wecom_base()
         if not token or not agentid: return
         
@@ -1839,8 +1860,8 @@ class NotificationBot:
                     match = re.search(r'id=([a-zA-Z0-9]+)', play_url)
                     if match:
                         item_id = match.group(1)
-                        base_emby = (cfg.get_main_public_url() or cfg.get("emby_host", "")).rstrip('/')
-                        api_key = cfg.get("emby_api_key", "")
+                        base_emby = (get_media_server_main_public_or_host() or get_media_server_host() or "").rstrip('/')
+                        api_key = get_media_server_api_key() or ""
                         if base_emby and api_key:
                             # 优先使用横版封面 Backdrop
                             pic_url = f"{base_emby}/emby/Items/{item_id}/Images/Backdrop?maxWidth=800&api_key={api_key}"
@@ -1880,7 +1901,7 @@ class NotificationBot:
                         f.write(photo_bytes)
                     
                     # 生成外部可访问的URL
-                    pulse_url = cfg.get("pulse_url", "")
+                    pulse_url = get_pulse_url()
                     if pulse_url:
                         pic_url = f"{pulse_url.rstrip('/')}/public/{report_filename}"
                         logger.info(f"[企业微信] 使用本地图片URL: {pic_url}")
@@ -1904,7 +1925,7 @@ class NotificationBot:
                 max_bytes = 512 - len(suffix.encode('utf-8')) - 5
                 desc = desc.encode('utf-8')[:max_bytes].decode('utf-8', 'ignore') + suffix
 
-            jump_url = cfg.get_main_public_url() or cfg.get("emby_host") or "https://emby.media"
+            jump_url = get_media_server_main_public_or_host() or get_media_server_host() or "https://emby.media"
             if inline_keyboard and "inline_keyboard" in inline_keyboard:
                 try: jump_url = inline_keyboard["inline_keyboard"][0][0]["url"]
                 except Exception: pass
@@ -1915,8 +1936,8 @@ class NotificationBot:
             item_id_match = re.search(r'id=([a-zA-Z0-9]+)', jump_url)
             if item_id_match and pic_url == REPORT_COVER_URL:
                 item_id = item_id_match.group(1)
-                base_emby = (cfg.get_main_public_url() or cfg.get("emby_host")).rstrip('/')
-                api_key = cfg.get('emby_api_key')
+                base_emby = (get_media_server_main_public_or_host() or get_media_server_host()).rstrip('/')
+                api_key = get_media_server_api_key()
                 
                 # 优先使用横版封面 Backdrop
                 img_type = "Backdrop"
@@ -1926,7 +1947,7 @@ class NotificationBot:
                 except Exception: pass
                 pic_url = f"{base_emby}/emby/Items/{item_id}/Images/{img_type}?maxWidth=800&api_key={api_key}"
 
-            pulse_url = cfg.get("pulse_url")
+            pulse_url = get_pulse_url()
             if pulse_url and any(kw in title for kw in ["求片", "心愿", "报错", "工单", "风控", "系统告警", "安全告警"]):
                 base_pulse = pulse_url.rstrip('/')
                 if "求片" in title or "心愿" in title: jump_url = f"{base_pulse}/requests_admin"
@@ -1979,13 +2000,13 @@ class NotificationBot:
                 except Exception: pass
             else: wecom_photo_bytes = wecom_photo_io.read()
 
-        if platform in ["all", "wecom"] and cfg.get("wecom_corpid"):
+        if platform in ["all", "wecom"] and get_wecom_corpid():
             # 企业微信不识别 "sys_notify" 这样的虚拟 ID，统一使用配置的 touser 或 @all
-            wecom_touser = cfg.get("wecom_touser", "@all")
+            wecom_touser = get_wecom_touser()
             _submit_bot_task(self._send_wecom_photo, wecom_photo_bytes, caption, reply_markup, wecom_touser)
 
-        if platform in ["all", "tg"] and cfg.get("tg_bot_token"):
-            raw_cids = str(cfg.get("tg_chat_id", ""))
+        if platform in ["all", "tg"] and get_notify_tg_bot_token():
+            raw_cids = str(get_tg_chat_id())
             # 🔥 处理不同格式的 chat_id
             tg_cids = []
             if chat_id in ["sys_notify", "admin"]:
@@ -2007,7 +2028,7 @@ class NotificationBot:
                     data = {"chat_id": tg_cid, "caption": caption, "parse_mode": parse_mode}
                     if reply_markup: data["reply_markup"] = json.dumps(reply_markup)
                     if photo_bytes:
-                        r = telegram_client.send_photo(cfg.get("tg_bot_token"), data=data, files={"photo": ("image.jpg", io.BytesIO(photo_bytes), "image/jpeg")}, proxies=self._get_proxies(), timeout=20)
+                        r = telegram_client.send_photo(get_notify_tg_bot_token(), data=data, files={"photo": ("image.jpg", io.BytesIO(photo_bytes), "image/jpeg")}, proxies=self._get_proxies(), timeout=20)
                         logger.info(f"[Bot] TG photo response: {r.status_code} - {r.text[:300] if r.text else 'empty'}")
                         if r.status_code == 200:
                             try:
@@ -2031,13 +2052,13 @@ class NotificationBot:
         text_preview = text_preview.replace("\n", " ")
         logger.info(f"[Bot] 📤 发送消息 -> {chat_id}: {text_preview}")
 
-        if platform in ["all", "wecom"] and cfg.get("wecom_corpid"):
+        if platform in ["all", "wecom"] and get_wecom_corpid():
             # 企业微信不识别 "sys_notify" 这样的虚拟 ID，统一使用配置的 touser 或 @all
-            wecom_touser = cfg.get("wecom_touser", "@all")
+            wecom_touser = get_wecom_touser()
             _submit_bot_task(self._send_wecom_message, text, reply_markup, wecom_touser)
 
-        if platform in ["all", "tg"] and cfg.get("tg_bot_token"):
-            raw_cids = str(cfg.get("tg_chat_id", ""))
+        if platform in ["all", "tg"] and get_notify_tg_bot_token():
+            raw_cids = str(get_tg_chat_id())
             # 🔥 处理不同格式的 chat_id
             tg_cids = []
             if chat_id in ["sys_notify", "admin"]:
@@ -2055,7 +2076,7 @@ class NotificationBot:
                 try:
                     data = {"chat_id": tg_cid, "text": text, "parse_mode": parse_mode}
                     if reply_markup: data["reply_markup"] = json.dumps(reply_markup)
-                    r = telegram_client.send_message(cfg.get("tg_bot_token"), data, proxies=self._get_proxies(), timeout=10)
+                    r = telegram_client.send_message(get_notify_tg_bot_token(), data, proxies=self._get_proxies(), timeout=10)
                     if r.status_code == 200:
                         try:
                             tmdb_id = _extract_request_tmdb_id(reply_markup)
@@ -2072,7 +2093,7 @@ class NotificationBot:
         """编辑已发送的消息（仅支持 Telegram）"""
         logger.info(f"[Bot] edit_message called: chat_id={chat_id}, message_id={message_id}")
         
-        if platform != "tg" or not cfg.get("tg_bot_token"):
+        if platform != "tg" or not get_notify_tg_bot_token():
             return False
         
         try:
@@ -2085,7 +2106,7 @@ class NotificationBot:
             if reply_markup:
                 data["reply_markup"] = json.dumps(reply_markup)
             
-            r = telegram_client.post_api(cfg.get("tg_bot_token"), "editMessageText", json=data, proxies=self._get_proxies(), timeout=10)
+            r = telegram_client.post_api(get_notify_tg_bot_token(), "editMessageText", json=data, proxies=self._get_proxies(), timeout=10)
             logger.info(f"[Bot] TG edit response: {r.status_code}")
             return r.status_code == 200
         except Exception as e:
@@ -2093,10 +2114,10 @@ class NotificationBot:
             return False
 
     def _polling_loop(self):
-        token = cfg.get("tg_bot_token")
+        token = get_notify_tg_bot_token()
         
         while self.running:
-            raw_cids = str(cfg.get("tg_chat_id", ""))
+            raw_cids = str(get_tg_chat_id())
             admin_ids = [c.strip() for c in raw_cids.replace('，', ',').split(',') if c.strip()]
             
             try:
@@ -2136,7 +2157,7 @@ class NotificationBot:
 
     def _handle_callback(self, cq):
         data = cq.get("data", ""); cid = str(cq["message"]["chat"]["id"])
-        mid = cq["message"]["message_id"]; cq_id = cq["id"]; token = cfg.get("tg_bot_token")
+        mid = cq["message"]["message_id"]; cq_id = cq["id"]; token = get_notify_tg_bot_token()
         proxies = self._get_proxies() 
         
         # 🔥 权限检查：对于管理类操作，检查用户是否有权限
@@ -2371,7 +2392,7 @@ class NotificationBot:
                 return
             
             elif action == "back":
-                tid = parts[2]; admin_url = cfg.get("pulse_url") or "http://127.0.0.1:10307"
+                tid = parts[2]; admin_url = get_pulse_url() or "http://127.0.0.1:10307"
                 # 检查影巢插件是否启用
                 hdhive_enabled = False
                 try:
@@ -2413,7 +2434,7 @@ class NotificationBot:
                 return
                 
             if action_db == "approve":
-                mp_url = cfg.get("moviepilot_url"); mp_token = cfg.get("moviepilot_token")
+                mp_url = get_moviepilot_url(); mp_token = get_moviepilot_token()
                 for r in rows:
                     if mp_url and mp_token:
                         payload = { "name": r["title"], "tmdbid": int(tid), "year": str(r["year"]), "type": "电影" if r["media_type"]=="movie" else "电视剧" }
@@ -2441,7 +2462,7 @@ class NotificationBot:
                 _sync_request_admin_messages(tid, action_text, operator, token, proxies, orig_text, False)
 
     def _set_commands(self):
-        token = cfg.get("tg_bot_token")
+        token = get_notify_tg_bot_token()
         if not token: return
         cmds = [
             {"command": "search", "description": "🔍 搜索资源"}, 
@@ -2464,7 +2485,7 @@ class NotificationBot:
     def _is_admin(self, cid, platform="tg"):
         """检查 chat_id 是否为配置的管理员"""
         if platform == "tg":
-            raw_cids = str(cfg.get("tg_chat_id", ""))
+            raw_cids = str(get_tg_chat_id())
             admin_ids = [c.strip() for c in raw_cids.replace('，', ',').split(',') if c.strip()]
             return bool(admin_ids and str(cid) in admin_ids)
         elif platform == "wecom":
@@ -2618,7 +2639,7 @@ class NotificationBot:
             type_icon = "🎬" if type_raw == "Movie" else "📺"
             info_line = f"{ep_count_str} | {tech_info_str}" if type_raw == "Series" else tech_info_str
             
-            base_url = cfg.get_main_public_url() or cfg.get("emby_host")
+            base_url = get_media_server_main_public_or_host() or get_media_server_host()
             if base_url and not base_url.startswith(('http://', 'https://')):
                 base_url = 'https://' + base_url
             play_url = f"{base_url}/web/index.html#!/item?id={top.get('Id')}&serverId={top.get('ServerId')}"
@@ -2948,7 +2969,7 @@ class NotificationBot:
                        f"👥 <b>当前活跃</b>：{active_users} 人正在观看")
 
                 try:
-                    raw_url_str = cfg.get("emby_public_url", "")
+                    raw_url_str = get_media_server_public_url()
                     routes = []
                     try:
                         parsed = json.loads(raw_url_str)
