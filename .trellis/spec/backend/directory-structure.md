@@ -89,6 +89,12 @@ Do not deepen cross-domain imports into private DAO/query modules. If one domain
 needs another domain's behavior, prefer a public service function, a narrow
 facade, or an event boundary.
 
+Foundation layers must not import concrete domains. `app/core/` and `app/infra/`
+can expose shared stores, query helpers, and compatibility functions, but they
+must not import `app.domains.*`. If a helper is needed by both infra/core and a
+domain, put the helper in `app/infra/` or `app/shared/`, then let the domain
+module wrap or re-export it for compatibility.
+
 ---
 
 ## Naming Conventions

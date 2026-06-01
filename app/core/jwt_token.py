@@ -9,7 +9,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from app.core.config import SECRET_KEY
-from app.domains.system.api_token_dao import get_api_token_by_hash
+from app.infra.db.api_token_store import get_api_token_by_hash
 
 logger = logging.getLogger("uvicorn")
 
