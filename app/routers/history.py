@@ -7,7 +7,7 @@ import math
 import ipaddress
 import time
 from app.core.security_utils import safe_error_message
-from app.queries.history_queries import (
+from app.domains.playback.queries import (
     build_history_select_fields,
     count_history,
     count_today_active_users,
