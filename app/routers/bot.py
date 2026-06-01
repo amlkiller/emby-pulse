@@ -14,6 +14,14 @@ from app.infra.config.bot_settings import (
     set_bot_setting,
     should_update_sensitive_bot_setting,
 )
+from app.infra.config.user_bot_settings import (
+    get_user_bot_allowed_groups,
+    get_user_bot_notify_group_enabled,
+    get_user_bot_notify_user_enabled,
+    get_user_bot_open_reg_enabled,
+    get_user_bot_reg_quota,
+    get_user_bot_reg_quota_mode,
+)
 from app.dao.bot_admin_dao import (
     adjust_lottery_pool,
     clear_active_scratch_card,
@@ -255,8 +263,8 @@ def api_send_open_reg_notify(request: Request, data: dict):
         return {"status": "error", "message": "需要管理员权限"}
     
     is_open = data.get("is_open", False)
-    notify_user = cfg.get("user_bot_open_reg_notify_user", False)
-    notify_group = cfg.get("user_bot_open_reg_notify_group", False)
+    notify_user = get_user_bot_notify_user_enabled()
+    notify_group = get_user_bot_notify_group_enabled()
     
     if not notify_user and not notify_group:
         return {"status": "success", "message": "未开启通知"}
@@ -305,7 +313,7 @@ def api_send_open_reg_notify(request: Request, data: dict):
     if notify_group:
         try:
             from app.services.user_bot_service import _send
-            allowed_groups = cfg.get("user_bot_allowed_groups", "")
+            allowed_groups = get_user_bot_allowed_groups()
             if allowed_groups:
                 group_ids = [g.strip() for g in allowed_groups.replace('，', ',').split('\n') if g.strip()]
                 for gid in group_ids:
@@ -659,8 +667,8 @@ async def api_get_reg_quota_status(request: Request):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     from app.services import user_bot_service
 
-    quota_mode = cfg.get("user_bot_reg_quota_mode", "total")
-    quota = int(cfg.get("user_bot_reg_quota", 0))
+    quota_mode = get_user_bot_reg_quota_mode()
+    quota = get_user_bot_reg_quota()
     # 直接读内存权威值，避免 cfg.json 落盘滞后
     batch_used = user_bot_service.get_batch_used_snapshot()
 
@@ -685,7 +693,7 @@ async def api_get_reg_quota_status(request: Request):
             "batch_used": batch_used,
             "total_users": total_users,
             "open_reg_total": open_reg_total,
-            "open_reg_enabled": cfg.get("user_bot_open_reg", False),
+            "open_reg_enabled": get_user_bot_open_reg_enabled(),
             "reg_queue": {
                 "active": user_bot_service._reg_active,
                 "waiting": user_bot_service._reg_waiters,
@@ -707,7 +715,7 @@ def api_sync_tg_usernames(request: Request):
             return {"status": "success", "data": {"updated": 0, "skipped": 0}, "message": "没有已绑定用户"}
 
         # 获取用户机器人 token
-        bot_token = cfg.get("tg_user_bot_token")
+        bot_token = get_user_bot_token()
         if not bot_token:
             return {"status": "error", "message": "用户机器人未配置"}
 

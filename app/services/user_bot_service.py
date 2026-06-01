@@ -20,6 +20,12 @@ from app.infra.clients.media_server_client import media_api
 from app.infra.clients.network_client import network_client
 from app.infra.clients.telegram_client import telegram_client
 from app.infra.config.user_bot_settings import (
+    get_user_bot_allowed_groups,
+    get_user_bot_notify_group_enabled,
+    get_user_bot_notify_user_enabled,
+    get_user_bot_open_reg_enabled,
+    get_user_bot_reg_quota,
+    get_user_bot_reg_quota_mode,
     get_user_bot_restriction_cache_ttl,
     get_user_bot_token,
     get_user_bot_worker_count,
@@ -178,8 +184,8 @@ def _leave_reg_queue():
 
 def _send_open_reg_closed_notify(reason=""):
     """发送开放注册关闭通知"""
-    notify_user = cfg.get("user_bot_open_reg_notify_user", False)
-    notify_group = cfg.get("user_bot_open_reg_notify_group", False)
+    notify_user = get_user_bot_notify_user_enabled()
+    notify_group = get_user_bot_notify_group_enabled()
     
     if not notify_user and not notify_group:
         return
@@ -213,7 +219,7 @@ def _send_open_reg_closed_notify(reason=""):
     if notify_group:
         try:
             from app.services.bot_service import bot
-            allowed_groups = cfg.get("user_bot_allowed_groups", "")
+            allowed_groups = get_user_bot_allowed_groups()
             if allowed_groups:
                 group_ids = [g.strip() for g in allowed_groups.replace('，', ',').split('\n') if g.strip()]
                 for gid in group_ids:
@@ -1021,16 +1027,13 @@ def _do_register(chat_id, tg_user_id, custom_name, tg_username="", tg_display_na
     quota = 0
     try:
         # 检查开放注册是否开启
-        if not cfg.get("user_bot_open_reg"):
+        if not get_user_bot_open_reg_enabled():
             _send(chat_id, "❌ 开放注册已关闭，请联系管理员获取注册码后使用 /code 注册码")
             return
 
         # 🎯 支持两种名额模式
-        quota_mode = cfg.get("user_bot_reg_quota_mode", "total")
-        try:
-            quota = int(cfg.get("user_bot_reg_quota", 0) or 0)
-        except Exception:
-            quota = 0
+        quota_mode = get_user_bot_reg_quota_mode()
+        quota = get_user_bot_reg_quota()
 
         # 🔒 软预占 quota（在调用 Emby 建号前先占槽，杜绝并发超额）
         if quota > 0:
