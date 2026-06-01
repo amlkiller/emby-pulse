@@ -13,7 +13,7 @@ from app.plugins.base import PluginBase
 from app.domains.users.auth import is_admin_user  # 🔒 管理员鉴权
 from app.infra.clients.media_server_client import media_api
 from app.infra.config.media_server_settings import get_media_server_host
-from app.dao.smart_collection_dao import (
+from app.plugins.smart_collections.smart_collection_dao import (
     add_smart_collection_log,
     create_smart_collection,
     delete_smart_collection,
