@@ -50,6 +50,20 @@ class MediaServerAdapter:
 
         return f"{self.host}{path}"
 
+    def _build_url_for(self, host: str, server_type: str, path: str) -> str:
+        """Build a media server URL from explicit candidate settings."""
+        if not path.startswith('/'):
+            path = '/' + path
+
+        if (server_type or "emby").lower() == "jellyfin":
+            if path.startswith('/emby/'):
+                path = path.replace('/emby/', '/', 1)
+        else:
+            if not path.startswith('/emby/'):
+                path = '/emby' + path
+
+        return f"{(host or '').rstrip('/')}{path}"
+
     def _get_headers(self, custom_headers=None, skip_content_type=False) -> dict:
         """智能鉴权转换器：解决鉴权方式差异
 
@@ -67,6 +81,18 @@ class MediaServerAdapter:
             if skip_content_type and "Content-Type" in custom_headers:
                 # 复制 custom_headers 但移除 Content-Type
                 custom_headers = {k: v for k, v in custom_headers.items() if k.lower() != "content-type"}
+            headers.update(custom_headers)
+        return headers
+
+    def _get_headers_for(self, api_key: str, server_type: str, custom_headers=None) -> dict:
+        """Build auth headers from explicit candidate settings."""
+        headers = {}
+        if (server_type or "emby").lower() == "jellyfin":
+            headers["Authorization"] = f'MediaBrowser Token="{api_key}"'
+        else:
+            headers["X-Emby-Token"] = api_key
+
+        if custom_headers:
             headers.update(custom_headers)
         return headers
 
@@ -104,6 +130,12 @@ class MediaServerAdapter:
             headers=headers,
             timeout=timeout,
         )
+
+    def probe_settings(self, host: str, api_key: str, server_type: str = "emby", *, timeout: float = 5):
+        """Probe System/Info using unsaved candidate settings."""
+        url = self._build_url_for(host, server_type, "/System/Info")
+        headers = self._get_headers_for(api_key, server_type)
+        return self.session.get(url, headers=headers, timeout=timeout)
 
     def health_check(self, timeout: float = 3.0) -> bool:
         """探活 Emby/Jellyfin。结果带 5 秒 TTL 缓存，避免批量场景放大请求。

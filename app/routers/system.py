@@ -14,6 +14,7 @@ import os
 import logging
 from app.core.security_utils import safe_error_message
 from app.core.rate_limiter import get_client_ip
+from app.infra.clients.media_server_client import media_api
 from app.infra.clients.tmdb_client import tmdb_client
 from app.infra.clients.moviepilot_client import moviepilot_client
 
@@ -315,11 +316,13 @@ def api_update_settings(data: SettingsModel, request: Request):
     
     if emby_host_changed or emby_api_key_changed:
         # 验证 Emby 连接
-        url = f"{data.emby_host}/System/Info" if server_type == "jellyfin" else f"{data.emby_host}/emby/System/Info"
-        headers = {"Authorization": f'MediaBrowser Token="{emby_api_key_to_use}"'} if server_type == "jellyfin" else {"X-Emby-Token": emby_api_key_to_use}
-        
         try:
-            res = requests.get(url, headers=headers, timeout=5)
+            res = media_api.probe_settings(
+                data.emby_host,
+                emby_api_key_to_use,
+                server_type=server_type,
+                timeout=5,
+            )
             if res.status_code != 200:
                 return {"status": "error", "message": "无法连接媒体服务器，请检查地址或 API Key"}
         except Exception as e:
