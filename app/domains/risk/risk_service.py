@@ -108,6 +108,8 @@ _last_playback_state = {}
 _scan_lock = threading.Lock()
 # 🔥 上次扫描时间，用于限流
 _last_scan_time = 0
+_risk_monitor_started = False
+_risk_monitor_start_lock = threading.Lock()
 
 def _send_user_warning(user_id, username, current_count, limit, devices_info):
     """通过TG用户机器人给违规用户发送警告消息"""
@@ -322,8 +324,14 @@ def _on_risk_alert_for_web(data):
     )
 
 def start_risk_monitor():
-    bus.subscribe("notify.playback.start", _on_playback_start)
-    bus.subscribe("notify.risk.alert", _on_risk_alert_for_web)
-    
-    threading.Thread(target=_risk_monitor_loop, daemon=True, name="RiskMonitorThread").start()
+    global _risk_monitor_started
+    with _risk_monitor_start_lock:
+        if _risk_monitor_started:
+            return
+        _risk_monitor_started = True
+
+        bus.subscribe("notify.playback.start", _on_playback_start)
+        bus.subscribe("notify.risk.alert", _on_risk_alert_for_web)
+        threading.Thread(target=_risk_monitor_loop, daemon=True, name="RiskMonitorThread").start()
+
     logger.info("👁️ [风险管控] 零延迟天眼系统已启动 (事件驱动 + 60s兜底)")
