@@ -68,6 +68,8 @@ TABLE_SCHEMAS = {
     # ==================== TG 机器人 ====================
     "tg_user_bindings": """CREATE TABLE IF NOT EXISTS tg_user_bindings (
         tg_user_id TEXT PRIMARY KEY,
+        tg_username TEXT DEFAULT '',
+        tg_display_name TEXT DEFAULT '',
         emby_user_id TEXT,
         emby_username TEXT,
         init_password TEXT DEFAULT '',
@@ -456,9 +458,7 @@ TABLE_ALTERS = {
         "ALTER TABLE users_meta ADD COLUMN points INTEGER DEFAULT 0",
         "ALTER TABLE users_meta ADD COLUMN block_routes TEXT DEFAULT ''",
         "ALTER TABLE users_meta ADD COLUMN allow_routes TEXT DEFAULT ''",
-        "ALTER TABLE users_meta ADD COLUMN remark TEXT DEFAULT ''"
-    ],
-    "users_meta": [
+        "ALTER TABLE users_meta ADD COLUMN remark TEXT DEFAULT ''",
         "ALTER TABLE users_meta ADD COLUMN req_free INTEGER DEFAULT 0",
         "ALTER TABLE users_meta ADD COLUMN req_free_count INTEGER DEFAULT -1",
         "ALTER TABLE users_meta ADD COLUMN emby_pw_hash TEXT DEFAULT ''"
@@ -473,6 +473,11 @@ TABLE_ALTERS = {
     ],
     "sys_notifications": [
         "ALTER TABLE sys_notifications ADD COLUMN is_cleared INTEGER DEFAULT 0"
+    ],
+    "tg_user_bindings": [
+        "ALTER TABLE tg_user_bindings ADD COLUMN init_password TEXT DEFAULT ''",
+        "ALTER TABLE tg_user_bindings ADD COLUMN tg_username TEXT DEFAULT ''",
+        "ALTER TABLE tg_user_bindings ADD COLUMN tg_display_name TEXT DEFAULT ''"
     ],
     "media_requests": [
         "ALTER TABLE media_requests ADD COLUMN episodes TEXT DEFAULT ''",

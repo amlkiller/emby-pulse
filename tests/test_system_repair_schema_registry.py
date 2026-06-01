@@ -7,9 +7,9 @@ _repo_root = Path(__file__).resolve().parents[1]
 if str(_repo_root) not in sys.path:
     sys.path.insert(0, str(_repo_root))
 
-from app.domains.system import system_tool_dao
-from app.infra.db.schema_registry import PLAYBACK_SCHEMA, TABLE_ALTERS, TABLE_SCHEMAS
-from app.infra.db.system_store import system_store
+from app.domains.system import system_tool_dao  # noqa: E402
+from app.infra.db.schema_registry import PLAYBACK_SCHEMA, TABLE_ALTERS, TABLE_SCHEMAS  # noqa: E402
+from app.infra.db.system_store import system_store  # noqa: E402
 
 
 REPAIRED_TABLES = [
@@ -57,7 +57,7 @@ def test_repair_creates_missing_tables_from_schema_registry(monkeypatch, tmp_pat
 
         users_meta_columns = _columns(conn, "users_meta")
         assert "req_free" in users_meta_columns
-        assert "req_free" in TABLE_ALTERS["users_meta"][0]
+        assert any("req_free" in alter_sql for alter_sql in TABLE_ALTERS["users_meta"])
 
         media_request_columns = _columns(conn, "media_requests")
         for column_name in ("episodes", "request_type", "series_id"):

@@ -1,54 +1,27 @@
+import sqlite3
+
+from app.infra.db.schema_registry import TABLE_ALTERS, TABLE_SCHEMAS
 from app.infra.db.system_store import system_store
+
+
+USER_BOT_REGISTRY_TABLES = ("tg_user_bindings", "tg_user_blacklist", "tg_reg_logs")
+
+
+def _apply_table_alters(cursor, table_name: str) -> None:
+    for alter_sql in TABLE_ALTERS.get(table_name, []):
+        try:
+            cursor.execute(alter_sql)
+        except sqlite3.OperationalError as exc:
+            if "duplicate column name" not in str(exc).lower():
+                raise
 
 
 def ensure_user_bot_tables() -> None:
     with system_store.connect() as conn:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS tg_user_bindings (
-                tg_user_id TEXT PRIMARY KEY,
-                emby_user_id TEXT,
-                emby_username TEXT,
-                tg_username TEXT,
-                tg_display_name TEXT,
-                init_password TEXT DEFAULT '',
-                bound_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-        try:
-            conn.execute("ALTER TABLE tg_user_bindings ADD COLUMN init_password TEXT DEFAULT ''")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE tg_user_bindings ADD COLUMN tg_username TEXT")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE tg_user_bindings ADD COLUMN tg_display_name TEXT")
-        except Exception:
-            pass
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS tg_user_blacklist (
-                tg_user_id TEXT PRIMARY KEY,
-                reason TEXT DEFAULT '',
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS tg_reg_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tg_user_id TEXT,
-                emby_username TEXT,
-                emby_user_id TEXT,
-                reg_type TEXT DEFAULT 'open',
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
+        for table_name in USER_BOT_REGISTRY_TABLES:
+            conn.execute(TABLE_SCHEMAS[table_name])
+            _apply_table_alters(conn, table_name)
+
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS tg_bot_users (
