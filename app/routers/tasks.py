@@ -1,4 +1,3 @@
-import requests
 import asyncio
 import datetime
 from fastapi import APIRouter, Request

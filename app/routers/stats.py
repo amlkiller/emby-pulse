@@ -7,7 +7,6 @@ from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读
 from app.infra.clients.media_server_client import media_api
 from app.infra.clients.tmdb_client import tmdb_client
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
-import requests
 import re
 import datetime
 import asyncio

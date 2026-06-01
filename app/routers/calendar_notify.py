@@ -256,7 +256,6 @@ def send_calendar_notify(test: bool = False):
             
             if corpid and corpsecret and agentid:
                 try:
-                    import requests
                     # 获取 access_token
                     from app.utils.proxy_helper import get_safe_wecom_base
                     proxy_url = get_safe_wecom_base()

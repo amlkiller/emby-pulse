@@ -2,7 +2,6 @@ from fastapi import APIRouter, Request, Depends
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 from app.core.security import require_login  # 🔒 统一登录依赖
 from fastapi.responses import StreamingResponse
-import requests
 import io
 import json # 🔥 新增 json 模块用于解析
 from app.core.config import cfg

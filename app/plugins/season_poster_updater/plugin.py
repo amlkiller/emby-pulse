@@ -6,7 +6,6 @@ import logging
 import threading
 import time
 import datetime
-import requests
 import base64
 import json
 import os
