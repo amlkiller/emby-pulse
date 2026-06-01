@@ -50,6 +50,13 @@ from app.dao.auth_dao import (
 from app.core.config import cfg
 from app.infra.clients.media_server_client import media_api
 from app.infra.clients.network_client import network_client
+from app.infra.config.auth_settings import (
+    is_emby_auth_disabled,
+    is_local_auth_enabled,
+    is_media_server_configured,
+    set_emby_auth_disabled,
+    set_local_auth_enabled,
+)
 
 from app.core.security_utils import sanitize_html, safe_error_message
 from app.core.security import validate_password_strength
@@ -312,8 +319,8 @@ def ensure_env_local_admin():
             print(f"[本地认证] 环境变量管理员 '{admin_username}' 已创建")
 
         # 同时确保本地认证开关开启
-        if not cfg.get("enable_local_auth", False):
-            cfg.set("enable_local_auth", True)
+        if not is_local_auth_enabled():
+            set_local_auth_enabled(True)
             print("[本地认证] 已自动开启本地认证")
 
     except Exception as e:
@@ -329,7 +336,7 @@ ensure_env_local_admin()
 @router.get("/api/auth/settings")
 async def get_auth_settings():
     """获取认证设置（公开 API，用于登录页面）"""
-    enable_local = cfg.get("enable_local_auth", False)
+    enable_local = is_local_auth_enabled()
     local_users_count = 0
     try:
         local_users_count = count_enabled_local_users()
@@ -337,15 +344,13 @@ async def get_auth_settings():
         pass
 
     # 检查 Emby 是否配置（用于前端判断默认登录方式）
-    emby_host = cfg.get("emby_host", "")
-    emby_api_key = cfg.get("emby_api_key", "")
-    emby_configured = bool(emby_host and emby_api_key)
+    emby_configured = is_media_server_configured()
 
     return {
         "status": "success",
         "data": {
             "enable_local_auth": enable_local,
-            "disable_emby_auth": cfg.get("disable_emby_auth", False),  # 新增：是否禁用 Emby 认证
+            "disable_emby_auth": is_emby_auth_disabled(),  # 新增：是否禁用 Emby 认证
             "has_local_admin": local_users_count > 0,
             "emby_configured": emby_configured  # Emby 是否已配置
         }
@@ -360,7 +365,7 @@ async def save_auth_settings(request: Request, data: AuthSettingsUpdate):
         return {"status": "error", "message": "需要管理员权限"}
 
     # 获取当前配置
-    current_disable_emby = cfg.get("disable_emby_auth", False)
+    current_disable_emby = is_emby_auth_disabled()
 
     # 安全检查1：如果要禁用 Emby 认证，必须先有本地管理员账号
     if data.disable_emby_auth:
@@ -380,8 +385,8 @@ async def save_auth_settings(request: Request, data: AuthSettingsUpdate):
     if current_disable_emby and not data.enable_local_auth:
         return {"status": "error", "message": "已禁用 Emby 登录，本地认证必须保持开启！两种登录模式至少保留一种。"}
 
-    cfg.set("enable_local_auth", data.enable_local_auth)
-    cfg.set("disable_emby_auth", data.disable_emby_auth)
+    set_local_auth_enabled(data.enable_local_auth)
+    set_emby_auth_disabled(data.disable_emby_auth)
     return {"status": "success", "message": "设置已保存"}
 
 
@@ -742,7 +747,7 @@ def verify_local_user(username: str, password: str, client_ip: str = None, totp_
     返回: (success: bool, user_info: dict or error_message: str)
     """
     # 检查是否启用本地认证
-    if not cfg.get("enable_local_auth", False):
+    if not is_local_auth_enabled():
         return False, "本地认证未启用"
 
     # 查询用户
@@ -879,13 +884,10 @@ async def api_login(data: LoginModel, request: Request):
 
     # Emby 账号登录（默认）
     # 检查是否禁用了 Emby 认证
-    if cfg.get("disable_emby_auth", False):
+    if is_emby_auth_disabled():
         return {"status": "error", "message": "Emby 管理员登录已禁用，请使用本地账号登录"}
 
-    emby_host = cfg.get("emby_host", "")
-    emby_key = cfg.get("emby_api_key", "")
-
-    if not emby_host or not emby_key:
+    if not is_media_server_configured():
         return {"status": "error", "message": "Emby 服务器未配置"}
 
     try:
