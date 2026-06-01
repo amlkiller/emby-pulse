@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from typing import Optional, List
 import glob
 from app.core.security_utils import safe_error_message
-from app.dao.pwa_dao import (
+from app.domains.pwa.pwa_dao import (
     get_pwa_config_values,
     get_user_pwa_icon,
     save_pwa_config_value,

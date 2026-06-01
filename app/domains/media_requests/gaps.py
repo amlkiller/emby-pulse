@@ -8,7 +8,7 @@ import re
 import time
 import logging
 
-from app.dao.gap_dao import (
+from app.domains.media_requests.gap_dao import (
     add_gap_perfect_series,
     delete_gap_perfect_series,
     delete_gap_record_by_id,
