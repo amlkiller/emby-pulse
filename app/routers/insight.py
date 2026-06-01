@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 from pydantic import BaseModel
-from app.core.config import cfg
+from app.infra.clients.media_server_client import media_api
 from app.dao.insight_dao import (
     delete_insight_ignores,
     list_insight_ignore_item_ids,
@@ -9,7 +9,6 @@ from app.dao.insight_dao import (
     save_insight_ignore,
     save_insight_ignores,
 )
-import requests
 import logging
 import time
 from datetime import datetime
@@ -34,9 +33,6 @@ def _trim_stats_cache(stats):
         if len(stats["movies"][key]) > MAX_CACHED_MOVIES:
             stats["movies"][key] = stats["movies"][key][:MAX_CACHED_MOVIES]
     return stats 
-
-def get_emby_auth(): return cfg.get("emby_host"), cfg.get("emby_api_key")
-
 class IgnoreModel(BaseModel):
     item_id: str
     item_name: str
@@ -83,16 +79,20 @@ def get_ignored_items(request: Request):
     rows = list_insight_ignores()
     return {"status": "success", "data": [dict(r) for r in rows] if rows else []}
 
-def _fetch_items_page(host, key, start_index, limit, retry=2):
+def _fetch_items_page(start_index, limit, retry=2):
     """获取单页电影数据（带重试）"""
-    headers = {"X-Emby-Token": key, "Accept": "application/json"}
-    query_params = f"Recursive=true&IncludeItemTypes=Movie&Fields=MediaSources,Path,MediaStreams,ProviderIds,DateCreated&StartIndex={start_index}&Limit={limit}"
-    url = f"{host}/emby/Items?{query_params}"
+    params = {
+        "Recursive": "true",
+        "IncludeItemTypes": "Movie",
+        "Fields": "MediaSources,Path,MediaStreams,ProviderIds,DateCreated",
+        "StartIndex": start_index,
+        "Limit": limit,
+    }
     
     for attempt in range(retry + 1):
         try:
             # 🔥 增加超时时间，避免 Emby 响应慢
-            response = requests.get(url, headers=headers, timeout=60)
+            response = media_api.get("/Items", params=params, timeout=60)
             if response.status_code == 200:
                 return response.json().get("Items", [])
         except Exception as e:
@@ -193,14 +193,15 @@ def scan_library_quality(request: Request):
     if not force_refresh and GLOBAL_CACHE["quality_stats"] and (current_time - GLOBAL_CACHE["last_scan_time"] < CACHE_EXPIRE_SECONDS):
         return {"status": "success", "data": get_filtered_stats(GLOBAL_CACHE["quality_stats"])}
 
-    host, key = get_emby_auth()
-    if not host or not key: return {"status": "error", "message": "Emby 未配置"}
+    if not media_api.host or not media_api.api_key: return {"status": "error", "message": "Emby 未配置"}
 
     try:
         # 第一步：获取总数
-        headers = {"X-Emby-Token": key, "Accept": "application/json"}
-        count_url = f"{host}/emby/Items?Recursive=true&IncludeItemTypes=Movie&Limit=0"
-        count_resp = requests.get(count_url, headers=headers, timeout=10)
+        count_resp = media_api.get(
+            "/Items",
+            params={"Recursive": "true", "IncludeItemTypes": "Movie", "Limit": 0},
+            timeout=10,
+        )
         
         if count_resp.status_code != 200:
             return {"status": "error", "message": "获取电影总数失败"}
@@ -221,7 +222,7 @@ def scan_library_quality(request: Request):
             # 页数少时直接顺序获取
             for page in range(page_count):
                 start_index = page * PAGE_SIZE
-                items = _fetch_items_page(host, key, start_index, PAGE_SIZE)
+                items = _fetch_items_page(start_index, PAGE_SIZE)
                 all_items.extend(items)
         else:
             # 页数多时用小并发
@@ -229,7 +230,7 @@ def scan_library_quality(request: Request):
                 futures = []
                 for page in range(page_count):
                     start_index = page * PAGE_SIZE
-                    futures.append(executor.submit(_fetch_items_page, host, key, start_index, PAGE_SIZE))
+                    futures.append(executor.submit(_fetch_items_page, start_index, PAGE_SIZE))
                 
                 completed = 0
                 for future in as_completed(futures, timeout=300):
