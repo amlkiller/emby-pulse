@@ -288,7 +288,7 @@ def proxy_smart_image(request: Request, item_id: str, name: str = "", year: str 
     # 参数验证
     if not item_id or item_id == "undefined" or item_id == "null":
         return Response(status_code=404)
-    # 1. 缓存拦截 (外部链接仍使用 ext_session)
+    # 1. 缓存拦截 (外部链接仍使用 image_proxy_client)
     cached_result = smart_image_cache.get(item_id)
     if cached_result and str(cached_result).startswith('http'):
         try:
@@ -334,7 +334,7 @@ def proxy_smart_image(request: Request, item_id: str, name: str = "", year: str 
                         return streaming_response_from_requests(n_resp, n_resp.headers.get("Content-Type", "image/jpeg"), cache_headers(86400))
         except image_proxy_client.RequestException: pass
 
-    # 4. 第 3 级防御：TMDB 终极兜底 (外部请求，保留 ext_session)
+    # 4. 第 3 级防御：TMDB 终极兜底 (外部图片字节下载保留 image_proxy_client)
     season_num = extract_season_number(name)
 
     if clean_name and tmdb_client.api_key:
