@@ -48,7 +48,7 @@ def start_dashboard_cache_tasks() -> None:
 
 def start_community_cache_refresh() -> None:
     def _refresh_loop():
-        from app.routers.media_request import _refresh_community_cache
+        from app.domains.media_requests.router import _refresh_community_cache
 
         time.sleep(15)
         _refresh_community_cache()
