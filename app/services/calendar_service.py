@@ -5,6 +5,7 @@ import time
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from app.core.config import cfg
+from app.infra.config.calendar_settings import get_calendar_cache_ttl
 from app.dao.calendar_dao import (
     delete_calendar_cache_for_series,
     list_cached_calendar_series_ids,
@@ -96,7 +97,7 @@ class CalendarService:
         """
         now = time.time()
         # 缓存生存时间，默认 24 小时
-        cache_ttl = int(cfg.get("calendar_cache_ttl") or 86400)
+        cache_ttl = get_calendar_cache_ttl()
 
         # 1. 第一层防御：检查内存二级缓存
         if not force_refresh:

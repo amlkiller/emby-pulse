@@ -16,6 +16,12 @@ from app.infra.db.perf_stats import get_query_perf_stats
 from app.infra.clients.network_client import network_client
 from app.infra.clients.tmdb_client import tmdb_client
 from app.infra.clients.weather_client import weather_client
+from app.infra.config.weather_settings import (
+    get_weather_amap_key,
+    get_weather_qweather_host,
+    get_weather_qweather_key,
+    get_weather_source,
+)
 from app.queries.system_tool_queries import get_latest_playback_date
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
 from app.core.security_utils import safe_error_message
@@ -89,12 +95,12 @@ _weather_refresh_running = False
 
 def _fetch_weather_from_api(city: str) -> dict:
     """从天气 API 获取数据（内部函数）"""
-    weather_source = cfg.get("weather_source", "wttr")
+    weather_source = get_weather_source()
 
     # 和风天气
     if weather_source == "qweather":
-        weather_key = cfg.get("weather_qweather_key", "")
-        qw_host = cfg.get("weather_qweather_host", "").strip().rstrip("/")
+        weather_key = get_weather_qweather_key()
+        qw_host = get_weather_qweather_host()
         if weather_key and qw_host:
             try:
                 loc_res = weather_client.get_qweather_location(qw_host, city, weather_key, timeout=6)
@@ -113,7 +119,7 @@ def _fetch_weather_from_api(city: str) -> dict:
 
     # 高德天气
     if weather_source == "amap":
-        amap_key = cfg.get("weather_amap_key", "")
+        amap_key = get_weather_amap_key()
         if amap_key:
             try:
                 res = weather_client.get_amap_weather(city, amap_key, timeout=6)
