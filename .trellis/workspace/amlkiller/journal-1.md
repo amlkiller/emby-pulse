@@ -156,3 +156,36 @@ Routed dedupe schema bootstrap through schema_registry, preserved legacy whiteli
 ### Next Steps
 
 - None - task complete
+
+
+## Session 5: Notification schema bootstraps registry
+
+**Date**: 2026-06-02
+**Task**: Notification schema bootstraps registry
+**Branch**: `main`
+
+### Summary
+
+Routed selected notification and message schema bootstraps through schema_registry, preserved the request admin message index and announcement table exclusion, added focused regression tests, updated database guidance, and verified full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `edfae01` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
