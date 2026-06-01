@@ -84,6 +84,30 @@ PLUGIN_CASES = [
         "_scheduler_loop",
         "emby-restart-scheduler",
     ),
+    (
+        "app.plugins.user_backup.plugin",
+        "UserBackupPlugin",
+        "_thread",
+        "_running",
+        "_schedule_loop",
+        "user-backup-scheduler",
+    ),
+    (
+        "app.plugins.hdhive.plugin",
+        "HDHivePlugin",
+        "_checkin_thread",
+        "_running",
+        "_checkin_loop",
+        "hdhive-checkin",
+    ),
+    (
+        "app.plugins.hdhivesign.plugin",
+        "HDHiveSignPlugin",
+        "_checkin_thread",
+        "_running",
+        "_checkin_loop",
+        "hdhivesign-checkin",
+    ),
 ]
 
 
@@ -101,6 +125,10 @@ def _build_plugin(monkeypatch, module_path, class_name):
         monkeypatch.setattr(plugin_class, "_init_db", lambda self: None)
     if hasattr(plugin_class, "_load_history"):
         monkeypatch.setattr(plugin_class, "_load_history", lambda self: None)
+    if hasattr(plugin_class, "_ensure_dir"):
+        monkeypatch.setattr(plugin_class, "_ensure_dir", lambda self: None)
+    if hasattr(plugin_class, "_check_today_backup"):
+        monkeypatch.setattr(plugin_class, "_check_today_backup", lambda self: None)
 
     plugin = plugin_class()
     plugin._enabled = True

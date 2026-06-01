@@ -68,6 +68,7 @@ class HDHiveSignPlugin(PluginBase):
         super().__init__()
         self._checkin_thread = None
         self._running = False
+        self._stop_event = threading.Event()
         self._last_checkin_date = None
         self._next_action_cache = None
         self._next_action_cache_time = 0
@@ -75,14 +76,23 @@ class HDHiveSignPlugin(PluginBase):
     
     def on_enable(self):
         """启用插件"""
+        if self._checkin_thread and self._checkin_thread.is_alive():
+            return
+        self._stop_event.clear()
         self._running = True
-        self._checkin_thread = threading.Thread(target=self._checkin_loop, daemon=True)
+        self._checkin_thread = threading.Thread(target=self._checkin_loop, daemon=True, name="hdhivesign-checkin")
         self._checkin_thread.start()
         self.log("影巢签到插件已启用", level="info", notify=False)
     
     def on_disable(self):
         """禁用插件"""
         self._running = False
+        self._stop_event.set()
+        thread = self._checkin_thread
+        if thread and thread.is_alive():
+            thread.join(timeout=1)
+        if not thread or not thread.is_alive():
+            self._checkin_thread = None
         self.log("影巢签到插件已禁用", level="info", notify=False)
     
     def get_page_url(self):
@@ -1057,7 +1067,8 @@ class HDHiveSignPlugin(PluginBase):
     
     def _checkin_loop(self):
         """自动签到线程"""
-        time.sleep(30)
+        if self._stop_event.wait(30):
+            return
         while self._running and self._enabled:
             try:
                 config = self._get_config()
@@ -1082,10 +1093,8 @@ class HDHiveSignPlugin(PluginBase):
                         self._last_checkin_date = current_date
             except Exception as e:
                 logger.error(f"[影巢签到] 自动签到检查异常: {e}")
-            for _ in range(60):
-                if not self._running:
-                    return
-                time.sleep(1)
+            if self._stop_event.wait(60):
+                return
 
 
 # 创建插件实例

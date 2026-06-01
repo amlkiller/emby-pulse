@@ -30,20 +30,30 @@ class HDHivePlugin(PluginBase):
         super().__init__()
         self._checkin_thread = None
         self._running = False
+        self._stop_event = threading.Event()
         self._subscribed = False
         self._setup_routes()
 
     def on_enable(self):
+        if self._checkin_thread and self._checkin_thread.is_alive():
+            return
+        self._stop_event.clear()
         self._running = True
         if not self._subscribed:
             bus.subscribe("bot.admin_message", self._on_admin_message)
             self._subscribed = True
-        self._checkin_thread = threading.Thread(target=self._checkin_loop, daemon=True)
+        self._checkin_thread = threading.Thread(target=self._checkin_loop, daemon=True, name="hdhive-checkin")
         self._checkin_thread.start()
         logger.info("🔌 [影巢] 插件已启用")
 
     def on_disable(self):
         self._running = False
+        self._stop_event.set()
+        thread = self._checkin_thread
+        if thread and thread.is_alive():
+            thread.join(timeout=1)
+        if not thread or not thread.is_alive():
+            self._checkin_thread = None
         logger.info("🔌 [影巢] 插件已禁用")
 
     def get_config_schema(self):
@@ -1225,7 +1235,8 @@ class HDHivePlugin(PluginBase):
         import re
         
         # 启动延迟，等待插件完全加载
-        time.sleep(30)
+        if self._stop_event.wait(30):
+            return
         last_checkin_date = None  # 记录上次签到日期
         
         while self._running and self._enabled:
@@ -1317,10 +1328,8 @@ class HDHivePlugin(PluginBase):
                 logger.error(f"[影巢] 自动签到检查异常: {e}")
                 
             # 每 60 秒检查一次
-            for _ in range(60):
-                if not self._running:
-                    return
-                time.sleep(1)
+            if self._stop_event.wait(60):
+                return
 
 
 # 搜索结果缓存

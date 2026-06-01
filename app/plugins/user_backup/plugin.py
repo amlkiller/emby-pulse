@@ -73,6 +73,7 @@ class UserBackupPlugin(PluginBase):
         super().__init__()
         self._thread = None
         self._running = False
+        self._stop_event = threading.Event()
         self._last_backup_date = None
         self._webdav_dir_created = False  # WebDAV 目录是否已创建标记
         self._setup_routes()
@@ -1230,11 +1231,14 @@ class UserBackupPlugin(PluginBase):
             logger.warning(f"[用户备份] 清理旧备份失败: {e}")
 
     def on_enable(self):
+        if self._thread and self._thread.is_alive():
+            return
         self._ensure_dir()
+        self._stop_event.clear()
         self._running = True
         # 启动时检查今天是否已有备份文件，避免重启后重复备份
         self._check_today_backup()
-        self._thread = threading.Thread(target=self._schedule_loop, daemon=True)
+        self._thread = threading.Thread(target=self._schedule_loop, daemon=True, name="user-backup-scheduler")
         self._thread.start()
         logger.info("🔌 [用户备份] 插件已启用，定时备份任务已启动")
 
@@ -1255,16 +1259,24 @@ class UserBackupPlugin(PluginBase):
 
     def on_disable(self):
         self._running = False
+        self._stop_event.set()
+        thread = self._thread
+        if thread and thread.is_alive():
+            thread.join(timeout=1)
+        if not thread or not thread.is_alive():
+            self._thread = None
         logger.info("🔌 [用户备份] 插件已禁用，定时备份任务已停止")
 
     def _schedule_loop(self):
         """定时备份循环"""
-        time.sleep(30)  # 启动后等待30秒
+        if self._stop_event.wait(30):  # 启动后等待30秒
+            return
         
         while self._running and self._enabled:
             try:
                 if not self._is_pro():
-                    time.sleep(3600)
+                    if self._stop_event.wait(3600):
+                        return
                     continue
                 
                 config = self._get_config()
@@ -1272,7 +1284,8 @@ class UserBackupPlugin(PluginBase):
                 
                 if interval == "disabled":
                     # 禁用状态，每小时检查一次配置变更
-                    time.sleep(3600)
+                    if self._stop_event.wait(3600):
+                        return
                     continue
                 
                 # 解析备份时间
@@ -1322,11 +1335,13 @@ class UserBackupPlugin(PluginBase):
                     self.log(f"✅ 定时备份完成 ({interval})")
                 
                 # 等待下一次检查（每分钟检查一次）
-                time.sleep(60)
+                if self._stop_event.wait(60):
+                    return
                 
             except Exception as e:
                 logger.error(f"[用户备份] 定时任务异常: {e}")
-                time.sleep(300)
+                if self._stop_event.wait(300):
+                    return
 
     def _do_auto_backup(self):
         """执行自动备份"""
