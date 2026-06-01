@@ -670,7 +670,7 @@ async def submit_media_request(request: Request):
                 ]}
             
             # 🔥 使用 notify_rules 配置控制通知渠道
-            from app.routers.notify_admin import get_notify_rule
+            from app.domains.notifications.notify_admin import get_notify_rule
             rule = get_notify_rule('request_new')
             if rule and rule.get('enabled'):
                 channels = rule.get('channels', [])
@@ -845,7 +845,7 @@ def batch_manage_action(data: BulkAdminActionModel, request: Request):
     # 🔥 批量通知用户（审批通过、入库完成、拒绝、手动接单、影巢转存完成）
     if data.action in ["approve", "finish", "reject", "manual", "hdhive_done"]:
         try:
-            from app.routers.notify_admin import get_notify_rule
+            from app.domains.notifications.notify_admin import get_notify_rule
             rule = get_notify_rule('request_status')
             logger.info(f"[状态变更通知] action={data.action}, rule={rule}")
             
@@ -1010,7 +1010,7 @@ def submit_feedback(data: FeedbackSubmitModel, request: Request):
     
     # 🔥 使用 notify_rules 配置控制通知渠道
     try:
-        from app.routers.notify_admin import get_notify_rule
+        from app.domains.notifications.notify_admin import get_notify_rule
         rule = get_notify_rule('feedback_new')
         
         if rule and rule.get('enabled'):
@@ -2017,7 +2017,7 @@ async def user_community_register(data: UserRegisterModel, request: Request):
             try:
                 from app.dao.notification_dao import add_sys_notification
                 from app.services.bot_service import bot
-                from app.routers.notify_admin import get_notify_rule
+                from app.domains.notifications.notify_admin import get_notify_rule
                 
                 rule = get_notify_rule('user_register')
                 days_display = "永久" if (days == -1 or days == 0 or days >= 36500) else f"{days} 天"

@@ -3162,7 +3162,7 @@ def _submit_request(chat_id, tg_user_id, media_type, tmdb_id, season):
             from app.services.bot_service import bot
             from app.dao.notification_dao import add_sys_notification
             from app.core.config import REPORT_COVER_URL
-            from app.routers.notify_admin import get_notify_rule
+            from app.domains.notifications.notify_admin import get_notify_rule
             msg = f"🎬 <b>收到新求片心愿</b>\n\n👤 <b>用户：</b>{uname}\n📺 <b>内容：</b>{title} ({year}){season_str}\n📱 <b>来源：</b>TG 用户机器人\n\n请及时前往后台审批处理。"
             admin_url = get_user_bot_portal_url() or get_media_server_main_public_url() or "http://127.0.0.1:10307"
             keyboard = {"inline_keyboard": [

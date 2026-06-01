@@ -593,7 +593,7 @@ class SystemDaemon:
             reject_reason: 拒绝原因（可选）
         """
         try:
-            from app.routers.notify_admin import get_notify_rule
+            from app.domains.notifications.notify_admin import get_notify_rule
             rule = get_notify_rule('request_status')
             
             if not rule or not rule.get('enabled') or 'tg_bot' not in rule.get('channels', []):
@@ -1462,7 +1462,7 @@ class NotificationBot:
     def on_user_login(self, data):
         # 检查通知规则配置
         try:
-            from app.routers.notify_admin import get_notify_rule
+            from app.domains.notifications.notify_admin import get_notify_rule
             rule = get_notify_rule('user_login')
             if not rule or not rule.get('enabled'):
                 return
@@ -1493,7 +1493,7 @@ class NotificationBot:
             
             # 根据规则发送到指定渠道
             try:
-                from app.routers.notify_admin import get_notify_rule
+                from app.domains.notifications.notify_admin import get_notify_rule
                 rule = get_notify_rule('user_login')
                 channels = rule.get('channels', []) if rule else []
                 

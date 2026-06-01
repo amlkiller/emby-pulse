@@ -1332,7 +1332,7 @@ def api_manage_user_delete(user_id: str, request: Request):
 
             # 🔥 发送用户删除通知
             try:
-                from app.routers.notify_admin import get_notify_rule
+                from app.domains.notifications.notify_admin import get_notify_rule
                 from app.dao.notification_dao import add_sys_notification
                 from app.services.bot_service import bot
 
