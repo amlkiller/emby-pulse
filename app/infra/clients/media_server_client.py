@@ -143,6 +143,13 @@ class MediaServerAdapter:
         headers = self._get_headers_for(api_key, server_type)
         return self.session.post(url, headers=headers, params={"api_key": api_key}, timeout=timeout)
 
+    def submit_custom_query(self, host: str, api_key: str, custom_query: str, *, timeout: float = 20):
+        """Submit a playback reporting custom query against an explicit media server."""
+        url = self._build_url_for(host, "emby", "/user_usage_stats/submit_custom_query")
+        headers = {"X-Emby-Token": api_key, "Content-Type": "application/json"}
+        payload = {"CustomQueryString": custom_query}
+        return self.session.post(url, headers=headers, json=payload, timeout=timeout)
+
     def health_check(self, timeout: float = 3.0) -> bool:
         """探活 Emby/Jellyfin。结果带 5 秒 TTL 缓存，避免批量场景放大请求。
 

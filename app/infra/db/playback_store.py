@@ -3,9 +3,8 @@ import logging
 import os
 import sqlite3
 
-import requests
-
 from app.core.config import DB_PATH, cfg
+from app.infra.clients.media_server_client import media_api
 
 from .row import DataRow, to_data_row
 
@@ -70,12 +69,13 @@ class PlaybackStore:
             print("[API 引擎] ⚠️ 警告: Emby Host 或 Token 未配置，自动降级回 SQLite。")
             return None
 
-        url = f"{host.rstrip('/')}/emby/user_usage_stats/submit_custom_query"
-        headers = {"X-Emby-Token": token, "Content-Type": "application/json"}
-        payload = {"CustomQueryString": _interpolate_sql(sql, params)}
-
         try:
-            response = requests.post(url, headers=headers, json=payload, timeout=20)
+            response = media_api.submit_custom_query(
+                host,
+                token,
+                _interpolate_sql(sql, params),
+                timeout=20,
+            )
             if response.status_code != 200:
                 print(f"[API 引擎] ❌ 接口拒绝请求! 响应: {response.text[:200]}")
                 return None
