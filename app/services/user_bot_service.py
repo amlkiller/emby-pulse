@@ -310,7 +310,7 @@ def _check_user_restrictions(tg_user_id: str) -> dict:
     result = {"passed": True, "missing_channels": [], "missing_groups": []}
     
     # 检查是否启用限制
-    enabled = cfg.get("user_bot_restriction_enabled", False)
+    enabled = user_bot_settings.is_user_bot_restriction_enabled()
     if not enabled:
         return result
     
@@ -323,7 +323,7 @@ def _check_user_restrictions(tg_user_id: str) -> dict:
             return {"passed": True, "missing_channels": [], "missing_groups": []}
     
     # 获取必须关注的频道
-    required_channels = cfg.get("user_bot_required_channels", "")
+    required_channels = user_bot_settings.get_user_bot_required_channels()
     if required_channels:
         channels = [c.strip() for c in required_channels.split("\n") if c.strip()]
         for channel in channels:
@@ -332,7 +332,7 @@ def _check_user_restrictions(tg_user_id: str) -> dict:
                 result["missing_channels"].append(channel)
     
     # 获取必须加入的群聊
-    required_groups = cfg.get("user_bot_required_groups", "")
+    required_groups = user_bot_settings.get_user_bot_required_groups()
     logger.info(f"[使用限制] required_groups={repr(required_groups)}")
     if required_groups:
         try:

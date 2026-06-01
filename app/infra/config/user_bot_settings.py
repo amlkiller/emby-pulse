@@ -20,6 +20,18 @@ def get_user_bot_token() -> str:
     return cfg.get("tg_user_bot_token")
 
 
+def is_user_bot_restriction_enabled() -> bool:
+    return cfg.get("user_bot_restriction_enabled", False)
+
+
+def get_user_bot_required_channels() -> str:
+    return cfg.get("user_bot_required_channels", "")
+
+
+def get_user_bot_required_groups() -> str:
+    return cfg.get("user_bot_required_groups", "")
+
+
 def get_user_bot_registration_batch_used() -> int:
     try:
         return int(cfg.get("user_bot_reg_batch_used", 0) or 0)
