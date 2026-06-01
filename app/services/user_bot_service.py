@@ -19,6 +19,13 @@ from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读
 from app.infra.clients.media_server_client import media_api
 from app.infra.clients.network_client import network_client
 from app.infra.clients.telegram_client import telegram_client
+from app.infra.config.user_bot_settings import (
+    get_user_bot_restriction_cache_ttl,
+    get_user_bot_token,
+    get_user_bot_worker_count,
+    get_user_bot_registration_batch_used,
+)
+from app.infra.config.user_visibility_settings import get_hidden_users
 from app.core.security import validate_password_strength  # 🔒 统一密码强度校验
 from app.core.security_utils import safe_error_message  # 🔒 错误脱敏
 from app.infra.clients.tmdb_client import tmdb_client
@@ -33,10 +40,7 @@ def escape_html(text):
     return str(text).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
 # 🚀 线程池：限制最大并发数，防止线程爆炸
-try:
-    MAX_CONCURRENT_TASKS = max(4, min(int(cfg.get("user_bot_worker_count") or 16), 50))
-except Exception:
-    MAX_CONCURRENT_TASKS = 16
+MAX_CONCURRENT_TASKS = get_user_bot_worker_count()
 _task_executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENT_TASKS, thread_name_prefix="userbot")
 _active_tasks = 0  # 当前活跃任务数
 _active_tasks_lock = threading.Lock()
@@ -62,11 +66,7 @@ _restriction_cache_lock = threading.Lock()
 
 def _get_restriction_cache_ttl():
     """从配置获取缓存时间，默认 120 秒"""
-    try:
-        ttl = int(cfg.get("user_bot_restriction_cache_ttl") or 120)
-        return max(0, min(ttl, 3600))  # 限制在 0-3600 秒
-    except:
-        return 120
+    return get_user_bot_restriction_cache_ttl()
 
 # 🚀 Emby 账号状态缓存
 _emby_account_cache = {}  # user_id -> {"exists": bool, "cached_at": timestamp}
@@ -239,7 +239,7 @@ def _get_proxies():
 
 
 def _tg_api(method, data=None, token=None):
-    tk = token or cfg.get("tg_user_bot_token")
+    tk = token or get_user_bot_token()
     if not tk:
         return None
     try:
@@ -854,10 +854,7 @@ def get_batch_used_snapshot():
     with _batch_used_lock:
         if _batch_used_mem is not None:
             return _batch_used_mem
-    try:
-        return int(cfg.get("user_bot_reg_batch_used", 0) or 0)
-    except Exception:
-        return 0
+    return get_user_bot_registration_batch_used()
 
 
 def _refresh_user_count_cache_locked(force=False, quota=0):
@@ -876,7 +873,7 @@ def _refresh_user_count_cache_locked(force=False, quota=0):
         return cached
     try:
         users = media_api.get("/Users", timeout=5).json()
-        hidden_users = cfg.get("hidden_users") or []
+        hidden_users = get_hidden_users()
         normal_users = [
             u for u in users
             if u.get("Name") not in hidden_users
