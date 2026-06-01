@@ -19,13 +19,14 @@ from app.bootstrap.runtime import (
     start_weather_cache_preload,
 )
 from app.core.config import PORT
-from app.core.rate_limiter import start_cleanup_timer
+from app.core.rate_limiter import initialize_trusted_proxies, start_cleanup_timer
 
 REQUEST_PORT = int(os.getenv("REQUEST_PORT", "10308"))
 
 
 def prepare_runtime() -> None:
     configure_sensitive_log_filter()
+    initialize_trusted_proxies()
     start_cleanup_timer()
     patch_sqlite_connect()
     print("[🔧 SQLite] 已启用 WAL 模式 + 30秒超时（解决 database is locked）")

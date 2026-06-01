@@ -13,14 +13,12 @@ from starlette.middleware.base import BaseHTTPMiddleware
 TRUSTED_PROXIES = set(os.getenv("TRUSTED_PROXIES", "127.0.0.1").split(","))
 
 # Docker 环境自动添加默认网关
-def _detect_docker_gateway():
+def initialize_trusted_proxies():
     gateway = os.getenv("DOCKER_GATEWAY", "")
     if gateway:
         TRUSTED_PROXIES.add(gateway)
     for gw in ["172.17.0.1", "172.18.0.1", "172.19.0.1"]:
         TRUSTED_PROXIES.add(gw)
-
-_detect_docker_gateway()
 
 # 速率限制配置
 RATE_LIMITS = {
