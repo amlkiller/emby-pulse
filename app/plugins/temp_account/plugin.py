@@ -50,6 +50,7 @@ class TempAccountPlugin(PluginBase):
         super().__init__()
         self._thread = None
         self._running = False
+        self._stop_event = threading.Event()
         self._setup_routes()
         self._init_db()
 
@@ -388,13 +389,22 @@ class TempAccountPlugin(PluginBase):
                 return {"status": "error", "message": str(e)}
 
     def on_enable(self):
+        if self._thread and self._thread.is_alive():
+            return
+        self._stop_event.clear()
         self._running = True
-        self._thread = threading.Thread(target=self._check_loop, daemon=True)
+        self._thread = threading.Thread(target=self._check_loop, daemon=True, name="temp-account-check")
         self._thread.start()
         self.log("插件已启用，后台密码更新线程已启动")
 
     def on_disable(self):
         self._running = False
+        self._stop_event.set()
+        thread = self._thread
+        if thread and thread.is_alive():
+            thread.join(timeout=1)
+        if not thread or not thread.is_alive():
+            self._thread = None
         self.log("插件已禁用")
 
     def get_config_schema(self):
@@ -876,14 +886,15 @@ class TempAccountPlugin(PluginBase):
 
     def _check_loop(self):
         """后台检查循环"""
-        while self._running:
+        while self._running and self._enabled:
             try:
                 self._check_password_updates()
             except Exception as e:
                 logger.error(f"[临时账号] 检查循环错误: {e}")
             
             # 每分钟检查一次
-            time.sleep(60)
+            if self._stop_event.wait(60):
+                return
 
     def _check_password_updates(self):
         """检查需要更新密码的账号"""

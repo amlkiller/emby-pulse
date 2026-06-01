@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend spec index for quality review."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Check lifecycle stop hook conventions."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Required uv verification commands."}
+{"file": "docs/架构审计.md", "reason": "Check implementation against the P1 plugin scheduler lifecycle item."}

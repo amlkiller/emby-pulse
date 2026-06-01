@@ -29,6 +29,7 @@ class AutoExpirePlugin(PluginBase):
         super().__init__()
         self._thread = None
         self._running = False
+        self._stop_event = threading.Event()
         self._reminded_today = set()
         self._setup_routes()
 
@@ -130,13 +131,22 @@ class AutoExpirePlugin(PluginBase):
                 return {"status": "error", "message": str(e)}
 
     def on_enable(self):
+        if self._thread and self._thread.is_alive():
+            return
+        self._stop_event.clear()
         self._running = True
-        self._thread = threading.Thread(target=self._check_loop, daemon=True)
+        self._thread = threading.Thread(target=self._check_loop, daemon=True, name="auto-expire-check")
         self._thread.start()
         logger.info("🔌 [到期提醒] 插件已启用")
 
     def on_disable(self):
         self._running = False
+        self._stop_event.set()
+        thread = self._thread
+        if thread and thread.is_alive():
+            thread.join(timeout=1)
+        if not thread or not thread.is_alive():
+            self._thread = None
         logger.info("🔌 [到期提醒] 插件已禁用")
 
     def get_config_schema(self):
@@ -160,10 +170,12 @@ class AutoExpirePlugin(PluginBase):
         self.log(msg, level=level)
 
     def _check_loop(self):
-        time.sleep(60)
+        if self._stop_event.wait(60):
+            return
         while self._running and self._enabled:
             if not self._is_pro():
-                time.sleep(3600)
+                if self._stop_event.wait(3600):
+                    return
                 continue
             try:
                 # 每天重置已提醒列表
@@ -178,7 +190,8 @@ class AutoExpirePlugin(PluginBase):
             interval = max(1, int(config.get("check_interval") or 6)) * 3600
             for _ in range(interval // 10):
                 if not self._running or not self._enabled: return
-                time.sleep(10)
+                if self._stop_event.wait(10):
+                    return
 
     def _do_check(self, manual=False):
         config = self._get_config()

@@ -43,6 +43,7 @@ class KeepAlivePlugin(PluginBase):
         super().__init__()
         self._thread = None
         self._running = False
+        self._stop_event = threading.Event()
         self._setup_routes()
         self._init_db()
 
@@ -120,13 +121,22 @@ class KeepAlivePlugin(PluginBase):
                 return {"status": "error", "message": str(e)}
 
     def on_enable(self):
+        if self._thread and self._thread.is_alive():
+            return
+        self._stop_event.clear()
         self._running = True
-        self._thread = threading.Thread(target=self._check_loop, daemon=True)
+        self._thread = threading.Thread(target=self._check_loop, daemon=True, name="keep-alive-check")
         self._thread.start()
         logger.info("🔌 [保号规则] 插件已启用，后台巡检线程已启动")
 
     def on_disable(self):
         self._running = False
+        self._stop_event.set()
+        thread = self._thread
+        if thread and thread.is_alive():
+            thread.join(timeout=1)
+        if not thread or not thread.is_alive():
+            self._thread = None
         logger.info("🔌 [保号规则] 插件已禁用")
 
     def get_config_schema(self):
@@ -167,13 +177,15 @@ class KeepAlivePlugin(PluginBase):
 
     def _check_loop(self):
         """检查循环 - 支持两种调度模式"""
-        time.sleep(120)
+        if self._stop_event.wait(120):
+            return
         last_check_minute = None  # 用于防止同一分钟重复执行
 
         while self._running and self._enabled:
             if not self._is_pro():
                 print("[保号规则] 非 Pro 用户，跳过巡检")
-                time.sleep(3600)
+                if self._stop_event.wait(3600):
+                    return
                 continue
 
             try:
@@ -199,7 +211,8 @@ class KeepAlivePlugin(PluginBase):
                 logger.error(f"[保号规则] 巡检异常: {e}")
 
             # 每小时检查一次（在整点判断是否需要执行）
-            time.sleep(3600)
+            if self._stop_event.wait(3600):
+                return
 
     def _check_monthly_trigger(self, config, now, last_check_minute):
         """检查是否到达每月固定日期的触发时间"""

@@ -141,6 +141,16 @@ server, should save both the thread handle and the server handle. Their stop
 hook should request shutdown through the server handle, join briefly, and clear
 stopped handles without changing routing or socket binding behavior.
 
+Built-in plugins under `app/plugins/` that own background scheduler/check loops
+should follow the same lifecycle shape even when they are not started by
+bootstrap. Store the worker thread handle on the plugin instance, store an
+instance-level `threading.Event` stop signal, skip duplicate `on_enable()` starts
+while the thread is alive, and make `on_disable()` set the event, join briefly,
+and clear stopped handles so later re-enable works in the same process. Long
+initial delays and interval waits inside these loops should use
+`self._stop_event.wait(...)` instead of `time.sleep(...)` so plugin disable can
+interrupt scheduler sleeps.
+
 ## Scenario: External Client Adapter Boundary
 
 ### 1. Scope / Trigger

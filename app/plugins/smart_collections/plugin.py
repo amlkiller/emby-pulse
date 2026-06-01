@@ -60,16 +60,26 @@ class SmartCollectionsPlugin(PluginBase):
         super().__init__()
         self._sync_thread = None
         self._running = False
+        self._stop_event = threading.Event()
         self._setup_routes()
     
     def on_enable(self):
+        if self._sync_thread and self._sync_thread.is_alive():
+            return
+        self._stop_event.clear()
         self._running = True
-        self._sync_thread = threading.Thread(target=self._sync_loop, daemon=True)
+        self._sync_thread = threading.Thread(target=self._sync_loop, daemon=True, name="smart-collections-sync")
         self._sync_thread.start()
         logger.info("🔌 [智能合集] 插件已启用")
     
     def on_disable(self):
         self._running = False
+        self._stop_event.set()
+        thread = self._sync_thread
+        if thread and thread.is_alive():
+            thread.join(timeout=1)
+        if not thread or not thread.is_alive():
+            self._sync_thread = None
         logger.info("🔌 [智能合集] 插件已禁用")
     
     def get_config_schema(self):
@@ -387,10 +397,12 @@ class SmartCollectionsPlugin(PluginBase):
     
     def _sync_loop(self):
         """后台定时同步线程"""
-        time.sleep(30)
+        if self._stop_event.wait(30):
+            return
         while self._running and self._enabled:
             if not self._is_pro():
-                time.sleep(3600)
+                if self._stop_event.wait(3600):
+                    return
                 continue
             
             config = self._get_config()
@@ -404,7 +416,8 @@ class SmartCollectionsPlugin(PluginBase):
             for _ in range(interval // 10):
                 if not self._running or not self._enabled:
                     return
-                time.sleep(10)
+                if self._stop_event.wait(10):
+                    return
     
     def sync_all_collections(self) -> dict:
         """同步所有启用的合集"""
