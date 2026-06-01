@@ -189,5 +189,5 @@ def cleanup_old_audit_logs(days: int = 90):
         return 0
 
 
-# 启动时初始化
-init_audit_table()
+def start_audit_services() -> None:
+    init_audit_table()
