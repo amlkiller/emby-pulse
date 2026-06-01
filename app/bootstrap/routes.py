@@ -28,7 +28,6 @@ def register_routes(app: FastAPI) -> None:
         points,
         risk,
         stats,
-        system,
         system_tools,
         tasks,
         users,
@@ -38,7 +37,7 @@ def register_routes(app: FastAPI) -> None:
     from app.domains.proxy import router as proxy
     from app.domains.reports import router as report
     from app.domains.pwa import router as pwa
-    from app.domains.system import api_tokens, audit, db_tools, pro, webhook
+    from app.domains.system import api_tokens, audit, db_tools, pro, router as system, webhook
     from .plugin_routes import register_calendar_notify_routes, register_plugin_routes
 
     app.include_router(views.router)
