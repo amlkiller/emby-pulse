@@ -49,6 +49,7 @@ from app.dao.auth_dao import (
 )
 from app.core.config import cfg
 from app.infra.clients.media_server_client import media_api
+from app.infra.clients.network_client import network_client
 
 from app.core.security_utils import sanitize_html, safe_error_message
 from app.core.security import validate_password_strength
@@ -802,7 +803,6 @@ def verify_local_user(username: str, password: str, client_ip: str = None, totp_
 # ==================== 登录 API（支持 Emby + 本地双模式） ====================
 
 from pydantic import BaseModel as _BaseModel
-import requests
 
 class LoginModel(_BaseModel):
     username: str
@@ -974,9 +974,9 @@ async def api_login(data: LoginModel, request: Request):
         request.session["login_time"] = time.time()
         return {"status": "success", "message": "登录成功"}
 
-    except requests.exceptions.Timeout:
+    except network_client.Timeout:
         return {"status": "error", "message": "Emby 连接超时"}
-    except requests.exceptions.ConnectionError:
+    except network_client.ConnectionError:
         return {"status": "error", "message": "Emby 连接失败"}
     except Exception as e:
         logger.error(f"[登录异常] {str(e)}")

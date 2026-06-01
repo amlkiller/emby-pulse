@@ -4,7 +4,6 @@ EmbyPulse 用户 TG 机器人 (Pro 专属)
 """
 import threading
 import time
-import requests
 import datetime
 import secrets
 import json
@@ -18,6 +17,7 @@ from app.dao import invitation_dao, media_request_dao, point_dao, user_bot_dao, 
 from app.queries import stats_queries
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
 from app.infra.clients.media_server_client import media_api
+from app.infra.clients.network_client import network_client
 from app.infra.clients.telegram_client import telegram_client
 from app.core.security import validate_password_strength  # 🔒 统一密码强度校验
 from app.core.security_utils import safe_error_message  # 🔒 错误脱敏
@@ -3463,7 +3463,7 @@ def cmd_server(chat_id, tg_user_id, msg_id=None):
             if url:
                 try:
                     start = time.time()
-                    requests.get(f"{url}/web/favicon.ico", timeout=3)
+                    network_client.get(f"{url}/web/favicon.ico", timeout=3)
                     delay = int((time.time() - start) * 1000)
                     icon = "🟢" if delay < 100 else ("🟡" if delay < 300 else "🔴")
                     msg += f"{icon} <b>{name}</b>：{delay}ms\n🔗 {url}\n\n"

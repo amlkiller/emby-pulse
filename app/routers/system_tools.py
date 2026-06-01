@@ -1,5 +1,4 @@
 import time
-import requests
 import logging
 import sys
 import datetime
@@ -14,6 +13,7 @@ from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 from app.core.config import cfg
 from app.dao.system_tool_dao import check_system_db_readwrite, check_system_table_integrity
 from app.infra.db.perf_stats import get_query_perf_stats
+from app.infra.clients.network_client import network_client
 from app.infra.clients.tmdb_client import tmdb_client
 from app.infra.clients.weather_client import weather_client
 from app.queries.system_tool_queries import get_latest_playback_date
@@ -318,7 +318,7 @@ if not getattr(sys.stderr, '_is_tee', False):
 def ping_url(url, proxies=None):
     start = time.time()
     try:
-        res = requests.get(url, proxies=proxies, timeout=5)
+        res = network_client.get(url, proxies=proxies, timeout=5)
         latency = int((time.time() - start) * 1000)
         return True, latency
     except Exception:

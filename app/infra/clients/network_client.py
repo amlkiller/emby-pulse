@@ -5,6 +5,8 @@ class NetworkClient:
     Timeout = requests.exceptions.Timeout
     ProxyError = requests.exceptions.ProxyError
     SSLError = requests.exceptions.SSLError
+    ConnectionError = requests.exceptions.ConnectionError
+    RequestException = requests.exceptions.RequestException
 
     @staticmethod
     def request(
