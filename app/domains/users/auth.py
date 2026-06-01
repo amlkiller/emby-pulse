@@ -18,7 +18,7 @@ from io import BytesIO
 from fastapi import APIRouter, Request, Depends
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
-from app.dao.auth_dao import (
+from app.domains.users.auth_dao import (
     cleanup_expired_login_locks,
     clear_login_failure,
     count_enabled_admin_users,
