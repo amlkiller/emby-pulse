@@ -17,6 +17,7 @@ from app.queries.report_queries import (
 from app.infra.clients.media_server_client import media_api
 from app.infra.clients.network_client import network_client
 from app.infra.clients.tmdb_client import tmdb_client
+from app.infra.config.report_settings import get_report_top_query_limit
 
 logger = logging.getLogger("uvicorn")
 
@@ -764,7 +765,7 @@ class ReportGenerator:
             # 🔥 从 pc 字典获取 where 条件
             where = pc.get("where", "")
 
-            top_limit = int(cfg.get("report_top_query_limit") or 300)
+            top_limit = get_report_top_query_limit()
             all_tops = list_report_ranked_items(where, exclude_sql, exclude_types, top_limit)
             if not all_tops:
                 return None
