@@ -6,7 +6,7 @@ import shutil
 from app.core.config import DB_PATH, SYSTEM_DB_PATH
 from app.dao.notification_dao import add_system_notification
 from app.infra.db.query_perf import get_query_perf_stats
-from app.queries.playback_filters import get_base_filter as _get_base_filter
+from app.domains.playback.queries import get_base_filter as _get_base_filter
 
 # 🔥 导出 SYSTEM_DB_PATH 供其他模块使用
 __all__ = ['init_db', 'get_base_filter', 'add_sys_notification',
