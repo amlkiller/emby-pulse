@@ -1,14 +1,14 @@
 """
 代理配置安全读取工具
 
-封装 cfg.get("proxy_url") / cfg.get("wecom_proxy_url") 的读取，
+封装 proxy_settings 中 proxy_url / wecom_proxy_url 的读取，
 确保运行时使用的代理地址已通过 SSRF 校验。即使写入侧校验被绕过、
 或历史配置已被污染，调用方拿到的也是安全的值（非法时自动降级）。
 """
 import logging
 from typing import Optional
 
-from app.core.config import cfg
+from app.infra.config.proxy_settings import get_proxy_url, get_wecom_proxy_url
 from app.utils.url_validator import (
     validate_proxy_url,
     validate_wecom_proxy_base,
@@ -39,10 +39,7 @@ def get_safe_proxies() -> Optional[dict]:
     - 合法值：返回 {"http": url, "https": url}
     - 首次发现非法值时打 WARNING 日志，相同值不重复打
     """
-    raw = cfg.get("proxy_url") or ""
-    if not isinstance(raw, str):
-        raw = ""
-    raw = raw.strip()
+    raw = get_proxy_url().strip()
 
     if not raw:
         return None
@@ -73,10 +70,7 @@ def get_safe_wecom_base() -> str:
     - 空值 / 非法值：返回默认 https://qyapi.weixin.qq.com
     - 首次发现非法值时打 WARNING 日志，相同值不重复打
     """
-    raw = cfg.get("wecom_proxy_url") or ""
-    if not isinstance(raw, str):
-        raw = ""
-    raw = raw.strip()
+    raw = get_wecom_proxy_url().strip()
 
     if not raw:
         return WECOM_DEFAULT_BASE
@@ -106,8 +100,8 @@ def audit_existing_proxy_config() -> None:
     若不通过则写 WARNING 日志 + audit_log（不自动清除）。
     """
     try:
-        proxy_raw = (cfg.get("proxy_url") or "").strip() if isinstance(cfg.get("proxy_url"), str) else ""
-        wecom_raw = (cfg.get("wecom_proxy_url") or "").strip() if isinstance(cfg.get("wecom_proxy_url"), str) else ""
+        proxy_raw = get_proxy_url().strip()
+        wecom_raw = get_wecom_proxy_url().strip()
 
         issues = []
 

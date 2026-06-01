@@ -58,6 +58,8 @@ Current migration pattern: if a caller only needs generic external transport for
 
 Current configuration migration pattern: infrastructure-scoped settings readers live under `app/infra/config/` and are used to centralize config access for infra modules before broader service/router config cleanup is tackled.
 
+Current proxy configuration pattern: `app/utils/proxy_helper.py` keeps validation, caching, and audit logging, while raw `proxy_url` / `wecom_proxy_url` reads live under `app/infra/config/proxy_settings.py`.
+
 ---
 
 ## Naming Conventions
