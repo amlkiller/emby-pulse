@@ -36,8 +36,6 @@ def _ensure_table():
     except Exception as e:
         logger.error(f"[日历通知] 建表失败: {e}")
 
-_ensure_table()
-
 # ============ 配置模型 ============
 class CalendarNotifyConfig(BaseModel):
     enabled: bool = False
@@ -367,3 +365,8 @@ def init_calendar_notify_service():
     except Exception as e:
         logger.error(f"[日历通知] 服务启动失败: {e}")
         return None
+
+
+def start_calendar_notify_services():
+    _ensure_table()
+    init_calendar_notify_service()

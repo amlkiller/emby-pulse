@@ -2,7 +2,6 @@ def register_calendar_notify_routes(app) -> None:
     from app.domains.notifications import calendar_notify
 
     app.include_router(calendar_notify.router)
-    calendar_notify.init_calendar_notify_service()
 
 
 def register_plugin_routes(app) -> None:

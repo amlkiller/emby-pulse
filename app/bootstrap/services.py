@@ -4,6 +4,8 @@ from app.domains.notifications.bot_service import (
     start_notification_services,
     stop_notification_services,
 )
+from app.domains.notifications.calendar_notify import start_calendar_notify_services
+from app.domains.notifications.router import start_notifications_router_services
 from app.domains.playback.dedupe import start_dedupe_services
 from app.domains.risk.risk_service import start_risk_monitor
 from app.domains.media_requests.gaps import start_gap_services
@@ -52,6 +54,8 @@ def start_bootstrap_services(app, request_port: int) -> None:
 
     playback_start_dashboard_cache_tasks()
     start_community_cache_refresh_loop()
+    start_notifications_router_services()
+    start_calendar_notify_services()
     start_dedupe_services()
     start_gap_services()
     start_auth_domain_services()

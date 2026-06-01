@@ -32,7 +32,8 @@ def _ensure_table():
         logger.error(f"[通知中心] 自动建表失败: {e}")
 
 
-_ensure_table()
+def start_notifications_router_services():
+    _ensure_table()
 
 
 @router.get("")
