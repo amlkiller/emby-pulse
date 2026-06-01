@@ -36,7 +36,7 @@ async def calendar_page(request: Request):
     public_url = get_calendar_public_url()
     if public_url and public_url.endswith('/'): public_url = public_url[:-1]
 
-    from app.routers.views import get_common_vars
+    from app.domains.system.views import get_common_vars
     return templates.TemplateResponse("calendar.html", get_common_vars(request, "calendar", {
         "emby_public_url": public_url,
         "is_pro": _check_pro_status()

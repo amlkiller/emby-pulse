@@ -28,12 +28,11 @@ def register_routes(app: FastAPI) -> None:
         stats,
         system_tools,
         users,
-        views,
     )
     from app.domains.playback import calendar, dedupe, insight, search
     from app.domains.notifications import bot as bot_router
     from app.domains.users import auth
-    from app.domains.system import tasks
+    from app.domains.system import tasks, views
     from app.domains.proxy import router as proxy
     from app.domains.reports import router as report
     from app.domains.pwa import router as pwa

@@ -23,7 +23,7 @@ def set_app(app):
 
 @router.get("/plugins")
 async def plugins_page(request: Request):
-    from app.routers.views import get_common_vars
+    from app.domains.system.views import get_common_vars
 
     if not request.session.get("user"):
         return RedirectResponse("/login", status_code=303)

@@ -45,7 +45,7 @@ from app.dao.bot_admin_dao import (
     update_tg_binding_names,
 )
 from app.services.bot_service import bot
-from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
 import threading
 import base64
 import struct

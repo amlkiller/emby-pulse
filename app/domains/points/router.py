@@ -36,7 +36,7 @@ class BatchPointsModel(BaseModel): user_ids: List[str]; amount: int; reason: str
 
 @router.get("/points")
 async def points_page(request: Request):
-    from app.routers.views import get_common_vars
+    from app.domains.system.views import get_common_vars
 
     if not request.session.get("user"):
         return RedirectResponse("/login", status_code=303)
