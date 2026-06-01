@@ -15,6 +15,9 @@ from app.core.config import cfg
 from app.core.security_utils import safe_error_message
 from app.infra.clients.telegram_client import telegram_client
 from app.infra.clients.wecom_client import wecom_client
+from app.infra.config.notification_settings import (
+    get_notification_channels_runtime_config,
+)
 from app.dao.calendar_notify_dao import (
     ensure_calendar_notify_config_table,
     get_calendar_notify_config,
@@ -230,8 +233,9 @@ def send_calendar_notify(test: bool = False):
         
         # 发送到 TG 管理员机器人
         if "tg_bot" in channels:
-            tg_chat_id = row['tg_chat_id'] or cfg.get("tg_chat_id")
-            tg_token = cfg.get("tg_bot_token")
+            tg_config = get_notification_channels_runtime_config()["tg_bot"]
+            tg_chat_id = row['tg_chat_id'] or tg_config["chat_id"]
+            tg_token = tg_config["token"]
             
             if tg_chat_id and tg_token:
                 try:
