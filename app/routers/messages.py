@@ -44,6 +44,14 @@ from app.dao.message_dao import (
     upsert_user_mute,
 )
 from app.infra.clients.media_server_client import media_api
+from app.infra.config.notification_settings import (
+    get_message_notification_base_url,
+    is_message_bot_notify_enabled,
+    is_message_bot_reply_enabled,
+    is_user_bot_configured,
+    set_message_bot_notify_enabled,
+    set_message_bot_reply_enabled,
+)
 from app.core.security_utils import sanitize_html, sanitize_rich_html
 from app.core.security import require_admin
 from app.routers.auth import is_admin_user
@@ -1038,11 +1046,10 @@ def mark_announcement_read(ann_id: int, request: Request):
 def _send_bot_notify_for_user_message(user_id: str, username: str, content: str, conv_id: int):
     """用户发消息时，发送机器人通知给管理员"""
     try:
-        from app.core.config import cfg
         from app.services.bot_service import bot
         
         # 检查是否启用机器人消息通知
-        if not cfg.get("msg_bot_notify_enabled", True):
+        if not is_message_bot_notify_enabled():
             return
         
         if is_notify_blocked(user_id):
@@ -1082,7 +1089,7 @@ def _send_bot_notify_for_user_message(user_id: str, username: str, content: str,
         }
         
         # 如果配置了 base_url，添加查看详情按钮
-        base_url = cfg.get("base_url", "").strip()
+        base_url = get_message_notification_base_url()
         if base_url:
             reply_markup["inline_keyboard"][0].append({
                 "text": "🔗 查看详情",
@@ -1100,11 +1107,10 @@ def _send_bot_notify_for_user_message(user_id: str, username: str, content: str,
 def _send_bot_reply_to_user(user_id: str, content: str, admin_name: str = "管理员"):
     """管理员通过机器人回复用户"""
     try:
-        from app.core.config import cfg
         from app.services.user_bot_service import user_bot
         
         # 检查用户机器人是否启用
-        if not cfg.get("tg_user_bot_token"):
+        if not is_user_bot_configured():
             return False
         
         row = get_user_tg_id(user_id)
@@ -1142,13 +1148,12 @@ def get_msg_bot_config(request: Request):
     if not is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
-    from app.core.config import cfg
     return {
         "status": "success",
         "data": {
-            "enabled": cfg.get("msg_bot_notify_enabled", True),
-            "reply_via_bot": cfg.get("msg_bot_reply_enabled", False),
-            "user_bot_configured": bool(cfg.get("tg_user_bot_token"))
+            "enabled": is_message_bot_notify_enabled(),
+            "reply_via_bot": is_message_bot_reply_enabled(),
+            "user_bot_configured": is_user_bot_configured()
         }
     }
 
@@ -1162,9 +1167,8 @@ def set_msg_bot_config(data: MsgBotConfigModel, request: Request):
     if not is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
-    from app.core.config import cfg
-    cfg.set("msg_bot_notify_enabled", data.enabled)
-    cfg.set("msg_bot_reply_enabled", data.reply_via_bot)
+    set_message_bot_notify_enabled(data.enabled)
+    set_message_bot_reply_enabled(data.reply_via_bot)
     
     return {"status": "success", "message": "配置已保存"}
 
