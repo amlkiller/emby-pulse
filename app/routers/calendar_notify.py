@@ -11,12 +11,12 @@ from fastapi import APIRouter, Request
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 from pydantic import BaseModel
 from typing import Optional, List
-from app.core.config import cfg
 from app.core.security_utils import safe_error_message
 from app.infra.clients.telegram_client import telegram_client
 from app.infra.clients.wecom_client import wecom_client
 from app.infra.config.notification_settings import (
     get_notification_channels_runtime_config,
+    get_wecom_runtime_config,
 )
 from app.dao.calendar_notify_dao import (
     ensure_calendar_notify_config_table,
@@ -253,10 +253,11 @@ def send_calendar_notify(test: bool = False):
         
         # 发送到企业微信
         if "wecom" in channels:
-            corpid = cfg.get("wecom_corpid")
-            corpsecret = cfg.get("wecom_corpsecret")
-            agentid = cfg.get("wecom_agentid")
-            touser = row['wecom_touser'] or "@all"
+            wecom_config = get_wecom_runtime_config()
+            corpid = wecom_config["corpid"]
+            corpsecret = wecom_config["corpsecret"]
+            agentid = wecom_config["agentid"]
+            touser = row['wecom_touser'] or wecom_config["touser"]
             
             if corpid and corpsecret and agentid:
                 try:

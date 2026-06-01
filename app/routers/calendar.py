@@ -5,10 +5,9 @@ from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from app.services.calendar_service import calendar_service
-from app.core.config import templates, cfg
+from app.core.config import templates
+from app.infra.config.calendar_settings import get_calendar_public_url, set_calendar_cache_ttl
 from app.routers.auth import check_permission
-
-from app.routers.views import get_common_vars
 
 router = APIRouter()
 logger = logging.getLogger("uvicorn")
@@ -36,9 +35,10 @@ async def calendar_page(request: Request):
         return RedirectResponse("/?no_permission=1", status_code=303)
 
     # 获取公网地址，如果没有则使用内网地址作为回退
-    public_url = cfg.get("emby_public_url") or cfg.get("emby_public_host") or cfg.get("emby_host")
+    public_url = get_calendar_public_url()
     if public_url and public_url.endswith('/'): public_url = public_url[:-1]
 
+    from app.routers.views import get_common_vars
     return templates.TemplateResponse("calendar.html", get_common_vars(request, "calendar", {
         "emby_public_url": public_url,
         "is_pro": _check_pro_status()
@@ -61,5 +61,5 @@ async def update_calendar_config(request: Request, config: CalendarConfigReq):
     """API: 更新日历配置"""
     if not is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
-    cfg.set("calendar_cache_ttl", config.ttl)
+    set_calendar_cache_ttl(config.ttl)
     return {"status": "success"}

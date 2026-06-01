@@ -48,6 +48,15 @@ def get_notification_channels_runtime_config() -> dict:
     return _get_notification_channels_config(masked=False)
 
 
+def get_wecom_runtime_config() -> dict:
+    return {
+        "corpid": cfg.get("wecom_corpid", ""),
+        "corpsecret": cfg.get("wecom_corpsecret", ""),
+        "agentid": cfg.get("wecom_agentid", ""),
+        "touser": cfg.get("wecom_touser", "@all"),
+    }
+
+
 def set_notification_channels_config(data: dict) -> None:
     def should_update(value):
         if not value or not isinstance(value, str):
