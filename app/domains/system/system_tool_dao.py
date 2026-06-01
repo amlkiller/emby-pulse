@@ -139,7 +139,7 @@ def repair_core_system_tables():
 
 def get_dashboard_layout():
     with system_store.connect() as conn:
-        conn.execute("CREATE TABLE IF NOT EXISTS sys_dashboard (id INTEGER PRIMARY KEY DEFAULT 1, layout_json TEXT)")
+        conn.execute(TABLE_SCHEMAS["sys_dashboard"])
         row = conn.execute("SELECT layout_json FROM sys_dashboard WHERE id = 1").fetchone()
         if row and row[0]:
             return json.loads(row[0])
@@ -148,7 +148,7 @@ def get_dashboard_layout():
 
 def save_dashboard_layout(data) -> None:
     with system_store.connect() as conn:
-        conn.execute("CREATE TABLE IF NOT EXISTS sys_dashboard (id INTEGER PRIMARY KEY DEFAULT 1, layout_json TEXT)")
+        conn.execute(TABLE_SCHEMAS["sys_dashboard"])
         conn.execute(
             "INSERT OR REPLACE INTO sys_dashboard (id, layout_json) VALUES (1, ?)",
             (json.dumps(data, ensure_ascii=False),),
