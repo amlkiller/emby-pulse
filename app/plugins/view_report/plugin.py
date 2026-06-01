@@ -677,7 +677,7 @@ class ViewReportPlugin(PluginBase):
     def _generate_poster(self, report_type: str, stats: dict, theme: str = None):
         """生成海报图片 - 支持主题选择"""
         try:
-            from app.services.report_service import report_gen, HAS_PIL
+            from app.domains.reports.report_service import report_gen, HAS_PIL
             if not HAS_PIL:
                 return None
             
@@ -1054,7 +1054,7 @@ async def preview_poster(request: Request, report_type: str, theme: str = 'cinem
     if report_type not in ['daily', 'weekly', 'monthly']:
         return {"success": False, "message": "无效的报告类型"}
     try:
-        from app.services.report_service import report_gen, HAS_PIL
+        from app.domains.reports.report_service import report_gen, HAS_PIL
         if not HAS_PIL:
             return {"success": False, "message": "Pillow 未安装"}
         
