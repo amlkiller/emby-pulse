@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Check schema registry notification bootstrap boundary"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Check uv verification command usage"}

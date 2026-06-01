@@ -1,17 +1,11 @@
+from app.infra.db.schema_registry import TABLE_SCHEMAS
 from app.infra.db.system_store import system_store
 
 
 def ensure_bot_notify_mutes_table() -> None:
     with system_store.connect() as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            """CREATE TABLE IF NOT EXISTS bot_notify_mutes (
-                user_id TEXT,
-                event_type TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (user_id, event_type)
-            )"""
-        )
+        cursor.execute(TABLE_SCHEMAS["bot_notify_mutes"])
         conn.commit()
 
 

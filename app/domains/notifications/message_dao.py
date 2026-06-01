@@ -1,40 +1,15 @@
+from app.infra.db.schema_registry import TABLE_SCHEMAS
 from app.infra.db.system_store import system_store
+
+
+MESSAGE_TABLES = ("msg_conversations", "msg_items", "msg_notify_block")
 
 
 def ensure_msg_tables() -> None:
     with system_store.connect() as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            """CREATE TABLE IF NOT EXISTS msg_conversations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id TEXT NOT NULL,
-                username TEXT,
-                user_avatar TEXT,
-                last_message TEXT,
-                last_time DATETIME DEFAULT CURRENT_TIMESTAMP,
-                unread_admin INTEGER DEFAULT 0,
-                unread_user INTEGER DEFAULT 0,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )"""
-        )
-        cursor.execute(
-            """CREATE TABLE IF NOT EXISTS msg_items (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                conversation_id INTEGER,
-                sender_type TEXT DEFAULT 'admin',
-                sender_id TEXT,
-                sender_name TEXT,
-                content TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )"""
-        )
-        cursor.execute(
-            """CREATE TABLE IF NOT EXISTS msg_notify_block (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id TEXT NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )"""
-        )
+        for table_name in MESSAGE_TABLES:
+            cursor.execute(TABLE_SCHEMAS[table_name])
         conn.commit()
 
 
@@ -238,21 +213,7 @@ def remove_notify_block(user_id: str) -> None:
 
 def ensure_mute_table() -> None:
     with system_store.connect() as conn:
-        conn.execute(
-            """CREATE TABLE IF NOT EXISTS user_mutes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id TEXT NOT NULL,
-                username TEXT,
-                is_muted INTEGER DEFAULT 1,
-                muted_until TEXT,
-                muted_reason TEXT,
-                muted_by TEXT,
-                muted_by_name TEXT,
-                muted_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(user_id)
-            )"""
-        )
+        conn.execute(TABLE_SCHEMAS["user_mutes"])
         conn.commit()
 
 

@@ -1,24 +1,11 @@
+from app.infra.db.schema_registry import TABLE_SCHEMAS
 from app.infra.db.system_store import system_store
 
 
 def ensure_request_admin_messages_table() -> None:
     with system_store.connect() as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS request_admin_messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                tmdb_id INTEGER NOT NULL,
-                chat_id TEXT NOT NULL,
-                message_id INTEGER NOT NULL,
-                is_caption INTEGER DEFAULT 1,
-                original_text TEXT DEFAULT '',
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(tmdb_id, chat_id, message_id)
-            )
-            """
-        )
+        cursor.execute(TABLE_SCHEMAS["request_admin_messages"])
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_request_admin_messages_tmdb ON request_admin_messages(tmdb_id)")
         conn.commit()
 
