@@ -18,7 +18,7 @@ from app.infra.clients.wecom_client import wecom_client
 from app.infra.config.media_server_settings import get_media_server_routes
 from app.infra.config.notification_settings import get_wecom_runtime_config
 from app.infra.config.bot_settings import get_tg_bot_token, get_tg_chat_id
-from app.dao.temp_account_dao import (
+from app.plugins.temp_account.temp_account_dao import (
     create_temp_account_with_meta,
     delete_temp_account_record,
     ensure_temp_account_tables,
