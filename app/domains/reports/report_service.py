@@ -646,7 +646,7 @@ class ReportGenerator:
         slogan = random.choice(slogans)
         
         # 🔥 使用统一的时间计算模块
-        from app.services.time_utils import get_period_range, get_weekday_cn
+        from app.shared.time import get_period_range, get_weekday_cn
         start_date, end_date, where_sql, title_text = get_period_range(period)
         
         # 构建海报显示配置

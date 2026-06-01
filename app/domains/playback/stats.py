@@ -919,7 +919,7 @@ def api_top_users_list(request: Request, period: str = 'all'):
         date_filter = ""
         
         # 🔥 使用统一的时间计算模块
-        from app.services.time_utils import get_period_range
+        from app.shared.time import get_period_range
         start_date, end_date, where_sql, _ = get_period_range(period)
         
         # 如果有有效的 WHERE 条件，使用它

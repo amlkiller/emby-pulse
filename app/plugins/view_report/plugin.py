@@ -296,7 +296,7 @@ class ViewReportPlugin(PluginBase):
             period_setting = 'yesterday'
         
         # 🔥 使用统一的时间计算模块
-        from app.services.time_utils import get_period_range, get_period_from_report_config
+        from app.shared.time import get_period_range, get_period_from_report_config
         
         period = get_period_from_report_config(report_type, period_setting)
         start_date, end_date, where_sql, title_text = get_period_range(period)
@@ -450,7 +450,7 @@ class ViewReportPlugin(PluginBase):
         report_params = tuple(exclude_params) if exclude_params else ()
         
         # 计算天数（用于日均播放量）- 使用统一的时间计算
-        from app.services.time_utils import get_period_days, get_period_from_report_config
+        from app.shared.time import get_period_days, get_period_from_report_config
         
         if report_type == 'daily':
             period_setting = config.get('daily_period', 'yesterday')

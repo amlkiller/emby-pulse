@@ -2672,7 +2672,7 @@ class NotificationBot:
 
     def _cmd_stats(self, chat_id, period='day', platform="tg"):
         # 🔥 使用统一的时间计算模块
-        from app.services.time_utils import get_period_range, get_period_days, get_weekday_cn
+        from app.shared.time import get_period_range, get_period_days, get_weekday_cn
         
         where, params = get_base_filter('all')
         titles = {'day': '今日日报', 'yesterday': '昨日日报', 'week': '本周周报', 'month': '本月月报', 'year': '年度报告'}
