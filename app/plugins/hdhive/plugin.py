@@ -69,6 +69,10 @@ class HDHivePlugin(PluginBase):
         from app.utils.proxy_helper import get_safe_proxies
         return get_safe_proxies()
 
+    def search_by_tmdb(self, tmdb_id, res_type, page=1, page_size=10):
+        """Public sync search API for other backend modules."""
+        return self._search_by_tmdb(tmdb_id, res_type, self._proxies(), page, page_size)
+
     def _log(self, msg, level="info"):
         """记录日志（兼容旧代码）- 同时写入数据库和控制台"""
         # 调用基类的 log 方法，写入数据库并发送通知

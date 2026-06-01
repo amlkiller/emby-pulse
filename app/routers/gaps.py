@@ -557,13 +557,11 @@ def search_hdhive_for_gap(request: Request = None, payload: dict = None):
                 keyword += f" S{str(season).zfill(2)}"
             search_data["keyword"] = keyword
 
-        # 直接调用同步的内部方法 _search_by_tmdb
-        h = hdhive._headers()
-        proxies = hdhive._proxies()
+        proxies = _get_proxies()
         
         # 如果有 TMDB ID，直接查影巢
         if tmdb_id:
-            result = hdhive._search_by_tmdb(tmdb_id, res_type, h, proxies)
+            result = hdhive.search_by_tmdb(tmdb_id, res_type)
             return result
         
         # 否则用关键词搜索 TMDB 再查影巢
@@ -596,7 +594,7 @@ def search_hdhive_for_gap(request: Request = None, payload: dict = None):
             if not first_match:
                 return {"status": "error", "message": "未找到相关资源"}
             
-            result = hdhive._search_by_tmdb(first_match["tmdb_id"], first_match["type"], h, proxies)
+            result = hdhive.search_by_tmdb(first_match["tmdb_id"], first_match["type"])
             return result
             
         except Exception as e:
