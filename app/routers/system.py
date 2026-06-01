@@ -9,7 +9,6 @@ from app.dao.system_tool_dao import (
     system_database_exists,
 )
 from app.queries.system_tool_queries import diagnose_playback_database
-import requests
 import os
 import logging
 from app.core.security_utils import safe_error_message
@@ -17,6 +16,7 @@ from app.core.rate_limiter import get_client_ip
 from app.infra.clients.media_server_client import media_api
 from app.infra.clients.tmdb_client import tmdb_client
 from app.infra.clients.moviepilot_client import moviepilot_client
+from app.infra.clients.network_client import network_client
 
 logger = logging.getLogger("uvicorn")
 
@@ -488,9 +488,9 @@ async def test_tmdb(request: Request):
             return {"status": "error", "message": "❌ API Key 权限不足"}
         else:
             return {"status": "error", "message": f"❌ 请求失败 (状态码: {res.status_code})"}
-    except requests.exceptions.Timeout:
+    except network_client.Timeout:
         return {"status": "error", "message": "❌ 连接超时，请检查网络或代理设置"}
-    except requests.exceptions.ProxyError:
+    except network_client.ProxyError:
         return {"status": "error", "message": "❌ 代理连接失败，请检查代理地址"}
     except Exception as e:
         return {"status": "error", "message": safe_error_message(e, "❌ 测试失败")}
@@ -513,19 +513,19 @@ async def test_proxy(request: Request):
     
     try:
         # 测试连接 Google（需要代理才能访问）
-        res = requests.get(
+        res = network_client.test_proxy(
             "https://www.google.com/favicon.ico",
             proxies={"http": proxy_url, "https": proxy_url},
-            timeout=10
+            timeout=10,
         )
         if res.status_code == 200:
             return {"status": "success", "message": "🎉 代理连通测试成功！"}
         return {"status": "error", "message": f"⚠️ 代理响应异常 (状态码: {res.status_code})"}
-    except requests.exceptions.ProxyError:
+    except network_client.ProxyError:
         return {"status": "error", "message": "❌ 无法连接代理服务器"}
-    except requests.exceptions.Timeout:
+    except network_client.Timeout:
         return {"status": "error", "message": "❌ 代理连接超时"}
-    except requests.exceptions.SSLError:
+    except network_client.SSLError:
         return {"status": "error", "message": "❌ SSL 证书错误"}
     except Exception as e:
         return {"status": "error", "message": safe_error_message(e, "❌ 测试失败")}
@@ -592,12 +592,12 @@ async def api_ping(request: Request):
         ping_url = url.rstrip("/") + "/"
 
         start = time.time()
-        res = requests.get(ping_url, timeout=5, allow_redirects=False)
+        res = network_client.ping(ping_url, timeout=5, allow_redirects=False)
         latency = int((time.time() - start) * 1000)
 
         # 只要有响应（2xx/3xx/4xx/5xx）都算通
         return {"status": "success", "latency": latency, "http_code": res.status_code}
-    except requests.exceptions.Timeout:
+    except network_client.Timeout:
         return {"status": "error", "message": "timeout"}
     except Exception as e:
         logger.error(f"[Ping] 请求异常: {e}")

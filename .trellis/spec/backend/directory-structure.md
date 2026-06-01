@@ -106,6 +106,7 @@ Use lowercase module names that describe the application responsibility:
 - Bad: a plugin imports `requests` only to call `requests.get(...)` against a third-party service.
 - Good: `app/utils/ip_location.py` keeps cache and location cleaning locally while delegating all external IP lookup HTTP calls to `ip_location_client`.
 - Good: `app/routers/system_tools.py` keeps weather cache and fallback ordering locally while delegating QWeather/Amap/wttr transport calls to `weather_client`.
+- Good: `app/routers/system.py` keeps proxy validation and ping response messages locally while delegating probe requests and exception aliases to `network_client`.
 
 ### 6. Tests Required
 

@@ -10,6 +10,7 @@ from .telegram_client import TelegramClient, telegram_client
 from .tmdb_client import TmdbClient, tmdb_client
 from .webdav_client import WebDavClient, webdav_client
 from .weather_client import WeatherClient, weather_client
+from .network_client import NetworkClient, network_client
 from .wecom_client import WeComClient, wecom_client
 
 __all__ = [
@@ -33,6 +34,8 @@ __all__ = [
     "webdav_client",
     "WeatherClient",
     "weather_client",
+    "NetworkClient",
+    "network_client",
     "WeComClient",
     "wecom_client",
 ]
