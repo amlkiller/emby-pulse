@@ -35,7 +35,7 @@ logger = logging.getLogger("uvicorn")
 templates = Jinja2Templates(directory="templates", autoescape=True)
 router = APIRouter()
 
-from app.main import APP_VERSION
+from app.shared.version import APP_VERSION
 from app.core.security_utils import safe_error_message
 
 def check_login(request: Request):

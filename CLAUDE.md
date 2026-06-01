@@ -25,7 +25,7 @@ The project is mid-refactor. Use `架构.md` as the authoritative architecture r
 
 ### Application Bootstrap
 
-- `app/main.py` is intentionally thin: version constants, app factory wiring, and local uvicorn entrypoint.
+- `app/main.py` is intentionally thin: app factory wiring and local uvicorn entrypoint. Runtime version metadata lives in `app/shared/version.py`.
 - `app/bootstrap/` owns startup wiring, middleware registration, static mounts, route registration, lifespan tasks, database initialization, logging, runtime preparation, and user portal startup.
 - Do not move business behavior into `app/bootstrap/`; call domain/router/service code from bootstrap wiring when needed.
 
@@ -150,7 +150,7 @@ Windows console output may include Chinese or emoji; set `PYTHONIOENCODING=utf-8
 
 ## Versioning
 
-- Runtime version is declared in `app/main.py` as `APP_VERSION`.
+- Runtime version is declared in `app/shared/version.py` as `APP_VERSION`; `app.main` re-exports it for compatibility.
 - Docker/CI version mirroring is handled by existing release workflow files.
 
 ## Working Rules For Agents

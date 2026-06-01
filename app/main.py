@@ -1,6 +1,3 @@
-# 应用版本号（单一来源，修改版本只改这里）
-APP_VERSION = "1.4.6"
-
 import os
 
 from fastapi import FastAPI, Request
@@ -20,6 +17,7 @@ from app.bootstrap.runtime import (
 )
 from app.core.config import PORT
 from app.core.rate_limiter import initialize_trusted_proxies, start_cleanup_timer
+from app.shared.version import APP_VERSION
 
 REQUEST_PORT = int(os.getenv("REQUEST_PORT", "10308"))
 

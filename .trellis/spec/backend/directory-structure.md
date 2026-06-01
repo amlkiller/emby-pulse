@@ -9,7 +9,7 @@
 The backend lives under `app/` and currently uses a pragmatic FastAPI structure
 with most HTTP and business modules now grouped under `app/domains/`:
 
-* `app/main.py` is the thin application entrypoint. Keep version constants and app factory wiring here only.
+* `app/main.py` is the thin application entrypoint. Keep app factory wiring and local uvicorn entrypoint behavior here only; side-effect-free runtime metadata such as `APP_VERSION` belongs under `app/shared/`.
 * `app/bootstrap/` owns application startup wiring: runtime preparation, middleware registration, route mounting, lifespan tasks, database initialization orchestration, logging setup, and the isolated user-portal ASGI wrapper.
 * `app/core/` owns reusable cross-cutting runtime helpers used by multiple backend areas, such as security, sessions, configuration, middleware implementations, and short-lived compatibility shims.
 * `app/infra/` owns infrastructure adapters such as database access, external service clients, and infrastructure-scoped configuration readers.
@@ -108,7 +108,7 @@ Use lowercase module names that describe the application responsibility:
 
 ## Examples
 
-`app/main.py` should remain a thin example of the desired application entrypoint: constants, `prepare_runtime()`, `create_app()`, exception handler registration, and the `uvicorn.run()` local entrypoint.
+`app/main.py` should remain a thin example of the desired application entrypoint: `prepare_runtime()`, `create_app()`, exception handler registration, and the `uvicorn.run()` local entrypoint. Domain modules must not import `app.main` just to read shared metadata; import `app.shared.version.APP_VERSION` instead.
 
 `app/bootstrap/routes.py` is the current source of truth for mounted domain
 routers. Add new domain routers there rather than recreating a top-level

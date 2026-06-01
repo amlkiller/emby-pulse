@@ -7,6 +7,7 @@ from fastapi.templating import Jinja2Templates
 from app.core.audit_logger import get_audit_logs, get_audit_stats, AUDIT_ACTIONS
 from app.infra.db.audit_dao import list_user_audit_logs_since
 from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.shared.version import APP_VERSION
 import time
 import os
 
@@ -17,8 +18,6 @@ templates = Jinja2Templates(directory="templates")
 @router.get("/page", response_class=HTMLResponse)
 async def audit_page(request: Request):
     """审计日志页面"""
-    from app.main import APP_VERSION
-
     # 检查登录
     user = request.session.get("user")
     if not user:

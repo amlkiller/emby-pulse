@@ -13,6 +13,7 @@ from app.infra.config.notification_settings import (
     get_notification_channels_config,
     set_notification_channels_config,
 )
+from app.shared.version import APP_VERSION
 import json
 
 router = APIRouter()
@@ -79,8 +80,6 @@ CHANNEL_OPTIONS = [
 @router.get("/notify_admin", response_class=HTMLResponse)
 def notify_admin_page(request: Request):
     """通知管理页面"""
-    from app.main import APP_VERSION
-
     # 检查登录状态
     user = request.session.get("user")
     if not user:
