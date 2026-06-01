@@ -1,6 +1,5 @@
 import threading
 import time
-import requests
 import datetime
 import io
 import logging
@@ -20,6 +19,7 @@ from app.dao import user_dao
 from app.infra.db.local_playback_store import insert_bot_playback_history_record
 from app.infra.clients.media_server_client import media_api
 from app.infra.clients.moviepilot_client import moviepilot_client
+from app.infra.clients.network_client import network_client
 from app.infra.clients.telegram_client import telegram_client
 from app.infra.clients.wecom_client import wecom_client
 from app.infra.clients.tmdb_client import tmdb_client
@@ -1965,7 +1965,7 @@ class NotificationBot:
         photo_bytes = None
         if isinstance(photo_io, str):
             try: 
-                res = requests.get(photo_io, proxies=self._get_proxies() if "tmdb" in photo_io.lower() else None, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+                res = network_client.get(photo_io, proxies=self._get_proxies() if "tmdb" in photo_io.lower() else None, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
                 if res.status_code == 200: photo_bytes = res.content
             except Exception: pass
         else: photo_bytes = photo_io.read()
@@ -1974,7 +1974,7 @@ class NotificationBot:
         if wecom_photo_io is not None and wecom_photo_io != photo_io:
             if isinstance(wecom_photo_io, str):
                 try: 
-                    res = requests.get(wecom_photo_io, proxies=self._get_proxies() if "tmdb" in wecom_photo_io.lower() else None, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+                    res = network_client.get(wecom_photo_io, proxies=self._get_proxies() if "tmdb" in wecom_photo_io.lower() else None, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
                     if res.status_code == 200: wecom_photo_bytes = res.content
                 except Exception: pass
             else: wecom_photo_bytes = wecom_photo_io.read()
@@ -2964,7 +2964,7 @@ class NotificationBot:
                             if r_url:
                                 try:
                                     r_start = time.time()
-                                    requests.get(f"{r_url}/web/favicon.ico", timeout=3)
+                                    network_client.get(f"{r_url}/web/favicon.ico", timeout=3)
                                     r_delay = int((time.time() - r_start) * 1000)
                                     icon = "🟢" if r_delay < 100 else ("🟡" if r_delay < 300 else "🔴")
                                     msg += f"{icon} {r_name}: {r_delay}ms\n"

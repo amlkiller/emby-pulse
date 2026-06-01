@@ -7,11 +7,11 @@ from app.dao import invitation_dao
 from app.dao import user_dao
 from app.dao import user_bot_dao
 from app.infra.clients.media_server_client import media_api
+from app.infra.clients.network_client import network_client
 
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 from app.core.security import validate_password_strength  # 🔒 统一密码强度校验
 from app.utils.image_validator import check_magic_bytes  # 🔒 头像魔数校验
-import requests
 import datetime
 import secrets
 import base64
@@ -559,7 +559,7 @@ async def api_update_user_image(request: Request, user_id: str = Form(...), url:
             validation = validate_url(url, allow_internal=False)
             if not validation["valid"]:
                 return {"status": "error", "message": f"URL 不安全: {validation['error']}"}
-            d_res = requests.get(url, timeout=10, allow_redirects=False, stream=True)
+            d_res = network_client.get(url, timeout=10, allow_redirects=False, stream=True)
             if d_res.status_code == 200:
                 img_data = d_res.content
                 c_type = d_res.headers.get('Content-Type', 'image/png')

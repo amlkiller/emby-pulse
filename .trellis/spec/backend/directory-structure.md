@@ -54,6 +54,8 @@ When splitting large files, move one responsibility at a time and keep route URL
 
 Infrastructure adapters should live under `app/infra/` rather than `app/core/` when they own transport/session/retry behavior for an external dependency. If a temporary compatibility import is needed during a migration, keep it in `app/core/` as a thin re-export only.
 
+Current migration pattern: if a caller only needs generic external transport for file/image downloads or simple reachability probes, route it through `app/infra/clients/network_client.py` instead of leaving direct `requests.get(...)` calls in routers or services. Keep domain parsing, cache decisions, and user-facing error mapping at the caller.
+
 ---
 
 ## Naming Conventions

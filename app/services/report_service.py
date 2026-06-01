@@ -1,7 +1,6 @@
 import os
 import io
 import re
-import requests
 import datetime
 import logging
 import math
@@ -16,6 +15,7 @@ from app.queries.report_queries import (
     sum_report_duration,
 )
 from app.infra.clients.media_server_client import media_api
+from app.infra.clients.network_client import network_client
 from app.infra.clients.tmdb_client import tmdb_client
 
 logger = logging.getLogger("uvicorn")
@@ -576,7 +576,7 @@ class ReportGenerator:
                 return None
 
             img_url = f"https://image.tmdb.org/t/p/w500{poster_path}"
-            img_res = requests.get(img_url, proxies=proxies, timeout=8)
+            img_res = network_client.get(img_url, proxies=proxies, timeout=8)
             if img_res.status_code == 200:
                 poster = Image.open(io.BytesIO(img_res.content)).convert('RGB')
                 poster = poster.resize((width, height), Image.LANCZOS)

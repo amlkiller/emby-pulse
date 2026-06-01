@@ -203,8 +203,8 @@ def get_tmdb_backdrop(tmdb_id: str, media_type: str = "movie", rng: random.Rando
         rng = random
     
     try:
-        import requests
         from app.utils.proxy_helper import get_safe_proxies
+        from app.infra.clients.network_client import network_client
 
         proxies = get_safe_proxies()
         if not proxies:
@@ -233,9 +233,9 @@ def get_tmdb_backdrop(tmdb_id: str, media_type: str = "movie", rng: random.Rando
         file_path = backdrop.get("file_path")
         if not file_path:
             return None
-        
+
         img_url = f"https://image.tmdb.org/t/p/w1280{file_path}"
-        img_res = requests.get(img_url, timeout=3, proxies=proxies)
+        img_res = network_client.get(img_url, timeout=3, proxies=proxies)
         if img_res.status_code == 200:
             return img_res.content
         return None
