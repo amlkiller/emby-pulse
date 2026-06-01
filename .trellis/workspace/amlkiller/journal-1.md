@@ -255,3 +255,36 @@ Routed auth local_users schema bootstrap through schema_registry, added TOTP col
 ### Next Steps
 
 - None - task complete
+
+
+## Session 8: Pro license schema registry bootstrap
+
+**Date**: 2026-06-02
+**Task**: Pro license schema registry bootstrap
+**Branch**: `main`
+
+### Summary
+
+Routed sys_license bootstrap through schema_registry, added nullable device extension columns and safe ALTER coverage, preserved Pro status behavior, and verified with focused schema tests plus full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0e9e87e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
