@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Request
 from app.schemas.models import SettingsModel
-from app.core.config import save_config
+from app.core.config import cfg, save_config
 from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
 from app.domains.system.system_tool_dao import (
     get_dashboard_layout,
@@ -27,33 +27,49 @@ from app.infra.config.request_portal_settings import (
     set_redirect_to_community_enabled,
     set_user_portal_url,
 )
-from app.infra.config.media_server_settings import get_media_server_routes
-from app.infra.config.moviepilot_settings import get_moviepilot_token
-from app.infra.config.system_settings import (
-    get_system_config_env_source,
-    get_system_config_value,
-    get_system_emby_api_key,
-    get_system_emby_host,
-    get_system_emby_public_or_host,
-    get_system_emby_public_url,
-    get_system_hidden_users,
-    get_system_moviepilot_url,
-    get_system_notify_item_deleted,
-    get_system_notify_user_login,
-    get_system_playback_data_mode,
-    get_system_proxy_url,
-    get_system_server_type,
-    get_system_tmdb_api_key,
-    get_system_weather_amap_key,
-    get_system_weather_greeting,
-    get_system_weather_qweather_host,
-    get_system_weather_qweather_key,
-    get_system_weather_source,
-    get_system_webhook_token,
-    get_system_welcome_message,
-    set_system_config_value,
+from app.infra.config.bot_settings import get_webhook_token, set_webhook_token
+from app.infra.config.db_settings import get_playback_data_mode, set_playback_data_mode
+from app.infra.config.media_server_settings import (
+    get_media_server_api_key,
+    get_media_server_host_raw,
+    get_media_server_main_public_or_host,
+    get_media_server_public_url_raw,
+    get_media_server_routes,
+    get_media_server_type_raw,
+    get_media_server_welcome_message,
+    set_media_server_api_key,
+    set_media_server_host,
+    set_media_server_public_url,
+    set_media_server_type,
+    set_media_server_welcome_message,
 )
-
+from app.infra.config.moviepilot_settings import (
+    get_moviepilot_token,
+    get_moviepilot_url,
+    set_moviepilot_token,
+    set_moviepilot_url,
+)
+from app.infra.config.notification_settings import (
+    get_notify_item_deleted,
+    get_notify_user_login,
+    set_notify_item_deleted,
+    set_notify_user_login,
+)
+from app.infra.config.proxy_settings import get_proxy_url_raw, set_proxy_url
+from app.infra.config.tmdb_settings import get_tmdb_api_key, set_tmdb_api_key
+from app.infra.config.user_visibility_settings import get_hidden_users, set_hidden_users
+from app.infra.config.weather_settings import (
+    get_weather_amap_key,
+    get_weather_greeting,
+    get_weather_qweather_host_raw,
+    get_weather_qweather_key,
+    get_weather_source,
+    set_weather_amap_key,
+    set_weather_greeting,
+    set_weather_qweather_host,
+    set_weather_qweather_key,
+    set_weather_source,
+)
 logger = logging.getLogger("uvicorn")
 
 router = APIRouter()
@@ -86,8 +102,8 @@ def api_diag_config(request: Request):
     
     for config_key, env_key in sensitive_fields.items():
         env_val = os.getenv(env_key, "")
-        config_val = get_system_config_value(config_key, "")
-        source = get_system_config_env_source(config_key)
+        config_val = cfg.get(config_key, "")
+        source = cfg.get_env_source(config_key)
         
         result["env_values"][env_key] = {
             "set": bool(env_val),
@@ -138,8 +154,8 @@ def api_diag_env(request: Request):
     
     for config_key, env_key in sensitive_fields.items():
         env_val = os.getenv(env_key, "")
-        config_val = get_system_config_value(config_key, "")
-        source = get_system_config_env_source(config_key)
+        config_val = cfg.get(config_key, "")
+        source = cfg.get_env_source(config_key)
         
         # 🔒 安全：只返回是否设置和长度，不返回任何实际值
         result["env_vars"][env_key] = {
@@ -201,30 +217,30 @@ def api_get_settings(request: Request):
     
     # 构建返回数据
     result_data = {
-        "server_type": get_system_server_type(),
-        "emby_host": get_system_emby_host(),
-        "proxy_url": get_system_proxy_url(),
-        "hidden_users": get_system_hidden_users(),
-        "emby_public_url": get_system_emby_public_url(),
-        "welcome_message": get_system_welcome_message(),
+        "server_type": get_media_server_type_raw(),
+        "emby_host": get_media_server_host_raw(),
+        "proxy_url": get_proxy_url_raw(),
+        "hidden_users": get_hidden_users(),
+        "emby_public_url": get_media_server_public_url_raw(),
+        "welcome_message": get_media_server_welcome_message(),
         "client_download_url": get_client_download_url(),
-        "moviepilot_url": get_system_moviepilot_url(),
+        "moviepilot_url": get_moviepilot_url(),
         "pulse_url": get_pulse_url(),
         "user_portal_url": get_user_portal_url(),
         "register_redirect_to_community": get_redirect_to_community_value(),
-        "playback_data_mode": get_system_playback_data_mode(),
-        "notify_user_login": get_system_notify_user_login(),
-        "notify_item_deleted": get_system_notify_item_deleted(),
-        "weather_greeting": get_system_weather_greeting(),
-        "weather_source": get_system_weather_source(),
-        "weather_qweather_host": get_system_weather_qweather_host(),
+        "playback_data_mode": get_playback_data_mode(),
+        "notify_user_login": get_notify_user_login(),
+        "notify_item_deleted": get_notify_item_deleted(),
+        "weather_greeting": get_weather_greeting(),
+        "weather_source": get_weather_source(),
+        "weather_qweather_host": get_weather_qweather_host_raw(),
     }
     
     # 🔒 脱敏并标记敏感字段来源
     env_override_fields = []
     for field in SENSITIVE_FIELDS:
-        value = get_system_config_value(field, "")
-        source = get_system_config_env_source(field)
+        value = cfg.get(field, "")
+        source = cfg.get_env_source(field)
         
         if source == "env":
             # 来自环境变量：返回标记，不返回实际值
@@ -239,8 +255,8 @@ def api_get_settings(request: Request):
             result_data[f"{field}_readonly"] = False
     
     # 🔥 Webhook Token 特殊处理
-    webhook_token = get_system_webhook_token()
-    webhook_source = get_system_config_env_source("webhook_token")
+    webhook_token = get_webhook_token()
+    webhook_source = cfg.get_env_source("webhook_token")
     
     if webhook_source == "env":
         result_data["webhook_token"] = "****（由环境变量设置）"
@@ -258,7 +274,7 @@ def api_get_settings(request: Request):
     if webhook_source == "env":
         result_data["webhook_url"] = "（Webhook Token 由环境变量管理，请在 Emby 中配置 Header）"
     else:
-        result_data["webhook_url"] = f"{get_system_emby_public_or_host()}/api/v1/webhook"
+        result_data["webhook_url"] = f"{get_media_server_main_public_or_host()}/api/v1/webhook"
     result_data["webhook_header_name"] = "X-Webhook-Token"
     result_data["webhook_token_available"] = bool(webhook_token and webhook_token != "embypulse" and webhook_token not in ("emby", "test", "123456", "password"))
     
@@ -277,7 +293,7 @@ def api_update_settings(data: SettingsModel, request: Request):
         - 包含脱敏标记 **** 的值不更新
         """
         # 检查是否来自环境变量
-        if get_system_config_env_source(field) == "env":
+        if cfg.get_env_source(field) == "env":
             return False
         # 检查是否为空值（前端禁用时发送空字符串）
         if not value or value.strip() == "":
@@ -318,14 +334,14 @@ def api_update_settings(data: SettingsModel, request: Request):
     
     # 记录变更前的值（用于审计日志）
     old_values = {
-        "emby_host": get_system_emby_host(),
-        "emby_api_key": get_system_emby_api_key(),
-        "tmdb_api_key": get_system_tmdb_api_key(),
-        "webhook_token": get_system_webhook_token(),
+        "emby_host": get_media_server_host_raw(),
+        "emby_api_key": get_media_server_api_key(),
+        "tmdb_api_key": get_tmdb_api_key(),
+        "webhook_token": get_webhook_token(),
         "moviepilot_token": get_moviepilot_token(),
-        "weather_qweather_key": get_system_weather_qweather_key(),
-        "weather_amap_key": get_system_weather_amap_key(),
-        "emby_public_url": get_system_emby_public_url(),
+        "weather_qweather_key": get_weather_qweather_key(),
+        "weather_amap_key": get_weather_amap_key(),
+        "emby_public_url": get_media_server_public_url_raw(),
     }
     
     # 🔒 安全：敏感字段仅在非环境变量且非脱敏时更新
@@ -334,8 +350,8 @@ def api_update_settings(data: SettingsModel, request: Request):
     if should_update_sensitive("emby_api_key", data.emby_api_key):
         emby_api_key_to_use = (data.emby_api_key or "").strip()
     else:
-        emby_api_key_to_use = get_system_emby_api_key()
-        env_source = get_system_config_env_source("emby_api_key")
+        emby_api_key_to_use = get_media_server_api_key()
+        env_source = cfg.get_env_source("emby_api_key")
         
         # 如果环境变量设置了但值为空，说明环境变量没有正确加载
         if env_source == "env" and not emby_api_key_to_use:
@@ -363,22 +379,22 @@ def api_update_settings(data: SettingsModel, request: Request):
             return {"status": "error", "message": "服务器地址无法访问"}
 
     # 保存所有配置
-    set_system_config_value("server_type", server_type)
-    set_system_config_value("emby_host", data.emby_host)
+    set_media_server_type(server_type)
+    set_media_server_host(data.emby_host)
     
     # 🔒 敏感字段：仅在非环境变量且非脱敏时更新
     if should_update_sensitive("emby_api_key", data.emby_api_key):
-        set_system_config_value("emby_api_key", (data.emby_api_key or "").strip())
+        set_media_server_api_key((data.emby_api_key or "").strip())
     if should_update_sensitive("tmdb_api_key", data.tmdb_api_key):
-        set_system_config_value("tmdb_api_key", (data.tmdb_api_key or "").strip())
+        set_tmdb_api_key((data.tmdb_api_key or "").strip())
     if should_update_sensitive("webhook_token", data.webhook_token):
-        set_system_config_value("webhook_token", (data.webhook_token or "").strip())
+        set_webhook_token((data.webhook_token or "").strip())
     if should_update_sensitive("moviepilot_token", data.moviepilot_token):
-        set_system_config_value("moviepilot_token", (data.moviepilot_token or "").strip())
+        set_moviepilot_token((data.moviepilot_token or "").strip())
     if should_update_sensitive("weather_qweather_key", data.weather_qweather_key):
-        set_system_config_value("weather_qweather_key", (data.weather_qweather_key or "").strip())
+        set_weather_qweather_key((data.weather_qweather_key or "").strip())
     if should_update_sensitive("weather_amap_key", data.weather_amap_key):
-        set_system_config_value("weather_amap_key", (data.weather_amap_key or "").strip())
+        set_weather_amap_key((data.weather_amap_key or "").strip())
     
     # 非敏感字段直接保存
     # 🔒 SSRF 防护：校验代理地址，禁止内网/回环
@@ -386,27 +402,27 @@ def api_update_settings(data: SettingsModel, request: Request):
     _proxy_check = validate_proxy_url(data.proxy_url or "")
     if not _proxy_check.get("valid"):
         return {"status": "error", "message": f"代理地址不合法: {_proxy_check.get('error', '')}"}
-    set_system_config_value("proxy_url", data.proxy_url)
+    set_proxy_url(data.proxy_url)
     # 配置变更后失效 proxy_helper 缓存
     try:
         from app.utils.proxy_helper import invalidate_cache as _proxy_cache_invalidate
         _proxy_cache_invalidate()
     except Exception:
         pass
-    set_system_config_value("hidden_users", data.hidden_users)
-    set_system_config_value("emby_public_url", data.emby_public_url)
-    set_system_config_value("welcome_message", data.welcome_message)
+    set_hidden_users(data.hidden_users)
+    set_media_server_public_url(data.emby_public_url)
+    set_media_server_welcome_message(data.welcome_message)
     set_client_download_url(data.client_download_url)
-    set_system_config_value("moviepilot_url", data.moviepilot_url)
+    set_moviepilot_url(data.moviepilot_url)
     set_pulse_url(data.pulse_url)
     set_user_portal_url(getattr(data, "user_portal_url", ""))
     set_redirect_to_community_enabled(getattr(data, "register_redirect_to_community", "false"))
-    set_system_config_value("playback_data_mode", getattr(data, "playback_data_mode", "sqlite"))
-    set_system_config_value("notify_user_login", getattr(data, "notify_user_login", False))
-    set_system_config_value("notify_item_deleted", getattr(data, "notify_item_deleted", False))
-    set_system_config_value("weather_greeting", getattr(data, "weather_greeting", ""))
-    set_system_config_value("weather_source", getattr(data, "weather_source", "wttr"))
-    set_system_config_value("weather_qweather_host", getattr(data, "weather_qweather_host", ""))
+    set_playback_data_mode(getattr(data, "playback_data_mode", "sqlite"))
+    set_notify_user_login(getattr(data, "notify_user_login", False))
+    set_notify_item_deleted(getattr(data, "notify_item_deleted", False))
+    set_weather_greeting(getattr(data, "weather_greeting", ""))
+    set_weather_source(getattr(data, "weather_source", "wttr"))
+    set_weather_qweather_host(getattr(data, "weather_qweather_host", ""))
     
     save_config()
     
@@ -456,7 +472,7 @@ async def api_update_weather_greeting(request: Request):
     
     data = await request.json()
     greeting = data.get("weather_greeting", "") if isinstance(data, dict) else ""
-    set_system_config_value("weather_greeting", greeting)
+    set_weather_greeting(greeting)
     save_config()
     
     return {"status": "success", "message": "问候语已保存"}
@@ -500,7 +516,7 @@ async def test_tmdb(request: Request):
     
     # 🔒 如果前端发送的是脱敏值，从配置中读取真实值
     if not api_key or "****" in api_key:
-        api_key = get_system_tmdb_api_key() or ""
+        api_key = get_tmdb_api_key() or ""
     
     if not api_key: return {"status": "error", "message": "请填写 TMDB API Key"}
     

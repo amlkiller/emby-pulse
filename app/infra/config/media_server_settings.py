@@ -5,8 +5,24 @@ def get_media_server_host() -> str:
     return cfg.get("emby_host", "").rstrip("/")
 
 
+def get_media_server_host_raw() -> str:
+    return cfg.get("emby_host")
+
+
+def set_media_server_host(value: str) -> None:
+    cfg.set("emby_host", value)
+
+
 def get_media_server_public_url() -> str:
     return cfg.get("emby_public_url", "") or cfg.get("emby_host", "")
+
+
+def get_media_server_public_url_raw() -> str:
+    return cfg.get("emby_public_url", "")
+
+
+def set_media_server_public_url(value: str) -> None:
+    cfg.set("emby_public_url", value)
 
 
 def get_media_server_public_host() -> str:
@@ -37,9 +53,25 @@ def get_media_server_api_key() -> str:
     return cfg.get("emby_api_key", "")
 
 
+def set_media_server_api_key(value: str) -> None:
+    cfg.set("emby_api_key", value)
+
+
 def get_media_server_type() -> str:
     return cfg.get("server_type", "emby").lower()
 
 
+def get_media_server_type_raw() -> str:
+    return cfg.get("server_type", "emby")
+
+
+def set_media_server_type(value: str) -> None:
+    cfg.set("server_type", value)
+
+
 def get_media_server_welcome_message() -> str:
     return cfg.get("welcome_message", "")
+
+
+def set_media_server_welcome_message(value: str) -> None:
+    cfg.set("welcome_message", value)

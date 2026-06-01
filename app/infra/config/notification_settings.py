@@ -42,6 +42,14 @@ def get_notify_item_deleted() -> bool:
     return cfg.get("notify_item_deleted", False)
 
 
+def set_notify_user_login(enabled: bool) -> None:
+    cfg.set("notify_user_login", enabled)
+
+
+def set_notify_item_deleted(enabled: bool) -> None:
+    cfg.set("notify_item_deleted", enabled)
+
+
 def get_tg_bot_token() -> str:
     return cfg.get("tg_bot_token", "")
 
