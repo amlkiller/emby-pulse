@@ -1,14 +1,18 @@
 from fastapi import APIRouter, Request, Response, UploadFile, File, Form, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List
-from app.core.config import cfg
 from app.dao import audit_dao
 from app.dao import invitation_dao
 from app.dao import user_dao
 from app.dao import user_bot_dao
 from app.infra.clients.media_server_client import media_api
 from app.infra.clients.network_client import network_client
+from app.infra.config.media_server_settings import get_media_server_public_host
 from app.infra.config.request_portal_settings import get_user_portal_url
+from app.infra.config.user_bot_settings import (
+    get_default_user_template_id,
+    set_default_user_template_id,
+)
 from app.infra.config.user_visibility_settings import get_hidden_users
 
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
@@ -437,7 +441,7 @@ def api_manage_users(request: Request, refresh: bool = False):
     if refresh:
         invalidate_emby_users_cache()
 
-    public_host = cfg.get("emby_public_host") or cfg.get("emby_host", "")
+    public_host = get_media_server_public_host()
     if public_host.endswith('/'): public_host = public_host[:-1]
 
     try:
@@ -1217,7 +1221,7 @@ def api_manage_user_new(data: NewUserModelEx, request: Request):
 
         p = media_api.get(f"/Users/{new_id}").json().get('Policy', {})
 
-        tpl_id = data.template_user_id or cfg.get("default_user_template_id")
+        tpl_id = data.template_user_id or get_default_user_template_id()
         if tpl_id:
             src_res = media_api.get(f"/Users/{tpl_id}", timeout=5)
             if src_res.status_code == 200:
@@ -1594,7 +1598,7 @@ def api_set_default_template(data: dict, request: Request):
 
     try:
         template_id = data.get("template_user_id", "")
-        cfg.set("default_user_template_id", template_id)
+        set_default_user_template_id(template_id)
         return {"status": "success", "message": "默认模板已更新"}
     except Exception as e:
         return {"status": "error", "message": safe_error_message(e)}
@@ -1605,7 +1609,7 @@ def api_get_default_template(request: Request):
     if not request.session.get("user"): return {"status": "error", "message": "未登录"}
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
-        template_id = cfg.get("default_user_template_id") or ""
+        template_id = get_default_user_template_id()
         return {"status": "success", "data": {"template_user_id": template_id}}
     except Exception as e:
         return {"status": "error", "message": safe_error_message(e)}

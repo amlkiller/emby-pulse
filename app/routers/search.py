@@ -4,9 +4,15 @@ from app.core.security import require_login  # 🔒 统一登录依赖
 from fastapi.responses import StreamingResponse
 import io
 import json # 🔥 新增 json 模块用于解析
-from app.core.config import cfg
 # 🔥 引入核心适配器
 from app.infra.clients.media_server_client import media_api
+from app.infra.config.media_server_settings import (
+    get_media_server_external_url,
+    get_media_server_host,
+    get_media_server_public_host,
+    get_media_server_public_url,
+    get_media_server_type,
+)
 from app.core.security_utils import safe_error_message
 
 # 🔥 拼音首字母搜索支持
@@ -83,7 +89,7 @@ def get_emby_sys_info():
         return {"Version": "4.10.0.0", "ServerName": ""}
 
 def is_new_emby_router(sys_info):
-    if cfg.get("server_type") == "jellyfin":
+    if get_media_server_type() == "jellyfin":
         return True # Jellyfin 一律视为新路由
         
     server_name = sys_info.get("ServerName", "").lower()
@@ -173,7 +179,12 @@ def global_library_search(query: str, request: Request):
 
     # 🔥 核心修复：优先使用公网地址，没有公网时使用内网地址
     # 顺序：emby_public_url > emby_external_url > emby_public_host > emby_host（内网）
-    raw_host = cfg.get("emby_public_url") or cfg.get("emby_external_url") or cfg.get("emby_public_host") or cfg.get("emby_host", "")
+    raw_host = (
+        get_media_server_public_url()
+        or get_media_server_external_url()
+        or get_media_server_public_host()
+        or get_media_server_host()
+    )
     
     # 🔥🔥🔥 处理 Pro 版配置中存在多个服务器或 JSON 列表的情况 🔥🔥🔥
     public_host = ""
@@ -200,7 +211,8 @@ def global_library_search(query: str, request: Request):
     
     # 如果公网地址为空，强制使用 emby_host（内网地址）
     if not public_host:
-        public_host = cfg.get("emby_host", "http://127.0.0.1:8096").rstrip('/')
+        public_host = get_media_server_host() or "http://127.0.0.1:8096"
+        public_host = public_host.rstrip('/')
 
     admin_id = get_emby_admin()
     if not admin_id: return {"status": "error", "message": "找不到管理员账号"}

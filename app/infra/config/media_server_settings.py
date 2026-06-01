@@ -9,6 +9,14 @@ def get_media_server_public_url() -> str:
     return cfg.get("emby_public_url", "") or cfg.get("emby_host", "")
 
 
+def get_media_server_public_host() -> str:
+    return cfg.get("emby_public_host") or cfg.get("emby_host", "")
+
+
+def get_media_server_external_url() -> str:
+    return cfg.get("emby_external_url") or ""
+
+
 def get_media_server_api_key() -> str:
     return cfg.get("emby_api_key", "")
 

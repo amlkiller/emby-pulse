@@ -176,6 +176,14 @@ def set_user_bot_template_user(value: str) -> None:
     cfg.set("user_bot_template_user", value)
 
 
+def get_default_user_template_id() -> str:
+    return cfg.get("default_user_template_id") or ""
+
+
+def set_default_user_template_id(value: str) -> None:
+    cfg.set("default_user_template_id", value)
+
+
 def get_user_bot_notify_user_enabled() -> bool:
     return is_user_bot_open_reg_notify_user_enabled()
 

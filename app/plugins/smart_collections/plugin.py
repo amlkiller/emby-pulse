@@ -11,8 +11,8 @@ from typing import Optional, List, Dict, Any
 from fastapi import Request
 from app.plugins.base import PluginBase
 from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
-from app.core.config import cfg
 from app.infra.clients.media_server_client import media_api
+from app.infra.config.media_server_settings import get_media_server_host
 from app.dao.smart_collection_dao import (
     add_smart_collection_log,
     create_smart_collection,
@@ -336,7 +336,7 @@ class SmartCollectionsPlugin(PluginBase):
                     "year": item.get("ProductionYear"),
                     "rating": item.get("CommunityRating"),
                     "tmdb_id": item.get("ProviderIds", {}).get("Tmdb"),
-                    "poster": f"{cfg.get('emby_host')}/Items/{item['Id']}/Images/Primary?maxHeight=200" if cfg.get("emby_host") else None,
+                    "poster": f"{get_media_server_host()}/Items/{item['Id']}/Images/Primary?maxHeight=200" if get_media_server_host() else None,
                 })
             
             return {"status": "success", "data": items}
