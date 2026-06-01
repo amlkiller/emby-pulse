@@ -14,7 +14,6 @@ def register_static_assets(app: FastAPI) -> None:
 
 
 def register_routes(app: FastAPI) -> None:
-    from app.plugins import discover_plugins, get_enabled_plugins
     from app.routers import (
         api_tokens,
         audit,
@@ -33,7 +32,6 @@ def register_routes(app: FastAPI) -> None:
         notify_admin,
         notify_rules,
         points,
-        plugins as plugins_router,
         pwa,
         pro,
         proxy,
@@ -48,6 +46,7 @@ def register_routes(app: FastAPI) -> None:
         views,
         webhook,
     )
+    from .plugin_routes import register_calendar_notify_routes, register_plugin_routes
 
     app.include_router(views.router)
     app.include_router(auth.router)
@@ -79,18 +78,6 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(messages.router)
     app.include_router(pwa.router)
 
-    from app.routers import calendar_notify
-
-    app.include_router(calendar_notify.router)
-    calendar_notify.init_calendar_notify_service()
-
-    discover_plugins()
-    for plugin in get_enabled_plugins():
-        try:
-            app.include_router(plugin.router)
-        except Exception as e:
-            print(f"[🧩 插件] 注册路由失败: {plugin.id} - {e}")
-
-    app.include_router(plugins_router.router)
+    register_calendar_notify_routes(app)
+    register_plugin_routes(app)
     app.include_router(audit.router)
-    plugins_router.set_app(app)
