@@ -30,7 +30,7 @@ def require_admin(request: Request):
     if not user:
         raise HTTPException(status_code=401, detail="未登录")
     # 延迟导入避免循环依赖
-    from app.routers.auth import is_admin_user
+    from app.domains.users.auth import is_admin_user
     if not is_admin_user(request):
         raise HTTPException(status_code=403, detail="需要管理员权限")
     return user

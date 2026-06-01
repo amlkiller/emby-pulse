@@ -10,7 +10,7 @@ import re
 from fastapi import Request
 from fastapi.responses import Response
 from app.plugins.base import PluginBase
-from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
+from app.domains.users.auth import is_admin_user  # 🔒 管理员鉴权
 from app.infra.clients.media_server_client import media_api
 from app.infra.config.user_visibility_settings import get_hidden_users
 from app.queries.report_queries import (

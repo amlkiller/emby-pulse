@@ -11,7 +11,7 @@ import string
 import json
 from fastapi import Request
 from app.plugins.base import PluginBase
-from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
+from app.domains.users.auth import is_admin_user  # 🔒 管理员鉴权
 from app.infra.clients.media_server_client import media_api
 from app.infra.clients.telegram_client import telegram_client
 from app.infra.clients.wecom_client import wecom_client

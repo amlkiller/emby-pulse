@@ -8,7 +8,7 @@ import threading
 import datetime
 from fastapi import Request
 from app.plugins.base import PluginBase
-from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
+from app.domains.users.auth import is_admin_user  # 🔒 管理员鉴权
 from app.infra.clients.media_server_client import media_api
 from app.dao.user_dao import delete_user_meta_many, get_user_display_name, list_user_ids_with_expire_date, list_users_with_expire_date
 from app.dao.user_bot_dao import get_tg_user_id_by_emby_id

@@ -19,7 +19,7 @@ import datetime
 from typing import Optional, Dict, Tuple, Any, List
 from fastapi import Request
 from app.plugins.base import PluginBase
-from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
+from app.domains.users.auth import is_admin_user  # 🔒 管理员鉴权
 from app.core.event_bus import bus
 from app.infra.clients.hdhive_site_client import hdhive_site_client
 

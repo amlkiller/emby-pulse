@@ -1,4 +1,4 @@
-﻿"""
+"""
 媒体库封面生成插件
 自动为 Emby/Jellyfin 媒体库生成动态/静态封面
 """
@@ -15,7 +15,7 @@ from fastapi import Request
 from PIL import Image
 
 from app.plugins.base import PluginBase
-from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
+from app.domains.users.auth import is_admin_user  # 🔒 管理员鉴权
 from app.infra.clients.media_server_client import media_api
 
 from .styles import get_style, list_all_styles, STATIC_STYLES

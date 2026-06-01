@@ -38,7 +38,7 @@ class Cloud115Plugin(PluginBase):
     def _setup_routes(self):
         """注册插件 API 路由"""
         from fastapi import Request
-        from app.routers.auth import is_admin_user
+        from app.domains.users.auth import is_admin_user
 
         @self.router.get("/folders")
         def get_folders(request: Request):

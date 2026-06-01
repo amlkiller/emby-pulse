@@ -12,7 +12,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from fastapi import Request
 from app.plugins.base import PluginBase
-from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
+from app.domains.users.auth import is_admin_user  # 🔒 管理员鉴权
 from app.core.event_bus import bus
 from app.infra.clients.media_server_client import media_api
 from app.dao.season_poster_dao import (

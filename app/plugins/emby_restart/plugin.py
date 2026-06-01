@@ -8,7 +8,7 @@ import time
 import datetime
 from fastapi import Request
 from app.plugins.base import PluginBase
-from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
+from app.domains.users.auth import is_admin_user  # 🔒 管理员鉴权
 from app.dao.emby_restart_dao import create_emby_restart_history, list_emby_restart_history
 from app.infra.clients.media_server_client import media_api
 

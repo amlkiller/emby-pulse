@@ -27,7 +27,7 @@ from app.dao.user_backup_dao import (
     upsert_user_meta_for_backup,
 )
 from app.plugins.base import PluginBase
-from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
+from app.domains.users.auth import is_admin_user  # 🔒 管理员鉴权
 from app.infra.clients.media_server_client import media_api
 from app.infra.clients.webdav_client import webdav_client
 from app.infra.config.media_server_settings import get_media_server_host
