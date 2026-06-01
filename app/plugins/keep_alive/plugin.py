@@ -9,9 +9,10 @@ import datetime
 from fastapi import Request
 from app.plugins.base import PluginBase
 from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
-from app.core.config import cfg
 from app.infra.clients.media_server_client import media_api
 from app.infra.clients.telegram_client import telegram_client
+from app.infra.config.notification_settings import get_notify_bot_runtime_config
+from app.infra.config.user_bot_settings import get_user_bot_token_or_empty
 from app.dao.keep_alive_dao import (
     count_keep_alive_disabled,
     count_keep_alive_unique_users,
@@ -501,10 +502,10 @@ class KeepAlivePlugin(PluginBase):
 
         # 通知管理员
         try:
-            from app.core.config import cfg
-            tg_token = cfg.get("tg_bot_token")
-            tg_chat_id = cfg.get("tg_chat_id")
-            wecom_corpid = cfg.get("wecom_corpid")
+            notify_cfg = get_notify_bot_runtime_config()
+            tg_token = notify_cfg["tg_bot_token"]
+            tg_chat_id = notify_cfg["tg_chat_id"]
+            wecom_corpid = notify_cfg["wecom_corpid"]
 
             self._log(f"📢 准备发送通知: tg_token={'已配置' if tg_token else '未配置'}, tg_chat_id={tg_chat_id or '未配置'}, wecom={'已配置' if wecom_corpid else '未配置'}")
 
@@ -670,9 +671,8 @@ class KeepAlivePlugin(PluginBase):
         import html  # 用于 HTML 转义
 
         try:
-            from app.core.config import cfg
             # 检查用户机器人是否启用
-            user_bot_token = cfg.get("tg_user_bot_token")
+            user_bot_token = get_user_bot_token_or_empty()
             if not user_bot_token:
                 self._log(f"⚠️ 未配置用户机器人 (tg_user_bot_token)，跳过用户通知", level="warning")
                 return False

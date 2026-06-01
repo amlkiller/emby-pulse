@@ -20,6 +20,10 @@ def get_user_bot_token() -> str:
     return cfg.get("tg_user_bot_token")
 
 
+def get_user_bot_token_or_empty() -> str:
+    return cfg.get("tg_user_bot_token") or ""
+
+
 def set_user_bot_token(value: str) -> None:
     cfg.set("tg_user_bot_token", value)
 

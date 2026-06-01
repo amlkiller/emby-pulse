@@ -57,6 +57,14 @@ def get_wecom_runtime_config() -> dict:
     }
 
 
+def get_notify_bot_runtime_config() -> dict:
+    return {
+        "tg_bot_token": cfg.get("tg_bot_token", ""),
+        "tg_chat_id": cfg.get("tg_chat_id", ""),
+        "wecom_corpid": cfg.get("wecom_corpid", ""),
+    }
+
+
 def set_notification_channels_config(data: dict) -> None:
     def should_update(value):
         if not value or not isinstance(value, str):
