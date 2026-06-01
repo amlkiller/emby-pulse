@@ -6,7 +6,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
-from app.dao.invitation_dao import (
+from app.domains.system.invitation_dao import (
     claim_registration_invitation,
     get_invitation_by_code,
     restore_invitation_code_usage,

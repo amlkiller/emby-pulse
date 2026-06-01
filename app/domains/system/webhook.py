@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Request, HTTPException
 from app.domains.system.client_dao import list_client_blacklist_names, list_client_whitelist_user_ids
-from app.dao.webhook_playback_dao import save_webhook_playback_ip_data
+from app.domains.system.webhook_playback_dao import save_webhook_playback_ip_data
 # 🔥 引入事件总线
 from app.core.event_bus import bus
 from app.infra.clients.media_server_client import media_api

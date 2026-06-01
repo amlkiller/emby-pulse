@@ -2,7 +2,7 @@ import time
 import logging
 from typing import Optional, Dict, Any
 
-from app.dao.audit_logger_dao import (
+from app.infra.db.audit_logger_dao import (
     cleanup_audit_logs_before,
     ensure_audit_table,
     get_audit_stats_since,

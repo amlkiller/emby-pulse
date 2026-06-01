@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from app.core.config import templates
 from app.dao.notification_dao import add_sys_notification
-from app.dao import invitation_dao
+from app.domains.system import invitation_dao
 from app.dao import point_dao
 from app.infra.clients.media_server_client import media_api
 from app.services.bot_service import bot
