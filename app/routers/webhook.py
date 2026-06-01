@@ -4,7 +4,7 @@ from app.dao.client_dao import list_client_blacklist_names, list_client_whitelis
 from app.dao.webhook_playback_dao import save_webhook_playback_ip_data
 # 🔥 引入事件总线
 from app.core.event_bus import bus
-import requests
+from app.infra.clients.media_server_client import media_api
 import json
 import logging
 import secrets
@@ -44,9 +44,6 @@ def intercept_illegal_client(data: dict):
         return False
         
     client_lower = client.lower()
-    host = cfg.get("emby_host")
-    key = cfg.get("emby_api_key")
-    
     try:
         blacklist_rows = list_client_blacklist_names()
         if not blacklist_rows: return False
@@ -68,12 +65,12 @@ def intercept_illegal_client(data: dict):
                         "TimeoutMs": "10000"
                     }
                 }
-                try: requests.post(f"{host}/emby/Sessions/{session_id}/Command?api_key={key}", json=msg_cmd, timeout=2)
+                try: media_api.post(f"/Sessions/{session_id}/Command", json=msg_cmd, timeout=2)
                 except Exception: pass
-                try: requests.post(f"{host}/emby/Sessions/{session_id}/Playing/Stop?api_key={key}", timeout=2)
+                try: media_api.post(f"/Sessions/{session_id}/Playing/Stop", timeout=2)
                 except Exception: pass
             
-            try: requests.delete(f"{host}/emby/Devices?Id={device_id}&api_key={key}", timeout=3)
+            try: media_api.delete("/Devices", params={"Id": device_id}, timeout=3)
             except Exception: pass
             
             logger.warning(f"💥 [主动防御] 已秒踢违规客户端: {client}")

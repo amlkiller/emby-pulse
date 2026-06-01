@@ -4,8 +4,7 @@ from app.dao.notify_rule_dao import (
     list_bot_notify_mutes,
     replace_bot_notify_mutes,
 )
-from app.core.config import cfg
-import requests
+from app.infra.clients.media_server_client import media_api
 from app.routers.auth import is_admin_user
 from app.core.security_utils import safe_error_message
 
@@ -27,10 +26,8 @@ async def get_emby_users(request: Request):
     if not is_admin_user(request):
         return {"success": False, "data": [], "error": "需要管理员权限"}
     
-    key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
-    if not key or not host: return {"success": False, "data": []}
     try:
-        res = requests.get(f"{host}/emby/Users?api_key={key}", timeout=5)
+        res = media_api.get("/Users", timeout=5)
         if res.status_code == 200:
             return {"success": True, "data": [{"id": u["Id"], "name": u["Name"]} for u in res.json()]}
     except Exception: pass

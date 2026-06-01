@@ -6,7 +6,6 @@ import datetime
 import logging
 import math
 import random
-import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from app.core.config import cfg, FONT_PATH, FONT_URLS, THEMES, BUILTIN_FONT_PATH
 from app.queries.report_queries import (
@@ -16,6 +15,8 @@ from app.queries.report_queries import (
     list_report_top_items,
     sum_report_duration,
 )
+from app.infra.clients.media_server_client import media_api
+from app.infra.clients.tmdb_client import tmdb_client
 
 logger = logging.getLogger("uvicorn")
 
@@ -389,13 +390,13 @@ def _load_font(size):
 
 def get_user_map_internal():
     user_map = {}
-    key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
-    if key and host:
-        try:
-            res = requests.get(f"{host}/emby/Users?api_key={key}", timeout=2)
-            if res.status_code == 200:
-                for u in res.json(): user_map[u['Id']] = u['Name']
-        except Exception: pass
+    try:
+        res = media_api.get("/Users", timeout=2)
+        if res.status_code == 200:
+            for u in res.json():
+                user_map[u['Id']] = u['Name']
+    except Exception:
+        pass
     return user_map
 
 
@@ -508,21 +509,15 @@ class ReportGenerator:
     def _get_series_id(self, item_id, item_name):
         if not item_id:
             return None
-        key = cfg.get("emby_api_key")
-        host = cfg.get("emby_host")
-        if not key or not host:
-            return None
         try:
-            url = f"{host}/emby/Users?api_key={key}"
-            res = requests.get(url, timeout=3)
+            res = media_api.get("/Users", timeout=3)
             if res.status_code != 200:
                 return None
             users = res.json()
             if not users:
                 return None
             user_id = users[0]['Id']
-            detail_url = f"{host}/emby/Users/{user_id}/Items/{item_id}?api_key={key}"
-            detail_res = requests.get(detail_url, timeout=3)
+            detail_res = media_api.get(f"/Users/{user_id}/Items/{item_id}", timeout=3)
             if detail_res.status_code == 200:
                 detail = detail_res.json()
                 series_id = detail.get('SeriesId')
@@ -535,13 +530,9 @@ class ReportGenerator:
     def _fetch_emby_poster(self, item_id, width=120, height=160):
         if not item_id or not HAS_PIL:
             return None
-        key = cfg.get("emby_api_key")
-        host = cfg.get("emby_host")
-        if not key or not host:
-            return None
         try:
-            url = f"{host}/emby/Items/{item_id}/Images/Primary?maxHeight={height*2}&maxWidth={width*2}&quality=85&api_key={key}"
-            res = requests.get(url, timeout=5)
+            params = {"maxHeight": height * 2, "maxWidth": width * 2, "quality": 85}
+            res = media_api.get(f"/Items/{item_id}/Images/Primary", params=params, timeout=5)
             if res.status_code == 200:
                 poster = Image.open(io.BytesIO(res.content)).convert('RGB')
                 poster = poster.resize((width, height), Image.LANCZOS)
@@ -553,8 +544,7 @@ class ReportGenerator:
     def _fetch_tmdb_poster(self, item_name, width=120, height=160, is_tv=False):
         if not item_name or not HAS_PIL:
             return None
-        tmdb_key = cfg.get("tmdb_api_key")
-        if not tmdb_key:
+        if not tmdb_client.api_key:
             return None
 
         clean_name = str(item_name).split(' - ')[0].strip()
@@ -570,21 +560,16 @@ class ReportGenerator:
                 pass
 
             media_type = "tv" if is_tv else "movie"
-            url = (
-                f"https://api.themoviedb.org/3/search/{media_type}"
-                f"?api_key={tmdb_key}&language=zh-CN&query={urllib.parse.quote(clean_name)}"
-            )
-            res = requests.get(url, proxies=proxies, timeout=5)
+            if media_type == "tv":
+                res = tmdb_client.search_tv(clean_name, proxies=proxies, timeout=5)
+            else:
+                res = tmdb_client.search_movie(clean_name, proxies=proxies, timeout=5)
             if res.status_code != 200:
                 return None
             results = res.json().get("results", [])
             poster_path = next((r.get("poster_path") for r in results if r.get("poster_path")), None)
             if not poster_path and not is_tv:
-                url = (
-                    f"https://api.themoviedb.org/3/search/tv"
-                    f"?api_key={tmdb_key}&language=zh-CN&query={urllib.parse.quote(clean_name)}"
-                )
-                tv_res = requests.get(url, proxies=proxies, timeout=5)
+                tv_res = tmdb_client.search_tv(clean_name, proxies=proxies, timeout=5)
                 if tv_res.status_code == 200:
                     poster_path = next((r.get("poster_path") for r in tv_res.json().get("results", []) if r.get("poster_path")), None)
             if not poster_path:

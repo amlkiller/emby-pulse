@@ -7,7 +7,7 @@ import io
 import json # 🔥 新增 json 模块用于解析
 from app.core.config import cfg
 # 🔥 引入核心适配器
-from app.core.media_adapter import media_api
+from app.infra.clients.media_server_client import media_api
 from app.core.security_utils import safe_error_message
 
 # 🔥 拼音首字母搜索支持

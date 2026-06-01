@@ -3,10 +3,10 @@ from fastapi.responses import RedirectResponse, FileResponse, StreamingResponse
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 from app.core.security import require_login, require_any_login, is_admin_session  # 🔒 统一登录依赖
 from app.core.config import cfg
-from app.core.media_adapter import media_api  # 🔥 引入核心适配器
+from app.infra.clients.tmdb_client import tmdb_client
+from app.infra.clients.media_server_client import media_api  # 🔥 引入媒体服务器客户端
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
 import requests
-import urllib.parse
 import logging
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -346,23 +346,20 @@ def proxy_smart_image(request: Request, item_id: str, name: str = "", year: str 
         except requests.exceptions.RequestException: pass
 
     # 4. 第 3 级防御：TMDB 终极兜底 (外部请求，保留 ext_session)
-    tmdb_key = cfg.get("tmdb_api_key")
     season_num = extract_season_number(name)
 
-    if clean_name and tmdb_key:
+    if clean_name and tmdb_client.api_key:
         try:
             proxies = get_safe_proxies()
 
-            tmdb_url = f"https://api.themoviedb.org/3/search/multi?api_key={tmdb_key}&language=zh-CN&query={urllib.parse.quote(clean_name)}"
-            t_resp = ext_session.get(tmdb_url, proxies=proxies, timeout=5)
+            t_resp = tmdb_client.search_multi(clean_name, proxies=proxies, timeout=5)
             
             if t_resp.status_code == 200:
                 results = t_resp.json().get("results", [])
                 for res in results:
                     if res.get("media_type") == "tv" and season_num is not None and img_type.lower() == 'primary':
                         tv_id = res.get("id")
-                        season_url = f"https://api.themoviedb.org/3/tv/{tv_id}/season/{season_num}?api_key={tmdb_key}&language=zh-CN"
-                        s_resp = ext_session.get(season_url, proxies=proxies, timeout=5)
+                        s_resp = tmdb_client.get_tv_season(tv_id, season_num, proxies=proxies, timeout=5)
                         if s_resp.status_code == 200:
                             s_data = s_resp.json()
                             if s_data.get("poster_path"):

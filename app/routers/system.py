@@ -14,6 +14,8 @@ import os
 import logging
 from app.core.security_utils import safe_error_message
 from app.core.rate_limiter import get_client_ip
+from app.infra.clients.tmdb_client import tmdb_client
+from app.infra.clients.moviepilot_client import moviepilot_client
 
 logger = logging.getLogger("uvicorn")
 
@@ -429,8 +431,8 @@ async def test_moviepilot(request: Request):
     # 🔒 安全检查：必须管理员
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     data = await request.json()
-    mp_url = data.get("mp_url", "").strip().rstrip('/')
-    mp_token = data.get("mp_token", "").strip().strip("'\"")
+    mp_url = moviepilot_client.normalize_url(data.get("mp_url", ""))
+    mp_token = moviepilot_client.normalize_token(data.get("mp_token", ""))
 
     # 🔒 如果前端发送的是脱敏值，从配置中读取真实值
     if not mp_token or "****" in mp_token:
@@ -439,13 +441,12 @@ async def test_moviepilot(request: Request):
     if not mp_url or not mp_token: return {"status": "error", "message": "请填写 MoviePilot 信息"}
 
     # 🔒 SSRF 防护：验证 MoviePilot URL 不指向内网
-    from app.utils.url_validator import validate_url
-    mp_validation = validate_url(mp_url, allow_internal=False)
+    mp_validation = moviepilot_client.validate_url(mp_url)
     if not mp_validation["valid"]:
         return {"status": "error", "message": f"MoviePilot 地址不合法: {mp_validation['error']}"}
 
     try:
-        res = requests.get(f"{mp_url}/api/v1/site/", headers={"X-API-KEY": mp_token, "User-Agent": "Mozilla/5.0"}, timeout=8)
+        res = moviepilot_client.test_site(mp_url, mp_token, timeout=8)
         if res.status_code == 200: return {"status": "success", "message": "🎉 MoviePilot 连通测试成功！"}
         elif res.status_code in [401, 403]: return {"status": "error", "message": "❌ Token 认证失败"}
         else: return {"status": "success", "message": f"⚠️ 服务器连通(状态码: {res.status_code})"}
@@ -472,11 +473,7 @@ async def test_tmdb(request: Request):
     
     try:
         # 使用 TMDB 配置接口测试
-        res = requests.get(
-            f"https://api.themoviedb.org/3/configuration?api_key={api_key}",
-            proxies=proxies,
-            timeout=10
-        )
+        res = tmdb_client.get_configuration(api_key=api_key, proxies=proxies, timeout=10)
         if res.status_code == 200:
             data = res.json()
             if data.get("images"):

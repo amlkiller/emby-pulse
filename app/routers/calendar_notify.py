@@ -13,6 +13,8 @@ from pydantic import BaseModel
 from typing import Optional, List
 from app.core.config import cfg
 from app.core.security_utils import safe_error_message
+from app.infra.clients.telegram_client import telegram_client
+from app.infra.clients.wecom_client import wecom_client
 from app.dao.calendar_notify_dao import (
     ensure_calendar_notify_config_table,
     get_calendar_notify_config,
@@ -233,16 +235,10 @@ def send_calendar_notify(test: bool = False):
             
             if tg_chat_id and tg_token:
                 try:
-                    import requests
                     from app.utils.proxy_helper import get_safe_proxies
                     proxies = get_safe_proxies()
                     
-                    res = requests.post(
-                        f"https://api.telegram.org/bot{tg_token}/sendMessage",
-                        data={"chat_id": tg_chat_id, "text": message, "parse_mode": "HTML"},
-                        proxies=proxies,
-                        timeout=10
-                    )
+                    res = telegram_client.post_api(tg_token, "sendMessage", data={"chat_id": tg_chat_id, "text": message, "parse_mode": "HTML"}, proxies=proxies, timeout=10)
                     if res.status_code == 200:
                         results.append("TG机器人")
                         logger.info(f"[日历通知] TG机器人发送成功")
@@ -264,25 +260,21 @@ def send_calendar_notify(test: bool = False):
                     # 获取 access_token
                     from app.utils.proxy_helper import get_safe_wecom_base
                     proxy_url = get_safe_wecom_base()
-                    token_res = requests.get(
-                        f"{proxy_url}/cgi-bin/gettoken",
-                        params={"corpid": corpid, "corpsecret": corpsecret},
-                        timeout=10
-                    )
+                    token_res = wecom_client.get_access_token(proxy_url, corpid, corpsecret, timeout=10)
                     token = token_res.json().get("access_token")
                     
                     if token:
                         # 发送消息
-                        send_res = requests.post(
-                            f"{proxy_url}/cgi-bin/message/send",
-                            params={"access_token": token},
-                            json={
+                        send_res = wecom_client.send_message(
+                            proxy_url,
+                            token,
+                            {
                                 "touser": touser,
                                 "msgtype": "text",
                                 "agentid": int(agentid),
                                 "text": {"content": message.replace("<b>", "").replace("</b>", "").replace("\n\n", "\n")}
                             },
-                            timeout=10
+                            timeout=10,
                         )
                         if send_res.json().get("errcode") == 0:
                             results.append("企业微信")

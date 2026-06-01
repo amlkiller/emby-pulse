@@ -15,9 +15,10 @@ from app.dao.invitation_dao import (
     save_registered_user_meta,
 )
 from app.dao.notification_dao import add_system_notification
-from app.core.media_adapter import media_api
+from app.infra.clients.media_server_client import media_api
 from app.core.security_utils import validate_redirect_url
 from app.core.security import validate_password_strength
+from app.infra.clients.tmdb_client import tmdb_client
 from app.routers.auth import check_permission, PAGE_PERMISSION_MAP
 import logging
 import random
@@ -758,12 +759,11 @@ async def get_wallpaper():
         {"url": "https://images.unsplash.com/photo-1536440136628-849c177e76a1?q=80&w=1925&auto=format&fit=crop", "title": "电影之夜 - Unsplash"},
         {"url": "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?q=80&w=2070&auto=format&fit=crop", "title": "家庭影院 - Unsplash"}
     ]
-    tmdb_key = cfg.get("tmdb_api_key")
     from app.utils.proxy_helper import get_safe_proxies as _get_safe_proxies
     proxies = _get_safe_proxies()
-    if tmdb_key:
+    if tmdb_client.api_key:
         try:
-            res = requests.get(f"https://api.themoviedb.org/3/trending/all/day?api_key={tmdb_key}&language=zh-CN", proxies=proxies, timeout=3)
+            res = tmdb_client.get_trending(proxies=proxies, timeout=3)
             if res.status_code == 200:
                 valid_items = [item for item in res.json().get("results", []) if item.get("backdrop_path")]
                 if valid_items:
@@ -771,7 +771,8 @@ async def get_wallpaper():
                     title = item.get("title") or item.get("name") or "TMDB 热门"
                     url = f"https://image.tmdb.org/t/p/original{item['backdrop_path']}"
                     return {"status": "success", "url": url, "title": f"今日热门: {title}"}
-        except Exception: pass
+        except Exception:
+            pass
     item = random.choice(fallback_wallpapers)
     return {"status": "success", "url": item["url"], "title": item["title"]}
 

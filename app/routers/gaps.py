@@ -5,7 +5,6 @@ import concurrent.futures
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 import json
-import urllib.parse
 import re
 import time
 import logging
@@ -34,7 +33,9 @@ from app.dao.gap_dao import (
 from app.routers.search import get_emby_sys_info, is_new_emby_router
 from app.routers.auth import is_admin_user
 # 🔥 引入核心适配器
-from app.core.media_adapter import media_api
+from app.infra.clients.media_server_client import media_api
+from app.infra.clients.moviepilot_client import moviepilot_client
+from app.infra.clients.tmdb_client import tmdb_client
 
 logger = logging.getLogger("uvicorn")
 
@@ -81,7 +82,7 @@ def process_single_series(series, lock_map, host, tmdb_key, proxies, today, glob
 
     local_inventory = global_inventory.get(series_id, {})
     try:
-        tmdb_series_data = requests.get(f"https://api.themoviedb.org/3/tv/{tmdb_id}?language=zh-CN&api_key={tmdb_key}", proxies=proxies, timeout=10).json()
+        tmdb_series_data = tmdb_client.get_tv_details(tmdb_id, proxies=proxies, timeout=10).json()
         tmdb_seasons = tmdb_series_data.get("seasons", []); tmdb_status = tmdb_series_data.get("status", "") 
     except: 
         update_progress(series_name)
@@ -93,7 +94,7 @@ def process_single_series(series, lock_map, host, tmdb_key, proxies, today, glob
         if not s_num or season.get("episode_count", 0) == 0: continue
         local_season_inventory = local_inventory.get(s_num, set())
         if len(local_season_inventory) >= season.get("episode_count", 0): continue
-        try: tmdb_episodes = requests.get(f"https://api.themoviedb.org/3/tv/{tmdb_id}/season/{s_num}?language=zh-CN&api_key={tmdb_key}", proxies=proxies, timeout=10).json().get("episodes", [])
+        try: tmdb_episodes = tmdb_client.get_tv_season(tmdb_id, s_num, proxies=proxies, timeout=10).json().get("episodes", [])
         except: continue
         for tmdb_ep in tmdb_episodes:
             e_num = tmdb_ep.get("episode_number"); air_date = tmdb_ep.get("air_date")
@@ -566,41 +567,30 @@ def search_hdhive_for_gap(request: Request = None, payload: dict = None):
             return result
         
         # 否则用关键词搜索 TMDB 再查影巢
-        tmdb_api_key = cfg.get("tmdb_api_key")
-        if not tmdb_api_key:
+        if not tmdb_client.api_key:
             return {"status": "error", "message": "未配置 TMDB API Key"}
-        
+
         # 构造搜索关键词：剧名 + 季
         keyword = series_name
         if season:
             keyword += f" S{str(season).zfill(2)}"
         
         try:
-            movie_res = requests.get(
-                f"https://api.themoviedb.org/3/search/movie",
-                params={"api_key": tmdb_api_key, "query": keyword, "language": "zh-CN", "page": 1},
-                proxies=proxies,
-                timeout=15
-            )
-            tv_res = requests.get(
-                f"https://api.themoviedb.org/3/search/tv",
-                params={"api_key": tmdb_api_key, "query": keyword, "language": "zh-CN", "page": 1},
-                proxies=proxies,
-                timeout=15
-            )
+            movie_res = tmdb_client.search_movie(keyword, proxies=proxies, timeout=15, page=1)
+            tv_res = tmdb_client.search_tv(keyword, proxies=proxies, timeout=15, page=1)
 
             # 优先使用剧集结果
             first_match = None
             if tv_res.status_code == 200:
                 tv_data = tv_res.json()
                 if tv_data.get("results"):
-                    item = tv_data["results"][0]
+                    item = next((i for i in tv_data["results"] if i.get("media_type") == "tv"), tv_data["results"][0])
                     first_match = {"type": "tv", "tmdb_id": item.get("id")}
             
             if not first_match and movie_res.status_code == 200:
                 movie_data = movie_res.json()
                 if movie_data.get("results"):
-                    item = movie_data["results"][0]
+                    item = next((i for i in movie_data["results"] if i.get("media_type") == "movie"), movie_data["results"][0])
                     first_match = {"type": "movie", "tmdb_id": item.get("id")}
             
             if not first_match:
@@ -764,8 +754,6 @@ def search_mp_for_gap(request: Request = None, payload: dict = None):
         except Exception: pass
     if not genes: genes = ["无明显特效"]
     
-    headers = {"X-API-KEY": mp_token.strip().strip("'\""), "User-Agent": "Mozilla/5.0", "Accept": "application/json"}
-    
     def deep_extract(d, keys):
         for k in keys:
             if d.get(k) is not None and str(d.get(k)).strip() != "": return d.get(k)
@@ -780,14 +768,14 @@ def search_mp_for_gap(request: Request = None, payload: dict = None):
         # 先搜单集关键词
         if len(episodes) == 1:
             kw = f"{series_name} S{str(season).zfill(2)}E{str(episodes[0]).zfill(2)}"
-            res_data = requests.get(f"{mp_url.rstrip('/')}/api/v1/search/title?keyword={urllib.parse.quote(kw)}", headers=headers, timeout=20).json()
+            res_data = moviepilot_client.search_title(mp_url, mp_token, kw, timeout=20).json()
             if isinstance(res_data, dict): res_data = res_data.get("data") or res_data.get("results") or []
             if isinstance(res_data, list): results = res_data
         
         # 如果没结果，搜整季关键词
         if len(results) == 0:
             kw2 = f"{series_name} S{str(season).zfill(2)}"
-            res_data2 = requests.get(f"{mp_url.rstrip('/')}/api/v1/search/title?keyword={urllib.parse.quote(kw2)}", headers=headers, timeout=20).json()
+            res_data2 = moviepilot_client.search_title(mp_url, mp_token, kw2, timeout=20).json()
             if isinstance(res_data2, dict): res_data2 = res_data2.get("data") or res_data2.get("results") or []
             if isinstance(res_data2, list): results = res_data2; is_pack = True
 
@@ -1243,9 +1231,6 @@ def download_gap_item(request: Request = None, payload: dict = None):
     torrent_info = payload.get("torrent_info", {}) if payload else {}
 
     mp_url = cfg.get("moviepilot_url"); mp_token = cfg.get("moviepilot_token")
-    clean_token = mp_token.strip().strip("'\"") if mp_token else ""
-    headers = {"X-API-KEY": clean_token, "Content-Type": "application/json"}
-
     ui_conf = get_gap_config_map()
     
     client_type = ui_conf.get("client_type", ""); client_url = ui_conf.get("client_url", "")
@@ -1265,7 +1250,7 @@ def download_gap_item(request: Request = None, payload: dict = None):
         import logging
         logger = logging.getLogger("uvicorn")
         try:
-            res = requests.post(f"{mp_url.rstrip('/')}/api/v1/download/add", headers=headers, json=mp_payload, timeout=60)
+            res = moviepilot_client.add_download(mp_url, mp_token, mp_payload, timeout=60)
             if res.status_code in [200, 201]:
                 logger.info(f"[缺集下载] MP推送成功: {series_name} S{season}E{episodes}")
                 

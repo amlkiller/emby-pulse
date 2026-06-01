@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend spec index for review."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Verify TMDB transport placement."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verify commands and test coverage follow project standards."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Verify fallback behavior remains unchanged."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared review checklist for scoped refactor work."}

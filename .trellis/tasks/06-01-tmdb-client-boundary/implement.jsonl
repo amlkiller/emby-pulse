@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend spec index for applicable guidelines."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "TMDB client belongs under app/infra/clients and routes remain thin."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verification commands must use the project uv environment."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Preserve route-level HTTP/error handling while extracting the client."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared thinking guides for scoped refactor work."}

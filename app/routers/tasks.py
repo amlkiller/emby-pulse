@@ -14,7 +14,7 @@ from app.dao.task_dao import (
     save_task_translation,
     set_task_notify_enabled,
 )
-from app.core.media_adapter import media_api
+from app.infra.clients.media_server_client import media_api
 from app.services.bot_service import bot
 from app.core.security_utils import safe_error_message
 

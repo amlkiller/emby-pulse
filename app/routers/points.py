@@ -2,7 +2,6 @@ import datetime
 import random
 import json
 import os
-import requests
 from fastapi import APIRouter, Request, Depends, HTTPException
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 from fastapi.responses import RedirectResponse
@@ -12,7 +11,7 @@ from app.core.config import cfg, templates
 from app.dao.notification_dao import add_sys_notification
 from app.dao import invitation_dao
 from app.dao import point_dao
-from app.core.media_adapter import media_api
+from app.infra.clients.media_server_client import media_api
 from app.services.bot_service import bot
 
 from app.routers.auth import check_permission
@@ -203,12 +202,12 @@ def user_redeem(data: RedeemModel, request: Request):
 
         if item_type in ["renew", "random_renew"] and result.get("admin_disabled") != 1:
             try:
-                u_res = requests.get(f"{cfg.get('emby_host')}/emby/Users/{user['Id']}?api_key={cfg.get('emby_api_key')}", timeout=5)
+                u_res = media_api.get(f"/Users/{user['Id']}", timeout=5)
                 if u_res.status_code == 200:
                     user_data = u_res.json()
                     policy = user_data.get('Policy', {})
                     policy['IsDisabled'] = False
-                    requests.post(f"{cfg.get('emby_host')}/emby/Users/{user['Id']}/Policy?api_key={cfg.get('emby_api_key')}", json=policy, timeout=3)
+                    media_api.post(f"/Users/{user['Id']}/Policy", json=policy, timeout=3)
             except Exception: pass
 
         try:
@@ -304,7 +303,7 @@ def user_use_renew_code(data: RenewCodeModel, request: Request):
         if admin_disabled != 1:
             try:
                 # 检查用户当前是否被禁用
-                u_res = requests.get(f"{cfg.get('emby_host')}/emby/Users/{uid}?api_key={cfg.get('emby_api_key')}", timeout=5)
+                u_res = media_api.get(f"/Users/{uid}", timeout=5)
                 if u_res.status_code == 200:
                     user_data = u_res.json()
                     if user_data.get('Policy', {}).get('IsDisabled', False):
@@ -312,7 +311,7 @@ def user_use_renew_code(data: RenewCodeModel, request: Request):
                         policy = user_data.get('Policy', {})
                         policy['IsDisabled'] = False
                         policy['LoginAttemptsBeforeLockout'] = -1
-                        requests.post(f"{cfg.get('emby_host')}/emby/Users/{uid}/Policy?api_key={cfg.get('emby_api_key')}", json=policy, timeout=3)
+                        media_api.post(f"/Users/{uid}/Policy", json=policy, timeout=3)
                         return {"status": "success", "message": f"续期成功！账号有效期已延长 {days_display}，至 {new_exp}。账号已自动解除禁用。"}
             except Exception as e:
                 print(f"[续费码] 解除禁用失败: {e}")

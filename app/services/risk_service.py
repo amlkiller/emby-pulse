@@ -1,10 +1,10 @@
-import requests
 import logging
 import time
 import threading
 import datetime
 from app.core.config import cfg
 from app.core.event_bus import bus
+from app.infra.clients.media_server_client import media_api
 from app.dao.notification_dao import add_system_notification
 from app.dao.risk_dao import (
     create_risk_log,
@@ -19,33 +19,22 @@ logger = logging.getLogger("uvicorn")
 # 🗡️ 屠龙刀：强力执法接口
 # ==========================================
 def kick_session(session_id: str, reason: str = "管理员强制中止播放"):
-    host = cfg.get("emby_host", "").rstrip('/')
-    api_key = cfg.get("emby_api_key", "")
-    if not host or not api_key: return False
-    
-    url = f"{host}/emby/Sessions/{session_id}/Playing/Stop"
     try:
-        res = requests.post(url, headers={"X-Emby-Token": api_key}, timeout=5)
+        res = media_api.post(f"/Sessions/{session_id}/Playing/Stop", timeout=5)
         return res.status_code in [200, 204]
     except Exception as e:
         logger.error(f"[风控] 踢出设备失败: {e}")
         return False
 
 def ban_user(user_id: str):
-    host = cfg.get("emby_host", "").rstrip('/')
-    api_key = cfg.get("emby_api_key", "")
-    if not host or not api_key: return False
-    
-    policy_url = f"{host}/emby/Users/{user_id}"
     try:
-        res = requests.get(policy_url, headers={"X-Emby-Token": api_key}, timeout=5)
+        res = media_api.get(f"/Users/{user_id}", timeout=5)
         if res.status_code == 200:
             user_data = res.json()
             policy = user_data.get("Policy", {})
             policy["IsDisabled"] = True
             
-            update_url = f"{host}/emby/Users/{user_id}/Policy"
-            update_res = requests.post(update_url, headers={"X-Emby-Token": api_key}, json=policy, timeout=5)
+            update_res = media_api.post(f"/Users/{user_id}/Policy", json=policy, timeout=5)
             
             if update_res.status_code in [200, 204]:
                 # 🔥 设置 admin_disabled = 1，标记为管理员封禁（非过期禁用）
@@ -60,20 +49,14 @@ def ban_user(user_id: str):
 
 def unban_user(user_id: str):
     """解封用户"""
-    host = cfg.get("emby_host", "").rstrip('/')
-    api_key = cfg.get("emby_api_key", "")
-    if not host or not api_key: return False
-    
-    policy_url = f"{host}/emby/Users/{user_id}"
     try:
-        res = requests.get(policy_url, headers={"X-Emby-Token": api_key}, timeout=5)
+        res = media_api.get(f"/Users/{user_id}", timeout=5)
         if res.status_code == 200:
             user_data = res.json()
             policy = user_data.get("Policy", {})
             policy["IsDisabled"] = False
             
-            update_url = f"{host}/emby/Users/{user_id}/Policy"
-            update_res = requests.post(update_url, headers={"X-Emby-Token": api_key}, json=policy, timeout=5)
+            update_res = media_api.post(f"/Users/{user_id}/Policy", json=policy, timeout=5)
             
             if update_res.status_code in [200, 204]:
                 # 🔥 清除 admin_disabled 标记
@@ -191,12 +174,8 @@ def scan_playbacks_and_alert():
         
         if not cfg.get("enable_risk_control", True): return
 
-        host = cfg.get("emby_host", "").rstrip('/')
-        api_key = cfg.get("emby_api_key", "")
-        if not host or not api_key: return
-
         try:
-            res = requests.get(f"{host}/emby/Sessions", headers={"X-Emby-Token": api_key}, timeout=10)
+            res = media_api.get("/Sessions", timeout=10)
             if res.status_code != 200: return
             sessions = res.json()
         except Exception as e:

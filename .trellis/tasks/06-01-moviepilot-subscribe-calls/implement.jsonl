@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend spec index for applicable guidelines."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "MoviePilot transport belongs under app/infra/clients."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verification commands must use the project uv environment."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Preserve existing failure swallowing at call sites."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared thinking guides for scoped refactor work."}

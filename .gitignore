@@ -9,7 +9,7 @@ config/*
 *.db
 
 # 🔒 忽略所有 .md 文件（除了 README.md）
-*.md
+
 !README.md
 !CHANGELOG.md
 

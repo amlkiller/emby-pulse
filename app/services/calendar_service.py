@@ -1,4 +1,3 @@
-import requests
 import datetime
 import logging
 import threading
@@ -15,6 +14,8 @@ from app.dao.calendar_dao import (
     replace_calendar_cache_items,
     save_series_status,
 )
+from app.infra.clients.media_server_client import media_api
+from app.infra.clients.tmdb_client import tmdb_client
 
 # 初始化日志记录器
 logger = logging.getLogger("uvicorn")
@@ -251,8 +252,7 @@ class CalendarService:
         # 动态获取当前 Emby 的 ServerId 用于前端跳转播放
         server_id = ""
         try:
-            key, host = cfg.get("emby_api_key"), cfg.get("emby_host")
-            sys_res = requests.get(f"{host}/emby/System/Info?api_key={key}", timeout=5)
+            sys_res = media_api.get("/System/Info", timeout=5)
             if sys_res.status_code == 200:
                 server_id = sys_res.json().get("Id", "")
         except Exception: pass
@@ -273,22 +273,19 @@ class CalendarService:
 
     def _get_emby_continuing_series(self):
         """从 Emby 获取所有状态为 Continuing 的剧集"""
-        key, host = cfg.get("emby_api_key"), cfg.get("emby_host")
         user_id = self._get_admin_id()
-        if not key or not host or not user_id:
+        if not user_id:
             logger.error("[追剧日历] 缺少配置")
             return []
 
         try:
-            url = f"{host}/emby/Users/{user_id}/Items"
             params = {
                 "IncludeItemTypes": "Series",
                 "Recursive": "true",
                 "Fields": "ProviderIds,Status",
-                "IsVirtual": "false",
-                "api_key": key
+                "IsVirtual": "false"
             }
-            res = requests.get(url, params=params, timeout=10)
+            res = media_api.get(f"/Users/{user_id}/Items", params=params, timeout=10)
             if res.status_code == 200:
                 items = res.json().get("Items", [])
                 
@@ -320,8 +317,7 @@ class CalendarService:
 
         try:
             # 1. 抓取剧集基本信息，提取剧集总简介 (series_overview) 用于前端兜底
-            url_series = f"https://api.themoviedb.org/3/tv/{tmdb_id}?api_key={api_key}&language=zh-CN"
-            res_series = requests.get(url_series, timeout=5, proxies=proxies)
+            res_series = tmdb_client.get_tv_details(tmdb_id, timeout=5, proxies=proxies)
             if res_series.status_code != 200: return []
             
             data_series = res_series.json()
@@ -357,8 +353,7 @@ class CalendarService:
             # 3. 遍历目标季，筛选出本周更新的单集
             for season_num in target_seasons:
                 if season_num is None: continue
-                url_season = f"https://api.themoviedb.org/3/tv/{tmdb_id}/season/{season_num}?api_key={api_key}&language=zh-CN"
-                res_season = requests.get(url_season, timeout=5, proxies=proxies)
+                res_season = tmdb_client.get_tv_season(tmdb_id, season_num, timeout=5, proxies=proxies)
                 if res_season.status_code != 200: continue
                 
                 episodes_list = res_season.json().get("episodes", [])
@@ -401,20 +396,17 @@ class CalendarService:
         拉取该系列所有集数，手动核对季号、集号，并确保 Path 或 MediaSources 存在
         绕过 Emby API 无法按季集号过滤虚拟占位符的 Bug
         """
-        key, host = cfg.get("emby_api_key"), cfg.get("emby_host")
         user_id = self._get_admin_id()
-        if not key or not host or not user_id: return False
+        if not user_id: return False
         
         try:
-            url = f"{host}/emby/Users/{user_id}/Items"
             params = {
                 "ParentId": series_id,
                 "Recursive": "true",
                 "IncludeItemTypes": "Episode",
-                "Fields": "Path,MediaSources,LocationType", 
-                "api_key": key
+                "Fields": "Path,MediaSources,LocationType"
             }
-            res = requests.get(url, params=params, timeout=5)
+            res = media_api.get(f"/Users/{user_id}/Items", params=params, timeout=5)
             if res.status_code == 200:
                 items = res.json().get("Items", [])
                 for item in items:
@@ -440,19 +432,16 @@ class CalendarService:
             
             # 获取 Emby 中存在的剧集 ID
             emby_series_ids = set()
-            key, host = cfg.get("emby_api_key"), cfg.get("emby_host")
             user_id = self._get_admin_id()
             
-            if key and host and user_id:
+            if user_id:
                 try:
-                    url = f"{host}/emby/Users/{user_id}/Items"
                     params = {
                         "IncludeItemTypes": "Series",
                         "Recursive": "true",
-                        "Fields": "ProviderIds,Status",
-                        "api_key": key
+                        "Fields": "ProviderIds,Status"
                     }
-                    res = requests.get(url, params=params, timeout=10)
+                    res = media_api.get(f"/Users/{user_id}/Items", params=params, timeout=10)
                     if res.status_code == 200:
                         emby_series_ids = {i.get("Id") for i in res.json().get("Items", [])}
                 except Exception as e:
@@ -469,12 +458,8 @@ class CalendarService:
 
     def _get_admin_id(self):
         """获取第一个管理员的 ID"""
-        key, host = cfg.get("emby_api_key"), cfg.get("emby_host")
-        if not key or not host:
-            logger.error(f"[追剧日历] Debug: _get_admin_id 缺少配置 - emby_api_key: {bool(key)}, emby_host: {bool(host)}")
-            return None
         try:
-            res = requests.get(f"{host}/emby/Users?api_key={key}", timeout=3)
+            res = media_api.get("/Users", timeout=3)
             if res.status_code == 200:
                 users = res.json()
                 admin_id = next((u['Id'] for u in users if u.get("Policy", {}).get("IsAdministrator")), users[0]['Id'] if users else None)

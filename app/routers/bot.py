@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Request, Response
 from app.schemas.models import BotSettingsModel
 from app.core.config import cfg
+from app.infra.clients.telegram_client import telegram_client
+from app.infra.clients.wecom_client import wecom_client
 from app.dao.bot_admin_dao import (
     adjust_lottery_pool,
     clear_active_scratch_card,
@@ -347,7 +349,7 @@ def api_test_bot(request: Request):
     
     try:
         proxies = get_safe_proxies()
-        res = requests.post(f"https://api.telegram.org/bot{token}/sendMessage", json={"chat_id": chat_id, "text": "🎉 测试消息"}, proxies=proxies, timeout=10)
+        res = telegram_client.send_message(token, {"chat_id": chat_id, "text": "🎉 测试消息"}, proxies=proxies, timeout=10)
         return {"status": "success"} if res.status_code == 200 else {"status": "error", "message": f"API Error: {res.text}"}
     except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
@@ -362,15 +364,18 @@ def api_test_wecom(request: Request):
     if not corpid or not corpsecret or not agentid:
         return {"status": "error", "message": "请填写完整的企业微信基础配置"}
     try:
-        token_res = requests.get(f"{proxy_url}/cgi-bin/gettoken?corpid={corpid}&corpsecret={corpsecret}", timeout=5).json()
+        token_res = wecom_client.get_access_token(proxy_url, corpid, corpsecret, timeout=5).json()
         if token_res.get("errcode") != 0: return {"status": "error", "message": f"Token 获取失败: {token_res.get('errmsg')}"}
         access_token = token_res["access_token"]
-        msg_res = requests.post(
-            f"{proxy_url}/cgi-bin/message/send?access_token={access_token}",
-            json={
+        msg_res = wecom_client.send_message(
+            proxy_url,
+            access_token,
+            {
                 "touser": touser, "msgtype": "markdown", "agentid": int(agentid),
                 "markdown": {"content": "🎉 <font color=\"info\">企业微信通道测试成功！</font>\n\n> EmbyPulse 已成功接入代理推送与双向交互通道。"}
-            }, timeout=10).json()
+            },
+            timeout=10,
+        ).json()
         if msg_res.get("errcode") == 0: return {"status": "success"}
         else: return {"status": "error", "message": f"发送失败: {msg_res.get('errmsg')}"}
     except Exception as e:
@@ -396,9 +401,9 @@ async def api_test_channel(request: Request):
     proxies = get_safe_proxies()
     
     try:
-        res = requests.post(
-            f"https://api.telegram.org/bot{token}/sendMessage",
-            json={
+        res = telegram_client.send_message(
+            token,
+            {
                 "chat_id": chat_id,
                 "text": f"📢 <b>频道通知测试成功</b>\n\n频道: {name or chat_id}\n时间: {__import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n✅ EmbyPulse 已成功连接到此频道，入库通知将推送到这里。",
                 "parse_mode": "HTML"
@@ -479,7 +484,7 @@ def send_tg_msg(chat_id, text):
     token = cfg.get("tg_bot_token")
     from app.utils.proxy_helper import get_safe_proxies
     proxies = get_safe_proxies()
-    try: requests.post(f"https://api.telegram.org/bot{token}/sendMessage", json={"chat_id": chat_id,"text": text,"parse_mode": "HTML"}, proxies=proxies, timeout=10)
+    try: telegram_client.send_message(token, {"chat_id": chat_id,"text": text,"parse_mode": "HTML"}, proxies=proxies, timeout=10)
     except Exception: pass
 
 # ================= 🔥 企微 API 回调交互 (增强查错与防护版) =================
@@ -730,12 +735,7 @@ def api_sync_tg_usernames(request: Request):
                 from app.utils.proxy_helper import get_safe_proxies
                 proxies = get_safe_proxies()
                 
-                res = requests.get(
-                    f"https://api.telegram.org/bot{bot_token}/getChat",
-                    params={"chat_id": tg_user_id},
-                    timeout=15,
-                    proxies=proxies
-                )
+                res = telegram_client.get_api(bot_token, "getChat", params={"chat_id": tg_user_id}, timeout=15, proxies=proxies)
                 
                 # 检查响应状态
                 if res.status_code != 200:

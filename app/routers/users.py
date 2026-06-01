@@ -6,7 +6,7 @@ from app.dao import audit_dao
 from app.dao import invitation_dao
 from app.dao import user_dao
 from app.dao import user_bot_dao
-from app.core.media_adapter import media_api
+from app.infra.clients.media_server_client import media_api
 
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 from app.core.security import validate_password_strength  # 🔒 统一密码强度校验
@@ -58,19 +58,9 @@ class PasswordVerifyModel(BaseModel):
 
 def verify_emby_admin_password(username: str, password: str) -> bool:
     """验证指定的 Emby 管理员账号密码"""
-    emby_host = cfg.get("emby_host", "")
-    emby_key = cfg.get("emby_api_key", "")
-
-    if not emby_host or not emby_key:
-        return False
-
     try:
         # 先验证该用户是否是管理员
-        users_res = requests.get(
-            f"{emby_host}/Users",
-            headers={"X-Emby-Token": emby_key},
-            timeout=10
-        )
+        users_res = media_api.get("/Users", timeout=10)
         if users_res.status_code != 200:
             return False
 
@@ -89,13 +79,7 @@ def verify_emby_admin_password(username: str, password: str) -> bool:
             return False  # 不是管理员
 
         # 使用 Emby 认证接口验证密码
-        auth_url = f"{emby_host}/Users/AuthenticateByName"
-        auth_res = requests.post(
-            auth_url,
-            data={"Username": username, "Pw": password},
-            headers={"X-Emby-Authorization": f'MediaBrowser Client="EmbyPulse", Device="EmbyPulse", DeviceId="EmbyPulse", Version="1.0"'},
-            timeout=10
-        )
+        auth_res = media_api.authenticate_by_name(username, password, timeout=10)
         return auth_res.status_code == 200
     except Exception as e:
         logging.error(f"[密码验证] Emby 验证失败: {e}")
@@ -103,18 +87,8 @@ def verify_emby_admin_password(username: str, password: str) -> bool:
 
 def get_emby_admin_users() -> List[str]:
     """获取所有 Emby 管理员用户名列表"""
-    emby_host = cfg.get("emby_host", "")
-    emby_key = cfg.get("emby_api_key", "")
-
-    if not emby_host or not emby_key:
-        return []
-
     try:
-        users_res = requests.get(
-            f"{emby_host}/Users",
-            headers={"X-Emby-Token": emby_key},
-            timeout=10
-        )
+        users_res = media_api.get("/Users", timeout=10)
         if users_res.status_code != 200:
             return []
 
@@ -660,9 +634,7 @@ def api_user_self_password(data: UserPasswordChangeModel, request: Request):
         return {"status": "error", "message": pw_error}
     try:
         # 先用旧密码验证身份
-        host = cfg.get("emby_host")
-        headers = {"X-Emby-Authorization": 'MediaBrowser Client="EmbyPulse", Device="Web", DeviceId="PulseUserProfile", Version="2.0"'}
-        auth_res = requests.post(f"{host}/emby/Users/AuthenticateByName", json={"Username": user_name, "Pw": data.old_password}, headers=headers, timeout=8)
+        auth_res = media_api.authenticate_by_name(user_name, data.old_password, timeout=8)
         if auth_res.status_code != 200:
             return {"status": "error", "message": "旧密码不正确"}
         # 验证通过,修改密码

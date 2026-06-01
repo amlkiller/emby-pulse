@@ -2,7 +2,7 @@ from fastapi import APIRouter, Request
 from typing import Optional
 from app.core.config import cfg
 # 🔥 引入核心适配器
-from app.core.media_adapter import media_api
+from app.infra.clients.media_server_client import media_api
 import math
 import ipaddress
 import time

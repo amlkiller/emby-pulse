@@ -4,7 +4,8 @@ from app.core.config import cfg
 from app.queries.stats_queries import build_stats_base_filter, get_playback_column_name, query_stats
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
 # 🔥 引入核心适配器
-from app.core.media_adapter import media_api
+from app.infra.clients.media_server_client import media_api
+from app.infra.clients.tmdb_client import tmdb_client
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 import requests
 import re
@@ -308,7 +309,6 @@ def api_latest_media(request: Request = None, limit: int = 60):
 
         items_raw = res.json().get("Items", [])
         data = []; seen_series = {}
-        tmdb_key = cfg.get("tmdb_api_key")
         proxies = get_safe_proxies()
         
         # 🔥 批量获取 TMDB 封面（并发）
@@ -369,8 +369,10 @@ def api_latest_media(request: Request = None, limit: int = 60):
         tmdb_cache = {}
         def fetch_tmdb(tmdb_id, media_type):
             try:
-                url = f"https://api.themoviedb.org/3/{media_type}/{tmdb_id}?api_key={tmdb_key}&language=zh-CN"
-                r = requests.get(url, proxies=proxies, timeout=8)
+                if media_type == "movie":
+                    r = tmdb_client.get_movie_details(tmdb_id, proxies=proxies, timeout=8)
+                else:
+                    r = tmdb_client.get_tv_details(tmdb_id, proxies=proxies, timeout=8)
                 if r.status_code == 200:
                     d = r.json()
                     poster_path = d.get("poster_path")

@@ -1,6 +1,6 @@
 import sys
 sys.path.insert(0, '.')
-from app.core.media_adapter import media_api
+from app.infra.clients.media_server_client import media_api
 import datetime
 
 # 获取 admin_id

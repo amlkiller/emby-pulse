@@ -43,7 +43,7 @@ from app.dao.message_dao import (
     update_announcement_fields,
     upsert_user_mute,
 )
-from app.core.media_adapter import media_api
+from app.infra.clients.media_server_client import media_api
 from app.core.security_utils import sanitize_html, sanitize_rich_html
 from app.core.security import require_admin
 from app.routers.auth import is_admin_user

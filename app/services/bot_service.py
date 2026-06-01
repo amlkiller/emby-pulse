@@ -18,6 +18,11 @@ from app.dao import notify_admin_dao, notify_rule_dao
 from app.queries.playback_filters import get_base_filter
 from app.dao import user_dao
 from app.infra.db.local_playback_store import insert_bot_playback_history_record
+from app.infra.clients.media_server_client import media_api
+from app.infra.clients.moviepilot_client import moviepilot_client
+from app.infra.clients.telegram_client import telegram_client
+from app.infra.clients.wecom_client import wecom_client
+from app.infra.clients.tmdb_client import tmdb_client
 from app.queries import stats_queries
 from app.utils.proxy_helper import get_safe_proxies, get_safe_wecom_base  # 🔒 SSRF 安全代理读取
 from app.services.report_service import report_gen, HAS_PIL
@@ -92,11 +97,7 @@ def _sync_request_admin_messages(tmdb_id, action_text, operator, token, proxies,
             payload_key = "caption" if row["is_caption"] else "text"
             try:
                 payload = {"chat_id": row["chat_id"], "message_id": row["message_id"], payload_key: new_text, "parse_mode": "HTML", "reply_markup": {"inline_keyboard": []}}
-                requests.post(
-                    f"https://api.telegram.org/bot{token}/{method}",
-                    json=payload,
-                    proxies=proxies, timeout=5
-                )
+                telegram_client.post_api(token, method, json=payload, proxies=proxies, timeout=5)
             except Exception as e:
                 logger.error(f"[求片审核同步] 更新副本失败 chat_id={row['chat_id']} message_id={row['message_id']}: {e}")
 
@@ -151,10 +152,8 @@ def get_notify_channels(notify_type: str) -> list:
     return ['tg_bot', 'tg_channel', 'wecom']
 
 def get_admin_id():
-    key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
-    if not key or not host: return None
     try:
-        res = requests.get(f"{host}/emby/Users?api_key={key}", timeout=5)
+        res = media_api.get("/Users", timeout=5)
         if res.status_code == 200:
             users = res.json()
             for u in users:
@@ -189,7 +188,6 @@ def get_media_quality_info(item_id: str) -> dict:
         "quality_icon": ""
     }
     try:
-        from app.core.media_adapter import media_api
         admin_id = get_admin_id()
         if not admin_id:
             return result
@@ -718,13 +716,11 @@ class SystemDaemon:
                 logger.error(f"[入库通知] 处理失败: {e}")
 
     def _check_fresh_episodes(self, series_id):
-        key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         admin_id = get_admin_id()
         if not admin_id: return []
         try:
-            url = f"{host}/emby/Users/{admin_id}/Items"
-            params = { "ParentId": series_id, "Recursive": "true", "IncludeItemTypes": "Episode", "Limit": 1000, "SortBy": "DateCreated", "SortOrder": "Descending", "Fields": "DateCreated,Name,ParentIndexNumber,IndexNumber", "api_key": key }
-            res = requests.get(url, params=params, timeout=10)
+            params = { "ParentId": series_id, "Recursive": "true", "IncludeItemTypes": "Episode", "Limit": 1000, "SortBy": "DateCreated", "SortOrder": "Descending", "Fields": "DateCreated,Name,ParentIndexNumber,IndexNumber" }
+            res = media_api.get(f"/Users/{admin_id}/Items", params=params, timeout=10)
             if res.status_code != 200: return []
             items = res.json().get("Items", [])
             if not items: return []
@@ -751,13 +747,11 @@ class SystemDaemon:
         except: return None
 
     def _push_episode_group(self, series_id, episodes):
-        key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         admin_id = get_admin_id()
         series_info = {}
         
         try:
-            url = f"{host}/emby/Users/{admin_id}/Items/{series_id}?api_key={key}"
-            res = requests.get(url, timeout=10)
+            res = media_api.get(f"/Users/{admin_id}/Items/{series_id}", timeout=10)
             if res.status_code == 200: series_info = res.json()
         except Exception: pass
         if not series_info: series_info = episodes[0]
@@ -786,10 +780,8 @@ class SystemDaemon:
         bus.publish("notify.library.new_episode", { "series_id": series_id, "episodes": episodes, "series_info": series_info })
 
     def _push_single_item(self, item):
-        key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         try:
-            url = f"{host}/emby/Items/{item['Id']}?api_key={key}"
-            res = requests.get(url, timeout=10)
+            res = media_api.get(f"/Items/{item['Id']}", timeout=10)
             if res.status_code == 200: item = res.json()
         except Exception: pass
         tmdb_id = item.get("ProviderIds", {}).get("Tmdb")
@@ -816,7 +808,6 @@ class SystemDaemon:
             # 🔥 修复：检查所有未完成状态（待审批、下载中、手动接单、待入库）
             rows = media_request_dao.list_pending_sync_requests()
             if not rows: return
-            host = cfg.get("emby_host"); key = cfg.get("emby_api_key")
             admin_id = get_admin_id()
             if not admin_id: return
             for r in rows:
@@ -825,8 +816,8 @@ class SystemDaemon:
                 episodes_str = r.get('episodes', '')
                 
                 type_filter = "Movie" if mtype == "movie" else "Series"
-                url = f"{host}/emby/Users/{admin_id}/Items?AnyProviderIdEquals=tmdb.{tid}&IncludeItemTypes={type_filter}&Recursive=true&api_key={key}"
-                res = requests.get(url, timeout=5).json()
+                params = {"AnyProviderIdEquals": f"tmdb.{tid}", "IncludeItemTypes": type_filter, "Recursive": "true"}
+                res = media_api.get(f"/Users/{admin_id}/Items", params=params, timeout=5).json()
                 if res.get("Items"):
                     if mtype == "movie":
                         media_request_dao.mark_sync_request_finished(tid)
@@ -838,8 +829,8 @@ class SystemDaemon:
                         if request_type == 'update' and episodes_str:
                             # 追新请求：检查集数
                             requested_eps = [int(e) for e in episodes_str.split(",") if e.strip().isdigit()]
-                            ep_url = f"{host}/emby/Users/{admin_id}/Items?ParentId={sid}&IncludeItemTypes=Episode&Recursive=true&Fields=ParentIndexNumber,IndexNumber&api_key={key}"
-                            ep_res = requests.get(ep_url, timeout=5).json()
+                            ep_params = {"ParentId": sid, "IncludeItemTypes": "Episode", "Recursive": "true", "Fields": "ParentIndexNumber,IndexNumber"}
+                            ep_res = media_api.get(f"/Users/{admin_id}/Items", params=ep_params, timeout=5).json()
                             local_eps = []
                             for ep in ep_res.get("Items", []):
                                 ep_season = ep.get("ParentIndexNumber")
@@ -853,7 +844,7 @@ class SystemDaemon:
                                 logger.info(f"[入库同步] 追新已入库: tmdb_id={tid}, season={sn}, episodes={episodes_str}")
                         else:
                             # 求片请求：检查季是否存在
-                            s_res = requests.get(f"{host}/emby/Shows/{sid}/Seasons?api_key={key}&UserId={admin_id}", timeout=5).json()
+                            s_res = media_api.get(f"/Shows/{sid}/Seasons", params={"UserId": admin_id}, timeout=5).json()
                             local_seasons = [s.get("IndexNumber") for s in s_res.get("Items", [])]
                             if sn in local_seasons:
                                 media_request_dao.mark_sync_request_finished(tid, sn)
@@ -867,17 +858,16 @@ class SystemDaemon:
             users = user_dao.list_users_with_expire_date()
             if not users: return
             today = datetime.datetime.now().strftime("%Y-%m-%d")
-            key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
             for u in users:
                 if u['expire_date'] < today:
                     try:
                         # 🔥 修复：先获取完整 Policy，再修改 IsDisabled，避免重置其他权限
-                        user_res = requests.get(f"{host}/emby/Users/{u['user_id']}?api_key={key}", timeout=5)
+                        user_res = media_api.get(f"/Users/{u['user_id']}", timeout=5)
                         if user_res.status_code == 200:
                             policy = user_res.json().get('Policy', {})
                             if not policy.get('IsDisabled', False):
                                 policy['IsDisabled'] = True
-                                requests.post(f"{host}/emby/Users/{u['user_id']}/Policy?api_key={key}", json=policy, timeout=5)
+                                media_api.post(f"/Users/{u['user_id']}/Policy", json=policy, timeout=5)
                     except Exception: pass
         except Exception: pass
 
@@ -1218,13 +1208,7 @@ class NotificationBot:
                     data["reply_markup"] = json.dumps(keyboard)
                 
                 files = {"photo": ("photo.jpg", photo_io, "image/jpeg")}
-                res = requests.post(
-                    f"https://api.telegram.org/bot{token}/sendPhoto",
-                    data=data,
-                    files=files,
-                    proxies=proxies,
-                    timeout=30
-                )
+                res = telegram_client.send_photo(token, data=data, files=files, proxies=proxies, timeout=30)
             else:
                 # 发送纯文本
                 data = {
@@ -1235,12 +1219,7 @@ class NotificationBot:
                 if keyboard:
                     data["reply_markup"] = json.dumps(keyboard)
                 
-                res = requests.post(
-                    f"https://api.telegram.org/bot{token}/sendMessage",
-                    data=data,
-                    proxies=proxies,
-                    timeout=30
-                )
+                res = telegram_client.send_message(token, data, proxies=proxies, timeout=30)
             
             if res.status_code != 200:
                 logger.error(f"📢 [频道通知] 发送失败: {res.text}")
@@ -1339,14 +1318,12 @@ class NotificationBot:
             detail_res = {}
             if target_id and user_id:
                 try:
-                    host = cfg.get("emby_host")
-                    key = cfg.get("emby_api_key")
-                    resp = requests.get(f"{host}/emby/Users/{user_id}/Items/{target_id}?api_key={key}", timeout=2)
+                    resp = media_api.get(f"/Users/{user_id}/Items/{target_id}", timeout=2)
                     if resp.status_code == 200:
                         detail_res = resp.json()
                         
                     if pos_ticks <= 0 and session.get("Id"):
-                        sess_res = requests.get(f"{host}/emby/Sessions?api_key={key}", timeout=2).json()
+                        sess_res = media_api.get("/Sessions", timeout=2).json()
                         for s in sess_res:
                             if s.get("Id") == session.get("Id"):
                                 pos_ticks = int(s.get("PlayState", {}).get("PositionTicks") or 0)
@@ -1365,7 +1342,7 @@ class NotificationBot:
             if raw_type == "Episode" and series_id:
                 if not str(overview_raw).strip() or not rating_raw:
                     try:
-                        series_res = requests.get(f"{host}/emby/Users/{user_id}/Items/{series_id}?api_key={key}", timeout=2).json()
+                        series_res = media_api.get(f"/Users/{user_id}/Items/{series_id}", timeout=2).json()
                         if not str(overview_raw).strip():
                             overview_raw = series_res.get("Overview") or ""
                         if not rating_raw:
@@ -1575,12 +1552,13 @@ class NotificationBot:
             if not primary_io and not backdrop_io:
                 tmdb_id = item.get("ProviderIds", {}).get("Tmdb")
                 if not tmdb_id and item.get("SeriesProviderIds"): tmdb_id = item.get("SeriesProviderIds", {}).get("Tmdb")
-                tmdb_key = cfg.get("tmdb_api_key")
-                if tmdb_id and tmdb_key:
+                if tmdb_id and tmdb_client.api_key:
                     try:
-                        m_type = "movie" if raw_type == "Movie" else "tv"
-                        req_url = f"https://api.themoviedb.org/3/{m_type}/{tmdb_id}?api_key={tmdb_key}"
-                        tmdb_res = requests.get(req_url, proxies=self._get_proxies(), timeout=5)
+                        proxies = self._get_proxies()
+                        if raw_type == "Movie":
+                            tmdb_res = tmdb_client.get_movie_details(tmdb_id, proxies=proxies, timeout=5)
+                        else:
+                            tmdb_res = tmdb_client.get_tv_details(tmdb_id, proxies=proxies, timeout=5)
                         if tmdb_res.status_code == 200:
                             p_path = tmdb_res.json().get("poster_path")
                             if p_path: tmdb_img_url = f"https://image.tmdb.org/t/p/w500{p_path}"
@@ -1628,11 +1606,7 @@ class NotificationBot:
         try:
             proxies = self._get_proxies()
             # 获取群组信息
-            res = requests.get(
-                f"https://api.telegram.org/bot{token}/getChatMember",
-                params={"chat_id": chat_id, "user_id": user_id},
-                proxies=proxies, timeout=10
-            )
+            res = telegram_client.get_api(token, "getChatMember", params={"chat_id": chat_id, "user_id": user_id}, proxies=proxies, timeout=10)
             if res.status_code == 200:
                 member = res.json().get("result", {})
                 status = member.get("status", "")
@@ -1648,21 +1622,18 @@ class NotificationBot:
         return True
 
     def _download_user_image(self, user_id):
-        key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
-        if not key or not host or not user_id: return None
+        if not user_id: return None
         try:
-            url = f"{host}/emby/Users/{user_id}/Images/Primary?maxHeight=400&maxWidth=400&quality=90&api_key={key}"
-            res = requests.get(url, timeout=5)
+            params = {"maxHeight": 400, "maxWidth": 400, "quality": 90}
+            res = media_api.get(f"/Users/{user_id}/Images/Primary", params=params, timeout=5)
             if res.status_code == 200: return io.BytesIO(res.content)
         except Exception: pass
         return None
 
     def _get_username(self, user_id):
         if user_id in self.user_cache: return self.user_cache[user_id]
-        key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
-        if not key or not host: return user_id
         try:
-            res = requests.get(f"{host}/emby/Users?api_key={key}", timeout=2)
+            res = media_api.get("/Users", timeout=2)
             if res.status_code == 200:
                 for u in res.json(): self.user_cache[u['Id']] = u['Name']
         except Exception: pass
@@ -1694,12 +1665,12 @@ class NotificationBot:
             logger.error(f"[Playback] 保存历史记录失败: {e}")
 
     def _download_emby_image(self, item_id, img_type='Primary', image_tag=None):
-        key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
-        if not key or not host: return None
+        if not item_id: return None
         try:
-            url = f"{host}/emby/Items/{item_id}/Images/{img_type}?maxHeight=800&maxWidth=600&quality=90"
-            url += f"&tag={image_tag}" if image_tag else f"&api_key={key}"
-            res = requests.get(url, timeout=15)
+            params = {"maxHeight": 800, "maxWidth": 600, "quality": 90}
+            if image_tag:
+                params["tag"] = image_tag
+            res = media_api.get(f"/Items/{item_id}/Images/{img_type}", params=params, timeout=15)
             if res.status_code == 200: return io.BytesIO(res.content)
         except Exception: pass
         return None
@@ -1713,7 +1684,7 @@ class NotificationBot:
         if self.wecom_token and time.time() < self.wecom_token_expires:
             return self.wecom_token
         try:
-            res = requests.get(f"{proxy_url}/cgi-bin/gettoken?corpid={corpid}&corpsecret={corpsecret}", timeout=5).json()
+            res = wecom_client.get_access_token(proxy_url, corpid, corpsecret, timeout=5).json()
             if res.get("errcode") == 0:
                 self.wecom_token = res["access_token"]
                 self.wecom_token_expires = time.time() + res["expires_in"] - 60
@@ -1770,7 +1741,7 @@ class NotificationBot:
         }
         
         try: 
-            res = requests.post(f"{proxy_url}/cgi-bin/menu/create?access_token={token}&agentid={agentid}", json=menu_data, timeout=5)
+            res = wecom_client.create_menu(proxy_url, token, agentid, menu_data, timeout=5)
             res_data = res.json()
             if res_data.get("errcode") == 0:
                 logger.info("✅ [企微助手] 底部三栏菜单推送成功！")
@@ -1800,11 +1771,7 @@ class NotificationBot:
                 max_bytes = 2048 - len(suffix.encode('utf-8')) - 5
                 content = content.encode('utf-8')[:max_bytes].decode('utf-8', 'ignore') + suffix
 
-            res = requests.post(
-                f"{proxy_url}/cgi-bin/message/send?access_token={token}",
-                json={"touser": touser, "msgtype": "text", "agentid": int(agentid), "text": {"content": content}},
-                timeout=10
-            )
+            res = wecom_client.send_message(proxy_url, token, {"touser": touser, "msgtype": "text", "agentid": int(agentid), "text": {"content": content}}, timeout=10)
             res_json = res.json() if res.text else {}
             if res_json.get("errcode") == 0:
                 logger.info(f"[企业微信] 消息发送成功: touser={touser}")
@@ -1845,13 +1812,8 @@ class NotificationBot:
                         logger.debug(f"[企业微信] 图片压缩失败: {e}")
                 
                 logger.info(f"[企业微信] 开始上传图片，大小: {len(photo_bytes)} bytes")
-                upload_url = f"{proxy_url}/cgi-bin/media/uploadimg?access_token={token}"
-                logger.info(f"[企业微信] 上传URL: {upload_url[:80]}...")
-                upload_res = requests.post(
-                    upload_url, 
-                    files={"media": ("image.jpg", photo_bytes, "image/jpeg")}, 
-                    timeout=15
-                )
+                logger.info(f"[企业微信] 上传URL: {proxy_url.rstrip('/')}/cgi-bin/media/uploadimg?access_token=***")
+                upload_res = wecom_client.upload_image(proxy_url, token, {"media": ("image.jpg", photo_bytes, "image/jpeg")}, timeout=15)
                 if upload_res.status_code == 200 and upload_res.text.strip():
                     resp_json = upload_res.json()
                     # uploadimg 成功返回 {"url": "https://..."}
@@ -1954,13 +1916,12 @@ class NotificationBot:
             if item_id_match and pic_url == REPORT_COVER_URL:
                 item_id = item_id_match.group(1)
                 base_emby = (cfg.get_main_public_url() or cfg.get("emby_host")).rstrip('/')
-                local_emby = cfg.get("emby_host").rstrip('/')
                 api_key = cfg.get('emby_api_key')
                 
                 # 优先使用横版封面 Backdrop
                 img_type = "Backdrop"
                 try:
-                    if requests.head(f"{local_emby}/emby/Items/{item_id}/Images/Backdrop?api_key={api_key}", timeout=2).status_code != 200:
+                    if media_api.request("HEAD", f"/Items/{item_id}/Images/Backdrop", timeout=2).status_code != 200:
                         img_type = "Primary"
                 except Exception: pass
                 pic_url = f"{base_emby}/emby/Items/{item_id}/Images/{img_type}?maxWidth=800&api_key={api_key}"
@@ -1989,7 +1950,7 @@ class NotificationBot:
                 }
             }
             logger.debug(f"[企业微信] 发送图文消息: title={title[:30]}..., pic_url={pic_url[:50]}...")
-            res = requests.post(f"{proxy_url}/cgi-bin/message/send?access_token={token}", json=news_payload, timeout=10)
+            res = wecom_client.send_message(proxy_url, token, news_payload, timeout=10)
             res_json = res.json() if res.text else {}
             if res_json.get("errcode") == 0:
                 logger.debug(f"[企业微信] 图文消息发送成功: touser={touser}")
@@ -2046,7 +2007,7 @@ class NotificationBot:
                     data = {"chat_id": tg_cid, "caption": caption, "parse_mode": parse_mode}
                     if reply_markup: data["reply_markup"] = json.dumps(reply_markup)
                     if photo_bytes:
-                        r = requests.post(f"https://api.telegram.org/bot{cfg.get('tg_bot_token')}/sendPhoto", data=data, files={"photo": ("image.jpg", io.BytesIO(photo_bytes), "image/jpeg")}, proxies=self._get_proxies(), timeout=20)
+                        r = telegram_client.send_photo(cfg.get("tg_bot_token"), data=data, files={"photo": ("image.jpg", io.BytesIO(photo_bytes), "image/jpeg")}, proxies=self._get_proxies(), timeout=20)
                         logger.info(f"[Bot] TG photo response: {r.status_code} - {r.text[:300] if r.text else 'empty'}")
                         if r.status_code == 200:
                             try:
@@ -2094,7 +2055,7 @@ class NotificationBot:
                 try:
                     data = {"chat_id": tg_cid, "text": text, "parse_mode": parse_mode}
                     if reply_markup: data["reply_markup"] = json.dumps(reply_markup)
-                    r = requests.post(f"https://api.telegram.org/bot{cfg.get('tg_bot_token')}/sendMessage", json=data, proxies=self._get_proxies(), timeout=10)
+                    r = telegram_client.send_message(cfg.get("tg_bot_token"), data, proxies=self._get_proxies(), timeout=10)
                     if r.status_code == 200:
                         try:
                             tmdb_id = _extract_request_tmdb_id(reply_markup)
@@ -2124,12 +2085,7 @@ class NotificationBot:
             if reply_markup:
                 data["reply_markup"] = json.dumps(reply_markup)
             
-            r = requests.post(
-                f"https://api.telegram.org/bot{cfg.get('tg_bot_token')}/editMessageText",
-                json=data,
-                proxies=self._get_proxies(),
-                timeout=10
-            )
+            r = telegram_client.post_api(cfg.get("tg_bot_token"), "editMessageText", json=data, proxies=self._get_proxies(), timeout=10)
             logger.info(f"[Bot] TG edit response: {r.status_code}")
             return r.status_code == 200
         except Exception as e:
@@ -2144,7 +2100,7 @@ class NotificationBot:
             admin_ids = [c.strip() for c in raw_cids.replace('，', ',').split(',') if c.strip()]
             
             try:
-                res = requests.get(f"https://api.telegram.org/bot{token}/getUpdates", params={"offset": self.offset, "timeout": 30}, proxies=self._get_proxies(), timeout=35)
+                res = telegram_client.get_updates(token, params={"offset": self.offset, "timeout": 30}, proxies=self._get_proxies(), timeout=35)
                 if res.status_code == 200:
                     for u in res.json().get("result", []):
                         self.offset = u["update_id"] + 1
@@ -2189,15 +2145,17 @@ class NotificationBot:
             if not self._check_admin_permission(cid, user_id):
                 # 回复无权限提示
                 try:
-                    requests.post(
-                        f"https://api.telegram.org/bot{token}/answerCallbackQuery",
+                    telegram_client.post_api(
+                        token,
+                        "answerCallbackQuery",
                         json={"callback_query_id": cq_id, "text": "⛔ 您没有权限执行此操作", "show_alert": True},
-                        proxies=proxies, timeout=5
+                        proxies=proxies,
+                        timeout=5,
                     )
                 except Exception: pass
                 return
         
-        try: requests.post(f"https://api.telegram.org/bot{token}/answerCallbackQuery", json={"callback_query_id": cq_id}, proxies=proxies, timeout=5)
+        try: telegram_client.post_api(token, "answerCallbackQuery", json={"callback_query_id": cq_id}, proxies=proxies, timeout=5)
         except Exception: pass
 
         # 插件回调分发
@@ -2323,7 +2281,7 @@ class NotificationBot:
             # 取消回复模式
             self._msg_reply_mode.discard(cid)
             try:
-                requests.post(f"https://api.telegram.org/bot{token}/editMessageText", json={
+                telegram_client.post_api(token, "editMessageText", json={
                     "chat_id": cid, "message_id": mid,
                     "text": "❌ 已取消回复",
                     "reply_markup": {"inline_keyboard": []}
@@ -2352,7 +2310,7 @@ class NotificationBot:
             msg_obj = cq["message"]
             orig_text = msg_obj.get("text", "风控警报")
             new_text = f"{orig_text}\n\n━━━━━━━━━━━━━━\n{action_text}"
-            try: requests.post(f"https://api.telegram.org/bot{token}/editMessageText", json={"chat_id": cid, "message_id": mid, "text": new_text, "reply_markup": {"inline_keyboard": []}}, proxies=proxies, timeout=5)
+            try: telegram_client.post_api(token, "editMessageText", json={"chat_id": cid, "message_id": mid, "text": new_text, "reply_markup": {"inline_keyboard": []}}, proxies=proxies, timeout=5)
             except Exception: pass
             return
 
@@ -2369,12 +2327,12 @@ class NotificationBot:
                 if "caption" in msg_obj:
                     orig_text = msg_obj.get("caption", "资源报错工单")
                     new_text = f"{orig_text}\n\n━━━━━━━━━━━━━━\n{status_text[action]}\n(操作人: {operator})"
-                    try: requests.post(f"https://api.telegram.org/bot{token}/editMessageCaption", json={"chat_id": cid, "message_id": mid, "caption": new_text, "reply_markup": {"inline_keyboard": []}}, proxies=proxies, timeout=5)
+                    try: telegram_client.post_api(token, "editMessageCaption", json={"chat_id": cid, "message_id": mid, "caption": new_text, "reply_markup": {"inline_keyboard": []}}, proxies=proxies, timeout=5)
                     except Exception: pass
                 else:
                     orig_text = msg_obj.get("text", "资源报错工单")
                     new_text = f"{orig_text}\n\n━━━━━━━━━━━━━━\n{status_text[action]}\n(操作人: {operator})"
-                    try: requests.post(f"https://api.telegram.org/bot{token}/editMessageText", json={"chat_id": cid, "message_id": mid, "text": new_text, "reply_markup": {"inline_keyboard": []}}, proxies=proxies, timeout=5)
+                    try: telegram_client.post_api(token, "editMessageText", json={"chat_id": cid, "message_id": mid, "text": new_text, "reply_markup": {"inline_keyboard": []}}, proxies=proxies, timeout=5)
                     except Exception: pass
             return
 
@@ -2390,10 +2348,12 @@ class NotificationBot:
                 except Exception as e:
                     logger.error(f"[Bot] 影巢搜索回调处理失败: {e}")
                     try:
-                        requests.post(
-                            f"https://api.telegram.org/bot{token}/editMessageReplyMarkup",
+                        telegram_client.post_api(
+                            token,
+                            "editMessageReplyMarkup",
                             json={"chat_id": cid, "message_id": mid, "reply_markup": {"inline_keyboard": []}},
-                            proxies=proxies, timeout=5
+                            proxies=proxies,
+                            timeout=5,
                         )
                     except Exception: pass
                 return
@@ -2406,7 +2366,7 @@ class NotificationBot:
                     [{"text": reasons[2], "callback_data": f"req_reject_do_{tid}_2"}, {"text": reasons[3], "callback_data": f"req_reject_do_{tid}_3"}],
                     [{"text": "🔙 取消返回", "callback_data": f"req_back_{tid}"}]
                 ]}
-                try: requests.post(f"https://api.telegram.org/bot{token}/editMessageReplyMarkup", json={"chat_id": cid, "message_id": mid, "reply_markup": keyboard}, proxies=proxies, timeout=5)
+                try: telegram_client.post_api(token, "editMessageReplyMarkup", json={"chat_id": cid, "message_id": mid, "reply_markup": keyboard}, proxies=proxies, timeout=5)
                 except Exception: pass
                 return
             
@@ -2434,7 +2394,7 @@ class NotificationBot:
                         [{"text": "🚀 推送 MP", "callback_data": f"req_approve_{tid}"}, {"text": "✋ 手动接单", "callback_data": f"req_manual_{tid}"}],
                         [{"text": "❌ 拒绝求片", "callback_data": f"req_reject_menu_{tid}"}, {"text": "💻 网页审批", "url": f"{admin_url}/requests_admin"}]
                     ]}
-                try: requests.post(f"https://api.telegram.org/bot{token}/editMessageReplyMarkup", json={"chat_id": cid, "message_id": mid, "reply_markup": keyboard}, proxies=proxies, timeout=5)
+                try: telegram_client.post_api(token, "editMessageReplyMarkup", json={"chat_id": cid, "message_id": mid, "reply_markup": keyboard}, proxies=proxies, timeout=5)
                 except Exception: pass
                 return
 
@@ -2448,7 +2408,7 @@ class NotificationBot:
 
             rows = media_request_dao.list_pending_requests_by_tmdb(tid)
             if not rows:
-                try: requests.post(f"https://api.telegram.org/bot{token}/editMessageReplyMarkup", json={"chat_id": cid, "message_id": mid, "reply_markup": {"inline_keyboard": []}}, proxies=proxies, timeout=5)
+                try: telegram_client.post_api(token, "editMessageReplyMarkup", json={"chat_id": cid, "message_id": mid, "reply_markup": {"inline_keyboard": []}}, proxies=proxies, timeout=5)
                 except Exception: pass
                 return
                 
@@ -2458,7 +2418,7 @@ class NotificationBot:
                     if mp_url and mp_token:
                         payload = { "name": r["title"], "tmdbid": int(tid), "year": str(r["year"]), "type": "电影" if r["media_type"]=="movie" else "电视剧" }
                         if r["media_type"] == "tv": payload["season"] = r['season']
-                        try: requests.post(f"{mp_url.rstrip('/')}/api/v1/subscribe/", json=payload, headers={"X-API-KEY": mp_token.strip().strip("'\"")}, timeout=10)
+                        try: moviepilot_client.subscribe(mp_url, mp_token, payload, timeout=10)
                         except Exception: pass
                     media_request_dao.update_media_request_status(tid, r['season'], 1)
                 action_text = "✅ 已审批：推送 MP 自动下载"
@@ -2498,7 +2458,7 @@ class NotificationBot:
             {"command": "whois", "description": "👤 查询绑定信息"},
             {"command": "help", "description": "🤖 帮助菜单"}
         ]
-        try: requests.post(f"https://api.telegram.org/bot{token}/setMyCommands", json={"commands": cmds}, proxies=self._get_proxies(), timeout=10)
+        try: telegram_client.post_api(token, "setMyCommands", json={"commands": cmds}, proxies=self._get_proxies(), timeout=10)
         except Exception: pass
 
     def _is_admin(self, cid, platform="tg"):
@@ -2543,15 +2503,13 @@ class NotificationBot:
             bus.publish("bot.admin_message", text, cid, platform)
 
     def _cmd_latest(self, cid, platform):
-        key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         try:
             user_id = get_admin_id()
             if not user_id: return self.send_message(cid, "❌ 错误: 无法获取 Emby 用户身份", platform=platform)
             fields = "DateCreated,Name,SeriesName,Type,ParentIndexNumber,IndexNumber"
-            url = f"{host}/emby/Users/{user_id}/Items/Latest"
-            params = {"IncludeItemTypes": "Movie,Episode", "Limit": 8, "Fields": fields, "api_key": key}
+            params = {"IncludeItemTypes": "Movie,Episode", "Limit": 8, "Fields": fields}
             
-            res = requests.get(url, params=params, timeout=10)
+            res = media_api.get(f"/Users/{user_id}/Items/Latest", params=params, timeout=10)
             if res.status_code != 200: return self.send_message(cid, f"❌ 查询失败", platform=platform)
             
             items = res.json()
@@ -2606,15 +2564,13 @@ class NotificationBot:
         parts = text.split(' ', 1)
         if len(parts) < 2: return self.send_message(chat_id, "🔍 请使用: /search 关键词", platform=platform)
         keyword = parts[1].strip()
-        key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         try:
             user_id = get_admin_id()
             if not user_id: return self.send_message(chat_id, "❌ 错误: 无法获取 Emby 用户身份", platform=platform)
 
             fields = "ProductionYear,Type,Id" 
-            url = f"{host}/emby/Users/{user_id}/Items"
-            params = {"SearchTerm": keyword, "IncludeItemTypes": "Movie,Series", "Recursive": "true", "Fields": fields, "Limit": 5, "api_key": key}
-            res = requests.get(url, params=params, timeout=10)
+            params = {"SearchTerm": keyword, "IncludeItemTypes": "Movie,Series", "Recursive": "true", "Fields": fields, "Limit": 5}
+            res = media_api.get(f"/Users/{user_id}/Items", params=params, timeout=10)
             if res.status_code != 200: return self.send_message(chat_id, f"❌ 搜索失败", platform=platform)
             items = res.json().get("Items", [])
             if not items: return self.send_message(chat_id, f"📭 未找到与 <b>{keyword}</b> 相关的资源", platform=platform)
@@ -2625,17 +2581,26 @@ class NotificationBot:
 
             try:
                 if type_raw == "Series":
-                    meta_url = f"{host}/emby/Users/{user_id}/Items/{top['Id']}?Fields=Overview,CommunityRating,Genres,RecursiveItemCount&api_key={key}"
-                    details = requests.get(meta_url, timeout=5).json()
+                    details = media_api.get(
+                        f"/Users/{user_id}/Items/{top['Id']}",
+                        params={"Fields": "Overview,CommunityRating,Genres,RecursiveItemCount"},
+                        timeout=5,
+                    ).json()
                     ep_count = details.get("RecursiveItemCount", 0)
                     ep_count_str = f"📊 共 {ep_count} 集"
-                    sample_url = f"{host}/emby/Users/{user_id}/Items?ParentId={top['Id']}&Recursive=true&IncludeItemTypes=Episode&Limit=1&Fields=MediaSources&api_key={key}"
-                    sample_res = requests.get(sample_url, timeout=5)
+                    sample_res = media_api.get(
+                        f"/Users/{user_id}/Items",
+                        params={"ParentId": top['Id'], "Recursive": "true", "IncludeItemTypes": "Episode", "Limit": 1, "Fields": "MediaSources"},
+                        timeout=5,
+                    )
                     if sample_res.status_code == 200 and sample_res.json().get("Items"):
                         tech_info_str = self._extract_tech_info(sample_res.json().get("Items")[0])
                 else:
-                    detail_url = f"{host}/emby/Users/{user_id}/Items/{top['Id']}?Fields=Overview,CommunityRating,Genres,MediaSources&api_key={key}"
-                    details = requests.get(detail_url, timeout=8).json()
+                    details = media_api.get(
+                        f"/Users/{user_id}/Items/{top['Id']}",
+                        params={"Fields": "Overview,CommunityRating,Genres,MediaSources"},
+                        timeout=8,
+                    ).json()
                     tech_info_str = self._extract_tech_info(details)
             except Exception: tech_info_str = "暂无技术信息"
 
@@ -2904,9 +2869,8 @@ class NotificationBot:
             self.send_message(chat_id, f"❌ 统计失败: {str(e)}", platform=platform)
 
     def _cmd_now(self, cid, platform):
-        key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         try:
-            res = requests.get(f"{host}/emby/Sessions?api_key={key}", timeout=5)
+            res = media_api.get("/Sessions", timeout=5)
             sessions = [s for s in res.json() if s.get("NowPlayingItem")]
             if not sessions: return self.send_message(cid, "🟢 当前无人在看", platform=platform)
             
@@ -2951,10 +2915,9 @@ class NotificationBot:
             self.send_message(cid, f"❌ 查询失败", platform=platform)
 
     def _cmd_check(self, cid, platform):
-        key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
         start = time.time()
         try:
-            res = requests.get(f"{host}/emby/System/Info?api_key={key}", timeout=5)
+            res = media_api.get("/System/Info", timeout=5)
             if res.status_code == 200:
                 info = res.json()
                 delay = int((time.time()-start)*1000)
@@ -2963,7 +2926,7 @@ class NotificationBot:
                 
                 movie_count = series_count = ep_count = 0
                 try:
-                    c_res = requests.get(f"{host}/emby/Items/Counts?api_key={key}", timeout=3).json()
+                    c_res = media_api.get("/Items/Counts", timeout=3).json()
                     movie_count = c_res.get('MovieCount', 0)
                     series_count = c_res.get('SeriesCount', 0)
                     ep_count = c_res.get('EpisodeCount', 0)
@@ -2971,7 +2934,7 @@ class NotificationBot:
                 
                 active_users = 0
                 try:
-                    s_res = requests.get(f"{host}/emby/Sessions?api_key={key}", timeout=3).json()
+                    s_res = media_api.get("/Sessions", timeout=3).json()
                     active_users = len([s for s in s_res if s.get("NowPlayingItem")])
                 except Exception: pass
 
@@ -3184,7 +3147,7 @@ class NotificationBot:
         }
         
         try:
-            requests.post(f"https://api.telegram.org/bot{token}/editMessageText", json={
+            telegram_client.post_api(token, "editMessageText", json={
                 "chat_id": cid, "message_id": mid,
                 "text": text, "parse_mode": "HTML",
                 "reply_markup": keyboard
@@ -3209,7 +3172,7 @@ class NotificationBot:
             }
             
             try:
-                requests.post(f"https://api.telegram.org/bot{token}/editMessageText", json={
+                telegram_client.post_api(token, "editMessageText", json={
                     "chat_id": cid, "message_id": mid,
                     "text": new_text, "parse_mode": "HTML",
                     "reply_markup": keyboard
@@ -3245,7 +3208,7 @@ class NotificationBot:
             }
             
             try:
-                requests.post(f"https://api.telegram.org/bot{token}/editMessageText", json={
+                telegram_client.post_api(token, "editMessageText", json={
                     "chat_id": cid, "message_id": mid,
                     "text": new_text, "parse_mode": "HTML",
                     "reply_markup": keyboard
