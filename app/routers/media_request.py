@@ -10,7 +10,6 @@ from pydantic import BaseModel
 from typing import Optional, List
 import threading
 
-from app.core.config import cfg  # 兼容旧测试/旧 monkeypatch
 from app.core.config import REPORT_COVER_URL
 from app.infra.clients.moviepilot_client import moviepilot_client
 from app.infra.clients.tmdb_client import tmdb_client

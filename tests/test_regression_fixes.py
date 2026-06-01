@@ -106,7 +106,7 @@ def test_request_login_rejects_passwordless_emby_users(monkeypatch, is_admin):
                 }
             ]
 
-    monkeypatch.setattr(media_request.cfg, "get", lambda key, default=None: "http://emby.local" if key == "emby_host" else default)
+    monkeypatch.setattr(media_request, "get_media_server_main_public_or_host", lambda: "http://emby.local")
     monkeypatch.setattr(media_request.media_api, "get", lambda *args, **kwargs: FakeMediaResponse())
     monkeypatch.setattr(media_request, "get_user_status_meta", lambda *args, **kwargs: None)
     monkeypatch.setattr(
