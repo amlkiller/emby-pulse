@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Request, Response
 from app.schemas.models import BotSettingsModel
 from app.core.config import cfg
+from app.infra.clients.media_server_client import media_api
 from app.infra.clients.telegram_client import telegram_client
 from app.infra.clients.wecom_client import wecom_client
 from app.dao.bot_admin_dao import (
@@ -22,7 +23,6 @@ from app.dao.bot_admin_dao import (
 )
 from app.services.bot_service import bot
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
-import requests
 import threading
 import base64
 import struct
@@ -472,11 +472,15 @@ async def telegram_webhook(request: Request):
     return {"status": "success"}
 
 def search_emby(keyword):
-    key = cfg.get("emby_api_key"); host = cfg.get("emby_host")
     try:
-        url = f"{host}/emby/Items?api_key={key}&Recursive=true&SearchTerm={keyword}&IncludeItemTypes=Movie,Series&Limit=5"
-        res = requests.get(url, timeout=5)
-        if res.status_code == 200: return res.json().get("Items", [])
+        res = media_api.get("/Items", params={
+            "Recursive": "true",
+            "SearchTerm": keyword,
+            "IncludeItemTypes": "Movie,Series",
+            "Limit": 5,
+        }, timeout=5)
+        if res.status_code == 200:
+            return res.json().get("Items", [])
     except Exception: pass
     return []
 
