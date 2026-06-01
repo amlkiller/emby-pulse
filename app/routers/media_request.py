@@ -1,4 +1,3 @@
-import requests  # 兼容测试/补丁挂钩，实际 Emby 请求已迁移到 media_api
 import json
 import time
 import re

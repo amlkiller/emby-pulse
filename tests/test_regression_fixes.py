@@ -110,8 +110,8 @@ def test_request_login_rejects_passwordless_emby_users(monkeypatch, is_admin):
     monkeypatch.setattr(media_request.media_api, "get", lambda *args, **kwargs: FakeMediaResponse())
     monkeypatch.setattr(media_request, "get_user_status_meta", lambda *args, **kwargs: None)
     monkeypatch.setattr(
-        media_request.requests,
-        "post",
+        media_request.media_api,
+        "authenticate_by_name",
         lambda *args, **kwargs: pytest.fail("无密码用户不应调用 Emby 密码认证接口"),
     )
 
