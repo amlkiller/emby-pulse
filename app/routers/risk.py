@@ -1,7 +1,6 @@
 from fastapi import APIRouter, HTTPException, Request
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 from pydantic import BaseModel
-import requests
 import json
 from app.core.config import cfg, save_config
 from app.dao.risk_dao import (
@@ -10,6 +9,7 @@ from app.dao.risk_dao import (
     list_risk_logs,
     list_top_risk_offenders,
 )
+from app.infra.clients.media_server_client import media_api
 from app.services.risk_service import ban_user, unban_user, log_risk_action, get_user_concurrent_limit
 from app.core.security_utils import safe_error_message
 
@@ -37,12 +37,10 @@ def get_online_status(request: Request):
     if not is_admin_user(request):
         return {"error": "需要管理员权限"}
     
-    host = cfg.get("emby_host", "").rstrip('/')
-    api_key = cfg.get("emby_api_key", "")
-    if not host or not api_key: return {"error": "未配置 Emby 服务器信息"}
+    if not media_api.host or not media_api.api_key: return {"error": "未配置 Emby 服务器信息"}
 
     try:
-        res = requests.get(f"{host}/emby/Sessions", headers={"X-Emby-Token": api_key}, timeout=10)
+        res = media_api.get("/Sessions", timeout=10)
         if res.status_code != 200: return {"error": "无法连接到 Emby"}
 
         sessions = res.json()
@@ -124,17 +122,13 @@ def api_kick_session(req: ActionRequest, request: Request):
     if not is_admin_user(request):
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
-    host = cfg.get("emby_host", "").rstrip('/')
-    api_key = cfg.get("emby_api_key", "")
-
     # 1. 发送常规 Stop 指令 (给官方客户端面子)
     if req.session_id:
-        requests.post(f"{host}/emby/Sessions/{req.session_id}/Playing/Stop", headers={"X-Emby-Token": api_key}, timeout=5)
+        media_api.post(f"/Sessions/{req.session_id}/Playing/Stop", timeout=5)
 
     # 2. 降维打击：直接删除设备登录凭证 (专门对付 Infuse 等第三方流氓客户端)
     if req.device_id:
-        delete_url = f"{host}/emby/Devices?Id={req.device_id}"
-        requests.delete(delete_url, headers={"X-Emby-Token": api_key}, timeout=5)
+        media_api.delete("/Devices", params={"Id": req.device_id}, timeout=5)
 
     log_risk_action(req.user_id, req.username, "kick", "强制注销设备Token并断开")
     return {"message": "已成功拔掉该设备的网线！"}
@@ -176,12 +170,10 @@ def get_user_status(user_id: str, request: Request):
         return {"error": "需要管理员权限"}
     
     try:
-        host = cfg.get("emby_host", "").rstrip('/')
-        api_key = cfg.get("emby_api_key", "")
-        if not host or not api_key:
+        if not media_api.host or not media_api.api_key:
             return {"error": "未配置 Emby 服务器信息"}
 
-        res = requests.get(f"{host}/emby/Users/{user_id}", headers={"X-Emby-Token": api_key}, timeout=5)
+        res = media_api.get(f"/Users/{user_id}", timeout=5)
         if res.status_code == 200:
             user_data = res.json()
             is_disabled = user_data.get("Policy", {}).get("IsDisabled", False)
