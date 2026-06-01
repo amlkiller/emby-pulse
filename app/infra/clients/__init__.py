@@ -5,6 +5,7 @@ from .media_server_client import MediaServerAdapter, media_api
 from .hdhive_client import HdhiveClient, hdhive_client
 from .hdhive_site_client import HdhiveSiteClient, hdhive_site_client
 from .moviepilot_client import MoviePilotClient, moviepilot_client
+from .ip_location_client import IpLocationClient, ip_location_client
 from .telegram_client import TelegramClient, telegram_client
 from .tmdb_client import TmdbClient, tmdb_client
 from .webdav_client import WebDavClient, webdav_client
@@ -21,6 +22,8 @@ __all__ = [
     "hdhive_site_client",
     "MoviePilotClient",
     "moviepilot_client",
+    "IpLocationClient",
+    "ip_location_client",
     "TelegramClient",
     "telegram_client",
     "TmdbClient",

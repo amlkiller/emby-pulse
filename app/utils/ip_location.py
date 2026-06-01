@@ -4,8 +4,8 @@ IP 归属地工具模块
 """
 import re
 import ipaddress
-import requests
 import logging
+from app.infra.clients.ip_location_client import ip_location_client
 
 logger = logging.getLogger("uvicorn")
 
@@ -70,12 +70,11 @@ def get_location(ip: str) -> str:
     # IPv6 地址尝试查询，失败则返回空（不显示错误位置）
     is_ipv6 = _is_ipv6(ip)
 
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
     loc = ""
 
     # API 1: open.ipw.cn
     try:
-        res = requests.get(f"https://open.ipw.cn/api/ip/location?ip={ip}", headers=headers, timeout=3)
+        res = ip_location_client.get_open_ipw_location(ip, timeout=3)
         if res.status_code == 200:
             d = res.json().get('data', {})
             if d.get('province') or d.get('city'):
@@ -90,7 +89,7 @@ def get_location(ip: str) -> str:
 
     # API 2: ip.zxinc.org (备用)
     try:
-        res = requests.get(f"https://ip.zxinc.org/api.php?type=json&ip={ip}", headers=headers, timeout=3)
+        res = ip_location_client.get_ip_zxinc_location(ip, timeout=3)
         if res.status_code == 200:
             d = res.json()
             if d.get('data', {}).get('location'):
@@ -106,7 +105,7 @@ def get_location(ip: str) -> str:
     # API 3: pconline (备用) - 仅对 IPv4 尝试
     if not is_ipv6:
         try:
-            res = requests.get(f"https://whois.pconline.com.cn/ipJson.jsp?ip={ip}&json=true", headers=headers, timeout=3)
+            res = ip_location_client.get_pconline_location(ip, timeout=3)
             if res.status_code == 200:
                 d = res.json()
                 if d.get('pro') or d.get('city'):
@@ -147,12 +146,11 @@ def get_isp(ip: str) -> str:
         _cleanup_ip_cache()
         return ""
 
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
     isp = ""
 
     # API 1: open.ipw.cn
     try:
-        res = requests.get(f"https://open.ipw.cn/api/ip/location?ip={ip}", headers=headers, timeout=3)
+        res = ip_location_client.get_open_ipw_location(ip, timeout=3)
         if res.status_code == 200:
             d = res.json().get('data', {})
             isp = d.get('isp', '') or d.get('org', '')
@@ -165,7 +163,7 @@ def get_isp(ip: str) -> str:
 
     # API 2: pconline
     try:
-        res = requests.get(f"https://whois.pconline.com.cn/ipJson.jsp?ip={ip}&json=true", headers=headers, timeout=3)
+        res = ip_location_client.get_pconline_location(ip, timeout=3)
         if res.status_code == 200:
             d = res.json()
             isp = d.get('isp', '') or d.get('addr', '')

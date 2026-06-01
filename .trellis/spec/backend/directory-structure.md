@@ -104,6 +104,7 @@ Use lowercase module names that describe the application responsibility:
 - Good: `app/plugins/user_backup/plugin.py` calls `webdav_client.request("PROPFIND", ...)` while keeping WebDAV XML parsing in the plugin.
 - Base: `app/routers/system.py` keeps user-facing TMDB error messages while calling `tmdb_client.get_configuration(...)`.
 - Bad: a plugin imports `requests` only to call `requests.get(...)` against a third-party service.
+- Good: `app/utils/ip_location.py` keeps cache and location cleaning locally while delegating all external IP lookup HTTP calls to `ip_location_client`.
 
 ### 6. Tests Required
 
