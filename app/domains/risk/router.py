@@ -20,7 +20,7 @@ from app.infra.config.risk_settings import (
     set_risk_sys_notification_enabled,
     set_violation_action,
 )
-from app.services.risk_service import ban_user, unban_user, log_risk_action, get_user_concurrent_limit
+from app.domains.risk.risk_service import ban_user, unban_user, log_risk_action, get_user_concurrent_limit
 from app.core.security_utils import safe_error_message
 
 router = APIRouter(prefix="/api/risk", tags=["RiskControl"])

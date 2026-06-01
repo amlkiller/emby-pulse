@@ -2319,7 +2319,7 @@ class NotificationBot:
 
         if data.startswith("risk_ban_"):
             uid = data.replace("risk_ban_", "")
-            from app.services.risk_service import ban_user, log_risk_action
+            from app.domains.risk.risk_service import ban_user, log_risk_action
             
             operator = cq.get('from', {}).get('first_name', 'Admin')
             target_username = self._get_username(uid) 
