@@ -553,7 +553,7 @@ class SystemDaemon:
             if item.get("Id"):
                 self.add_library_task(item)
                 if item.get("Type") == "Episode":
-                    from app.services.calendar_service import calendar_service
+                    from app.domains.playback.calendar_service import calendar_service
                     calendar_service.mark_episode_ready(item.get("SeriesId"), item.get("ParentIndexNumber"), item.get("IndexNumber"))
                     self._clear_gap_record_async(item)
         elif "playback.start" in event:

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Request, Depends
 from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
-from app.services.calendar_service import calendar_service
+from app.domains.playback.calendar_service import calendar_service
 from app.core.config import templates
 from app.infra.config.calendar_settings import get_calendar_public_url, set_calendar_cache_ttl
 from app.domains.users.auth import check_permission

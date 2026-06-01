@@ -132,7 +132,7 @@ def manual_send(request: Request):
 def get_today_updates():
     """获取今日更新的剧集列表"""
     try:
-        from app.services.calendar_service import calendar_service
+        from app.domains.playback.calendar_service import calendar_service
         
         # 获取本周日历数据
         data = calendar_service.get_weekly_calendar(force_refresh=False, week_offset=0)
