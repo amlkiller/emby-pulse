@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Request
 from typing import Optional
-from app.core.config import cfg
 from app.queries.stats_queries import build_stats_base_filter, get_playback_column_name, query_stats
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
 # 🔥 引入核心适配器
 from app.infra.clients.media_server_client import media_api
 from app.infra.clients.tmdb_client import tmdb_client
+from app.infra.config.stats_settings import get_dashboard_cache_ttl
+from app.infra.config.user_visibility_settings import get_hidden_users
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 import re
 import datetime
@@ -939,7 +940,7 @@ def api_top_users_list(request: Request, period: str = 'all'):
         res = query_stats(sql, params)
         if not res: return {"status": "success", "data": []}
         user_map = get_user_map_local()
-        hidden = cfg.get("hidden_users") or []
+        hidden = get_hidden_users()
         # 确保 hidden 中的值是字符串，以便比较
         hidden_str = [str(h) for h in hidden]
         data = []
@@ -1112,7 +1113,7 @@ _executor = ThreadPoolExecutor(max_workers=8)
 _DASHBOARD_PRELOAD_KEY = "admin:all"
 _dashboard_cache = {}
 _dashboard_cache_user_ids = {}
-_DASHBOARD_CACHE_TTL = int(cfg.get("dashboard_cache_ttl") or 300)  # 默认5分钟
+_DASHBOARD_CACHE_TTL = get_dashboard_cache_ttl()  # 默认5分钟
 _DASHBOARD_ACTIVE_WINDOW = 600
 _dashboard_last_access = {}
 _dashboard_refresh_lock = asyncio.Lock()
@@ -1187,7 +1188,7 @@ async def _fetch_users_list() -> list:
     try:
         res = media_api.get("/Users", timeout=3)
         if res.status_code == 200:
-            hidden = cfg.get("hidden_users") or []
+            hidden = get_hidden_users()
             return [
                 {"UserId": u['Id'], "UserName": u['Name'], "IsHidden": u['Id'] in hidden}
                 for u in res.json()
@@ -1227,7 +1228,7 @@ async def _fetch_top_users() -> list:
         sql = f"SELECT UserId, COUNT(*) as Plays, SUM(PlayDuration) as TotalTime FROM PlaybackActivity {where_base} GROUP BY UserId ORDER BY TotalTime DESC LIMIT 10"
         res_top = query_stats(sql, params_top)
         user_map = get_user_map_local()
-        hidden = cfg.get("hidden_users") or []
+        hidden = get_hidden_users()
         hidden_str = [str(h) for h in hidden]
         top_users = []
         for row in (res_top or []):

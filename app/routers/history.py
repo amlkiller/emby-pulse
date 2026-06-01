@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Request
 from typing import Optional
-from app.core.config import cfg
 # 🔥 引入核心适配器
 from app.infra.clients.media_server_client import media_api
+from app.infra.config.user_visibility_settings import get_hidden_users
 import math
 import ipaddress
 import time
@@ -112,7 +112,7 @@ def api_get_history(
         where_clauses = []
         params = []
 
-        hidden_users = cfg.get("hidden_users") or []
+        hidden_users = get_hidden_users()
         if hidden_users:
             placeholders = ','.join(['?'] * len(hidden_users))
             where_clauses.append(f"UserId NOT IN ({placeholders})")
@@ -269,7 +269,7 @@ def api_get_history_stats(request: Request):
         today_end = now.strftime("%Y-%m-%d 23:59:59")
 
         # 隐藏用户
-        hidden_users = cfg.get("hidden_users") or []
+        hidden_users = get_hidden_users()
 
         # 🔥 获取有效用户ID（过滤已删除用户）
         valid_user_ids = get_valid_user_ids()
