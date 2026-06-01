@@ -8,12 +8,12 @@ from app.infra.db.notification_dao import add_system_notification
 from app.infra.db.playback_filters import get_base_filter as _get_base_filter
 from app.infra.db.query_perf import get_query_perf_stats
 from app.infra.db.schema_bootstrap import ensure_registered_table
-from app.infra.db.schema_registry import SYSTEM_TABLES
+from app.infra.db.schema_registry import PLAYBACK_TABLES, SYSTEM_TABLES
 
 # 🔥 导出 SYSTEM_DB_PATH 供其他模块使用
 __all__ = ['init_db', 'get_base_filter', 'add_sys_notification',
            'DB_PATH', 'SYSTEM_DB_PATH', 'auto_migrate_system_db', 'get_db_connection',
-           'get_query_perf_stats']
+           'get_query_perf_stats', 'PLAYBACK_TABLES', 'SYSTEM_TABLES']
 
 # 🔥 统一数据库连接函数 - 解决 "database is locked" 问题
 def get_db_connection(db_path, timeout=30.0, enable_wal=True):

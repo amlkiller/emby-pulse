@@ -16,7 +16,7 @@ SYSTEM_TABLES = [
     "dedupe_config", "keep_alive_violations",
     "task_config", "task_translations", "tv_calendar_cache", "tg_reg_logs",
     "local_users", "msg_conversations", "msg_items", "msg_notify_block", "user_mutes",
-    "bot_notify_mutes", "user_audit_logs", "notify_rules"
+    "bot_notify_mutes", "user_audit_logs", "notify_rules", "calendar_notify_config"
 ]
 
 # 🔥 播放数据表（不迁移，保持原库读取）
@@ -204,6 +204,18 @@ TABLE_SCHEMAS = {
         channels TEXT DEFAULT '[]',
         enabled INTEGER DEFAULT 1,
         config TEXT DEFAULT '{}',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )""",
+
+    "calendar_notify_config": """CREATE TABLE IF NOT EXISTS calendar_notify_config (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        enabled INTEGER DEFAULT 0,
+        notify_time TEXT DEFAULT '09:00',
+        channels TEXT DEFAULT '["tg_bot"]',
+        tg_chat_id TEXT,
+        wecom_touser TEXT DEFAULT '@all',
+        last_sent TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )""",

@@ -441,6 +441,7 @@ tokens = list_api_tokens(user_id)
 - New local auth table DDL or local-user ALTER statements in `app.domains.users.auth_dao.ensure_local_users_table()` for registry-owned `local_users` -> fail focused auth local-users bootstrap/schema registry tests.
 - New local Pro license table DDL or license ALTER statements in `app.domains.system.pro_license_dao.ensure_pro_schema()` for registry-owned `sys_license` -> fail focused Pro license bootstrap/schema registry tests.
 - New local `CREATE TABLE IF NOT EXISTS users_meta` or `ALTER TABLE users_meta ADD COLUMN` in `app.infra.db.database`, `app.domains.users.user_dao`, `app.domains.media_requests.media_request_dao`, or `app.domains.points.point_dao` -> fail focused user-meta bootstrap/schema registry tests.
+- New local calendar-notify config table DDL in `app.domains.notifications.calendar_notify_dao.ensure_calendar_notify_config_table()` for registry-owned `calendar_notify_config` -> fail focused calendar-notify bootstrap/schema registry tests.
 - New cross-domain import solely to reuse a schema bootstrap helper -> fail architecture review; move the helper to `app.infra.db.schema_bootstrap` or another infra/shared boundary.
 - Need a new schema metadata value -> add/export it through `schema_registry`, then update focused tests.
 
@@ -459,6 +460,7 @@ tokens = list_api_tokens(user_id)
 - Good: `app.domains.system.pro_license_dao.ensure_pro_schema()` creates registry-owned `sys_license` from `TABLE_SCHEMAS`, applies `TABLE_ALTERS["sys_license"]`, and keeps nullable extension columns such as `max_devices` and `current_devices` compatible with existing inserts that write only license key, machine id, and status.
 - Good: `app.domains.users.user_dao.ensure_users_meta_schema()` uses `schema_bootstrap.ensure_registered_table(...)` for the registry-owned `users_meta` table and exposes only a guarded `ensure_users_meta_column()` for registered optional columns.
 - Good: `app.infra.db.database`, `app.domains.media_requests.media_request_dao`, and `app.domains.points.point_dao` use `schema_bootstrap.ensure_registered_table(...)` for `users_meta` instead of keeping local `users_meta` ALTER statements.
+- Good: `app.domains.notifications.calendar_notify_dao.ensure_calendar_notify_config_table()` uses `schema_bootstrap.ensure_registered_table(...)` for `calendar_notify_config` and keeps only the singleton default-row insert local.
 - Base: `app.core.db_schemas` temporarily re-exports values from `app.infra.db.schema_registry`.
 - Bad: `app.infra.db.db_manager` imports `TABLE_SCHEMAS` directly from `app.core.db_schemas`.
 - Bad: `repair_core_system_tables()` contains a second hand-written `CREATE TABLE IF NOT EXISTS media_requests (...)` definition.
@@ -480,6 +482,7 @@ tokens = list_api_tokens(user_id)
 - Focused auth local-users bootstrap test: run `ensure_local_users_table()` against a temporary database and assert registry-backed table creation, safe optional-column ALTER application, TOTP DAO smoke paths, and no local duplicate `local_users` DDL in the DAO source.
 - Focused Pro license bootstrap test: run `ensure_pro_schema()` against a temporary database and assert registry-backed table creation, safe optional-column ALTER application, preserved license row shape, existing Pro status payload compatibility, and no local duplicate `sys_license` DDL in the DAO source.
 - Focused user-meta bootstrap test: run `ensure_users_meta_schema()` against a temporary database and assert registry-backed table creation, safe optional-column ALTER application, admin-disabled migration backfill, selected DAO smoke paths, unregistered-column rejection, and no local duplicate `users_meta` DDL/ALTER in database/user/media-request/points bootstrap paths.
+- Focused calendar-notify bootstrap test: run `ensure_calendar_notify_config_table()` against a temporary database and assert registry-backed table creation, preserved default row, DAO save/mark-sent smoke paths, and no local duplicate `calendar_notify_config` DDL in the DAO source.
 - Compile/import check changed database modules with `uv run --with-requirements requirements.txt`.
 - Run the full pytest suite before completing a schema boundary batch.
 

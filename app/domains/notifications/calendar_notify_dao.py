@@ -1,22 +1,11 @@
+from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
 
 
 def ensure_calendar_notify_config_table() -> None:
     with system_store.connect() as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            """CREATE TABLE IF NOT EXISTS calendar_notify_config (
-                id INTEGER PRIMARY KEY CHECK (id = 1),
-                enabled INTEGER DEFAULT 0,
-                notify_time TEXT DEFAULT '09:00',
-                channels TEXT DEFAULT '["tg_bot"]',
-                tg_chat_id TEXT,
-                wecom_touser TEXT DEFAULT '@all',
-                last_sent TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )"""
-        )
+        ensure_registered_table(cursor, "calendar_notify_config")
         cursor.execute("INSERT OR IGNORE INTO calendar_notify_config (id, enabled) VALUES (1, 0)")
         conn.commit()
 
