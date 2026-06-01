@@ -48,6 +48,7 @@ from app.dao.auth_dao import (
     upsert_login_failure,
 )
 from app.core.config import cfg
+from app.infra.clients.media_server_client import media_api
 
 from app.core.security_utils import sanitize_html, safe_error_message
 from app.core.security import validate_password_strength
@@ -889,10 +890,7 @@ async def api_login(data: LoginModel, request: Request):
 
     try:
         # 获取所有用户
-        users_res = requests.get(
-            f"{emby_host}/Users?api_key={emby_key}",
-            timeout=10
-        )
+        users_res = media_api.get("/Users", timeout=10)
 
         if users_res.status_code != 200:
             return {"status": "error", "message": "Emby 服务器连接失败"}
@@ -934,13 +932,7 @@ async def api_login(data: LoginModel, request: Request):
             }
         if has_password:
             # 使用 Emby 认证接口验证密码
-            auth_url = f"{emby_host}/Users/AuthenticateByName"
-            auth_res = requests.post(
-                auth_url,
-                data={"Username": username, "Pw": password},
-                headers={"X-Emby-Authorization": f'MediaBrowser Client="EmbyPulse", Device="EmbyPulse", DeviceId="EmbyPulse", Version="1.0"'},
-                timeout=10
-            )
+            auth_res = media_api.authenticate_by_name(username, password, timeout=10)
             if auth_res.status_code != 200:
                 _record_login_failure(ip_key, "ip")
                 _record_login_failure(user_key, "user")
