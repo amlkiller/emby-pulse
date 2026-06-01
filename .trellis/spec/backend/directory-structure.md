@@ -120,9 +120,12 @@ Use lowercase module names that describe the application responsibility:
 routers. Add new domain routers there rather than recreating a top-level
 `app/routers/` module.
 
-`app/bootstrap/services.py` is the current startup orchestrator. New long-running
-domain services should expose idempotent start functions and, where practical,
-matching stop functions so lifespan shutdown can eventually become complete.
+`app/bootstrap/services.py` is the current startup orchestrator and should route
+startup through `app/bootstrap/service_registry.py`. New bootstrap-started
+services should be registered with a stable name, an idempotent start callback,
+and, where practical, a matching stop callback so lifespan shutdown can
+eventually become complete. Keep direct ad hoc `start_*()` calls out of
+`start_bootstrap_services()`; add them to the registry instead.
 
 ## Scenario: External Client Adapter Boundary
 

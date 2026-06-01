@@ -1,0 +1,106 @@
+import os
+import sys
+
+_repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _repo_root not in sys.path:
+    sys.path.insert(0, _repo_root)
+
+
+def test_registry_starts_once_and_stops_in_reverse_order():
+    from app.bootstrap.service_registry import BootstrapServiceRegistry
+
+    events = []
+    registry = BootstrapServiceRegistry()
+    registry.register("first", lambda: events.append("start:first"), lambda: events.append("stop:first"))
+    registry.register("second", lambda: events.append("start:second"), lambda: events.append("stop:second"))
+
+    registry.start_all()
+    registry.start_all()
+
+    assert events == ["start:first", "start:second"]
+    assert registry.started_names() == ["first", "second"]
+
+    registry.stop_all()
+
+    assert events == ["start:first", "start:second", "stop:second", "stop:first"]
+    assert registry.started_names() == []
+
+
+def test_registry_clears_started_state_when_stop_callback_raises():
+    from app.bootstrap.service_registry import BootstrapServiceRegistry
+
+    registry = BootstrapServiceRegistry()
+
+    def raise_on_stop():
+        raise RuntimeError("boom")
+
+    registry.register("service", lambda: None, raise_on_stop)
+    registry.start_all()
+
+    try:
+        registry.stop_all()
+    except RuntimeError:
+        pass
+
+    assert registry.started_names() == []
+
+
+def test_bootstrap_services_use_registry_and_skip_duplicate_starts(monkeypatch):
+    from app.bootstrap import services
+
+    services.reset_bootstrap_registry()
+    calls = []
+
+    def record(name):
+        return lambda: calls.append(name)
+
+    monkeypatch.setattr(services, "ensure_strong_webhook_token", record("webhook-token"))
+    monkeypatch.setattr(services, "audit_proxy_config", record("proxy-audit"))
+    monkeypatch.setattr(services, "start_notification_services", record("notifications"))
+    monkeypatch.setattr(services, "stop_notification_services", record("stop:notifications"))
+    monkeypatch.setattr(services, "start_user_portal_thread", lambda app, port: calls.append(f"user-portal:{port}"))
+    monkeypatch.setattr(services, "start_risk_monitor", record("risk-monitor"))
+    monkeypatch.setattr(services, "start_dashboard_cache_tasks", record("dashboard-cache"))
+    monkeypatch.setattr(services, "start_media_request_services", record("media-requests"))
+    monkeypatch.setattr(services, "start_calendar_service", record("calendar"))
+    monkeypatch.setattr(services, "start_notifications_router_services", record("notifications-router"))
+    monkeypatch.setattr(services, "start_calendar_notify_services", record("calendar-notify"))
+    monkeypatch.setattr(services, "start_dedupe_services", record("dedupe"))
+    monkeypatch.setattr(services, "start_gap_services", record("gaps"))
+    monkeypatch.setattr(services, "start_auth_domain_services", record("auth-domain"))
+    monkeypatch.setattr(services, "start_user_domain_services", record("user-domain"))
+    monkeypatch.setattr(services, "start_pro_services", record("pro-domain"))
+    monkeypatch.setattr(services, "start_system_task_services", record("system-tasks"))
+    monkeypatch.setattr(services, "start_audit_services", record("audit"))
+    monkeypatch.setattr(services, "start_session_services", record("session"))
+    monkeypatch.setattr(services, "print_startup_panel", lambda port: calls.append(f"startup-panel:{port}"))
+
+    services.start_bootstrap_services(object(), 10308)
+    services.start_bootstrap_services(object(), 10309)
+
+    assert calls == [
+        "webhook-token",
+        "proxy-audit",
+        "notifications",
+        "user-portal:10308",
+        "risk-monitor",
+        "dashboard-cache",
+        "media-requests",
+        "calendar",
+        "notifications-router",
+        "calendar-notify",
+        "dedupe",
+        "gaps",
+        "auth-domain",
+        "user-domain",
+        "pro-domain",
+        "system-tasks",
+        "audit",
+        "session",
+        "startup-panel:10308",
+    ]
+
+    services.stop_bootstrap_services()
+
+    assert calls[-1] == "stop:notifications"
+    services.reset_bootstrap_registry()

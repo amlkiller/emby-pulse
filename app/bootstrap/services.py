@@ -19,7 +19,11 @@ from app.core.audit_logger import start_audit_services
 from app.core.session import start_session_services
 from app.utils.proxy_helper import audit_existing_proxy_config
 
+from .service_registry import BootstrapServiceRegistry
 from .user_portal import start_user_portal_thread
+
+_bootstrap_registry = None
+
 
 def audit_proxy_config() -> None:
     try:
@@ -45,35 +49,58 @@ def print_startup_panel(request_port: int) -> None:
     print("=" * 55 + "\n")
 
 
-def start_bootstrap_services(app, request_port: int) -> None:
-    ensure_strong_webhook_token()
-    audit_proxy_config()
-
-    start_notification_services()
-    start_user_portal_thread(app, request_port)
-    start_risk_monitor()
-
+def start_dashboard_cache_tasks() -> None:
     from app.domains.playback.stats import start_dashboard_cache_tasks as playback_start_dashboard_cache_tasks
 
     playback_start_dashboard_cache_tasks()
-    start_media_request_services()
-    start_calendar_service()
-    start_notifications_router_services()
-    start_calendar_notify_services()
-    start_dedupe_services()
-    start_gap_services()
-    start_auth_domain_services()
-    start_user_domain_services()
-    start_pro_services()
-    start_system_task_services()
-    start_audit_services()
-    start_session_services()
-    print_startup_panel(request_port)
+
+
+def build_bootstrap_registry(app, request_port: int) -> BootstrapServiceRegistry:
+    registry = BootstrapServiceRegistry()
+    registry.register("webhook-token", ensure_strong_webhook_token)
+    registry.register("proxy-audit", audit_proxy_config)
+    registry.register("notifications", start_notification_services, stop_notification_services)
+    registry.register("user-portal", lambda: start_user_portal_thread(app, request_port))
+    registry.register("risk-monitor", start_risk_monitor)
+    registry.register("dashboard-cache", start_dashboard_cache_tasks)
+    registry.register("media-requests", start_media_request_services)
+    registry.register("calendar", start_calendar_service)
+    registry.register("notifications-router", start_notifications_router_services)
+    registry.register("calendar-notify", start_calendar_notify_services)
+    registry.register("dedupe", start_dedupe_services)
+    registry.register("gaps", start_gap_services)
+    registry.register("auth-domain", start_auth_domain_services)
+    registry.register("user-domain", start_user_domain_services)
+    registry.register("pro-domain", start_pro_services)
+    registry.register("system-tasks", start_system_task_services)
+    registry.register("audit", start_audit_services)
+    registry.register("session", start_session_services)
+    registry.register("startup-panel", lambda: print_startup_panel(request_port))
+    return registry
+
+
+def get_bootstrap_registry(app, request_port: int) -> BootstrapServiceRegistry:
+    global _bootstrap_registry
+    if _bootstrap_registry is None:
+        _bootstrap_registry = build_bootstrap_registry(app, request_port)
+    return _bootstrap_registry
+
+
+def reset_bootstrap_registry() -> None:
+    global _bootstrap_registry
+    _bootstrap_registry = None
+
+
+def start_bootstrap_services(app, request_port: int) -> None:
+    get_bootstrap_registry(app, request_port).start_all()
 
 
 def stop_bootstrap_services() -> None:
     print("\n" + "=" * 55)
     print("🛑 [系统关闭] 正在停止 EmbyPulse 服务...")
-    stop_notification_services()
+    registry = _bootstrap_registry
+    if registry is not None:
+        registry.stop_all()
+        reset_bootstrap_registry()
     print("💤 [系统关闭] 所有服务已安全退出。")
     print("=" * 55 + "\n")
