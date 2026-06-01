@@ -6,11 +6,11 @@ import time
 import logging
 import threading
 import datetime
-import requests
 from fastapi import Request
 from app.plugins.base import PluginBase
 from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
 from app.core.config import cfg
+from app.infra.clients.media_server_client import media_api
 from app.infra.clients.telegram_client import telegram_client
 from app.dao.keep_alive_dao import (
     count_keep_alive_disabled,
@@ -322,15 +322,14 @@ class KeepAlivePlugin(PluginBase):
                 import traceback
                 logger.error(traceback.format_exc())
 
-        host = cfg.get("emby_host"); key = cfg.get("emby_api_key")
-        if not host or not key:
+        if not media_api.host or not media_api.api_key:
             if manual:
                 return {"error": "未配置 Emby 主机或 API Key"}
             return
 
         # 获取所有 Emby 用户
         try:
-            res = requests.get(f"{host}/emby/Users?api_key={key}", timeout=10)
+            res = media_api.get("/Users", timeout=10)
             if res.status_code != 200:
                 if manual:
                     return {"error": f"获取用户列表失败: HTTP {res.status_code}"}
@@ -426,8 +425,7 @@ class KeepAlivePlugin(PluginBase):
                 was_disabled = False
                 if action == "disable":
                     try:
-                        requests.post(f"{host}/emby/Users/{uid}/Policy?api_key={key}",
-                                    json={"IsDisabled": True}, timeout=5)
+                        media_api.post(f"/Users/{uid}/Policy", json={"IsDisabled": True}, timeout=5)
                         was_disabled = True
                         disabled_users.append(uname)
                         violation["disabled"] = True
@@ -559,10 +557,8 @@ class KeepAlivePlugin(PluginBase):
             # 获取 Emby 用户当前状态（用于显示是否被禁用）
             emby_user_status = {}
             try:
-                host = cfg.get("emby_host")
-                key = cfg.get("emby_api_key")
-                if host and key:
-                    res = requests.get(f"{host}/emby/Users?api_key={key}", timeout=10)
+                if media_api.host and media_api.api_key:
+                    res = media_api.get("/Users", timeout=10)
                     if res.status_code == 200:
                         for u in res.json():
                             emby_user_status[u.get("Id")] = u.get("Policy", {}).get("IsDisabled", False)
@@ -610,18 +606,12 @@ class KeepAlivePlugin(PluginBase):
 
     def _unban_user(self, user_id, violation_id=None):
         """解禁用户"""
-        host = cfg.get("emby_host")
-        key = cfg.get("emby_api_key")
-        if not host or not key:
+        if not media_api.host or not media_api.api_key:
             return {"status": "error", "message": "未配置 Emby"}
 
         try:
             # 调用 Emby API 解禁
-            res = requests.post(
-                f"{host}/emby/Users/{user_id}/Policy?api_key={key}",
-                json={"IsDisabled": False},
-                timeout=5
-            )
+            res = media_api.post(f"/Users/{user_id}/Policy", json={"IsDisabled": False}, timeout=5)
             if res.status_code != 200 and res.status_code != 204:
                 return {"status": "error", "message": f"Emby API 返回 HTTP {res.status_code}"}
 
@@ -630,7 +620,7 @@ class KeepAlivePlugin(PluginBase):
                 update_keep_alive_violation_disabled(violation_id, False)
 
             # 获取用户名
-            user_res = requests.get(f"{host}/emby/Users/{user_id}?api_key={key}", timeout=5)
+            user_res = media_api.get(f"/Users/{user_id}", timeout=5)
             user_name = "未知用户"
             if user_res.status_code == 200:
                 user_name = user_res.json().get("Name", "未知用户")
