@@ -11,7 +11,7 @@ from app.infra.config.risk_settings import (
     is_risk_sys_notification_enabled,
 )
 from app.dao.notification_dao import add_system_notification
-from app.dao.risk_dao import (
+from app.domains.risk.risk_dao import (
     create_risk_log,
     get_tg_user_id_for_emby_user,
     get_user_concurrent_policy,

@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Request
 from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
 from pydantic import BaseModel
 import json
-from app.dao.risk_dao import (
+from app.domains.risk.risk_dao import (
     count_recent_risk_actions,
     count_vip_users,
     list_risk_logs,
