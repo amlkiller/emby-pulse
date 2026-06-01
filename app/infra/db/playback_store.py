@@ -3,8 +3,9 @@ import logging
 import os
 import sqlite3
 
-from app.core.config import DB_PATH, cfg
+from app.core.config import DB_PATH
 from app.infra.clients.media_server_client import media_api
+from app.infra.config.db_settings import get_playback_data_mode
 from app.infra.config.media_server_settings import (
     get_media_server_api_key,
     get_media_server_host,
@@ -64,7 +65,7 @@ class PlaybackStore:
         return self._query_sqlite(sql, params, one=one)
 
     def _use_api_mode(self) -> bool:
-        return cfg.get("playback_data_mode", "sqlite") == "api"
+        return get_playback_data_mode() == "api"
 
     def _query_api(self, sql: str, params, one: bool = False):
         host = get_media_server_host()

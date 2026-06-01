@@ -5,6 +5,12 @@ import os
 import secrets
 import logging
 
+from app.core.config import CONFIG_FILE
+from app.infra.config.bot_settings import get_tg_bot_token, get_webhook_token, set_webhook_token
+from app.infra.config.media_server_settings import get_media_server_api_key
+from app.infra.config.proxy_settings import get_proxy_url
+from app.infra.config.user_bot_settings import get_user_bot_token_or_empty
+
 logger = logging.getLogger("uvicorn")
 
 def generate_secure_token(length: int = 32) -> str:
@@ -14,14 +20,12 @@ def generate_secure_token(length: int = 32) -> str:
 
 def check_webhook_token():
     """检查 Webhook Token 是否为默认值"""
-    from app.core.config import cfg
-    
-    current_token = cfg.get("webhook_token", "")
+    current_token = get_webhook_token()
     default_tokens = ["embypulse", "emby", "test", "123456", "password", ""]
     
     if current_token in default_tokens:
         new_token = generate_secure_token(24)
-        cfg.set("webhook_token", new_token)
+        set_webhook_token(new_token)
         logger.warning("🔒 [安全] 检测到默认/空 Webhook Token，已自动生成安全 Token")
         logger.warning(f"   新 Token: {new_token[:8]}****{new_token[-8:]}")
         logger.warning("   请在 Emby Webhook 设置中更新此 Token")
@@ -31,8 +35,6 @@ def check_webhook_token():
 
 def check_config_file_permissions():
     """检查配置文件权限"""
-    from app.core.config import CONFIG_FILE
-    
     if not os.path.exists(CONFIG_FILE):
         return True
     
@@ -52,25 +54,23 @@ def check_config_file_permissions():
 
 def check_sensitive_tokens():
     """检查敏感 Token 是否配置"""
-    from app.core.config import cfg
-    
     warnings = []
     
     # 检查管理员机器人 Token
-    if cfg.get("tg_bot_token"):
-        token = cfg.get("tg_bot_token")
+    token = get_tg_bot_token() or ""
+    if token:
         if len(token) < 40 or ":" not in token:
             warnings.append("管理员机器人 Token 格式可能不正确")
     
     # 检查用户机器人 Token
-    if cfg.get("tg_user_bot_token"):
-        token = cfg.get("tg_user_bot_token")
+    token = get_user_bot_token_or_empty()
+    if token:
         if len(token) < 40 or ":" not in token:
             warnings.append("用户机器人 Token 格式可能不正确")
     
     # 检查 Emby API Key
-    if cfg.get("emby_api_key"):
-        key = cfg.get("emby_api_key")
+    key = get_media_server_api_key() or ""
+    if key:
         if len(key) < 32:
             warnings.append("Emby API Key 格式可能不正确")
     
@@ -82,9 +82,7 @@ def check_sensitive_tokens():
 
 def check_proxy_security():
     """检查代理配置安全性"""
-    from app.core.config import cfg
-    
-    proxy = cfg.get("proxy_url", "")
+    proxy = get_proxy_url()
     
     if proxy:
         # 检查是否使用 HTTP 代理（不安全）

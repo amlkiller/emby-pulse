@@ -29,6 +29,10 @@ def get_webhook_token() -> str:
     return cfg.get("webhook_token", "")
 
 
+def set_webhook_token(value: str) -> None:
+    cfg.set("webhook_token", value)
+
+
 def get_tg_bot_token() -> str:
     return cfg.get("tg_bot_token", "")
 

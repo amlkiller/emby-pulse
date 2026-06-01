@@ -5,8 +5,10 @@ import threading
 import time
 from contextlib import asynccontextmanager
 
-from app.core.config import PORT, cfg
+from app.core.config import PORT
 from app.core.session import cleanup_expired_sessions
+from app.infra.config.bot_settings import get_webhook_token, set_webhook_token
+from app.infra.config.user_bot_settings import get_user_bot_token
 from app.services.bot_service import bot
 from app.services.risk_service import start_risk_monitor
 from app.services.user_bot_service import user_bot
@@ -16,9 +18,9 @@ from .user_portal import start_user_portal_server
 
 def _ensure_webhook_token() -> None:
     weak_tokens = {"embypulse", "emby", "test", "123456", "password", ""}
-    if cfg.get("webhook_token") in weak_tokens:
+    if get_webhook_token() in weak_tokens:
         new_token = secrets.token_urlsafe(32)
-        cfg.set("webhook_token", new_token)
+        set_webhook_token(new_token)
         logging.getLogger("uvicorn").warning("[安全] Webhook Token 已自动生成（原为弱 token），请更新 Emby Webhook 配置")
 
 
@@ -33,7 +35,7 @@ def _audit_proxy_config() -> None:
 
 def _start_user_bot_if_configured() -> None:
     try:
-        if cfg.get("tg_user_bot_token"):
+        if get_user_bot_token():
             user_bot.start()
     except Exception as e:
         print(f"⚠️ 用户机器人启动异常: {e}")
@@ -122,4 +124,3 @@ def build_lifespan(request_port: int):
         print("=" * 55 + "\n")
 
     return lifespan
-

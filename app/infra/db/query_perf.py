@@ -2,7 +2,7 @@ import datetime
 import logging
 from collections import deque
 
-from app.core.config import cfg
+from app.infra.config.db_settings import get_slow_query_ms
 
 logger = logging.getLogger("uvicorn")
 
@@ -14,14 +14,6 @@ _query_stats = {
     "large_result": 0,
 }
 
-
-def _get_slow_query_ms() -> int:
-    try:
-        return int(cfg.get("slow_query_ms") or 800)
-    except Exception:
-        return 800
-
-
 def record_query_perf(query: str, elapsed_ms: float, row_count: int = 0) -> None:
     _query_stats["total"] += 1
     if query.strip().upper().startswith("SELECT"):
@@ -29,7 +21,7 @@ def record_query_perf(query: str, elapsed_ms: float, row_count: int = 0) -> None
     if row_count >= 1000:
         _query_stats["large_result"] += 1
 
-    slow_ms = _get_slow_query_ms()
+    slow_ms = get_slow_query_ms()
     if elapsed_ms >= slow_ms:
         _query_stats["slow"] += 1
         normalized = " ".join(query.strip().split())
@@ -47,6 +39,6 @@ def record_query_perf(query: str, elapsed_ms: float, row_count: int = 0) -> None
 def get_query_perf_stats():
     return {
         **_query_stats,
-        "slow_query_ms": _get_slow_query_ms(),
+        "slow_query_ms": get_slow_query_ms(),
         "recent_slow_queries": list(_slow_queries),
     }
