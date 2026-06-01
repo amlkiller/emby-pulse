@@ -21,9 +21,6 @@ def ensure_notify_rules_table():
     """确保 notify_rules 表存在"""
     ensure_notify_rules_table_data()
 
-# 启动时确保表存在
-ensure_notify_rules_table()
-
 # ==================== 通知规则读取函数 ====================
 def get_notify_rule(notify_type: str) -> dict:
     """获取单个通知类型的规则配置，供其他模块调用"""

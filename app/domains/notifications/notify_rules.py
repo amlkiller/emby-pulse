@@ -17,8 +17,9 @@ def _ensure_bot_notify_mutes_table():
     except Exception as e:
         print(f"[降噪管理] 创建表失败: {e}")
 
-# 模块加载时确保表存在
-_ensure_bot_notify_mutes_table()
+
+def start_notify_rules_services():
+    _ensure_bot_notify_mutes_table()
 
 @router.get("/users")
 async def get_emby_users(request: Request):

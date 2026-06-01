@@ -3325,6 +3325,11 @@ bot = EmbyPulseOrchestrator()
 
 def start_notification_services() -> None:
     init_notify_rules_db()
+    from app.domains.notifications.notify_admin import ensure_notify_rules_table
+    from app.domains.notifications.notify_rules import start_notify_rules_services
+
+    ensure_notify_rules_table()
+    start_notify_rules_services()
     bot.start()
 
     try:
