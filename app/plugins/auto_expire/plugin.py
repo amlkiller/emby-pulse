@@ -6,11 +6,10 @@ import time
 import logging
 import threading
 import datetime
-import requests
 from fastapi import Request
 from app.plugins.base import PluginBase
 from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
-from app.core.config import cfg
+from app.infra.clients.media_server_client import media_api
 from app.dao.user_dao import delete_user_meta_many, get_user_display_name, list_user_ids_with_expire_date, list_users_with_expire_date
 from app.dao.user_bot_dao import get_tg_user_id_by_emby_id
 
@@ -105,13 +104,11 @@ class AutoExpirePlugin(PluginBase):
             if not is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             try:
-                host = cfg.get("emby_host")
-                key = cfg.get("emby_api_key")
-                if not host or not key:
+                if not media_api.host or not media_api.api_key:
                     return {"status": "error", "message": "Emby API 未配置"}
 
                 # 获取 Emby 中所有用户 ID
-                emby_users = self._get_all_emby_users(key, host)
+                emby_users = self._get_all_emby_users()
                 emby_user_ids = set(emby_users.keys())
 
                 # 获取 users_meta 中有过期日期的用户
@@ -188,8 +185,7 @@ class AutoExpirePlugin(PluginBase):
         remind_days = int(config.get("remind_days") or 3)
         notify_admin = config.get("notify_admin") in [True, "true", "1", 1]
 
-        host = cfg.get("emby_host"); key = cfg.get("emby_api_key")
-        if not host or not key:
+        if not media_api.host or not media_api.api_key:
             if manual:
                 return {"error": "Emby API 未配置"}
             return
@@ -201,7 +197,7 @@ class AutoExpirePlugin(PluginBase):
             return
 
         # 批量获取 Emby 用户信息，避免逐个调用 API
-        emby_users = self._get_all_emby_users(key, host) if key and host else {}
+        emby_users = self._get_all_emby_users()
 
         today = datetime.date.today()
         today_str = today.strftime("%Y-%m-%d")
@@ -259,15 +255,12 @@ class AutoExpirePlugin(PluginBase):
 
     def _get_expiring_users(self, days: int = 7):
         """获取即将到期的用户列表（用于面板展示）"""
-        host = cfg.get("emby_host")
-        key = cfg.get("emby_api_key")
-        
         users = list_users_with_expire_date()
         if not users:
             return []
 
         # 批量获取 Emby 用户信息
-        emby_users = self._get_all_emby_users(key, host) if key and host else {}
+        emby_users = self._get_all_emby_users() if media_api.host and media_api.api_key else {}
 
         today = datetime.date.today()
         today_str = today.strftime("%Y-%m-%d")
@@ -337,11 +330,11 @@ class AutoExpirePlugin(PluginBase):
         except Exception as e:
             print(f"[到期提醒] ❌ 发送用户提醒失败: {e}")
 
-    def _get_all_emby_users(self, key, host):
+    def _get_all_emby_users(self):
         """批量获取 Emby 用户信息，建立 ID -> Name 的映射"""
         users_map = {}
         try:
-            res = requests.get(f"{host}/emby/Users?api_key={key}", timeout=10)
+            res = media_api.get("/Users", timeout=10)
             if res.status_code == 200:
                 for u in res.json():
                     users_map[u.get("Id")] = u.get("Name", u.get("Id"))
