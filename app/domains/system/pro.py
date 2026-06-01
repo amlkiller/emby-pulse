@@ -2,7 +2,7 @@ import logging
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 from app.dao.notification_dao import add_system_notification
-from app.dao.pro_license_dao import (
+from app.domains.system.pro_license_dao import (
     ensure_pro_schema as ensure_pro_schema_data,
     get_license_status,
     replace_license,
