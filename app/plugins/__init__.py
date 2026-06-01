@@ -7,7 +7,7 @@ import importlib
 import logging
 from typing import Dict, List, Optional
 from app.plugins.base import PluginBase, _config_cache, _config_cache_lock
-from app.dao import plugin_dao
+from app.plugins import plugin_dao
 
 logger = logging.getLogger("uvicorn")
 

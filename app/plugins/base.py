@@ -1,7 +1,7 @@
 import threading
 import logging
 from fastapi import APIRouter, Request, HTTPException, Depends
-from app.dao import plugin_dao
+from app.plugins import plugin_dao
 
 logger = logging.getLogger("uvicorn")
 
