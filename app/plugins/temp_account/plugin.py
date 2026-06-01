@@ -12,10 +12,12 @@ import json
 from fastapi import Request
 from app.plugins.base import PluginBase
 from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
-from app.core.config import cfg
 from app.infra.clients.media_server_client import media_api
 from app.infra.clients.telegram_client import telegram_client
 from app.infra.clients.wecom_client import wecom_client
+from app.infra.config.media_server_settings import get_media_server_routes
+from app.infra.config.notification_settings import get_wecom_runtime_config
+from app.infra.config.bot_settings import get_tg_bot_token, get_tg_chat_id
 from app.dao.temp_account_dao import (
     create_temp_account_with_meta,
     delete_temp_account_record,
@@ -378,7 +380,7 @@ class TempAccountPlugin(PluginBase):
                 return {"status": "error", "message": "需要管理员权限"}
             try:
                 # 使用系统配置的线路列表
-                all_routes = cfg.get_all_routes()
+                all_routes = get_media_server_routes()
                 routes = [{"id": r.get("name", ""), "name": r.get("name", ""), "url": r.get("url", "")} for r in all_routes if r.get("name")]
                 return {"status": "success", "data": routes}
             except Exception as e:
@@ -805,8 +807,8 @@ class TempAccountPlugin(PluginBase):
         """发送 TG 通知（使用系统配置）"""
         try:
             # 使用系统 TG 机器人配置
-            bot_token = cfg.get("tg_bot_token", "")
-            chat_id = cfg.get("tg_chat_id", "")
+            bot_token = get_tg_bot_token()
+            chat_id = get_tg_chat_id()
             
             if not bot_token or not chat_id:
                 logger.warning("[临时账号] TG 机器人未配置")
@@ -830,9 +832,10 @@ class TempAccountPlugin(PluginBase):
         """发送企业微信通知（使用系统配置）"""
         try:
             # 使用系统企微配置
-            corpid = cfg.get("wecom_corpid", "")
-            corpsecret = cfg.get("wecom_corpsecret", "")
-            agentid = cfg.get("wecom_agentid", "")
+            wecom_cfg = get_wecom_runtime_config()
+            corpid = wecom_cfg["corpid"]
+            corpsecret = wecom_cfg["corpsecret"]
+            agentid = wecom_cfg["agentid"]
             
             if not corpid or not corpsecret or not agentid:
                 logger.warning("[临时账号] 企业微信未配置")
@@ -852,7 +855,7 @@ class TempAccountPlugin(PluginBase):
                 return False
             
             # 发送消息
-            touser = cfg.get("wecom_touser", "@all")
+            touser = wecom_cfg["touser"]
             if action == "账号创建成功":
                 message = f"🎉 临时账号创建成功\n\n用户名: {username}\n密码: {password}\n\n创建时间: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
             else:

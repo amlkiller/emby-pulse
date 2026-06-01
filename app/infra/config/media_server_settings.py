@@ -17,6 +17,10 @@ def get_media_server_external_url() -> str:
     return cfg.get("emby_external_url") or ""
 
 
+def get_media_server_routes() -> list:
+    return cfg.get_all_routes()
+
+
 def get_media_server_api_key() -> str:
     return cfg.get("emby_api_key", "")
 
