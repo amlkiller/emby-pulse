@@ -9,6 +9,7 @@ from app.dao import user_bot_dao
 from app.infra.clients.media_server_client import media_api
 from app.infra.clients.network_client import network_client
 from app.infra.config.request_portal_settings import get_user_portal_url
+from app.infra.config.user_visibility_settings import get_hidden_users
 
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 from app.core.security import validate_password_strength  # 🔒 统一密码强度校验
@@ -1657,7 +1658,7 @@ def api_get_users(request: Request):
     try:
         res = media_api.get("/Users", timeout=5)
         if res.status_code == 200:
-            hidden = cfg.get("hidden_users") or []
+            hidden = get_hidden_users()
             data = [{"UserId": u['Id'], "UserName": u['Name'], "IsHidden": u['Id'] in hidden} for u in res.json()]
             data.sort(key=lambda x: x['UserName'])
             return {"status": "success", "data": data}

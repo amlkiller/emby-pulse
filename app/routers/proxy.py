@@ -2,10 +2,10 @@ from fastapi import APIRouter, Response, Request, Depends, HTTPException
 from fastapi.responses import RedirectResponse, FileResponse, StreamingResponse
 from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
 from app.core.security import require_login, require_any_login, is_admin_session  # 🔒 统一登录依赖
-from app.core.config import cfg
 from app.infra.clients.tmdb_client import tmdb_client
 from app.infra.clients.media_server_client import media_api  # 🔥 引入媒体服务器客户端
 from app.infra.clients.image_proxy_client import image_proxy_client
+from app.infra.config.image_proxy_settings import get_image_proxy_max_bytes
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
 import logging
 import re
@@ -37,10 +37,7 @@ IMAGE_CACHE_MAX_AGE = 86400 * 7  # 7天过期
 IMAGE_CACHE_MAX_SIZE = 500 * 1024 * 1024  # 最大 500MB
 
 def _image_max_bytes() -> int:
-    try:
-        return int(cfg.get("image_proxy_max_bytes") or 10 * 1024 * 1024)
-    except Exception:
-        return 10 * 1024 * 1024
+    return get_image_proxy_max_bytes()
 
 def ensure_cache_dir():
     """确保缓存目录存在"""
