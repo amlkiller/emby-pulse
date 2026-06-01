@@ -1,5 +1,4 @@
 from fastapi import APIRouter, BackgroundTasks, Request
-import requests
 import threading
 import concurrent.futures
 from datetime import datetime
@@ -35,6 +34,8 @@ from app.routers.auth import is_admin_user
 # 🔥 引入核心适配器
 from app.infra.clients.media_server_client import media_api
 from app.infra.clients.moviepilot_client import moviepilot_client
+from app.infra.clients.qbittorrent_client import qbittorrent_client
+from app.infra.clients.transmission_client import transmission_client
 from app.infra.clients.tmdb_client import tmdb_client
 
 logger = logging.getLogger("uvicorn")
@@ -1028,8 +1029,8 @@ def hook_qbittorrent(host, user, password, expected_size, target_episodes, torre
     import logging
     logger = logging.getLogger("uvicorn")
     try:
-        s = requests.Session()
-        login = s.post(f"{host.rstrip('/')}/api/v2/auth/login", data={"username": user, "password": password}, timeout=10)
+        s = qbittorrent_client.create_session()
+        login = qbittorrent_client.login(s, host, user, password, timeout=10)
         if login.status_code != 200 or "Ok" not in login.text:
             logger.error(f"[QB截胡] 登录失败: status={login.status_code}, response={login.text[:100]}")
             return False, "qBittorrent 登录失败"
@@ -1041,7 +1042,7 @@ def hook_qbittorrent(host, user, password, expected_size, target_episodes, torre
         
         for attempt in range(20):
             time.sleep(3)
-            res = s.get(f"{host.rstrip('/')}/api/v2/torrents/info?filter=all&sort=added_on&reverse=true", timeout=10)
+            res = qbittorrent_client.list_torrents(s, host, timeout=10)
             if res.status_code != 200:
                 logger.warning(f"[QB截胡] 获取种子列表失败: status={res.status_code}")
                 continue
@@ -1093,7 +1094,7 @@ def hook_qbittorrent(host, user, password, expected_size, target_episodes, torre
             return False, "轮询 60 秒超时：未找到匹配的种子"
         
         # 获取文件列表
-        f_res = s.get(f"{host.rstrip('/')}/api/v2/torrents/files?hash={target_hash}", timeout=10)
+        f_res = qbittorrent_client.list_files(s, host, target_hash, timeout=10)
         if f_res.status_code != 200:
             logger.error(f"[QB截胡] 获取文件列表失败: status={f_res.status_code}")
             return False, f"获取种子文件列表失败 (HTTP {f_res.status_code})"
@@ -1154,13 +1155,15 @@ def hook_qbittorrent(host, user, password, expected_size, target_episodes, torre
         # 注意：priority=0 表示"不下载"，priority=1 表示"正常下载"
         try:
             if unwanted:
-                prio_res = s.post(f"{host.rstrip('/')}/api/v2/torrents/filePrio", 
-                    data={"hash": target_hash, "id": "|".join(unwanted), "priority": 0}, timeout=10)
+                prio_res = qbittorrent_client.set_file_priority(
+                    s, host, target_hash, "|".join(unwanted), 0, timeout=10
+                )
                 logger.info(f"[QB截胡] 设置不下载文件: {unwanted}, 响应: {prio_res.status_code}")
             
             if wanted:
-                prio_res = s.post(f"{host.rstrip('/')}/api/v2/torrents/filePrio", 
-                    data={"hash": target_hash, "id": "|".join(wanted), "priority": 1}, timeout=10)
+                prio_res = qbittorrent_client.set_file_priority(
+                    s, host, target_hash, "|".join(wanted), 1, timeout=10
+                )
                 logger.info(f"[QB截胡] 设置下载文件: {wanted}, 响应: {prio_res.status_code}")
             
             return True, f"🔪 截胡成功！保留 {len(wanted)} 个目标文件，跳过 {len(unwanted)} 个多余文件"
@@ -1169,10 +1172,10 @@ def hook_qbittorrent(host, user, password, expected_size, target_episodes, torre
             logger.error(f"[QB截胡] 设置文件优先级失败: {e}")
             return False, safe_error_message(e, "设置文件优先级失败")
             
-    except requests.exceptions.Timeout:
+    except qbittorrent_client.Timeout:
         logger.error("[QB截胡] 连接超时")
         return False, "qBittorrent 连接超时，请检查网络"
-    except requests.exceptions.ConnectionError:
+    except qbittorrent_client.ConnectionError:
         logger.error("[QB截胡] 连接失败")
         return False, "qBittorrent 连接失败，请检查地址是否正确"
     except Exception as e:
@@ -1181,10 +1184,9 @@ def hook_qbittorrent(host, user, password, expected_size, target_episodes, torre
 
 def hook_transmission(host, user, password, expected_size, target_episodes):
     try:
-        rpc_url = f"{host.rstrip('/')}/transmission/rpc"
         auth = (user, password) if user else None
-        s = requests.Session()
-        res = s.post(rpc_url, auth=auth, timeout=10)
+        s = transmission_client.create_session()
+        res = transmission_client.handshake(s, host, auth=auth, timeout=10)
         session_id = res.headers.get('X-Transmission-Session-Id')
         if not session_id: return False, "Transmission 认证失败"
         s.headers.update({'X-Transmission-Session-Id': session_id})
@@ -1192,7 +1194,7 @@ def hook_transmission(host, user, password, expected_size, target_episodes):
         for attempt in range(20):
             time.sleep(3)
             payload = {"method": "torrent-get", "arguments": {"fields": ["id", "addedDate", "totalSize", "files"]}}
-            r = s.post(rpc_url, json=payload, auth=auth, timeout=10)
+            r = transmission_client.torrent_get(s, host, payload, auth=auth, timeout=10)
             if r.status_code == 200:
                 torrents = r.json().get("arguments", {}).get("torrents", [])
                 for t in torrents:
@@ -1212,7 +1214,7 @@ def hook_transmission(host, user, password, expected_size, target_episodes):
                 set_payload = {"method": "torrent-set", "arguments": {"id": target_id}}
                 if unwanted: set_payload["arguments"]["files-unwanted"] = unwanted
                 if wanted: set_payload["arguments"]["files-wanted"] = wanted
-                s.post(rpc_url, json=set_payload, auth=auth, timeout=10)
+                transmission_client.torrent_get(s, host, set_payload, auth=auth, timeout=10)
                 return True, f"🔪 TR 截胡成功！保留 {len(wanted)} 集，剔除 {len(unwanted)} 个文件"
         return False, "轮询 60 秒超时：未锁定种子"
     except Exception as e: return False, safe_error_message(e, "TR 交互异常")
