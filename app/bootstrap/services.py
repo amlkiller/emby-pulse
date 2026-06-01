@@ -5,7 +5,7 @@ from app.domains.notifications.bot_service import (
     stop_notification_services,
 )
 from app.domains.risk.risk_service import start_risk_monitor
-from app.domains.system.tasks import start_task_poller
+from app.domains.system.tasks import start_system_task_services
 from app.core.session import start_session_cleanup_loop
 from app.utils.proxy_helper import audit_existing_proxy_config
 
@@ -48,7 +48,7 @@ def start_bootstrap_services(app, request_port: int) -> None:
 
     playback_start_dashboard_cache_tasks()
     start_community_cache_refresh_loop()
-    start_task_poller()
+    start_system_task_services()
     start_session_cleanup_loop()
     print_startup_panel(request_port)
 

@@ -109,8 +109,6 @@ def init_task_config_defaults():
         ensure_task_config_defaults()
     except Exception as e: pass
 
-init_task_config_defaults()
-
 class TaskConfigModel(BaseModel):
     enable_notify: bool
 
@@ -201,6 +199,11 @@ def start_task_poller():
     except RuntimeError:
         return
     _poller_task = loop.create_task(poll_emby_tasks())
+
+
+def start_system_task_services():
+    init_task_config_defaults()
+    start_task_poller()
 
 
 # ==========================================
