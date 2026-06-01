@@ -1,5 +1,7 @@
+import sqlite3
 from typing import Optional
 
+from app.infra.db.schema_registry import TABLE_ALTERS, TABLE_SCHEMAS
 from app.infra.db.system_store import system_store
 
 
@@ -44,46 +46,20 @@ def cleanup_expired_login_locks() -> int:
     return system_store.execute("DELETE FROM login_failures WHERE locked_until IS NOT NULL AND locked_until < CURRENT_TIMESTAMP")
 
 
+def _apply_table_alters(cursor, table_name: str) -> None:
+    for alter_sql in TABLE_ALTERS.get(table_name, []):
+        try:
+            cursor.execute(alter_sql)
+        except sqlite3.OperationalError as exc:
+            if "duplicate column name" not in str(exc).lower():
+                raise
+
+
 def ensure_local_users_table() -> None:
     with system_store.connect() as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            """CREATE TABLE IF NOT EXISTS local_users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                password_hash TEXT NOT NULL,
-                role TEXT DEFAULT 'admin',
-                remark TEXT DEFAULT '',
-                avatar TEXT DEFAULT '',
-                is_enabled INTEGER DEFAULT 1,
-                permissions TEXT DEFAULT '[]',
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                last_login_at DATETIME,
-                last_login_ip TEXT
-            )"""
-        )
-        cursor.execute("PRAGMA table_info(local_users)")
-        columns = [row[1] for row in cursor.fetchall()]
-        migrations = {
-            "username": "ALTER TABLE local_users ADD COLUMN username TEXT UNIQUE NOT NULL",
-            "password_hash": "ALTER TABLE local_users ADD COLUMN password_hash TEXT NOT NULL",
-            "role": "ALTER TABLE local_users ADD COLUMN role TEXT DEFAULT 'admin'",
-            "remark": "ALTER TABLE local_users ADD COLUMN remark TEXT DEFAULT ''",
-            "avatar": "ALTER TABLE local_users ADD COLUMN avatar TEXT DEFAULT ''",
-            "is_enabled": "ALTER TABLE local_users ADD COLUMN is_enabled INTEGER DEFAULT 1",
-            "permissions": "ALTER TABLE local_users ADD COLUMN permissions TEXT DEFAULT '[]'",
-            "created_at": "ALTER TABLE local_users ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
-            "updated_at": "ALTER TABLE local_users ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP",
-            "last_login_at": "ALTER TABLE local_users ADD COLUMN last_login_at DATETIME",
-            "last_login_ip": "ALTER TABLE local_users ADD COLUMN last_login_ip TEXT",
-            "totp_secret": "ALTER TABLE local_users ADD COLUMN totp_secret TEXT DEFAULT ''",
-            "totp_enabled": "ALTER TABLE local_users ADD COLUMN totp_enabled INTEGER DEFAULT 0",
-            "totp_pending_secret": "ALTER TABLE local_users ADD COLUMN totp_pending_secret TEXT DEFAULT ''",
-        }
-        for column, sql in migrations.items():
-            if column not in columns:
-                cursor.execute(sql)
+        cursor.execute(TABLE_SCHEMAS["local_users"])
+        _apply_table_alters(cursor, "local_users")
         conn.commit()
 
 

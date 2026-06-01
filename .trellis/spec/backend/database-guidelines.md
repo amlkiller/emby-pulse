@@ -434,6 +434,7 @@ tokens = list_api_tokens(user_id)
 - New local dedupe table DDL or dedupe ALTER map in `app.domains.playback.dedupe_dao.init_dedupe_tables()` for registry-owned `dedupe_*` tables -> fail focused dedupe bootstrap/schema registry tests.
 - New local notification/message table DDL in selected bootstrap helpers for registry-owned `request_admin_messages`, `bot_notify_mutes`, `notify_rules`, `msg_*`, or `user_mutes` tables -> fail focused notification bootstrap/schema registry tests.
 - New local user-bot table DDL or user-binding ALTER statements in `app.domains.users.user_bot_dao.ensure_user_bot_tables()` for registry-owned `tg_user_bindings`, `tg_user_blacklist`, or `tg_reg_logs` -> fail focused user-bot bootstrap/schema registry tests.
+- New local auth table DDL or local-user ALTER statements in `app.domains.users.auth_dao.ensure_local_users_table()` for registry-owned `local_users` -> fail focused auth local-users bootstrap/schema registry tests.
 - Need a new schema metadata value -> add/export it through `schema_registry`, then update focused tests.
 
 ### 5. Good/Base/Bad Cases
@@ -447,6 +448,7 @@ tokens = list_api_tokens(user_id)
 - Good: `app.domains.playback.dedupe_dao.init_dedupe_tables()` creates registry-owned `dedupe_*` tables from `TABLE_SCHEMAS`, applies `TABLE_ALTERS`, and keeps only the legacy whitelist data-copy migration logic local.
 - Good: small notification/message bootstrap helpers create registry-owned request-admin, notify-rule, bot-mute, message, notify-block, and user-mute tables from `TABLE_SCHEMAS`, while keeping non-table extras such as indexes local.
 - Good: `app.domains.users.user_bot_dao.ensure_user_bot_tables()` creates registry-owned Telegram binding, blacklist, and registration-log tables from `TABLE_SCHEMAS`, applies `TABLE_ALTERS["tg_user_bindings"]`, and keeps unregistered helper tables such as `tg_bot_users` and `tg_channel_bindings` local until they are explicitly registered.
+- Good: `app.domains.users.auth_dao.ensure_local_users_table()` creates registry-owned `local_users` from `TABLE_SCHEMAS`, applies only safe optional-column entries from `TABLE_ALTERS["local_users"]`, and leaves unsafe legacy repairs such as adding `UNIQUE NOT NULL` identity columns out of generic ALTER metadata.
 - Base: `app.core.db_schemas` temporarily re-exports values from `app.infra.db.schema_registry`.
 - Bad: `app.infra.db.db_manager` imports `TABLE_SCHEMAS` directly from `app.core.db_schemas`.
 - Bad: `repair_core_system_tables()` contains a second hand-written `CREATE TABLE IF NOT EXISTS media_requests (...)` definition.
@@ -464,6 +466,7 @@ tokens = list_api_tokens(user_id)
 - Focused dedupe bootstrap test: run `init_dedupe_tables()` against a temporary database and assert registry-backed table creation, registered `dedupe_results` / `dedupe_whitelist` ALTER application, legacy `dedupe_whitelist` migration, and no local duplicate dedupe table DDL or ALTER map in the DAO source.
 - Focused notification bootstrap test: run selected notification/message bootstrap helpers against a temporary database and assert registry-backed table creation, preserved request-admin-message index creation, excluded announcement table behavior, and no local duplicate registry-owned table DDL in the DAO source.
 - Focused user-bot bootstrap test: run `ensure_user_bot_tables()` against a temporary database and assert registry-backed table creation, registered `tg_user_bindings` ALTER application, preserved legacy binding rows, DAO username/display-name smoke paths, local creation of unregistered helper tables, and no local duplicate registry-owned table DDL in the DAO source.
+- Focused auth local-users bootstrap test: run `ensure_local_users_table()` against a temporary database and assert registry-backed table creation, safe optional-column ALTER application, TOTP DAO smoke paths, and no local duplicate `local_users` DDL in the DAO source.
 - Compile/import check changed database modules with `uv run --with-requirements requirements.txt`.
 - Run the full pytest suite before completing a schema boundary batch.
 

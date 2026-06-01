@@ -347,7 +347,10 @@ TABLE_SCHEMAS = {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         last_login_at DATETIME,
-        last_login_ip TEXT
+        last_login_ip TEXT,
+        totp_secret TEXT DEFAULT '',
+        totp_enabled INTEGER DEFAULT 0,
+        totp_pending_secret TEXT DEFAULT ''
     )""",
 
     # ==================== 消息中心 ====================
@@ -478,6 +481,18 @@ TABLE_ALTERS = {
         "ALTER TABLE tg_user_bindings ADD COLUMN init_password TEXT DEFAULT ''",
         "ALTER TABLE tg_user_bindings ADD COLUMN tg_username TEXT DEFAULT ''",
         "ALTER TABLE tg_user_bindings ADD COLUMN tg_display_name TEXT DEFAULT ''"
+    ],
+    "local_users": [
+        "ALTER TABLE local_users ADD COLUMN role TEXT DEFAULT 'admin'",
+        "ALTER TABLE local_users ADD COLUMN remark TEXT DEFAULT ''",
+        "ALTER TABLE local_users ADD COLUMN avatar TEXT DEFAULT ''",
+        "ALTER TABLE local_users ADD COLUMN is_enabled INTEGER DEFAULT 1",
+        "ALTER TABLE local_users ADD COLUMN permissions TEXT DEFAULT '[]'",
+        "ALTER TABLE local_users ADD COLUMN last_login_at DATETIME",
+        "ALTER TABLE local_users ADD COLUMN last_login_ip TEXT",
+        "ALTER TABLE local_users ADD COLUMN totp_secret TEXT DEFAULT ''",
+        "ALTER TABLE local_users ADD COLUMN totp_enabled INTEGER DEFAULT 0",
+        "ALTER TABLE local_users ADD COLUMN totp_pending_secret TEXT DEFAULT ''"
     ],
     "media_requests": [
         "ALTER TABLE media_requests ADD COLUMN episodes TEXT DEFAULT ''",
