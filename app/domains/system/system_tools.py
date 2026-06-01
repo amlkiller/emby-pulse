@@ -10,7 +10,7 @@ logger = logging.getLogger("uvicorn")
 from collections import deque
 from fastapi import APIRouter, Request
 from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
-from app.dao.system_tool_dao import check_system_db_readwrite, check_system_table_integrity
+from app.domains.system.system_tool_dao import check_system_db_readwrite, check_system_table_integrity
 from app.infra.db.perf_stats import get_query_perf_stats
 from app.infra.clients.network_client import network_client
 from app.infra.clients.tmdb_client import tmdb_client

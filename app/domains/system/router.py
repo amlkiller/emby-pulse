@@ -2,7 +2,7 @@ from fastapi import APIRouter, Request
 from app.schemas.models import SettingsModel
 from app.core.config import save_config
 from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
-from app.dao.system_tool_dao import (
+from app.domains.system.system_tool_dao import (
     get_dashboard_layout,
     repair_core_system_tables,
     save_dashboard_layout,
