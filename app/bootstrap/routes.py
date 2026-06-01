@@ -14,29 +14,24 @@ def register_static_assets(app: FastAPI) -> None:
 
 
 def register_routes(app: FastAPI) -> None:
-    from app.routers import (
-        clients,
-        gaps,
-        history,
-        media_request,
+    from app.domains.media_requests import router as media_request
+    from app.domains.notifications import (
+        bot as bot_router,
+        calendar_notify,
         messages,
-        notifications,
         notify_admin,
         notify_rules,
-        points,
-        risk,
-        stats,
-        system_tools,
-        users,
+        router as notifications,
     )
-    from app.domains.playback import calendar, dedupe, insight, search
-    from app.domains.notifications import bot as bot_router
-    from app.domains.users import auth
-    from app.domains.system import tasks, views
+    from app.domains.playback import calendar, dedupe, insight, search, stats
+    from app.domains.points import router as points
     from app.domains.proxy import router as proxy
     from app.domains.reports import router as report
     from app.domains.pwa import router as pwa
-    from app.domains.system import api_tokens, audit, db_tools, pro, router as system, webhook
+    from app.domains.risk import router as risk
+    from app.domains.system import api_tokens, audit, clients, db_tools, pro, router as system, system_tools, tasks, views, webhook
+    from app.domains.users import auth
+    from app.routers import gaps, history, users
     from .plugin_routes import register_calendar_notify_routes, register_plugin_routes
 
     app.include_router(views.router)
