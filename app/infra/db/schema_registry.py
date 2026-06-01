@@ -36,7 +36,14 @@ TABLE_SCHEMAS = {
         points INTEGER DEFAULT 0,
         block_routes TEXT DEFAULT '',
         allow_routes TEXT DEFAULT '',
-        remark TEXT DEFAULT ''
+        remark TEXT DEFAULT '',
+        admin_disabled INTEGER DEFAULT 0,
+        req_free INTEGER DEFAULT 0,
+        req_free_count INTEGER DEFAULT -1,
+        tags TEXT DEFAULT '',
+        emby_pw_hash TEXT DEFAULT '',
+        admin_enabled_folders TEXT,
+        hidden_libraries TEXT DEFAULT ''
     )""",
 
     "invitations": """CREATE TABLE IF NOT EXISTS invitations (
@@ -464,9 +471,13 @@ TABLE_ALTERS = {
         "ALTER TABLE users_meta ADD COLUMN block_routes TEXT DEFAULT ''",
         "ALTER TABLE users_meta ADD COLUMN allow_routes TEXT DEFAULT ''",
         "ALTER TABLE users_meta ADD COLUMN remark TEXT DEFAULT ''",
+        "ALTER TABLE users_meta ADD COLUMN admin_disabled INTEGER DEFAULT 0",
         "ALTER TABLE users_meta ADD COLUMN req_free INTEGER DEFAULT 0",
         "ALTER TABLE users_meta ADD COLUMN req_free_count INTEGER DEFAULT -1",
-        "ALTER TABLE users_meta ADD COLUMN emby_pw_hash TEXT DEFAULT ''"
+        "ALTER TABLE users_meta ADD COLUMN tags TEXT DEFAULT ''",
+        "ALTER TABLE users_meta ADD COLUMN emby_pw_hash TEXT DEFAULT ''",
+        "ALTER TABLE users_meta ADD COLUMN admin_enabled_folders TEXT",
+        "ALTER TABLE users_meta ADD COLUMN hidden_libraries TEXT DEFAULT ''"
     ],
     "invitations": [
         "ALTER TABLE invitations ADD COLUMN template_user_id TEXT",

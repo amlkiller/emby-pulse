@@ -7,7 +7,8 @@ from app.core.config import DB_PATH, SYSTEM_DB_PATH
 from app.infra.db.notification_dao import add_system_notification
 from app.infra.db.playback_filters import get_base_filter as _get_base_filter
 from app.infra.db.query_perf import get_query_perf_stats
-from app.infra.db.schema_registry import PLAYBACK_TABLES, SYSTEM_TABLES
+from app.infra.db.schema_bootstrap import ensure_registered_table
+from app.infra.db.schema_registry import SYSTEM_TABLES
 
 # 🔥 导出 SYSTEM_DB_PATH 供其他模块使用
 __all__ = ['init_db', 'get_base_filter', 'add_sys_notification',
@@ -302,33 +303,7 @@ def init_system_db():
 
 def _create_system_tables(c):
     """创建系统表（内部函数）"""
-    c.execute('''CREATE TABLE IF NOT EXISTS users_meta (user_id TEXT PRIMARY KEY, expire_date TEXT, note TEXT, created_at TEXT)''')
-
-    # 风控字段
-    try: c.execute("ALTER TABLE users_meta ADD COLUMN max_concurrent INTEGER")
-    except Exception: pass
-    try: c.execute("ALTER TABLE users_meta ADD COLUMN risk_level TEXT DEFAULT 'safe'")
-    except Exception: pass
-    try: c.execute("ALTER TABLE users_meta ADD COLUMN is_vip INTEGER DEFAULT 0")
-    except Exception: pass
-    try: c.execute("ALTER TABLE users_meta ADD COLUMN points INTEGER DEFAULT 0")
-    except Exception: pass
-    try: c.execute("ALTER TABLE users_meta ADD COLUMN block_routes TEXT DEFAULT ''")
-    except Exception: pass
-    try: c.execute("ALTER TABLE users_meta ADD COLUMN allow_routes TEXT DEFAULT ''")
-    except Exception: pass
-    try: c.execute("ALTER TABLE users_meta ADD COLUMN remark TEXT DEFAULT ''")
-    except Exception: pass
-    try: c.execute("ALTER TABLE users_meta ADD COLUMN admin_disabled INTEGER DEFAULT 0")
-    except Exception: pass
-    # 🔥 求片权限字段
-    try: c.execute("ALTER TABLE users_meta ADD COLUMN req_free INTEGER DEFAULT 0")  # 0=跟随全局, 1=免费, 2=付费
-    except Exception: pass
-    try: c.execute("ALTER TABLE users_meta ADD COLUMN req_free_count INTEGER DEFAULT -1")  # -1=无限次, >=0=剩余次数
-    except Exception: pass
-    # 🔥 用户标签字段
-    try: c.execute("ALTER TABLE users_meta ADD COLUMN tags TEXT DEFAULT ''")  # 用户标签，逗号分隔
-    except Exception: pass
+    ensure_registered_table(c, "users_meta")
 
     # 🔒 安全：登录失败锁定表（持久化，防止重启后丢失）
     c.execute('''CREATE TABLE IF NOT EXISTS login_failures (
@@ -655,19 +630,7 @@ def init_db(skip_migration=False):
         c = conn.cursor()
 
         c.execute('''CREATE TABLE IF NOT EXISTS PlaybackActivity (Id INTEGER PRIMARY KEY AUTOINCREMENT, UserId TEXT, UserName TEXT, ItemId TEXT, ItemName TEXT, PlayDuration INTEGER, DateCreated DATETIME DEFAULT CURRENT_TIMESTAMP, Client TEXT, DeviceName TEXT, RemoteEndPoint TEXT, Location TEXT, ISP TEXT)''')
-        c.execute('''CREATE TABLE IF NOT EXISTS users_meta (user_id TEXT PRIMARY KEY, expire_date TEXT, note TEXT, created_at TEXT)''')
-
-        # 🔥 风控模块：为老数据库无损新增"并发控制"和"风控等级"字段
-        try: c.execute("ALTER TABLE users_meta ADD COLUMN max_concurrent INTEGER")
-        except Exception: pass
-        try: c.execute("ALTER TABLE users_meta ADD COLUMN risk_level TEXT DEFAULT 'safe'")
-        except Exception: pass
-        # 👇 添加这一行：新增 VIP 独立字段
-        try: c.execute("ALTER TABLE users_meta ADD COLUMN is_vip INTEGER DEFAULT 0")
-        except Exception: pass
-        # 👇 新增：admin_disabled 字段，区分过期禁用和管理员禁用
-        try: c.execute("ALTER TABLE users_meta ADD COLUMN admin_disabled INTEGER DEFAULT 0")
-        except Exception: pass
+        ensure_registered_table(c, "users_meta")
 
         c.execute('''CREATE TABLE IF NOT EXISTS invitations (code TEXT PRIMARY KEY, days INTEGER, used_count INTEGER DEFAULT 0, max_uses INTEGER DEFAULT 1, created_at TEXT, used_at DATETIME, used_by TEXT, status INTEGER DEFAULT 0, template_user_id TEXT, type TEXT DEFAULT 'register', routes TEXT)''')
         try: c.execute("ALTER TABLE invitations ADD COLUMN template_user_id TEXT")
@@ -730,17 +693,6 @@ def init_db(skip_migration=False):
         c.execute('''CREATE TABLE IF NOT EXISTS point_config (key TEXT PRIMARY KEY, value TEXT)''')
         # 🤖 开放注册日志表
         c.execute('''CREATE TABLE IF NOT EXISTS tg_reg_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, tg_user_id TEXT, emby_username TEXT, emby_user_id TEXT, reg_type TEXT DEFAULT 'open', created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
-        try: c.execute("ALTER TABLE users_meta ADD COLUMN points INTEGER DEFAULT 0")
-        except Exception: pass
-        # 🔥 屏蔽线路功能：新增用户专属屏蔽线路字段
-        try: c.execute("ALTER TABLE users_meta ADD COLUMN block_routes TEXT DEFAULT ''")
-        except Exception: pass
-        # 🔥 允许线路功能：新增用户专属允许线路字段（可覆盖屏蔽设置）
-        try: c.execute("ALTER TABLE users_meta ADD COLUMN allow_routes TEXT DEFAULT ''")
-        except Exception: pass
-        # 🔥 备注字段（忽略已存在的错误）
-        try: c.execute("ALTER TABLE users_meta ADD COLUMN remark TEXT DEFAULT ''")
-        except Exception: pass
 
         # 🔥 播放历史增强：新增 IP、归属地、运营商字段（兼容旧数据库）
         try: c.execute("ALTER TABLE PlaybackActivity ADD COLUMN RemoteEndPoint TEXT")

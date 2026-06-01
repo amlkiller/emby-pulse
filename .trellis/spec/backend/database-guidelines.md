@@ -400,6 +400,7 @@ tokens = list_api_tokens(user_id)
 
 - The `app.core.database` and `app.core.db_manager` compatibility shells have been removed; imports must target `app.infra.db.database`, `app.infra.db.db_manager`, DAO modules, or query service modules directly.
 - `app.infra.db.schema_registry` owns schema metadata definitions and is the import point for schema metadata.
+- `app.infra.db.schema_bootstrap.ensure_registered_table(cursor, table_name, only_columns=None)` is the shared helper for registry-backed `CREATE TABLE` plus safe `TABLE_ALTERS` application in small bootstrap paths.
 - `app.core.db_schemas` is only a compatibility re-export for older imports during migration.
 - `app.infra.db.migration_service` is the new boundary for migration, health, backup, restore, and database-tool deep-check orchestration and currently delegates to existing implementations.
 
@@ -414,6 +415,8 @@ tokens = list_api_tokens(user_id)
 
 - Import schema metadata from `app.infra.db.schema_registry`.
 - Current exports: `SYSTEM_TABLES`, `PLAYBACK_TABLES`, `TABLE_SCHEMAS`, `TABLE_ALTERS`, `PLAYBACK_SCHEMA`, and `CORE_TABLES`.
+- Shared helper: `app.infra.db.schema_bootstrap.ensure_registered_table(cursor, table_name: str, only_columns: set[str] | None = None) -> set[str]`.
+- Shared helper: `app.infra.db.schema_bootstrap.registered_alter_columns(table_name: str) -> set[str]`.
 
 ### 3. Contracts
 
@@ -422,6 +425,7 @@ tokens = list_api_tokens(user_id)
 - Runtime modules must not keep local copies of `SYSTEM_TABLES` or `PLAYBACK_TABLES`; use the registry object so table lists cannot drift.
 - Repair helpers for registry-owned tables must create tables from `TABLE_SCHEMAS` / `PLAYBACK_SCHEMA` and apply compatible entries from `TABLE_ALTERS`; do not keep a second handwritten DDL copy in the repair path.
 - Small bootstrap helpers for registry-owned tables must also create tables from `TABLE_SCHEMAS` and apply compatible entries from `TABLE_ALTERS`; do not keep local `CREATE TABLE` / registry-owned `ALTER TABLE` copies in DAO bootstrap paths.
+- If more than one DAO needs to ensure a registry-owned table or column, use `schema_bootstrap.ensure_registered_table(...)` instead of copying PRAGMA/ALTER loops or importing another domain DAO for its bootstrap helper.
 - This boundary does not authorize behavior changes to DDL, ALTER order, migration mode, or repair semantics.
 
 ### 4. Validation & Error Matrix
@@ -436,6 +440,8 @@ tokens = list_api_tokens(user_id)
 - New local user-bot table DDL or user-binding ALTER statements in `app.domains.users.user_bot_dao.ensure_user_bot_tables()` for registry-owned `tg_user_bindings`, `tg_user_blacklist`, or `tg_reg_logs` -> fail focused user-bot bootstrap/schema registry tests.
 - New local auth table DDL or local-user ALTER statements in `app.domains.users.auth_dao.ensure_local_users_table()` for registry-owned `local_users` -> fail focused auth local-users bootstrap/schema registry tests.
 - New local Pro license table DDL or license ALTER statements in `app.domains.system.pro_license_dao.ensure_pro_schema()` for registry-owned `sys_license` -> fail focused Pro license bootstrap/schema registry tests.
+- New local `CREATE TABLE IF NOT EXISTS users_meta` or `ALTER TABLE users_meta ADD COLUMN` in `app.infra.db.database`, `app.domains.users.user_dao`, `app.domains.media_requests.media_request_dao`, or `app.domains.points.point_dao` -> fail focused user-meta bootstrap/schema registry tests.
+- New cross-domain import solely to reuse a schema bootstrap helper -> fail architecture review; move the helper to `app.infra.db.schema_bootstrap` or another infra/shared boundary.
 - Need a new schema metadata value -> add/export it through `schema_registry`, then update focused tests.
 
 ### 5. Good/Base/Bad Cases
@@ -451,11 +457,14 @@ tokens = list_api_tokens(user_id)
 - Good: `app.domains.users.user_bot_dao.ensure_user_bot_tables()` creates registry-owned Telegram binding, blacklist, and registration-log tables from `TABLE_SCHEMAS`, applies `TABLE_ALTERS["tg_user_bindings"]`, and keeps unregistered helper tables such as `tg_bot_users` and `tg_channel_bindings` local until they are explicitly registered.
 - Good: `app.domains.users.auth_dao.ensure_local_users_table()` creates registry-owned `local_users` from `TABLE_SCHEMAS`, applies only safe optional-column entries from `TABLE_ALTERS["local_users"]`, and leaves unsafe legacy repairs such as adding `UNIQUE NOT NULL` identity columns out of generic ALTER metadata.
 - Good: `app.domains.system.pro_license_dao.ensure_pro_schema()` creates registry-owned `sys_license` from `TABLE_SCHEMAS`, applies `TABLE_ALTERS["sys_license"]`, and keeps nullable extension columns such as `max_devices` and `current_devices` compatible with existing inserts that write only license key, machine id, and status.
+- Good: `app.domains.users.user_dao.ensure_users_meta_schema()` uses `schema_bootstrap.ensure_registered_table(...)` for the registry-owned `users_meta` table and exposes only a guarded `ensure_users_meta_column()` for registered optional columns.
+- Good: `app.infra.db.database`, `app.domains.media_requests.media_request_dao`, and `app.domains.points.point_dao` use `schema_bootstrap.ensure_registered_table(...)` for `users_meta` instead of keeping local `users_meta` ALTER statements.
 - Base: `app.core.db_schemas` temporarily re-exports values from `app.infra.db.schema_registry`.
 - Bad: `app.infra.db.db_manager` imports `TABLE_SCHEMAS` directly from `app.core.db_schemas`.
 - Bad: `repair_core_system_tables()` contains a second hand-written `CREATE TABLE IF NOT EXISTS media_requests (...)` definition.
 - Bad: `ensure_notifications_table()` contains a second hand-written `CREATE TABLE IF NOT EXISTS sys_notifications (...)` definition.
 - Bad: `app.infra.db.database` defines its own `SYSTEM_TABLES` list.
+- Bad: `media_request_dao.py` imports `app.domains.users.user_dao` only to add a missing `users_meta` column.
 
 ### 6. Tests Required
 
@@ -470,6 +479,7 @@ tokens = list_api_tokens(user_id)
 - Focused user-bot bootstrap test: run `ensure_user_bot_tables()` against a temporary database and assert registry-backed table creation, registered `tg_user_bindings` ALTER application, preserved legacy binding rows, DAO username/display-name smoke paths, local creation of unregistered helper tables, and no local duplicate registry-owned table DDL in the DAO source.
 - Focused auth local-users bootstrap test: run `ensure_local_users_table()` against a temporary database and assert registry-backed table creation, safe optional-column ALTER application, TOTP DAO smoke paths, and no local duplicate `local_users` DDL in the DAO source.
 - Focused Pro license bootstrap test: run `ensure_pro_schema()` against a temporary database and assert registry-backed table creation, safe optional-column ALTER application, preserved license row shape, existing Pro status payload compatibility, and no local duplicate `sys_license` DDL in the DAO source.
+- Focused user-meta bootstrap test: run `ensure_users_meta_schema()` against a temporary database and assert registry-backed table creation, safe optional-column ALTER application, admin-disabled migration backfill, selected DAO smoke paths, unregistered-column rejection, and no local duplicate `users_meta` DDL/ALTER in database/user/media-request/points bootstrap paths.
 - Compile/import check changed database modules with `uv run --with-requirements requirements.txt`.
 - Run the full pytest suite before completing a schema boundary batch.
 

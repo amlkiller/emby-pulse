@@ -1,27 +1,44 @@
 import sqlite3
+from typing import Optional
 
+from app.infra.db.schema_bootstrap import (
+    ensure_registered_table,
+    registered_alter_columns,
+    table_columns,
+)
 from app.infra.db.system_store import system_store
 
 
-def ensure_users_meta_column(column_name: str, column_definition: str) -> None:
+_USERS_META_TABLE = "users_meta"
+
+
+def ensure_users_meta_schema() -> None:
     with system_store.connect() as conn:
         cursor = conn.cursor()
-        cursor.execute("PRAGMA table_info(users_meta)")
-        columns = [column[1] for column in cursor.fetchall()]
-        if column_name not in columns:
-            cursor.execute(f"ALTER TABLE users_meta ADD COLUMN {column_definition}")
-            conn.commit()
+        ensure_registered_table(cursor, _USERS_META_TABLE)
+        conn.commit()
+
+
+def ensure_users_meta_column(column_name: str, column_definition: Optional[str] = None) -> None:
+    del column_definition
+    if column_name not in registered_alter_columns(_USERS_META_TABLE):
+        raise ValueError(f"users_meta column is not registered: {column_name}")
+
+    with system_store.connect() as conn:
+        cursor = conn.cursor()
+        ensure_registered_table(cursor, _USERS_META_TABLE, {column_name})
+        conn.commit()
 
 
 def migrate_admin_disabled(disabled_user_ids, today: str):
     with system_store.connect() as conn:
         cursor = conn.cursor()
-        cursor.execute("PRAGMA table_info(users_meta)")
-        columns = [row[1] for row in cursor.fetchall()]
+        ensure_registered_table(cursor, _USERS_META_TABLE, set())
+        columns = table_columns(cursor, _USERS_META_TABLE)
         if "admin_disabled" in columns:
             return None
 
-        cursor.execute("ALTER TABLE users_meta ADD COLUMN admin_disabled INTEGER DEFAULT 0")
+        ensure_registered_table(cursor, _USERS_META_TABLE, {"admin_disabled"})
         migrated_count = 0
         for user_id in disabled_user_ids:
             row = cursor.execute("SELECT expire_date FROM users_meta WHERE user_id = ?", (user_id,)).fetchone()
@@ -234,8 +251,8 @@ def create_user_meta(
 
 
 def sync_user_library_permissions(user_id: str, enable_all_folders: bool, enabled_folders):
-    ensure_users_meta_column("admin_enabled_folders", "admin_enabled_folders TEXT")
-    ensure_users_meta_column("hidden_libraries", "hidden_libraries TEXT")
+    ensure_users_meta_column("admin_enabled_folders")
+    ensure_users_meta_column("hidden_libraries")
     enabled_folder_set = set(enabled_folders or [])
 
     with system_store.connect() as conn:
@@ -259,8 +276,8 @@ def sync_user_library_permissions(user_id: str, enable_all_folders: bool, enable
 
 
 def get_user_library_settings(user_id: str):
-    ensure_users_meta_column("admin_enabled_folders", "admin_enabled_folders TEXT")
-    ensure_users_meta_column("hidden_libraries", "hidden_libraries TEXT DEFAULT ''")
+    ensure_users_meta_column("admin_enabled_folders")
+    ensure_users_meta_column("hidden_libraries")
     return system_store.fetch_one(
         "SELECT admin_enabled_folders, hidden_libraries FROM users_meta WHERE user_id = ?",
         (user_id,),
@@ -268,17 +285,17 @@ def get_user_library_settings(user_id: str):
 
 
 def get_user_admin_enabled_folders(user_id: str):
-    ensure_users_meta_column("admin_enabled_folders", "admin_enabled_folders TEXT")
+    ensure_users_meta_column("admin_enabled_folders")
     return system_store.fetch_one("SELECT admin_enabled_folders FROM users_meta WHERE user_id = ?", (user_id,))
 
 
 def save_user_admin_enabled_folders(user_id: str, admin_enabled_folders: str) -> None:
-    ensure_users_meta_column("admin_enabled_folders", "admin_enabled_folders TEXT")
+    ensure_users_meta_column("admin_enabled_folders")
     system_store.execute("UPDATE users_meta SET admin_enabled_folders = ? WHERE user_id = ?", (admin_enabled_folders, user_id))
 
 
 def save_user_hidden_libraries(user_id: str, hidden_libraries: str) -> None:
-    ensure_users_meta_column("hidden_libraries", "hidden_libraries TEXT DEFAULT ''")
+    ensure_users_meta_column("hidden_libraries")
     system_store.execute("UPDATE users_meta SET hidden_libraries = ? WHERE user_id = ?", (hidden_libraries, user_id))
 
 

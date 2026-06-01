@@ -2,6 +2,7 @@ import json
 import datetime
 import random
 
+from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
 
 
@@ -37,11 +38,7 @@ def ensure_lottery_table() -> None:
 def ensure_points_schema() -> None:
     with system_store.connect() as conn:
         cursor = conn.cursor()
-        cursor.execute("PRAGMA table_info(users_meta)")
-        columns = [column[1] for column in cursor.fetchall()]
-        if "points" not in columns:
-            cursor.execute("ALTER TABLE users_meta ADD COLUMN points INTEGER DEFAULT 0")
-
+        ensure_registered_table(cursor, "users_meta", {"points"})
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS point_logs (

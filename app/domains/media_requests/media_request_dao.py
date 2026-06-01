@@ -1,5 +1,6 @@
 import json
 
+from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.row import to_data_row
 from app.infra.db.system_store import system_store
 
@@ -859,10 +860,7 @@ def claim_registration_invitation(code: str, used_by: str):
 def save_registered_user_meta(user_id, expire_date, allow_routes, block_routes, req_free, req_free_count, admin_enabled_folders) -> None:
     with system_store.connect() as conn:
         cursor = conn.cursor()
-        cursor.execute("PRAGMA table_info(users_meta)")
-        columns = [column[1] for column in cursor.fetchall()]
-        if "admin_enabled_folders" not in columns:
-            cursor.execute("ALTER TABLE users_meta ADD COLUMN admin_enabled_folders TEXT")
+        ensure_registered_table(cursor, "users_meta", {"admin_enabled_folders"})
         admin_folders = ",".join(admin_enabled_folders) if admin_enabled_folders else None
         cursor.execute(
             """
