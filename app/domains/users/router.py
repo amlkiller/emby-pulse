@@ -280,8 +280,8 @@ def migrate_admin_disabled():
     except Exception as e:
         logging.getLogger("uvicorn").error(f"❌ 数据库迁移失败: {e}")
 
-# 启动时执行迁移
-migrate_admin_disabled()
+def start_user_domain_services():
+    migrate_admin_disabled()
 
 class UserUpdateModelEx(BaseModel):
     user_id: str
