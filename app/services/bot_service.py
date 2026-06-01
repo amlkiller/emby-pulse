@@ -9,7 +9,7 @@ import re
 import ipaddress
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
-from app.core.config import cfg, REPORT_COVER_URL, FALLBACK_IMAGE_URL
+from app.core.config import REPORT_COVER_URL, FALLBACK_IMAGE_URL
 from app.dao.notification_dao import add_sys_notification
 from app.dao import bot_service_dao, media_request_dao, message_dao, user_bot_dao
 from app.dao import gap_dao

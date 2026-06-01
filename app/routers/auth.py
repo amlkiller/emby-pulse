@@ -47,7 +47,6 @@ from app.dao.auth_dao import (
     upsert_env_local_admin,
     upsert_login_failure,
 )
-from app.core.config import cfg
 from app.infra.clients.media_server_client import media_api
 from app.infra.clients.network_client import network_client
 from app.infra.config.auth_settings import (

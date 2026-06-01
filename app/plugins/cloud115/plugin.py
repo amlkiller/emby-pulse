@@ -8,7 +8,6 @@ import time
 import logging
 import threading
 from app.plugins.base import PluginBase
-from app.core.config import cfg
 from app.core.event_bus import bus
 from app.infra.clients.cloud115_client import cloud115_client
 

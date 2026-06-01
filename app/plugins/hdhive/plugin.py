@@ -10,7 +10,6 @@ import datetime
 from fastapi import Request
 from app.plugins.base import PluginBase
 from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
-from app.core.config import cfg
 from app.core.event_bus import bus
 from app.infra.clients.hdhive_client import hdhive_client
 from app.infra.clients.tmdb_client import tmdb_client
