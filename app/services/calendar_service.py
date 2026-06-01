@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from app.infra.config.calendar_settings import get_calendar_cache_ttl
 from app.infra.config.media_server_settings import get_media_server_public_url
 from app.infra.config.tmdb_settings import get_tmdb_api_key
-from app.dao.calendar_dao import (
+from app.domains.playback.calendar_dao import (
     delete_calendar_cache_for_series,
     list_cached_calendar_series_ids,
     list_calendar_cache_rows,
