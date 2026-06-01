@@ -431,6 +431,7 @@ tokens = list_api_tokens(user_id)
 - New multiline `CREATE TABLE` copy for a registry-owned repair table in `app.domains.system.system_tool_dao.repair_core_system_tables()` -> fail focused repair/schema registry tests.
 - New local `CREATE TABLE IF NOT EXISTS sys_notifications` or `CREATE TABLE IF NOT EXISTS sys_dashboard` in small bootstrap helpers -> fail focused bootstrap/schema registry tests.
 - New local gap table DDL in `app.domains.media_requests.gap_dao.ensure_gap_tables()` for registry-owned `gap_*` tables -> fail focused gap bootstrap/schema registry tests.
+- New local dedupe table DDL or dedupe ALTER map in `app.domains.playback.dedupe_dao.init_dedupe_tables()` for registry-owned `dedupe_*` tables -> fail focused dedupe bootstrap/schema registry tests.
 - Need a new schema metadata value -> add/export it through `schema_registry`, then update focused tests.
 
 ### 5. Good/Base/Bad Cases
@@ -441,6 +442,7 @@ tokens = list_api_tokens(user_id)
 - Good: `app.infra.db.notification_dao.ensure_notifications_table()` uses `TABLE_SCHEMAS["sys_notifications"]` and `TABLE_ALTERS["sys_notifications"]`.
 - Good: `app.domains.system.system_tool_dao` dashboard helpers use `TABLE_SCHEMAS["sys_dashboard"]`.
 - Good: `app.domains.media_requests.gap_dao.ensure_gap_tables()` loops its registry-owned `gap_*` table subset through `TABLE_SCHEMAS`, applies `TABLE_ALTERS["gap_perfect_series"]`, and recreates legacy `gap_scan_cache` from `TABLE_SCHEMAS["gap_scan_cache"]`.
+- Good: `app.domains.playback.dedupe_dao.init_dedupe_tables()` creates registry-owned `dedupe_*` tables from `TABLE_SCHEMAS`, applies `TABLE_ALTERS`, and keeps only the legacy whitelist data-copy migration logic local.
 - Base: `app.core.db_schemas` temporarily re-exports values from `app.infra.db.schema_registry`.
 - Bad: `app.infra.db.db_manager` imports `TABLE_SCHEMAS` directly from `app.core.db_schemas`.
 - Bad: `repair_core_system_tables()` contains a second hand-written `CREATE TABLE IF NOT EXISTS media_requests (...)` definition.
@@ -455,6 +457,7 @@ tokens = list_api_tokens(user_id)
 - Focused repair test: run `repair_core_system_tables()` against a temporary database and assert registry-backed table creation plus registered ALTER application.
 - Focused bootstrap test: run small registry-owned bootstrap helpers against a temporary database and assert registry-backed table creation plus registered ALTER application.
 - Focused gap bootstrap test: run `ensure_gap_tables()` against a temporary database and assert registry-backed table creation, `gap_perfect_series.tmdb_id` ALTER application, default `gap_config.cache_interval_hours = 6`, legacy `gap_scan_cache` migration, and no local duplicate gap table DDL in the DAO source.
+- Focused dedupe bootstrap test: run `init_dedupe_tables()` against a temporary database and assert registry-backed table creation, registered `dedupe_results` / `dedupe_whitelist` ALTER application, legacy `dedupe_whitelist` migration, and no local duplicate dedupe table DDL or ALTER map in the DAO source.
 - Compile/import check changed database modules with `uv run --with-requirements requirements.txt`.
 - Run the full pytest suite before completing a schema boundary batch.
 

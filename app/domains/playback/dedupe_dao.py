@@ -1,6 +1,20 @@
 import json
+import sqlite3
 
+from app.infra.db.schema_registry import TABLE_ALTERS, TABLE_SCHEMAS
 from app.infra.db.system_store import system_store
+
+
+DEDUPE_TABLES = ("dedupe_whitelist", "dedupe_results", "dedupe_config")
+
+
+def _apply_table_alters(cursor, table_name: str) -> None:
+    for alter_sql in TABLE_ALTERS.get(table_name, []):
+        try:
+            cursor.execute(alter_sql)
+        except sqlite3.OperationalError as exc:
+            if "duplicate column name" not in str(exc).lower():
+                raise
 
 
 def init_dedupe_tables(logger=None) -> None:
@@ -17,13 +31,7 @@ def init_dedupe_tables(logger=None) -> None:
             cursor.execute("SELECT item_id, item_name, created_at FROM dedupe_whitelist")
             old_data = cursor.fetchall()
             cursor.execute("DROP TABLE IF EXISTS dedupe_whitelist")
-            cursor.execute(
-                """CREATE TABLE dedupe_whitelist (
-                    group_key TEXT PRIMARY KEY,
-                    title TEXT,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )"""
-            )
+            cursor.execute(TABLE_SCHEMAS["dedupe_whitelist"])
             for row in old_data:
                 if row[0]:
                     cursor.execute(
@@ -33,75 +41,13 @@ def init_dedupe_tables(logger=None) -> None:
             if logger:
                 logger.info(f"[去重引擎] 已迁移 {len(old_data)} 条白名单记录")
         else:
-            cursor.execute(
-                """CREATE TABLE IF NOT EXISTS dedupe_whitelist (
-                    group_key TEXT PRIMARY KEY,
-                    title TEXT,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )"""
-            )
+            cursor.execute(TABLE_SCHEMAS["dedupe_whitelist"])
 
-        cursor.execute(
-            """CREATE TABLE IF NOT EXISTS dedupe_results (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                group_key TEXT,
-                tmdb_id TEXT,
-                media_type TEXT,
-                title TEXT,
-                season_num INTEGER,
-                episode_num INTEGER,
-                item_id TEXT,
-                file_name TEXT,
-                file_path TEXT,
-                resolution TEXT,
-                bitrate INTEGER,
-                size_bytes REAL,
-                video_codec TEXT,
-                audio_codec TEXT,
-                has_hdr INTEGER,
-                has_dovi INTEGER,
-                has_chi_sub INTEGER,
-                has_ass_sub INTEGER,
-                score INTEGER,
-                is_recommended_del INTEGER DEFAULT 0,
-                is_exempt INTEGER DEFAULT 0,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )"""
-        )
+        for table_name in DEDUPE_TABLES:
+            if table_name != "dedupe_whitelist":
+                cursor.execute(TABLE_SCHEMAS[table_name])
+            _apply_table_alters(cursor, table_name)
 
-        cursor.execute("PRAGMA table_info(dedupe_results)")
-        columns = [column[1] for column in cursor.fetchall()]
-        migrations = {
-            "group_key": "ALTER TABLE dedupe_results ADD COLUMN group_key TEXT",
-            "tmdb_id": "ALTER TABLE dedupe_results ADD COLUMN tmdb_id TEXT",
-            "season_num": "ALTER TABLE dedupe_results ADD COLUMN season_num INTEGER",
-            "episode_num": "ALTER TABLE dedupe_results ADD COLUMN episode_num INTEGER",
-            "file_name": "ALTER TABLE dedupe_results ADD COLUMN file_name TEXT",
-            "file_path": "ALTER TABLE dedupe_results ADD COLUMN file_path TEXT",
-            "resolution": "ALTER TABLE dedupe_results ADD COLUMN resolution TEXT",
-            "bitrate": "ALTER TABLE dedupe_results ADD COLUMN bitrate INTEGER",
-            "size_bytes": "ALTER TABLE dedupe_results ADD COLUMN size_bytes REAL",
-            "video_codec": "ALTER TABLE dedupe_results ADD COLUMN video_codec TEXT",
-            "audio_codec": "ALTER TABLE dedupe_results ADD COLUMN audio_codec TEXT",
-            "has_hdr": "ALTER TABLE dedupe_results ADD COLUMN has_hdr INTEGER",
-            "has_dovi": "ALTER TABLE dedupe_results ADD COLUMN has_dovi INTEGER",
-            "has_chi_sub": "ALTER TABLE dedupe_results ADD COLUMN has_chi_sub INTEGER",
-            "has_ass_sub": "ALTER TABLE dedupe_results ADD COLUMN has_ass_sub INTEGER",
-            "score": "ALTER TABLE dedupe_results ADD COLUMN score INTEGER",
-            "is_recommended_del": "ALTER TABLE dedupe_results ADD COLUMN is_recommended_del INTEGER DEFAULT 0",
-            "is_exempt": "ALTER TABLE dedupe_results ADD COLUMN is_exempt INTEGER DEFAULT 0",
-        }
-        for column, sql in migrations.items():
-            if column not in columns:
-                cursor.execute(sql)
-
-        cursor.execute(
-            """CREATE TABLE IF NOT EXISTS dedupe_config (
-                key TEXT PRIMARY KEY,
-                value TEXT,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )"""
-        )
         conn.commit()
 
 
