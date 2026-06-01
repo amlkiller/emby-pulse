@@ -136,6 +136,7 @@ async def set_task_config(data: TaskConfigModel, request: Request):
 _task_last_end_times = {}
 _poller_initialized = False
 _poller_task = None
+_task_poller_started = False
 
 def fetch_emby_tasks():
     try: return media_api.get("/ScheduledTasks", timeout=5).json()
@@ -191,7 +192,9 @@ async def poll_emby_tasks():
         await asyncio.sleep(5)
 
 def start_task_poller():
-    global _poller_task
+    global _poller_task, _task_poller_started
+    if _task_poller_started:
+        return
     if _poller_task and not _poller_task.done():
         return
     try:
@@ -199,6 +202,7 @@ def start_task_poller():
     except RuntimeError:
         return
     _poller_task = loop.create_task(poll_emby_tasks())
+    _task_poller_started = True
 
 
 def start_system_task_services():
