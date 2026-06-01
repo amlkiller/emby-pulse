@@ -1,23 +1,25 @@
 import json
+import sqlite3
 
+from app.infra.db.schema_registry import TABLE_ALTERS, TABLE_SCHEMAS
 from app.infra.db.system_store import system_store
+
+
+GAP_TABLES = ("gap_config", "gap_records", "gap_perfect_series", "gap_scan_cache")
 
 
 def ensure_gap_tables(logger=None) -> None:
     with system_store.connect() as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            "CREATE TABLE IF NOT EXISTS gap_config (key TEXT PRIMARY KEY, value TEXT, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)"
-        )
-        cursor.execute(
-            "CREATE TABLE IF NOT EXISTS gap_records (id INTEGER PRIMARY KEY AUTOINCREMENT, series_id TEXT, series_name TEXT, season_number INTEGER, episode_number INTEGER, status INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(series_id, season_number, episode_number))"
-        )
-        cursor.execute(
-            "CREATE TABLE IF NOT EXISTS gap_perfect_series (id INTEGER PRIMARY KEY AUTOINCREMENT, series_id TEXT, tmdb_id TEXT, series_name TEXT, total_seasons INTEGER, total_episodes INTEGER, marked_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(series_id))"
-        )
-        cursor.execute(
-            "CREATE TABLE IF NOT EXISTS gap_scan_cache (id INTEGER PRIMARY KEY, result_json TEXT, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)"
-        )
+        for table_name in GAP_TABLES:
+            cursor.execute(TABLE_SCHEMAS[table_name])
+
+        for alter_sql in TABLE_ALTERS.get("gap_perfect_series", []):
+            try:
+                cursor.execute(alter_sql)
+            except sqlite3.OperationalError as exc:
+                if "duplicate column name" not in str(exc).lower():
+                    raise
 
         cursor.execute("SELECT value FROM gap_config WHERE key = 'cache_interval_hours'")
         if not cursor.fetchone():
@@ -29,9 +31,7 @@ def ensure_gap_tables(logger=None) -> None:
             if logger:
                 logger.info("[缺集管理] 检测到旧版 gap_scan_cache 表结构，正在迁移...")
             cursor.execute("DROP TABLE gap_scan_cache")
-            cursor.execute(
-                "CREATE TABLE gap_scan_cache (id INTEGER PRIMARY KEY, result_json TEXT, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)"
-            )
+            cursor.execute(TABLE_SCHEMAS["gap_scan_cache"])
 
         conn.commit()
 

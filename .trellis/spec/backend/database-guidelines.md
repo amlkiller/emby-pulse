@@ -430,6 +430,7 @@ tokens = list_api_tokens(user_id)
 - New local `SYSTEM_TABLES = [...]` / `PLAYBACK_TABLES = [...]` in `app/infra/db/database.py` -> fail the schema boundary regression test.
 - New multiline `CREATE TABLE` copy for a registry-owned repair table in `app.domains.system.system_tool_dao.repair_core_system_tables()` -> fail focused repair/schema registry tests.
 - New local `CREATE TABLE IF NOT EXISTS sys_notifications` or `CREATE TABLE IF NOT EXISTS sys_dashboard` in small bootstrap helpers -> fail focused bootstrap/schema registry tests.
+- New local gap table DDL in `app.domains.media_requests.gap_dao.ensure_gap_tables()` for registry-owned `gap_*` tables -> fail focused gap bootstrap/schema registry tests.
 - Need a new schema metadata value -> add/export it through `schema_registry`, then update focused tests.
 
 ### 5. Good/Base/Bad Cases
@@ -439,6 +440,7 @@ tokens = list_api_tokens(user_id)
 - Good: `app.domains.system.system_tool_dao.repair_core_system_tables()` creates repaired registry-owned tables from `TABLE_SCHEMAS` / `PLAYBACK_SCHEMA` and applies `TABLE_ALTERS`.
 - Good: `app.infra.db.notification_dao.ensure_notifications_table()` uses `TABLE_SCHEMAS["sys_notifications"]` and `TABLE_ALTERS["sys_notifications"]`.
 - Good: `app.domains.system.system_tool_dao` dashboard helpers use `TABLE_SCHEMAS["sys_dashboard"]`.
+- Good: `app.domains.media_requests.gap_dao.ensure_gap_tables()` loops its registry-owned `gap_*` table subset through `TABLE_SCHEMAS`, applies `TABLE_ALTERS["gap_perfect_series"]`, and recreates legacy `gap_scan_cache` from `TABLE_SCHEMAS["gap_scan_cache"]`.
 - Base: `app.core.db_schemas` temporarily re-exports values from `app.infra.db.schema_registry`.
 - Bad: `app.infra.db.db_manager` imports `TABLE_SCHEMAS` directly from `app.core.db_schemas`.
 - Bad: `repair_core_system_tables()` contains a second hand-written `CREATE TABLE IF NOT EXISTS media_requests (...)` definition.
@@ -452,6 +454,7 @@ tokens = list_api_tokens(user_id)
 - Focused identity test: assert `app.infra.db.database.SYSTEM_TABLES is app.infra.db.schema_registry.SYSTEM_TABLES`.
 - Focused repair test: run `repair_core_system_tables()` against a temporary database and assert registry-backed table creation plus registered ALTER application.
 - Focused bootstrap test: run small registry-owned bootstrap helpers against a temporary database and assert registry-backed table creation plus registered ALTER application.
+- Focused gap bootstrap test: run `ensure_gap_tables()` against a temporary database and assert registry-backed table creation, `gap_perfect_series.tmdb_id` ALTER application, default `gap_config.cache_interval_hours = 6`, legacy `gap_scan_cache` migration, and no local duplicate gap table DDL in the DAO source.
 - Compile/import check changed database modules with `uv run --with-requirements requirements.txt`.
 - Run the full pytest suite before completing a schema boundary batch.
 
@@ -478,6 +481,7 @@ from app.infra.db.schema_registry import SYSTEM_TABLES
 - Do not copy schema metadata lists such as `SYSTEM_TABLES` into runtime modules.
 - Do not copy registry-owned `CREATE TABLE` SQL into repair helpers; use `TABLE_SCHEMAS`, `TABLE_ALTERS`, and `PLAYBACK_SCHEMA`.
 - Do not copy registry-owned `CREATE TABLE` / `ALTER TABLE` SQL into small bootstrap helpers; use `TABLE_SCHEMAS` and `TABLE_ALTERS`.
+- Do not recreate legacy registry-owned tables with ad hoc SQL during DAO migrations; after dropping an old table shape, recreate it from `TABLE_SCHEMAS`.
 - Do not add new `query_db()` usage in migrated modules.
 - Do not hide playback API passthrough inside system database helpers.
 - Do not mix route response changes into database access migration.
