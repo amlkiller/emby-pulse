@@ -16,13 +16,13 @@ import base64
 import logging
 import threading
 import datetime
-import requests
 from typing import Optional, Dict, Tuple, Any, List
 from fastapi import Request
 from app.plugins.base import PluginBase
 from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
 from app.core.config import cfg
 from app.core.event_bus import bus
+from app.infra.clients.hdhive_site_client import hdhive_site_client
 
 logger = logging.getLogger("uvicorn")
 
@@ -285,8 +285,8 @@ class HDHiveSignPlugin(PluginBase):
             
             logger.info(f"[影巢签到] 请求签到: url={base_url}/, is_gambler={is_gambler}")
             
-            resp = requests.post(
-                url=f"{base_url}/",
+            resp = hdhive_site_client.post_page(
+                f"{base_url}/",
                 headers=headers,
                 cookies=cookies,
                 data=data,
@@ -531,8 +531,8 @@ class HDHiveSignPlugin(PluginBase):
             logger.info(f"[影巢签到] 正在动态获取 next-action...")
             
             # 1. 获取主页 HTML（签到在主页触发）
-            resp = requests.get(base_url, headers=headers, cookies=cookies,
-                              proxies=self._proxies(), timeout=30)
+            resp = hdhive_site_client.get_page(base_url, headers=headers, cookies=cookies,
+                                               proxies=self._proxies(), timeout=30)
             
             if resp.status_code != 200:
                 logger.warning(f"[影巢签到] 获取主页失败: {resp.status_code}，使用默认 action")
@@ -572,8 +572,8 @@ class HDHiveSignPlugin(PluginBase):
                 js_url = urljoin(base_url, script_src)
                 
                 try:
-                    js_resp = requests.get(js_url, headers=headers, cookies=cookies,
-                                          proxies=self._proxies(), timeout=30)
+                    js_resp = hdhive_site_client.get_page(js_url, headers=headers, cookies=cookies,
+                                                          proxies=self._proxies(), timeout=30)
                     
                     if js_resp.status_code == 200:
                         # 查找包含 checkIn 的 createServerReference 调用
@@ -639,7 +639,7 @@ class HDHiveSignPlugin(PluginBase):
             
             # 1. 获取登录页面 HTML
             login_url = f"{base_url}/login"
-            resp = session.get(login_url, headers=headers, timeout=30)
+            resp = hdhive_site_client.get_login_page(base_url, headers=headers, timeout=30, session=session)
 
             if resp.status_code != 200:
                 logger.warning(f"[影巢签到] 获取登录页面失败: {resp.status_code}")
@@ -669,7 +669,7 @@ class HDHiveSignPlugin(PluginBase):
                 js_url = urljoin(base_url, script_src)
                 
                 try:
-                    js_resp = session.get(js_url, headers=headers, timeout=30)
+                    js_resp = hdhive_site_client.get_page(js_url, headers=headers, timeout=30, session=session)
                     
                     if js_resp.status_code == 200:
                         # 查找包含 login/signin 的 createServerReference 调用
@@ -723,10 +723,7 @@ class HDHiveSignPlugin(PluginBase):
         
         try:
             logger.info(f"[影巢签到] 尝试自动登录: {username}, 站点: {base_url}")
-            session = requests.Session()
-            proxies = self._proxies()
-            if proxies:
-                session.proxies.update(proxies)
+            session = hdhive_site_client.create_session(proxies=self._proxies())
             
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -737,7 +734,7 @@ class HDHiveSignPlugin(PluginBase):
             # 1. 访问登录页面获取 cookies 和 next-action
             login_url = f"{base_url}/login"
             logger.info(f"[影巢签到] 访问登录页面: {login_url}")
-            resp = session.get(login_url, headers=headers, timeout=30)
+            resp = hdhive_site_client.get_login_page(base_url, headers=headers, timeout=30, session=session)
             logger.info(f"[影巢签到] 登录页面响应: {resp.status_code}")
             
             if resp.status_code != 200:
@@ -774,9 +771,13 @@ class HDHiveSignPlugin(PluginBase):
             
             logger.info(f"[影巢签到] 发送登录请求到: {login_url}")
             logger.info(f"[影巢签到] 请求体: {login_body}")
-            action_resp = session.post(login_url, headers=action_headers,
-                                       data=login_body, timeout=30,
-                                       allow_redirects=False)  # 禁止自动重定向，捕获原始响应
+            action_resp = hdhive_site_client.post_login_action(
+                base_url,
+                headers=action_headers,
+                data=login_body,
+                timeout=30,
+                session=session,
+            )
             
             logger.info(f"[影巢签到] 登录响应: status={action_resp.status_code}")
             logger.info(f"[影巢签到] 响应内容: {action_resp.text[:500] if action_resp.text else 'empty'}")
@@ -844,9 +845,13 @@ class HDHiveSignPlugin(PluginBase):
                     'Referer': login_url,
                 }
                 
-                login_resp = session.post(login_api, headers=login_headers,
-                                         json={"username": username, "password": password},
-                                         timeout=30)
+                login_resp = hdhive_site_client.post_legacy_login(
+                    login_api,
+                    headers=login_headers,
+                    payload={"username": username, "password": password},
+                    timeout=30,
+                    session=session,
+                )
                 
                 if login_resp.status_code == 200:
                     data = login_resp.json()
@@ -895,8 +900,8 @@ class HDHiveSignPlugin(PluginBase):
             }
             
             # 尝试从用户页面获取信息
-            resp = requests.get(referer, headers=headers, cookies=cookies,
-                              proxies=self._proxies(), timeout=30)
+            resp = hdhive_site_client.get_page(referer, headers=headers, cookies=cookies,
+                                               proxies=self._proxies(), timeout=30)
             
             if resp.status_code == 200:
                 # 尝试从页面中提取用户信息
@@ -937,8 +942,8 @@ class HDHiveSignPlugin(PluginBase):
                 'Authorization': f'Bearer {token}',
             }
             
-            resp = requests.get(f"{base_url}/api/customer/user/info", headers=api_headers,
-                              cookies=cookies, proxies=self._proxies(), timeout=30)
+            resp = hdhive_site_client.get_user_info(base_url, headers=api_headers,
+                                                    cookies=cookies, proxies=self._proxies(), timeout=30)
             
             if resp.status_code == 200:
                 data = resp.json()
