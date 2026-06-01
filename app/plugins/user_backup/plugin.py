@@ -28,9 +28,9 @@ from app.dao.user_backup_dao import (
 )
 from app.plugins.base import PluginBase
 from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
-from app.core.config import cfg
 from app.infra.clients.media_server_client import media_api
 from app.infra.clients.webdav_client import webdav_client
+from app.infra.config.media_server_settings import get_media_server_host
 
 logger = logging.getLogger("uvicorn")
 
@@ -354,7 +354,7 @@ class UserBackupPlugin(PluginBase):
             ("用户总数", len(users)),
             ("TG绑定数", len(tg_bindings)),
             ("积分记录数", len(point_logs)),
-            ("Emby服务器", cfg.get("emby_host", "")),
+            ("Emby服务器", get_media_server_host()),
             ("Pro状态", "是" if self._is_pro() else "否"),
         ]
         for row_idx, (key, value) in enumerate(meta_info, 1):
