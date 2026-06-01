@@ -21,7 +21,7 @@ from app.dao.dedupe_dao import (
     remove_dedupe_whitelist_items,
     save_dedupe_config_values,
 )
-from app.routers.auth import is_admin_user
+from app.domains.users.auth import is_admin_user
 from app.core.security_utils import safe_error_message
 
 logger = logging.getLogger("uvicorn")

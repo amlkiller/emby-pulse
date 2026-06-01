@@ -1,6 +1,6 @@
 # 通知管理路由
 from fastapi import APIRouter, Request
-from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from app.dao.notify_admin_dao import (

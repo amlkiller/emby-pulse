@@ -3,7 +3,7 @@ import random
 import json
 import os
 from fastapi import APIRouter, Request, Depends, HTTPException
-from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from typing import List, Optional
@@ -14,7 +14,7 @@ from app.dao import point_dao
 from app.infra.clients.media_server_client import media_api
 from app.services.bot_service import bot
 
-from app.routers.auth import check_permission
+from app.domains.users.auth import check_permission
 
 router = APIRouter()
 from app.core.security_utils import safe_error_message

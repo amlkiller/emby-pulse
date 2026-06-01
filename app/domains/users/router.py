@@ -15,7 +15,7 @@ from app.infra.config.user_bot_settings import (
 )
 from app.infra.config.user_visibility_settings import get_hidden_users
 
-from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
 from app.core.security import validate_password_strength  # 🔒 统一密码强度校验
 from app.utils.image_validator import check_magic_bytes  # 🔒 头像魔数校验
 import datetime

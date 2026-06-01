@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Response
-from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
 from app.schemas.models import PushRequestModel
 from app.services.report_service import report_gen, HAS_PIL
 from app.services.bot_service import bot

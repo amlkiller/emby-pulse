@@ -6,7 +6,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from app.core.audit_logger import get_audit_logs, get_audit_stats, AUDIT_ACTIONS
 from app.dao.audit_dao import list_user_audit_logs_since
-from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
 import time
 import os
 

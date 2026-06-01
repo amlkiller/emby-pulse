@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Request
-from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
 from pydantic import BaseModel
 import json
 from app.dao.risk_dao import (

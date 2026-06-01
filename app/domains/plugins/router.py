@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Request
-from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
 from fastapi.responses import RedirectResponse
 from app.core.config import templates
 from app.plugins import get_all_plugins, set_plugin_enabled, get_plugin_config, save_plugin_config, update_plugin_config, get_plugin, get_plugin_logs, clear_plugin_logs, _registry
-from app.routers.auth import check_permission, is_admin_user  # 🔒 引入管理员权限检查
+from app.domains.users.auth import check_permission, is_admin_user  # 🔒 引入管理员权限检查
 
 router = APIRouter()
 

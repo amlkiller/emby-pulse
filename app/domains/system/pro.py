@@ -8,7 +8,7 @@ from app.dao.pro_license_dao import (
     replace_license,
 )
 from app.core.license import get_machine_id
-from app.routers.auth import is_admin_user
+from app.domains.users.auth import is_admin_user
 
 logger = logging.getLogger("uvicorn")
 router = APIRouter()

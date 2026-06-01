@@ -1,7 +1,7 @@
 import asyncio
 import datetime
 from fastapi import APIRouter, Request
-from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
 from pydantic import BaseModel
 from app.dao.notification_dao import add_system_notification
 from app.dao.task_dao import (

@@ -25,7 +25,7 @@ from app.infra.db.migration_service import (
     old_database_path,
     restore_backup,
 )
-from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
 import os
 from app.core.rate_limiter import get_client_ip
 

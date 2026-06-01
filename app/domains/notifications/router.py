@@ -14,7 +14,7 @@ from app.dao.notification_dao import (
     list_notifications,
     mark_notifications_read,
 )
-from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
 
 logger = logging.getLogger("uvicorn")
 

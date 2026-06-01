@@ -17,7 +17,7 @@ from app.dao.pwa_dao import (
     save_pwa_config_value,
     set_user_pwa_icon,
 )
-from app.routers.auth import is_admin_user
+from app.domains.users.auth import is_admin_user
 
 router = APIRouter()
 

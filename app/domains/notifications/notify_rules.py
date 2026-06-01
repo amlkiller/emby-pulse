@@ -5,7 +5,7 @@ from app.dao.notify_rule_dao import (
     replace_bot_notify_mutes,
 )
 from app.infra.clients.media_server_client import media_api
-from app.routers.auth import is_admin_user
+from app.domains.users.auth import is_admin_user
 from app.core.security_utils import safe_error_message
 
 router = APIRouter(prefix="/api/notify_rules", tags=["Notification Rules"])

@@ -8,7 +8,7 @@ import datetime
 import threading
 import time
 from fastapi import APIRouter, Request
-from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
 from pydantic import BaseModel
 from typing import Optional, List
 from app.core.security_utils import safe_error_message

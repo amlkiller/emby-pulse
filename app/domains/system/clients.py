@@ -17,7 +17,7 @@ from app.dao.client_dao import (
 )
 from app.queries.client_queries import count_playback_clients_by_app, count_playback_devices
 
-from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
 from app.core.security_utils import safe_error_message
 from app.core.rate_limiter import get_client_ip
 

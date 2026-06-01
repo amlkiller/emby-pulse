@@ -7,7 +7,7 @@ from app.infra.clients.media_server_client import media_api
 from app.infra.clients.tmdb_client import tmdb_client
 from app.infra.config.stats_settings import get_dashboard_cache_ttl
 from app.infra.config.user_visibility_settings import get_hidden_users
-from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
 import re
 import datetime
 import asyncio

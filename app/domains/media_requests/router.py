@@ -4,7 +4,7 @@ import re
 from datetime import date
 from fastapi import APIRouter, Request, Depends, BackgroundTasks
 from fastapi.responses import JSONResponse
-from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
 from app.core.security import validate_password_strength  # 🔒 统一密码强度校验
 from pydantic import BaseModel
 from typing import Optional, List

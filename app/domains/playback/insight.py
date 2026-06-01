@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request
-from app.routers.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
 from pydantic import BaseModel
 from app.infra.clients.media_server_client import media_api
 from app.dao.insight_dao import (

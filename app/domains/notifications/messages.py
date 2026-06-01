@@ -54,7 +54,7 @@ from app.infra.config.notification_settings import (
 )
 from app.core.security_utils import sanitize_html, sanitize_rich_html
 from app.core.security import require_admin
-from app.routers.auth import is_admin_user
+from app.domains.users.auth import is_admin_user
 from app.core.security_utils import safe_error_message
 
 router = APIRouter()

@@ -29,7 +29,7 @@ from app.dao.gap_dao import (
     save_gap_scan_cache,
 )
 from app.domains.playback.search import is_new_emby_router
-from app.routers.auth import is_admin_user
+from app.domains.users.auth import is_admin_user
 # 🔥 引入核心适配器
 from app.infra.clients.media_server_client import media_api
 from app.infra.clients.moviepilot_client import moviepilot_client

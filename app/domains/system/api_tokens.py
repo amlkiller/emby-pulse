@@ -12,7 +12,7 @@ from app.dao.api_token_dao import (
     list_api_tokens,
     mark_api_token_used,
 )
-from app.routers.auth import is_admin_user
+from app.domains.users.auth import is_admin_user
 from app.core.jwt_token import create_api_token, verify_api_token
 from app.core.security_utils import safe_error_message
 

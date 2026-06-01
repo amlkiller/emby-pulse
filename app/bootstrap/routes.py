@@ -15,7 +15,6 @@ def register_static_assets(app: FastAPI) -> None:
 
 def register_routes(app: FastAPI) -> None:
     from app.routers import (
-        auth,
         bot as bot_router,
         clients,
         gaps,
@@ -33,6 +32,7 @@ def register_routes(app: FastAPI) -> None:
         views,
     )
     from app.domains.playback import calendar, dedupe, insight, search
+    from app.domains.users import auth
     from app.domains.system import tasks
     from app.domains.proxy import router as proxy
     from app.domains.reports import router as report
