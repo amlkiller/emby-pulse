@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend spec index for lifecycle work."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Defines bootstrap service registry and stop hook conventions."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Project verification command requirements."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Lifecycle stop hooks cross bootstrap and domain service boundaries."}
+{"file": "docs/架构审计.md", "reason": "Authoritative audit finding for P1 lifecycle management."}

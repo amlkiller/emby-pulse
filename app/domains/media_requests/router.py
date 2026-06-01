@@ -74,6 +74,8 @@ _COMMUNITY_CACHE_MAX_SIZE = 64
 _community_refresh_lock = threading.Lock()
 _community_refresh_started = False
 _community_refresh_start_lock = threading.Lock()
+_community_refresh_stop_event = threading.Event()
+_community_refresh_thread = None
 
 # 缓存 TTL 配置（秒）
 COMMUNITY_CACHE_TTL = 300  # 默认 5 分钟
@@ -1331,25 +1333,44 @@ def _refresh_community_cache():
 
 
 def start_community_cache_refresh_loop() -> None:
-    global _community_refresh_started
+    global _community_refresh_started, _community_refresh_thread
     with _community_refresh_start_lock:
         if _community_refresh_started:
             return
         _community_refresh_started = True
+        _community_refresh_stop_event.clear()
 
     def _refresh_loop():
-        time.sleep(15)
+        if _community_refresh_stop_event.wait(15):
+            return
         _refresh_community_cache()
-        while True:
-            time.sleep(300)
+        while not _community_refresh_stop_event.wait(300):
             _refresh_community_cache()
 
-    threading.Thread(target=_refresh_loop, daemon=True).start()
+    _community_refresh_thread = threading.Thread(target=_refresh_loop, daemon=True, name="community-cache-refresh")
+    _community_refresh_thread.start()
+
+
+def stop_community_cache_refresh_loop() -> None:
+    global _community_refresh_started, _community_refresh_thread
+    with _community_refresh_start_lock:
+        if not _community_refresh_started:
+            return
+        _community_refresh_stop_event.set()
+        thread = _community_refresh_thread
+        _community_refresh_started = False
+        _community_refresh_thread = None
+    if thread and thread.is_alive():
+        thread.join(timeout=1)
 
 
 def start_media_request_services() -> None:
     ensure_db_schema()
     start_community_cache_refresh_loop()
+
+
+def stop_media_request_services() -> None:
+    stop_community_cache_refresh_loop()
 
 
 @router.post("/api/requests/refresh_cache")

@@ -129,10 +129,12 @@ eventually become complete. Keep direct ad hoc `start_*()` calls out of
 
 When adding a stop hook for a bootstrap service, keep it next to the matching
 start function and make it reset the module's started state. Thread loops should
-use a module-level `threading.Event` plus a saved thread handle; asyncio pollers
-should cancel the saved task and clear the task/started flags. This lets
-`stop_bootstrap_services()` shut down and then restart services in the same
-process during reloads or tests.
+use a module-level or instance-level `threading.Event` plus a saved thread
+handle; asyncio pollers should cancel the saved task and clear the task/started
+flags. Replace long `time.sleep(...)` calls in lifecycle loops with
+`Event.wait(...)` so shutdown can interrupt initial delays and refresh waits.
+This lets `stop_bootstrap_services()` shut down and then restart services in the
+same process during reloads or tests.
 
 ## Scenario: External Client Adapter Boundary
 

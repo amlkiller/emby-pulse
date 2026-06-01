@@ -4,13 +4,13 @@ from app.domains.notifications.bot_service import (
     start_notification_services,
     stop_notification_services,
 )
-from app.domains.playback.calendar_service import start_calendar_service
+from app.domains.playback.calendar_service import start_calendar_service, stop_calendar_service
 from app.domains.notifications.calendar_notify import start_calendar_notify_services, stop_calendar_notify_services
 from app.domains.notifications.router import start_notifications_router_services
 from app.domains.playback.dedupe import start_dedupe_services
-from app.domains.risk.risk_service import start_risk_monitor
+from app.domains.risk.risk_service import start_risk_monitor, stop_risk_monitor
 from app.domains.media_requests.gaps import start_gap_services
-from app.domains.media_requests.router import start_media_request_services
+from app.domains.media_requests.router import start_media_request_services, stop_media_request_services
 from app.domains.system.pro import start_pro_services
 from app.domains.system.tasks import start_system_task_services, stop_system_task_services
 from app.domains.users.auth import start_auth_domain_services, stop_auth_domain_services
@@ -61,10 +61,10 @@ def build_bootstrap_registry(app, request_port: int) -> BootstrapServiceRegistry
     registry.register("proxy-audit", audit_proxy_config)
     registry.register("notifications", start_notification_services, stop_notification_services)
     registry.register("user-portal", lambda: start_user_portal_thread(app, request_port))
-    registry.register("risk-monitor", start_risk_monitor)
+    registry.register("risk-monitor", start_risk_monitor, stop_risk_monitor)
     registry.register("dashboard-cache", start_dashboard_cache_tasks)
-    registry.register("media-requests", start_media_request_services)
-    registry.register("calendar", start_calendar_service)
+    registry.register("media-requests", start_media_request_services, stop_media_request_services)
+    registry.register("calendar", start_calendar_service, stop_calendar_service)
     registry.register("notifications-router", start_notifications_router_services)
     registry.register("calendar-notify", start_calendar_notify_services, stop_calendar_notify_services)
     registry.register("dedupe", start_dedupe_services)

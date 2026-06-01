@@ -33,9 +33,14 @@ class CalendarService:
         self._ended_cache_lock = threading.Lock()
         self._background_sync_started = False
         self._background_sync_start_lock = threading.Lock()
+        self._background_sync_stop_event = threading.Event()
+        self._background_sync_thread = None
 
     def start(self):
         self._start_background_sync()
+
+    def stop(self):
+        self._stop_background_sync()
 
     def _start_background_sync(self):
         """
@@ -46,11 +51,13 @@ class CalendarService:
             if self._background_sync_started:
                 return
             self._background_sync_started = True
+            self._background_sync_stop_event.clear()
 
         def sync_task():
             # 延迟 60 秒启动，确保系统核心组件（如数据库、网络代理）已就绪
-            time.sleep(60)
-            while True:
+            if self._background_sync_stop_event.wait(60):
+                return
+            while not self._background_sync_stop_event.is_set():
                 try:
                     logger.info("🔄 [定时任务] 开始在后台自动刷新追剧日历缓存...")
                     # 强制同步本周 (0) 和 下周 (1) 的数据
@@ -61,11 +68,22 @@ class CalendarService:
                     logger.error(f"❌ [定时任务] 后台同步日历失败: {e}")
                 
                 # 休眠 12 小时 (43200秒)
-                time.sleep(43200)
+                self._background_sync_stop_event.wait(43200)
         
         # daemon=True 确保主进程退出时线程能正常销毁
-        t = threading.Thread(target=sync_task, daemon=True)
-        t.start()
+        self._background_sync_thread = threading.Thread(target=sync_task, daemon=True, name="calendar-background-sync")
+        self._background_sync_thread.start()
+
+    def _stop_background_sync(self):
+        with self._background_sync_start_lock:
+            if not self._background_sync_started:
+                return
+            self._background_sync_stop_event.set()
+            thread = self._background_sync_thread
+            self._background_sync_started = False
+            self._background_sync_thread = None
+        if thread and thread.is_alive():
+            thread.join(timeout=1)
 
     def _get_proxies(self):
         """获取全局代理配置，用于 TMDB 请求"""
@@ -501,3 +519,7 @@ calendar_service = CalendarService()
 
 def start_calendar_service() -> None:
     calendar_service.start()
+
+
+def stop_calendar_service() -> None:
+    calendar_service.stop()

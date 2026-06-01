@@ -110,6 +110,8 @@ _scan_lock = threading.Lock()
 _last_scan_time = 0
 _risk_monitor_started = False
 _risk_monitor_start_lock = threading.Lock()
+_risk_monitor_stop_event = threading.Event()
+_risk_monitor_thread = None
 
 def _send_user_warning(user_id, username, current_count, limit, devices_info):
     """通过TG用户机器人给违规用户发送警告消息"""
@@ -290,15 +292,16 @@ def scan_playbacks_and_alert():
 def _on_playback_start(data):
     # 稍微延迟等 Emby session 注册完成再扫描
     def delay_scan():
-        time.sleep(3)
+        if _risk_monitor_stop_event.wait(3):
+            return
         scan_playbacks_and_alert()
     threading.Thread(target=delay_scan, daemon=True).start()
 
 def _risk_monitor_loop():
-    while True:
+    while not _risk_monitor_stop_event.is_set():
         try: scan_playbacks_and_alert()
         except Exception: pass
-        time.sleep(60) 
+        _risk_monitor_stop_event.wait(60)
 
 def _on_risk_alert_for_web(data):
     # 检查是否开启全局通知中心
@@ -324,14 +327,29 @@ def _on_risk_alert_for_web(data):
     )
 
 def start_risk_monitor():
-    global _risk_monitor_started
+    global _risk_monitor_started, _risk_monitor_thread
     with _risk_monitor_start_lock:
         if _risk_monitor_started:
             return
+        _risk_monitor_stop_event.clear()
         _risk_monitor_started = True
 
         bus.subscribe("notify.playback.start", _on_playback_start)
         bus.subscribe("notify.risk.alert", _on_risk_alert_for_web)
-        threading.Thread(target=_risk_monitor_loop, daemon=True, name="RiskMonitorThread").start()
+        _risk_monitor_thread = threading.Thread(target=_risk_monitor_loop, daemon=True, name="RiskMonitorThread")
+        _risk_monitor_thread.start()
 
     logger.info("👁️ [风险管控] 零延迟天眼系统已启动 (事件驱动 + 60s兜底)")
+
+
+def stop_risk_monitor():
+    global _risk_monitor_started, _risk_monitor_thread
+    with _risk_monitor_start_lock:
+        if not _risk_monitor_started:
+            return
+        _risk_monitor_stop_event.set()
+        thread = _risk_monitor_thread
+        _risk_monitor_started = False
+        _risk_monitor_thread = None
+    if thread and thread.is_alive():
+        thread.join(timeout=1)
