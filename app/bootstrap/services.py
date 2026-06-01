@@ -4,6 +4,7 @@ from app.domains.notifications.bot_service import (
     start_notification_services,
     stop_notification_services,
 )
+from app.domains.playback.calendar_service import start_calendar_service
 from app.domains.notifications.calendar_notify import start_calendar_notify_services
 from app.domains.notifications.router import start_notifications_router_services
 from app.domains.playback.dedupe import start_dedupe_services
@@ -56,6 +57,7 @@ def start_bootstrap_services(app, request_port: int) -> None:
 
     playback_start_dashboard_cache_tasks()
     start_media_request_services()
+    start_calendar_service()
     start_notifications_router_services()
     start_calendar_notify_services()
     start_dedupe_services()

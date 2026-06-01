@@ -31,8 +31,10 @@ class CalendarService:
         # 🔥 TMDB 剧集状态缓存: { tmdb_id: 'ended' } - 缓存已完结的剧集
         self._ended_series_cache = {}
         self._ended_cache_lock = threading.Lock()
-        
-        # 🔥 启动后台守护线程：定时执行全量同步
+        self._background_sync_started = False
+        self._background_sync_start_lock = threading.Lock()
+
+    def start(self):
         self._start_background_sync()
 
     def _start_background_sync(self):
@@ -40,6 +42,11 @@ class CalendarService:
         后台独立线程：每隔 12 小时自动拉取 TMDB 排期并落盘。
         防止用户在服务器重启或长时间未访问后，首次打开页面加载过慢。
         """
+        with self._background_sync_start_lock:
+            if self._background_sync_started:
+                return
+            self._background_sync_started = True
+
         def sync_task():
             # 延迟 60 秒启动，确保系统核心组件（如数据库、网络代理）已就绪
             time.sleep(60)
@@ -490,3 +497,7 @@ class CalendarService:
 
 # 单例实例化
 calendar_service = CalendarService()
+
+
+def start_calendar_service() -> None:
+    calendar_service.start()
