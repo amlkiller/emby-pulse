@@ -130,7 +130,7 @@ def _send_user_warning(user_id, username, current_count, limit, devices_info):
                f"如有疑问，请联系管理员。")
         
         # 通过用户机器人发送消息
-        from app.services.user_bot_service import _send
+        from app.domains.notifications.user_bot_service import _send
         _send(tg_user_id, msg)
         logger.info(f"✅ [风控警告] 已向用户 {username} (TG: {tg_user_id}) 发送警告消息")
     except Exception as e:
@@ -155,7 +155,7 @@ def _send_user_ban_notify(user_id, username, current_count, limit, devices_info)
                f"📌 如需解封，请联系管理员。")
         
         # 通过用户机器人发送消息
-        from app.services.user_bot_service import _send
+        from app.domains.notifications.user_bot_service import _send
         _send(tg_user_id, msg)
         logger.info(f"✅ [风控封禁] 已向用户 {username} (TG: {tg_user_id}) 发送封禁通知")
     except Exception as e:

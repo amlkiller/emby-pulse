@@ -9,7 +9,7 @@ from app.infra.config.bot_settings import get_webhook_token, set_webhook_token
 from app.infra.config.user_bot_settings import get_user_bot_token
 from app.domains.notifications.bot_service import bot
 from app.domains.risk.risk_service import start_risk_monitor
-from app.services.user_bot_service import user_bot
+from app.domains.notifications.user_bot_service import user_bot
 
 from .user_portal import start_user_portal_server
 

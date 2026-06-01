@@ -606,7 +606,7 @@ class SystemDaemon:
             user_ids = [u['user_id'] for u in users_info]
             tg_bindings = media_request_dao.list_tg_bindings(user_ids)
             
-            from app.services.user_bot_service import _send, _tg_api
+            from app.domains.notifications.user_bot_service import _send, _tg_api
             
             for req in requests_info:
                 title = req['title']

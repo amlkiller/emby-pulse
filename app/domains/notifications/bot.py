@@ -219,7 +219,7 @@ def api_save_bot_settings(data: BotSettingsModel, request: Request):
     bot.stop()
     if data.enable_bot: threading.Timer(1.0, bot.start).start()
 
-    from app.services.user_bot_service import user_bot
+    from app.domains.notifications.user_bot_service import user_bot
     user_bot.stop()
     # 只有真正更新了 token 才重启用户机器人
     real_token = get_user_bot_token()
@@ -301,7 +301,7 @@ def api_send_open_reg_notify(request: Request, data: dict):
     # 发送到用户机器人私聊（所有启动过机器人的用户）
     if notify_user:
         try:
-            from app.services.user_bot_service import _send, _get_all_bot_users
+            from app.domains.notifications.user_bot_service import _send, _get_all_bot_users
             users = _get_all_bot_users()
             if users:
                 for u in users:
@@ -317,7 +317,7 @@ def api_send_open_reg_notify(request: Request, data: dict):
     # 发送到群聊（使用用户机器人）
     if notify_group:
         try:
-            from app.services.user_bot_service import _send
+            from app.domains.notifications.user_bot_service import _send
             allowed_groups = get_user_bot_allowed_groups()
             if allowed_groups:
                 group_ids = [g.strip() for g in allowed_groups.replace('，', ',').split('\n') if g.strip()]
@@ -599,7 +599,7 @@ async def api_add_user_blacklist(request: Request):
     tg_id = data.get("tg_user_id", "").strip()
     reason = data.get("reason", "管理员手动添加")
     if not tg_id: return {"status": "error", "message": "请输入 TG 用户 ID"}
-    from app.services.user_bot_service import _add_to_blacklist
+    from app.domains.notifications.user_bot_service import _add_to_blacklist
     _add_to_blacklist(tg_id, reason)
     return {"status": "success"}
 
@@ -809,7 +809,7 @@ def api_lottery_draw(request: Request):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     
     try:
-        from app.services.user_bot_service import do_lottery_draw
+        from app.domains.notifications.user_bot_service import do_lottery_draw
         do_lottery_draw()
 
         # 获取开奖结果

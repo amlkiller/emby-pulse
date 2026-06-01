@@ -856,7 +856,7 @@ def batch_manage_action(data: BulkAdminActionModel, request: Request):
                 logger.info(f"[状态变更通知] 共 {len(notify_items)} 个工单需要通知，TG绑定数: {len(tg_bindings)}")
                 
                 # 🔥 发送通知
-                from app.services.user_bot_service import _send, _tg_api
+                from app.domains.notifications.user_bot_service import _send, _tg_api
                 
                 for ni in notify_items:
                     req_row = ni['request']

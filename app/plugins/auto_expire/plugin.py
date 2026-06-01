@@ -316,7 +316,7 @@ class AutoExpirePlugin(PluginBase):
 
     def _send_user_remind(self, user_id, days_left, expire_date):
         try:
-            from app.services.user_bot_service import user_bot, _send as user_bot_send
+            from app.domains.notifications.user_bot_service import user_bot, _send as user_bot_send
             if not user_bot.running: return
             # tg_user_bindings 表：tg_user_id 对应 emby_user_id
             chat_id = get_tg_user_id_by_emby_id(user_id)
