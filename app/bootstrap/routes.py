@@ -18,7 +18,6 @@ def register_routes(app: FastAPI) -> None:
         api_tokens,
         auth,
         bot as bot_router,
-        calendar,
         clients,
         db_tools,
         dedupe,
@@ -35,7 +34,6 @@ def register_routes(app: FastAPI) -> None:
         proxy,
         report,
         risk,
-        search,
         stats,
         system,
         system_tools,
@@ -44,6 +42,7 @@ def register_routes(app: FastAPI) -> None:
         views,
         webhook,
     )
+    from app.domains.playback import calendar, search
     from app.domains.system import audit, pro
     from .plugin_routes import register_calendar_notify_routes, register_plugin_routes
 

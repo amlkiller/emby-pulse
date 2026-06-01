@@ -12,8 +12,6 @@ from app.routers.auth import check_permission
 router = APIRouter()
 logger = logging.getLogger("uvicorn")
 
-from app.main import APP_VERSION
-
 def _check_pro_status():
     """检查 Pro 授权状态"""
     return True
