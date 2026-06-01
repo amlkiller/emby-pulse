@@ -4,7 +4,7 @@ import time
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 from app.infra.clients.media_server_client import media_api
-from app.dao.audit_dao import create_user_audit_log
+from app.infra.db.audit_dao import create_user_audit_log
 from app.domains.system.client_dao import (
     add_client_blacklist,
     add_client_whitelist,

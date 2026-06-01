@@ -3,7 +3,7 @@ import sqlite3
 import threading
 import time
 
-from app.dao.session_dao import clear_sessions_if_table_exists
+from app.infra.db.session_dao import clear_sessions_if_table_exists
 from app.core.config import CONFIG_DIR, FONT_DIR
 
 _original_connect = sqlite3.connect

@@ -2,7 +2,7 @@ import secrets
 import time
 from typing import Optional, Any, Dict
 
-from app.dao.session_dao import (
+from app.infra.db.session_dao import (
     cleanup_expired_sessions as dao_cleanup_expired_sessions,
     create_session as dao_create_session,
     delete_session as dao_delete_session,
