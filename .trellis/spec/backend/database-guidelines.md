@@ -435,6 +435,7 @@ tokens = list_api_tokens(user_id)
 - New local notification/message table DDL in selected bootstrap helpers for registry-owned `request_admin_messages`, `bot_notify_mutes`, `notify_rules`, `msg_*`, or `user_mutes` tables -> fail focused notification bootstrap/schema registry tests.
 - New local user-bot table DDL or user-binding ALTER statements in `app.domains.users.user_bot_dao.ensure_user_bot_tables()` for registry-owned `tg_user_bindings`, `tg_user_blacklist`, or `tg_reg_logs` -> fail focused user-bot bootstrap/schema registry tests.
 - New local auth table DDL or local-user ALTER statements in `app.domains.users.auth_dao.ensure_local_users_table()` for registry-owned `local_users` -> fail focused auth local-users bootstrap/schema registry tests.
+- New local Pro license table DDL or license ALTER statements in `app.domains.system.pro_license_dao.ensure_pro_schema()` for registry-owned `sys_license` -> fail focused Pro license bootstrap/schema registry tests.
 - Need a new schema metadata value -> add/export it through `schema_registry`, then update focused tests.
 
 ### 5. Good/Base/Bad Cases
@@ -449,6 +450,7 @@ tokens = list_api_tokens(user_id)
 - Good: small notification/message bootstrap helpers create registry-owned request-admin, notify-rule, bot-mute, message, notify-block, and user-mute tables from `TABLE_SCHEMAS`, while keeping non-table extras such as indexes local.
 - Good: `app.domains.users.user_bot_dao.ensure_user_bot_tables()` creates registry-owned Telegram binding, blacklist, and registration-log tables from `TABLE_SCHEMAS`, applies `TABLE_ALTERS["tg_user_bindings"]`, and keeps unregistered helper tables such as `tg_bot_users` and `tg_channel_bindings` local until they are explicitly registered.
 - Good: `app.domains.users.auth_dao.ensure_local_users_table()` creates registry-owned `local_users` from `TABLE_SCHEMAS`, applies only safe optional-column entries from `TABLE_ALTERS["local_users"]`, and leaves unsafe legacy repairs such as adding `UNIQUE NOT NULL` identity columns out of generic ALTER metadata.
+- Good: `app.domains.system.pro_license_dao.ensure_pro_schema()` creates registry-owned `sys_license` from `TABLE_SCHEMAS`, applies `TABLE_ALTERS["sys_license"]`, and keeps nullable extension columns such as `max_devices` and `current_devices` compatible with existing inserts that write only license key, machine id, and status.
 - Base: `app.core.db_schemas` temporarily re-exports values from `app.infra.db.schema_registry`.
 - Bad: `app.infra.db.db_manager` imports `TABLE_SCHEMAS` directly from `app.core.db_schemas`.
 - Bad: `repair_core_system_tables()` contains a second hand-written `CREATE TABLE IF NOT EXISTS media_requests (...)` definition.
@@ -467,6 +469,7 @@ tokens = list_api_tokens(user_id)
 - Focused notification bootstrap test: run selected notification/message bootstrap helpers against a temporary database and assert registry-backed table creation, preserved request-admin-message index creation, excluded announcement table behavior, and no local duplicate registry-owned table DDL in the DAO source.
 - Focused user-bot bootstrap test: run `ensure_user_bot_tables()` against a temporary database and assert registry-backed table creation, registered `tg_user_bindings` ALTER application, preserved legacy binding rows, DAO username/display-name smoke paths, local creation of unregistered helper tables, and no local duplicate registry-owned table DDL in the DAO source.
 - Focused auth local-users bootstrap test: run `ensure_local_users_table()` against a temporary database and assert registry-backed table creation, safe optional-column ALTER application, TOTP DAO smoke paths, and no local duplicate `local_users` DDL in the DAO source.
+- Focused Pro license bootstrap test: run `ensure_pro_schema()` against a temporary database and assert registry-backed table creation, safe optional-column ALTER application, preserved license row shape, existing Pro status payload compatibility, and no local duplicate `sys_license` DDL in the DAO source.
 - Compile/import check changed database modules with `uv run --with-requirements requirements.txt`.
 - Run the full pytest suite before completing a schema boundary batch.
 

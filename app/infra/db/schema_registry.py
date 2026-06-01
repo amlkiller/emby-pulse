@@ -62,7 +62,9 @@ TABLE_SCHEMAS = {
         pro_token TEXT,
         status TEXT DEFAULT 'pro',
         expire_date DATETIME,
-        last_checked DATETIME DEFAULT CURRENT_TIMESTAMP
+        last_checked DATETIME DEFAULT CURRENT_TIMESTAMP,
+        max_devices INTEGER,
+        current_devices INTEGER
     )""",
 
     # ==================== TG 机器人 ====================
@@ -476,6 +478,13 @@ TABLE_ALTERS = {
     ],
     "sys_notifications": [
         "ALTER TABLE sys_notifications ADD COLUMN is_cleared INTEGER DEFAULT 0"
+    ],
+    "sys_license": [
+        "ALTER TABLE sys_license ADD COLUMN pro_token TEXT",
+        "ALTER TABLE sys_license ADD COLUMN expire_date DATETIME",
+        "ALTER TABLE sys_license ADD COLUMN last_checked DATETIME",
+        "ALTER TABLE sys_license ADD COLUMN max_devices INTEGER",
+        "ALTER TABLE sys_license ADD COLUMN current_devices INTEGER"
     ],
     "tg_user_bindings": [
         "ALTER TABLE tg_user_bindings ADD COLUMN init_password TEXT DEFAULT ''",

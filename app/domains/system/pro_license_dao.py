@@ -1,30 +1,23 @@
+import sqlite3
+
+from app.infra.db.schema_registry import TABLE_ALTERS, TABLE_SCHEMAS
 from app.infra.db.system_store import system_store
+
+
+def _apply_table_alters(cursor, table_name: str) -> None:
+    for alter_sql in TABLE_ALTERS.get(table_name, []):
+        try:
+            cursor.execute(alter_sql)
+        except sqlite3.OperationalError as exc:
+            if "duplicate column name" not in str(exc).lower():
+                raise
 
 
 def ensure_pro_schema() -> None:
     with system_store.connect() as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            """CREATE TABLE IF NOT EXISTS sys_license (
-                license_key TEXT,
-                machine_id TEXT,
-                pro_token TEXT,
-                status TEXT DEFAULT 'pro',
-                expire_date DATETIME,
-                last_checked DATETIME DEFAULT CURRENT_TIMESTAMP
-            )"""
-        )
-        for column in [
-            "pro_token TEXT",
-            "expire_date DATETIME",
-            "last_checked DATETIME DEFAULT CURRENT_TIMESTAMP",
-            "max_devices INTEGER",
-            "current_devices INTEGER",
-        ]:
-            try:
-                cursor.execute(f"ALTER TABLE sys_license ADD COLUMN {column}")
-            except Exception:
-                pass
+        cursor.execute(TABLE_SCHEMAS["sys_license"])
+        _apply_table_alters(cursor, "sys_license")
         conn.commit()
 
 
