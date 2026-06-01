@@ -4,6 +4,16 @@ from app.core.config import cfg
 from app.infra.clients.media_server_client import media_api
 from app.infra.clients.telegram_client import telegram_client
 from app.infra.clients.wecom_client import wecom_client
+from app.infra.config.bot_settings import (
+    get_all_bot_settings,
+    get_bot_setting_source,
+    get_bot_settings_audit_values,
+    get_user_bot_token,
+    get_webhook_base_url,
+    get_webhook_token,
+    set_bot_setting,
+    should_update_sensitive_bot_setting,
+)
 from app.dao.bot_admin_dao import (
     adjust_lottery_pool,
     clear_active_scratch_card,
@@ -47,7 +57,7 @@ def api_get_bot_settings(request: Request):
     # 🔒 安全检查：必须管理员
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     
-    all_config = cfg.get_all()
+    all_config = get_all_bot_settings()
     
     # 🔒 安全：脱敏敏感字段
     def mask_sensitive(value):
@@ -75,7 +85,7 @@ def api_get_bot_settings(request: Request):
     for field in SENSITIVE_ENV_FIELDS:
         if field in all_config:
             value = all_config[field]
-            source = cfg.get_env_source(field)
+            source = get_bot_setting_source(field)
             
             if source == "env":
                 # 来自环境变量：返回标记，不返回实际值
@@ -94,8 +104,9 @@ def api_get_bot_settings(request: Request):
             all_config[field] = mask_sensitive(all_config[field])
     
     # 🔥 Webhook Token 特殊处理
-    webhook_token = cfg.get("webhook_token", "")
-    webhook_source = cfg.get_env_source("webhook_token")
+    webhook_token = get_webhook_token()
+    webhook_source = get_bot_setting_source("webhook_token")
+    webhook_base_url = get_webhook_base_url()
     
     if webhook_source == "env":
         all_config["webhook_token"] = "****（由环境变量设置）"
@@ -103,14 +114,14 @@ def api_get_bot_settings(request: Request):
         all_config["webhook_token_readonly"] = True
         all_config["webhook_token_masked"] = "****"
         # 🔒 安全：webhook_url 中不包含真实 token
-        all_config["webhook_url"] = f"{cfg.get('emby_public_url', '') or cfg.get('emby_host', '')}/api/v1/webhook?token=****"
+        all_config["webhook_url"] = f"{webhook_base_url}/api/v1/webhook?token=****"
     else:
         all_config["webhook_token"] = webhook_token
         all_config["webhook_token_source"] = "config"
         all_config["webhook_token_readonly"] = False
         all_config["webhook_token_masked"] = mask_sensitive(webhook_token)
         # 🔒 安全：webhook_url 中使用脱敏 token
-        all_config["webhook_url"] = f"{cfg.get('emby_public_url', '') or cfg.get('emby_host', '')}/api/v1/webhook?token={mask_sensitive(webhook_token)}"
+        all_config["webhook_url"] = f"{webhook_base_url}/api/v1/webhook?token={mask_sensitive(webhook_token)}"
     
     return {"status": "success", "data": all_config}
 
@@ -120,62 +131,37 @@ def api_save_bot_settings(data: BotSettingsModel, request: Request):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     
     # 🔒 安全：检查是否应该更新敏感字段
-    def should_update_sensitive(field, value):
-        """检查敏感字段是否应该更新
-        - 环境变量设置的字段不更新
-        - 空值不更新（前端禁用时发送空字符串）
-        - 包含脱敏标记 **** 的值不更新
-        """
-        # 检查是否来自环境变量
-        if cfg.get_env_source(field) == "env":
-            return False
-        # 检查是否为空值（前端禁用时发送空字符串）
-        if not value or value.strip() == "":
-            return False
-        # 检查是否包含脱敏标记
-        if "****" in str(value):
-            return False
-        return True
-    
     # 🔥 记录变更前的值（用于审计日志）
-    old_values = {
-        "tg_bot_token": cfg.get("tg_bot_token"),
-        "tg_user_bot_token": cfg.get("tg_user_bot_token"),
-        "wecom_corpsecret": cfg.get("wecom_corpsecret"),
-        "wecom_token": cfg.get("wecom_token"),
-        "wecom_aeskey": cfg.get("wecom_aeskey"),
-        "enable_bot": cfg.get("enable_bot"),
-        "user_bot_open_reg": cfg.get("user_bot_open_reg"),
-    }
+    old_values = get_bot_settings_audit_values()
     
     # 🔒 安全：敏感字段仅在非环境变量且非脱敏时更新
-    if should_update_sensitive("tg_bot_token", data.tg_bot_token):
-        cfg.set("tg_bot_token", (data.tg_bot_token or "").strip())
-    if should_update_sensitive("tg_user_bot_token", data.tg_user_bot_token):
-        cfg.set("tg_user_bot_token", (data.tg_user_bot_token or "").strip())
-    if should_update_sensitive("wecom_corpsecret", data.wecom_corpsecret):
-        cfg.set("wecom_corpsecret", (data.wecom_corpsecret or "").strip())
-    if should_update_sensitive("wecom_token", data.wecom_token):
-        cfg.set("wecom_token", (data.wecom_token or "").strip())
-    if should_update_sensitive("wecom_aeskey", data.wecom_aeskey):
-        cfg.set("wecom_aeskey", (data.wecom_aeskey or "").strip())
+    if should_update_sensitive_bot_setting("tg_bot_token", data.tg_bot_token):
+        set_bot_setting("tg_bot_token", (data.tg_bot_token or "").strip())
+    if should_update_sensitive_bot_setting("tg_user_bot_token", data.tg_user_bot_token):
+        set_bot_setting("tg_user_bot_token", (data.tg_user_bot_token or "").strip())
+    if should_update_sensitive_bot_setting("wecom_corpsecret", data.wecom_corpsecret):
+        set_bot_setting("wecom_corpsecret", (data.wecom_corpsecret or "").strip())
+    if should_update_sensitive_bot_setting("wecom_token", data.wecom_token):
+        set_bot_setting("wecom_token", (data.wecom_token or "").strip())
+    if should_update_sensitive_bot_setting("wecom_aeskey", data.wecom_aeskey):
+        set_bot_setting("wecom_aeskey", (data.wecom_aeskey or "").strip())
     
     # 非敏感字段直接保存
-    cfg.set("tg_chat_id", data.tg_chat_id)
-    cfg.set("enable_bot", data.enable_bot)
-    cfg.set("enable_notify", data.enable_notify)
-    cfg.set("enable_library_notify", data.enable_library_notify) 
+    set_bot_setting("tg_chat_id", data.tg_chat_id)
+    set_bot_setting("enable_bot", data.enable_bot)
+    set_bot_setting("enable_notify", data.enable_notify)
+    set_bot_setting("enable_library_notify", data.enable_library_notify) 
     
-    cfg.set("wecom_corpid", (data.wecom_corpid or "").strip())
-    cfg.set("wecom_agentid", (data.wecom_agentid or "").strip())
-    cfg.set("wecom_touser", data.wecom_touser or "@all")
+    set_bot_setting("wecom_corpid", (data.wecom_corpid or "").strip())
+    set_bot_setting("wecom_agentid", (data.wecom_agentid or "").strip())
+    set_bot_setting("wecom_touser", data.wecom_touser or "@all")
     # 🔒 SSRF 防护：校验企微代理基址
     _wecom_base = (data.wecom_proxy_url or "https://qyapi.weixin.qq.com").strip()
     from app.utils.url_validator import validate_wecom_proxy_base
     _wecom_check = validate_wecom_proxy_base(_wecom_base)
     if not _wecom_check.get("valid"):
         return {"status": "error", "message": f"企微代理地址不合法: {_wecom_check.get('error', '')}"}
-    cfg.set("wecom_proxy_url", _wecom_base)
+    set_bot_setting("wecom_proxy_url", _wecom_base)
     try:
         from app.utils.proxy_helper import invalidate_cache as _proxy_cache_invalidate
         _proxy_cache_invalidate()
@@ -183,39 +169,39 @@ def api_save_bot_settings(data: BotSettingsModel, request: Request):
         pass
 
     # 🤖 Pro: 用户机器人配置
-    cfg.set("user_bot_open_reg", data.user_bot_open_reg)
-    cfg.set("user_bot_open_reg_notify_user", data.user_bot_open_reg_notify_user)
-    cfg.set("user_bot_open_reg_notify_group", data.user_bot_open_reg_notify_group)
-    cfg.set("user_bot_max_reg", data.user_bot_max_reg)
-    cfg.set("user_bot_reg_days", data.user_bot_reg_days)
-    cfg.set("user_bot_template_user", data.user_bot_template_user)
-    cfg.set("user_bot_portal_url", data.user_bot_portal_url)
+    set_bot_setting("user_bot_open_reg", data.user_bot_open_reg)
+    set_bot_setting("user_bot_open_reg_notify_user", data.user_bot_open_reg_notify_user)
+    set_bot_setting("user_bot_open_reg_notify_group", data.user_bot_open_reg_notify_group)
+    set_bot_setting("user_bot_max_reg", data.user_bot_max_reg)
+    set_bot_setting("user_bot_reg_days", data.user_bot_reg_days)
+    set_bot_setting("user_bot_template_user", data.user_bot_template_user)
+    set_bot_setting("user_bot_portal_url", data.user_bot_portal_url)
     # 开放注册线路设置
-    cfg.set("user_bot_route_mode", data.user_bot_route_mode or "block")
-    cfg.set("user_bot_allow_routes", data.user_bot_allow_routes or "")
-    cfg.set("user_bot_block_routes", data.user_bot_block_routes or "")
+    set_bot_setting("user_bot_route_mode", data.user_bot_route_mode or "block")
+    set_bot_setting("user_bot_allow_routes", data.user_bot_allow_routes or "")
+    set_bot_setting("user_bot_block_routes", data.user_bot_block_routes or "")
     # 🎯 开放注册名额模式
-    cfg.set("user_bot_reg_quota_mode", data.user_bot_reg_quota_mode or "total")
-    cfg.set("user_bot_reg_quota", data.user_bot_reg_quota or 0)
-    cfg.set("user_bot_reg_batch_used", data.user_bot_reg_batch_used or 0)
+    set_bot_setting("user_bot_reg_quota_mode", data.user_bot_reg_quota_mode or "total")
+    set_bot_setting("user_bot_reg_quota", data.user_bot_reg_quota or 0)
+    set_bot_setting("user_bot_reg_batch_used", data.user_bot_reg_batch_used or 0)
     
     # 🎯 群聊设置
-    cfg.set("user_bot_group_enabled", data.user_bot_group_enabled or False)
-    cfg.set("user_bot_allowed_groups", data.user_bot_allowed_groups or "")
-    cfg.set("user_bot_group_commands", data.user_bot_group_commands or "checkin,help")
-    cfg.set("user_bot_welcome_msg", data.user_bot_welcome_msg or "")
+    set_bot_setting("user_bot_group_enabled", data.user_bot_group_enabled or False)
+    set_bot_setting("user_bot_allowed_groups", data.user_bot_allowed_groups or "")
+    set_bot_setting("user_bot_group_commands", data.user_bot_group_commands or "checkin,help")
+    set_bot_setting("user_bot_welcome_msg", data.user_bot_welcome_msg or "")
     
     # 🔥 使用限制设置
-    cfg.set("user_bot_restriction_enabled", data.user_bot_restriction_enabled or False)
-    cfg.set("user_bot_required_channels", data.user_bot_required_channels or "")
-    cfg.set("user_bot_required_groups", data.user_bot_required_groups or "")
-    cfg.set("user_bot_restriction_cache_ttl", data.user_bot_restriction_cache_ttl or 120)
+    set_bot_setting("user_bot_restriction_enabled", data.user_bot_restriction_enabled or False)
+    set_bot_setting("user_bot_required_channels", data.user_bot_required_channels or "")
+    set_bot_setting("user_bot_required_groups", data.user_bot_required_groups or "")
+    set_bot_setting("user_bot_restriction_cache_ttl", data.user_bot_restriction_cache_ttl or 120)
     
     # 🎯 频道入库通知
-    cfg.set("notify_channels", data.notify_channels or "")
+    set_bot_setting("notify_channels", data.notify_channels or "")
     
     # 🎯 入库通知渠道选择
-    cfg.set("library_notify_channels", data.library_notify_channels or "")
+    set_bot_setting("library_notify_channels", data.library_notify_channels or "")
 
     bot.stop()
     if data.enable_bot: threading.Timer(1.0, bot.start).start()
@@ -223,7 +209,7 @@ def api_save_bot_settings(data: BotSettingsModel, request: Request):
     from app.services.user_bot_service import user_bot
     user_bot.stop()
     # 只有真正更新了 token 才重启用户机器人
-    real_token = cfg.get("tg_user_bot_token")
+    real_token = get_user_bot_token()
     if real_token:
         threading.Timer(1.5, user_bot.start).start()
     
