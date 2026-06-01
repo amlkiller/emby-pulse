@@ -21,7 +21,7 @@ from app.infra.config.weather_settings import (
     get_weather_qweather_key,
     get_weather_source,
 )
-from app.queries.system_tool_queries import get_latest_playback_date
+from app.domains.system.system_tool_queries import get_latest_playback_date
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
 from app.core.security_utils import safe_error_message
 

@@ -8,7 +8,7 @@ from app.dao.system_tool_dao import (
     save_dashboard_layout,
     system_database_exists,
 )
-from app.queries.system_tool_queries import diagnose_playback_database
+from app.domains.system.system_tool_queries import diagnose_playback_database
 import os
 import logging
 from app.core.security_utils import safe_error_message
