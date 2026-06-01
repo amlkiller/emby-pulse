@@ -15,7 +15,7 @@ from app.domains.system.tasks import start_system_task_services
 from app.domains.users.auth import start_auth_domain_services
 from app.domains.users.router import start_user_domain_services
 from app.core.audit_logger import start_audit_services
-from app.core.session import start_session_cleanup_loop
+from app.core.session import start_session_services
 from app.utils.proxy_helper import audit_existing_proxy_config
 
 from .user_portal import start_user_portal_thread
@@ -65,7 +65,7 @@ def start_bootstrap_services(app, request_port: int) -> None:
     start_pro_services()
     start_system_task_services()
     start_audit_services()
-    start_session_cleanup_loop()
+    start_session_services()
     print_startup_panel(request_port)
 
 

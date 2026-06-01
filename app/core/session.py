@@ -17,6 +17,8 @@ SESSION_TABLE = "sessions"
 SESSION_COOKIE_NAME = "session_id"
 SESSION_MAX_AGE = 24 * 3600  # 24小时（空闲超时）
 SESSION_ABSOLUTE_MAX_AGE = 7 * 24 * 3600  # 7天（绝对超时）
+_session_cleanup_started = False
+_session_cleanup_lock = threading.Lock()
 
 
 def init_session_table():
@@ -59,6 +61,12 @@ def cleanup_expired_sessions():
 
 
 def start_session_cleanup_loop(interval_seconds: int = 3600) -> None:
+    global _session_cleanup_started
+    with _session_cleanup_lock:
+        if _session_cleanup_started:
+            return
+        _session_cleanup_started = True
+
     try:
         deleted = cleanup_expired_sessions()
         if deleted > 0:
@@ -152,6 +160,9 @@ class SessionManager:
             init_session_table()
             self._initialized = True
 
+    def initialize(self):
+        self._ensure_init()
+
     def mark_modified(self, session_id: str, data: Dict[str, Any]):
         self._modified_sessions[session_id] = data
 
@@ -180,3 +191,8 @@ class SessionManager:
 
 
 session_manager = SessionManager()
+
+
+def start_session_services() -> None:
+    session_manager.initialize()
+    start_session_cleanup_loop()
