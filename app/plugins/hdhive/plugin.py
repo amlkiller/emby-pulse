@@ -6,18 +6,16 @@ import time
 import json
 import logging
 import threading
-import requests
 import datetime
 from fastapi import Request
 from app.plugins.base import PluginBase
 from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
 from app.core.config import cfg
 from app.core.event_bus import bus
+from app.infra.clients.hdhive_client import hdhive_client
 from app.infra.clients.tmdb_client import tmdb_client
 
 logger = logging.getLogger("uvicorn")
-
-HDHIVE_BASE = "https://hdhive.com/api/open"
 
 
 class HDHivePlugin(PluginBase):
@@ -66,10 +64,6 @@ class HDHivePlugin(PluginBase):
     def _get_config(self):
         from app.plugins import get_plugin_config
         return get_plugin_config(self.id)
-
-    def _headers(self):
-        config = self._get_config()
-        return {"X-API-Key": config.get("api_key", ""), "Content-Type": "application/json"}
 
     def _proxies(self):
         from app.utils.proxy_helper import get_safe_proxies
@@ -180,12 +174,11 @@ class HDHivePlugin(PluginBase):
         if not keyword and not tmdb_id:
             return {"status": "error", "message": "请提供关键词或TMDB ID"}
 
-        h = self._headers()
         proxies = self._proxies()
 
         # 如果有 TMDB ID，直接查影巢
         if tmdb_id:
-            result = self._search_by_tmdb(tmdb_id, res_type, h, proxies, page, page_size)
+            result = self._search_by_tmdb(tmdb_id, res_type, proxies, page, page_size)
             # 添加 TMDB 信息
             if result.get("status") == "success":
                 result["tmdb_info"] = {"id": tmdb_id, "type": res_type}
@@ -234,7 +227,7 @@ class HDHivePlugin(PluginBase):
             # 如果只有一个结果，直接查询影巢
             if len(tmdb_results) == 1:
                 first = tmdb_results[0]
-                result = self._search_by_tmdb(first["id"], first["type"], h, proxies, page, page_size)
+                result = self._search_by_tmdb(first["id"], first["type"], proxies, page, page_size)
                 if result.get("status") == "success":
                     result["tmdb_info"] = first
                 return result
@@ -250,22 +243,18 @@ class HDHivePlugin(PluginBase):
             logger.error(f"[影巢API] 搜索失败: {e}")
             return {"status": "error", "message": f"搜索失败: {str(e)}"}
 
-    def _search_by_tmdb(self, tmdb_id, res_type, h, proxies, page=1, page_size=10):
+    def _search_by_tmdb(self, tmdb_id, res_type, proxies, page=1, page_size=10):
         """根据 TMDB ID 查询影巢 115 资源
         
         Args:
             tmdb_id: TMDB ID
             res_type: 资源类型 (movie/tv)
-            h: 请求头
             proxies: 代理配置
             page: 页码（从1开始）
             page_size: 每页数量
         """
-        api_res_type = "movie" if res_type == "movie" else "tv"
-        url = f"{HDHIVE_BASE}/resources/{api_res_type}/{tmdb_id}"
-
         try:
-            resp = requests.get(url, headers=h, proxies=proxies, timeout=15)
+            resp = hdhive_client.search_resources(self._get_config().get("api_key", ""), res_type, tmdb_id, proxies=proxies, timeout=15)
 
             if resp.status_code != 200:
                 return {"status": "error", "message": f"影巢API错误: HTTP {resp.status_code}"}
@@ -445,8 +434,7 @@ class HDHivePlugin(PluginBase):
         if not slug:
             return {"status": "error", "message": "缺少资源 slug"}
         try:
-            h = self._headers()
-            res = requests.post(f"{HDHIVE_BASE}/resources/unlock", headers=h, json={"slug": slug}, proxies=self._proxies(), timeout=15)
+            res = hdhive_client.unlock_resource(self._get_config().get("api_key", ""), slug, proxies=self._proxies(), timeout=15)
             if res.status_code == 200:
                 data = res.json()
                 if data.get("success"):
@@ -458,7 +446,7 @@ class HDHivePlugin(PluginBase):
                     drive_type = ""
                     if url:
                         try:
-                            check_res = requests.post(f"{HDHIVE_BASE}/check/resource", headers=h, json={"url": url}, proxies=self._proxies(), timeout=10)
+                            check_res = hdhive_client.check_resource(self._get_config().get("api_key", ""), url, proxies=self._proxies(), timeout=10)
                             if check_res.status_code == 200:
                                 check_data = check_res.json()
                                 if check_data.get("success"):
@@ -495,24 +483,24 @@ class HDHivePlugin(PluginBase):
     def get_account_info(self):
         """获取影巢账户信息"""
         try:
-            h = self._headers()
-            if not h.get("X-API-Key"):
+            api_key = self._get_config().get("api_key", "")
+            if not api_key:
                 return {"status": "error", "message": "未配置 API Key"}
             # 先检查连通性
-            ping = requests.get(f"{HDHIVE_BASE}/ping", headers=h, proxies=self._proxies(), timeout=10)
+            ping = hdhive_client.ping(api_key, proxies=self._proxies(), timeout=10)
             logger.info(f"[影巢] ping响应: HTTP {ping.status_code}, body={ping.text[:200]}")
             if ping.status_code != 200:
                 return {"status": "error", "message": "API Key 无效或网络异常"}
             ping_data = ping.json()
 
             # 获取配额
-            quota = requests.get(f"{HDHIVE_BASE}/quota", headers=h, proxies=self._proxies(), timeout=10)
+            quota = hdhive_client.get_quota(api_key, proxies=self._proxies(), timeout=10)
             quota_data = quota.json().get("data", {}) if quota.status_code == 200 else {}
 
             # 尝试获取用户信息（Premium）
             user_info = {}
             try:
-                me = requests.get(f"{HDHIVE_BASE}/me", headers=h, proxies=self._proxies(), timeout=10)
+                me = hdhive_client.get_me(api_key, proxies=self._proxies(), timeout=10)
                 if me.status_code == 200:
                     user_info = me.json().get("data", {})
             except Exception: pass
@@ -535,14 +523,10 @@ class HDHivePlugin(PluginBase):
             dict: 签到结果，包含积分变化等信息
         """
         try:
-            h = self._headers()
-            res = requests.post(
-                f"{HDHIVE_BASE}/checkin", 
-                headers=h, 
-                json={"is_gambler": is_gambler}, 
-                proxies=self._proxies(), 
-                timeout=15
-            )
+            api_key = self._get_config().get("api_key", "")
+            if not api_key:
+                return {"status": "error", "message": "未配置 API Key"}
+            res = hdhive_client.checkin(api_key, is_gambler=is_gambler, proxies=self._proxies(), timeout=15)
             if res.status_code == 200:
                 data = res.json()
                 if data.get("success"):
@@ -560,7 +544,7 @@ class HDHivePlugin(PluginBase):
                     total_points = 0
                     signin_days = 0
                     try:
-                        me_res = requests.get(f"{HDHIVE_BASE}/me", headers=h, proxies=self._proxies(), timeout=10)
+                        me_res = hdhive_client.get_me(api_key, proxies=self._proxies(), timeout=10)
                         if me_res.status_code == 200:
                             me_data = me_res.json()
                             if me_data.get("success"):
@@ -594,8 +578,8 @@ class HDHivePlugin(PluginBase):
     def get_usage_stats(self, start_date=None, end_date=None):
         """获取用量统计"""
         try:
-            h = self._headers()
-            if not h.get("X-API-Key"):
+            api_key = self._get_config().get("api_key", "")
+            if not api_key:
                 return {"status": "error", "message": "未配置 API Key"}
             
             params = {}
@@ -604,13 +588,7 @@ class HDHivePlugin(PluginBase):
             if end_date:
                 params["end_date"] = end_date
             
-            res = requests.get(
-                f"{HDHIVE_BASE}/usage", 
-                headers=h, 
-                params=params,
-                proxies=self._proxies(), 
-                timeout=10
-            )
+            res = hdhive_client.get_usage(api_key, params=params, proxies=self._proxies(), timeout=10)
             if res.status_code == 200:
                 data = res.json()
                 if data.get("success"):
@@ -623,16 +601,11 @@ class HDHivePlugin(PluginBase):
     def get_usage_today(self):
         """获取今日用量"""
         try:
-            h = self._headers()
-            if not h.get("X-API-Key"):
+            api_key = self._get_config().get("api_key", "")
+            if not api_key:
                 return {"status": "error", "message": "未配置 API Key"}
             
-            res = requests.get(
-                f"{HDHIVE_BASE}/usage/today", 
-                headers=h, 
-                proxies=self._proxies(), 
-                timeout=10
-            )
+            res = hdhive_client.get_usage_today(api_key, proxies=self._proxies(), timeout=10)
             if res.status_code == 200:
                 data = res.json()
                 if data.get("success"):
@@ -645,16 +618,11 @@ class HDHivePlugin(PluginBase):
     def get_vip_weekly_quota(self):
         """获取永V每周免费解锁额度"""
         try:
-            h = self._headers()
-            if not h.get("X-API-Key"):
+            api_key = self._get_config().get("api_key", "")
+            if not api_key:
                 return {"status": "error", "message": "未配置 API Key"}
             
-            res = requests.get(
-                f"{HDHIVE_BASE}/vip/weekly-free-quota", 
-                headers=h, 
-                proxies=self._proxies(), 
-                timeout=10
-            )
+            res = hdhive_client.get_vip_weekly_quota(api_key, proxies=self._proxies(), timeout=10)
             if res.status_code == 200:
                 data = res.json()
                 if data.get("success"):
@@ -913,16 +881,11 @@ class HDHivePlugin(PluginBase):
         keyword = cache.get("keyword", "")
         self._log(f"用户选择: {selected['title']}，正在查询影巢资源...")
 
-        h = self._headers()
         from app.utils.proxy_helper import get_safe_proxies
         proxies = get_safe_proxies()
 
-        # 用 TMDB ID 查询影巢资源
-        api_res_type = "movie" if res_type == "movie" else "tv"
-        url = f"{HDHIVE_BASE}/resources/{api_res_type}/{tmdb_id}"
-
         try:
-            resp = requests.get(url, headers=h, proxies=proxies, timeout=15)
+            resp = hdhive_client.search_resources(self._get_config().get("api_key", ""), res_type, tmdb_id, proxies=proxies, timeout=15)
             logger.info(f"[影巢搜索] 影巢API响应: HTTP {resp.status_code}, body: {resp.text[:200]}")
 
             resources_115 = []
@@ -955,7 +918,7 @@ class HDHivePlugin(PluginBase):
                     if pan_type == "115":
                         r["drive_type"] = "115"
                         r["item_info"] = selected
-                        r["resource_type"] = api_res_type
+                        r["resource_type"] = "movie" if res_type == "movie" else "tv"
                         r["slug"] = res_slug or slug
                         r["website"] = "115"
                         resources_115.append(r)

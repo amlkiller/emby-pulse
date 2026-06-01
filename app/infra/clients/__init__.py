@@ -1,6 +1,7 @@
 """External service client infrastructure boundaries."""
 
 from .media_server_client import MediaServerAdapter, media_api
+from .hdhive_client import HdhiveClient, hdhive_client
 from .moviepilot_client import MoviePilotClient, moviepilot_client
 from .telegram_client import TelegramClient, telegram_client
 from .tmdb_client import TmdbClient, tmdb_client
@@ -9,6 +10,8 @@ from .wecom_client import WeComClient, wecom_client
 __all__ = [
     "MediaServerAdapter",
     "media_api",
+    "HdhiveClient",
+    "hdhive_client",
     "MoviePilotClient",
     "moviepilot_client",
     "TelegramClient",
