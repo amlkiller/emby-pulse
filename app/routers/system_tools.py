@@ -15,6 +15,7 @@ from app.core.config import cfg
 from app.dao.system_tool_dao import check_system_db_readwrite, check_system_table_integrity
 from app.infra.db.perf_stats import get_query_perf_stats
 from app.infra.clients.tmdb_client import tmdb_client
+from app.infra.clients.weather_client import weather_client
 from app.queries.system_tool_queries import get_latest_playback_date
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
 from app.core.security_utils import safe_error_message
@@ -88,9 +89,6 @@ _weather_refresh_running = False
 
 def _fetch_weather_from_api(city: str) -> dict:
     """从天气 API 获取数据（内部函数）"""
-    import urllib.parse
-    headers = {"User-Agent": "Mozilla/5.0 (EmbyPulse)"}
-    encoded_city = urllib.parse.quote(city)
     weather_source = cfg.get("weather_source", "wttr")
 
     # 和风天气
@@ -99,13 +97,12 @@ def _fetch_weather_from_api(city: str) -> dict:
         qw_host = cfg.get("weather_qweather_host", "").strip().rstrip("/")
         if weather_key and qw_host:
             try:
-                auth_headers = {**headers, "X-QW-Api-Key": weather_key}
-                loc_res = requests.get(f"https://{qw_host}/geo/v2/city/lookup?location={encoded_city}", headers=auth_headers, timeout=6)
+                loc_res = weather_client.get_qweather_location(qw_host, city, weather_key, timeout=6)
                 if loc_res.status_code == 200:
                     loc_data = loc_res.json()
                     if loc_data.get("code") == "200" and loc_data.get("location"):
                         loc_id = loc_data["location"][0]["id"]
-                        w_res = requests.get(f"https://{qw_host}/v7/weather/now?location={loc_id}", headers=auth_headers, timeout=6)
+                        w_res = weather_client.get_qweather_now(qw_host, loc_id, weather_key, timeout=6)
                         if w_res.status_code == 200:
                             w = w_res.json()
                             if w.get("code") == "200":
@@ -119,7 +116,7 @@ def _fetch_weather_from_api(city: str) -> dict:
         amap_key = cfg.get("weather_amap_key", "")
         if amap_key:
             try:
-                res = requests.get(f"https://restapi.amap.com/v3/weather/weatherInfo?city={encoded_city}&key={amap_key}&extensions=base", headers=headers, timeout=6)
+                res = weather_client.get_amap_weather(city, amap_key, timeout=6)
                 if res.status_code == 200:
                     d = res.json()
                     if d.get("status") == "1" and d.get("lives"):
@@ -131,7 +128,7 @@ def _fetch_weather_from_api(city: str) -> dict:
     # 兜底：wttr.in
     proxies = get_safe_proxies()
     try:
-        res = requests.get(f"https://wttr.in/{encoded_city}?format=j1&lang=zh", headers=headers, timeout=6)
+        res = weather_client.get_wttr_weather(city, timeout=6)
         if res.status_code == 200:
             # 🔥 显式设置编码为 UTF-8，避免中文乱码
             res.encoding = 'utf-8'
@@ -139,7 +136,7 @@ def _fetch_weather_from_api(city: str) -> dict:
     except Exception: pass
     if proxies:
         try:
-            res = requests.get(f"https://wttr.in/{encoded_city}?format=j1&lang=zh", proxies=proxies, headers=headers, timeout=6)
+            res = weather_client.get_wttr_weather(city, proxies=proxies, timeout=6)
             if res.status_code == 200:
                 # 🔥 显式设置编码为 UTF-8，避免中文乱码
                 res.encoding = 'utf-8'
