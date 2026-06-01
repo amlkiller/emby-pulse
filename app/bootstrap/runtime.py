@@ -55,7 +55,7 @@ def start_weather_cache_preload() -> None:
     """Preload weather cache in the background after startup."""
     def _start_weather_service():
         time.sleep(10)
-        from app.routers.system_tools import preload_weather_cache
+        from app.domains.system.system_tools import preload_weather_cache
 
         preload_weather_cache()
 
