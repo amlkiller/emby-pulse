@@ -6,11 +6,11 @@ import re
 import json
 import time
 import logging
-import requests
 import threading
 from app.plugins.base import PluginBase
 from app.core.config import cfg
 from app.core.event_bus import bus
+from app.infra.clients.cloud115_client import cloud115_client
 
 logger = logging.getLogger("uvicorn")
 
@@ -256,7 +256,6 @@ class Cloud115Plugin(PluginBase):
             folder_cid = "0"
             folder_name = "根目录"
 
-        headers = {"Cookie": cookie, "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", "Referer": "https://115.com/"}
         total_count = len(magnets) + len(ed2ks)
 
         self._log(f"开始处理离线下载，磁力:{len(magnets)}个, ed2k:{len(ed2ks)}个，目标:{folder_name}({folder_cid})")
@@ -265,13 +264,13 @@ class Cloud115Plugin(PluginBase):
         # 获取uid和sign
         try:
             # 获取uid
-            user_resp = requests.get("https://my.115.com/?ct=ajax&ac=nav", headers=headers, timeout=15)
+            user_resp = cloud115_client.get_nav(cookie, timeout=15)
             user_data = user_resp.json()
             uid = user_data.get("data", {}).get("user_id", "")
             logger.info(f"[115离线] 获取uid: {uid}")
 
             # 获取sign和time
-            token_resp = requests.get("https://115.com/?ct=offline&ac=space", headers=headers, timeout=15)
+            token_resp = cloud115_client.get_offline_space(cookie, timeout=15)
             token_data = token_resp.json()
             sign = token_data.get("sign", "")
             time_val = token_data.get("time", "")
@@ -303,7 +302,7 @@ class Cloud115Plugin(PluginBase):
                     "savepath": ""
                 }
 
-                resp = requests.post("https://115.com/web/lixian/?ct=lixian&ac=add_task_url", data=data, headers=headers, timeout=15)
+                resp = cloud115_client.add_offline_task(cookie, data, timeout=15)
                 result = resp.json()
                 logger.info(f"[115离线] 添加URL: {url[:50]}...")
                 logger.info(f"[115离线] 响应: {result}")
@@ -374,11 +373,7 @@ class Cloud115Plugin(PluginBase):
                 self._notify(chat_id, f"⚠️ [115转存] 无法解析链接：{link[:50]}...", platform)
                 return
 
-            headers = {"Cookie": cookie, "User-Agent": "Mozilla/5.0"}
-            info_res = requests.get(
-                f"https://webapi.115.com/share/snap?share_code={share_code}&offset=0&limit=20&receive_code={receive_code}",
-                headers=headers, timeout=15
-            )
+            info_res = cloud115_client.get_share_snap(cookie, share_code, receive_code, timeout=15)
             if info_res.status_code != 200:
                 self._notify(chat_id, f"❌ [115转存] 获取分享信息失败", platform)
                 return
@@ -398,17 +393,13 @@ class Cloud115Plugin(PluginBase):
             file_ids = [str(f.get("fid") or f.get("cid")) for f in file_list]
             share_snap_id = info.get("data", {}).get("shareinfo", {}).get("snap_id", "")
 
-            transfer_res = requests.post(
-                "https://webapi.115.com/share/receive",
-                data={
-                    "share_code": share_code,
-                    "receive_code": receive_code,
-                    "snap_id": share_snap_id,
-                    "file_id": ",".join(file_ids),
-                    "cid": cid
-                },
-                headers=headers, timeout=15
-            )
+            transfer_res = cloud115_client.receive_share(cookie, {
+                "share_code": share_code,
+                "receive_code": receive_code,
+                "snap_id": share_snap_id,
+                "file_id": ",".join(file_ids),
+                "cid": cid
+            }, timeout=15)
             result = transfer_res.json()
 
             if result.get("state"):
@@ -432,11 +423,7 @@ class Cloud115Plugin(PluginBase):
             if not share_code:
                 return {"status": "error", "message": "无法解析分享链接"}
 
-            headers = {"Cookie": cookie, "User-Agent": "Mozilla/5.0"}
-            info_res = requests.get(
-                f"https://webapi.115.com/share/snap?share_code={share_code}&offset=0&limit=20&receive_code={receive_code}",
-                headers=headers, timeout=15
-            )
+            info_res = cloud115_client.get_share_snap(cookie, share_code, receive_code, timeout=15)
             if info_res.status_code != 200:
                 return {"status": "error", "message": "获取分享信息失败"}
 
@@ -453,17 +440,13 @@ class Cloud115Plugin(PluginBase):
             file_ids = [str(f.get("fid") or f.get("cid")) for f in file_list]
             share_snap_id = info.get("data", {}).get("shareinfo", {}).get("snap_id", "")
 
-            transfer_res = requests.post(
-                "https://webapi.115.com/share/receive",
-                data={
-                    "share_code": share_code,
-                    "receive_code": receive_code,
-                    "snap_id": share_snap_id,
-                    "file_id": ",".join(file_ids),
-                    "cid": cid
-                },
-                headers=headers, timeout=15
-            )
+            transfer_res = cloud115_client.receive_share(cookie, {
+                "share_code": share_code,
+                "receive_code": receive_code,
+                "snap_id": share_snap_id,
+                "file_id": ",".join(file_ids),
+                "cid": cid
+            }, timeout=15)
             result = transfer_res.json()
 
             if result.get("state"):
