@@ -7,7 +7,7 @@ import math
 import random
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from app.core.config import FONT_PATH, FONT_URLS, THEMES, BUILTIN_FONT_PATH
-from app.queries.report_queries import (
+from app.domains.reports.report_queries import (
     build_report_base_filter,
     count_report_plays,
     list_report_ranked_items,
