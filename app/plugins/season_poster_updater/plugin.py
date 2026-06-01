@@ -16,7 +16,7 @@ from app.plugins.base import PluginBase
 from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
 from app.core.config import cfg
 from app.core.event_bus import bus
-from app.core.media_adapter import media_api
+from app.infra.clients.media_server_client import media_api
 from app.dao.season_poster_dao import (
     clear_plugin_logs,
     clear_season_poster_cache,

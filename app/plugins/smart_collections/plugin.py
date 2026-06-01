@@ -6,14 +6,13 @@ import time
 import json
 import logging
 import threading
-import requests
 import datetime
 from typing import Optional, List, Dict, Any
 from fastapi import Request
 from app.plugins.base import PluginBase
 from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
 from app.core.config import cfg
-from app.core.media_adapter import media_api
+from app.infra.clients.media_server_client import media_api
 from app.dao.smart_collection_dao import (
     add_smart_collection_log,
     create_smart_collection,
@@ -28,6 +27,7 @@ from app.dao.smart_collection_dao import (
     set_smart_collection_sync_state,
     update_smart_collection,
 )
+from app.infra.clients.tmdb_client import tmdb_client
 
 logger = logging.getLogger("uvicorn")
 
@@ -481,7 +481,6 @@ class SmartCollectionsPlugin(PluginBase):
         if not admin_id:
             return []
         
-        tmdb_key = cfg.get("tmdb_api_key")
         from app.utils.proxy_helper import get_safe_proxies
         proxies = get_safe_proxies()
         
@@ -498,33 +497,34 @@ class SmartCollectionsPlugin(PluginBase):
             source_config = json.loads(row["source_config"] or "{}")
             return source_config.get("item_ids", [])
         elif source_type.startswith("tmdb_"):
-            return self._fetch_tmdb_items(source_type, tmdb_key, proxies, min_rating, emby_tmdb_map)
+            return self._fetch_tmdb_items(source_type, proxies, min_rating, emby_tmdb_map)
         
         return []
     
-    def _fetch_tmdb_items(self, source_type: str, tmdb_key: str, proxies: dict, min_rating: float, emby_tmdb_map: dict) -> List[str]:
+    def _fetch_tmdb_items(self, source_type: str, proxies: dict, min_rating: float, emby_tmdb_map: dict) -> List[str]:
         """从 TMDB 获取项目"""
-        urls = {
-            "tmdb_movie_trending": f"https://api.themoviedb.org/3/trending/movie/week?api_key={tmdb_key}&language=zh-CN",
-            "tmdb_movie_top_rated": f"https://api.themoviedb.org/3/movie/top_rated?api_key={tmdb_key}&language=zh-CN",
-            "tmdb_tv_trending": f"https://api.themoviedb.org/3/trending/tv/week?api_key={tmdb_key}&language=zh-CN",
-            "tmdb_tv_top_rated": f"https://api.themoviedb.org/3/tv/top_rated?api_key={tmdb_key}&language=zh-CN",
-            "tmdb_anime_trending": f"https://api.themoviedb.org/3/discover/tv?api_key={tmdb_key}&language=zh-CN&with_genres=16&sort_by=popularity.desc",
-            "tmdb_anime_top_rated": f"https://api.themoviedb.org/3/discover/tv?api_key={tmdb_key}&language=zh-CN&with_genres=16&sort_by=vote_average.desc&vote_count.gte=100",
-        }
-        
         # TMDB Top250 需要分页获取
         if source_type == "tmdb_movie_top250":
-            return self._fetch_tmdb_top250("movie", tmdb_key, proxies, min_rating, emby_tmdb_map)
+            return self._fetch_tmdb_top250("movie", proxies, min_rating, emby_tmdb_map)
         elif source_type == "tmdb_tv_top250":
-            return self._fetch_tmdb_top250("tv", tmdb_key, proxies, min_rating, emby_tmdb_map)
-        
-        url = urls.get(source_type)
-        if not url:
-            return []
-        
+            return self._fetch_tmdb_top250("tv", proxies, min_rating, emby_tmdb_map)
+
         try:
-            res = requests.get(url, proxies=proxies, timeout=15)
+            if source_type == "tmdb_movie_trending":
+                res = tmdb_client.get_trending(media_type="movie", proxies=proxies, timeout=15)
+            elif source_type == "tmdb_movie_top_rated":
+                res = tmdb_client.get_top_rated("movie", proxies=proxies, timeout=15)
+            elif source_type == "tmdb_tv_trending":
+                res = tmdb_client.get_trending(media_type="tv", proxies=proxies, timeout=15)
+            elif source_type == "tmdb_tv_top_rated":
+                res = tmdb_client.get_top_rated("tv", proxies=proxies, timeout=15)
+            elif source_type == "tmdb_anime_trending":
+                res = tmdb_client.discover_tv(proxies=proxies, timeout=15, with_genres="16", sort_by="popularity.desc")
+            elif source_type == "tmdb_anime_top_rated":
+                res = tmdb_client.discover_tv(proxies=proxies, timeout=15, with_genres="16", sort_by="vote_average.desc", vote_count_gte=100)
+            else:
+                return []
+
             if res.status_code != 200:
                 return []
             
@@ -543,17 +543,15 @@ class SmartCollectionsPlugin(PluginBase):
             logger.error(f"[智能合集] TMDB 请求失败: {e}")
             return []
     
-    def _fetch_tmdb_top250(self, media_type: str, tmdb_key: str, proxies: dict, min_rating: float, emby_tmdb_map: dict) -> List[str]:
+    def _fetch_tmdb_top250(self, media_type: str, proxies: dict, min_rating: float, emby_tmdb_map: dict) -> List[str]:
         """获取 TMDB Top250 榜单（分页获取前250名）"""
         matched_ids = []
         
         try:
             # TMDB 每页最多 20 条，需要获取 13 页才能拿到 250 条
             for page in range(1, 14):
-                url = f"https://api.themoviedb.org/3/{media_type}/top_rated?api_key={tmdb_key}&language=zh-CN&page={page}"
-                
                 try:
-                    res = requests.get(url, proxies=proxies, timeout=15)
+                    res = tmdb_client.get_top_rated(media_type, proxies=proxies, timeout=15, page=page)
                     if res.status_code != 200:
                         continue
                     

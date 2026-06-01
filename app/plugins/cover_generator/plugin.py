@@ -17,7 +17,7 @@ from PIL import Image
 from app.plugins.base import PluginBase
 from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
 from app.core.config import cfg
-from app.core.media_adapter import media_api
+from app.infra.clients.media_server_client import media_api
 
 from .styles import get_style, list_all_styles, STATIC_STYLES
 from .utils.image import load_image_from_bytes
@@ -532,7 +532,6 @@ class CoverGeneratorPlugin(PluginBase):
     def _is_pro(self):
         """检查 Pro 授权"""
         return True
-
 
 
 

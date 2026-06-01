@@ -30,7 +30,7 @@ from app.dao.user_backup_dao import (
 from app.plugins.base import PluginBase
 from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
 from app.core.config import cfg
-from app.core.media_adapter import media_api
+from app.infra.clients.media_server_client import media_api
 
 logger = logging.getLogger("uvicorn")
 

@@ -17,9 +17,11 @@ from app.core.config import cfg
 from app.dao import invitation_dao, media_request_dao, point_dao, user_bot_dao, user_dao
 from app.queries import stats_queries
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
-from app.core.media_adapter import media_api
+from app.infra.clients.media_server_client import media_api
+from app.infra.clients.telegram_client import telegram_client
 from app.core.security import validate_password_strength  # 🔒 统一密码强度校验
 from app.core.security_utils import safe_error_message  # 🔒 错误脱敏
+from app.infra.clients.tmdb_client import tmdb_client
 
 logger = logging.getLogger("uvicorn")
 
@@ -242,7 +244,7 @@ def _tg_api(method, data=None, token=None):
         return None
     try:
         # 缩短超时时间，快速失败
-        r = requests.post(f"https://api.telegram.org/bot{tk}/{method}", json=data, proxies=_get_proxies(), timeout=8)
+        r = telegram_client.post_api(tk, method, json=data, proxies=_get_proxies(), timeout=8)
         return r.json() if r.status_code == 200 else None
     except:
         return None
@@ -761,10 +763,7 @@ def cmd_bind(chat_id, tg_user_id, args, tg_username="", tg_display_name=""):
         return
     try:
         # 通过 Emby AuthenticateByName 验证身份
-        host = cfg.get("emby_host")
-        url = f"{host}/emby/Users/AuthenticateByName"
-        headers = {"X-Emby-Authorization": 'MediaBrowser Client="EmbyPulse", Device="TGBot", DeviceId="UserBot", Version="1.0.0"'}
-        res = requests.post(url, json={"Username": username, "Pw": password}, headers=headers, timeout=10)
+        res = media_api.authenticate_by_name(username, password, timeout=10)
         if res.status_code != 200:
             _send(chat_id, "❌ 用户名或密码错误，请检查后重试")
             return
@@ -1480,12 +1479,7 @@ def _delete_messages_later(chat_id, message_ids, delay_seconds=30):
         for msg_id in message_ids:
             if msg_id:
                 try:
-                    requests.post(
-                        f"https://api.telegram.org/bot{token}/deleteMessage",
-                        json={"chat_id": chat_id, "message_id": msg_id},
-                        proxies=_get_proxies(),
-                        timeout=10
-                    )
+                    telegram_client.post_api(token, "deleteMessage", json={"chat_id": chat_id, "message_id": msg_id}, proxies=_get_proxies(), timeout=10)
                 except:
                     pass
     threading.Thread(target=delete_messages, daemon=True).start()
@@ -1525,7 +1519,7 @@ def cmd_rank(chat_id, tg_user_id, is_group=False):
     try:
         # 先获取 Emby 用户列表，用于过滤已删除的用户
         try:
-            from app.core.media_adapter import media_api
+            from app.infra.clients.media_server_client import media_api
             emby_users = media_api.get("/Users", timeout=5).json()
             emby_user_ids = {u['Id'] for u in emby_users}
             emby_name_map = {u['Id']: u['Name'] for u in emby_users}
@@ -1628,7 +1622,7 @@ def cmd_rob(chat_id, tg_user_id, text, is_group=False, entities=None):
             row = user_bot_dao.get_binding_by_tg_user_or_username(target)
             if not row:
                 try:
-                    from app.core.media_adapter import media_api
+                    from app.infra.clients.media_server_client import media_api
                     emby_users = media_api.get("/Users", timeout=5).json()
                     user_map = {u['Name']: u['Id'] for u in emby_users}
                     to_user_id = user_map.get(target)
@@ -1904,7 +1898,7 @@ def cmd_pk_invite(chat_id, tg_user_id, text, is_group=False, entities=None, user
             
             if not row:
                 try:
-                    from app.core.media_adapter import media_api
+                    from app.infra.clients.media_server_client import media_api
                     emby_users = media_api.get("/Users", timeout=5).json()
                     user_map = {u['Name']: u['Id'] for u in emby_users}
                     to_user_id = user_map.get(target)
@@ -3016,13 +3010,12 @@ def cmd_request(chat_id, tg_user_id, args):
     if not args:
         _send(chat_id, "🔍 请输入要搜索的影视名称：/request 剧名")
         return
-    tmdb_key = cfg.get("tmdb_api_key")
-    if not tmdb_key:
+    if not tmdb_client.api_key:
         _send(chat_id, "❌ 服务器未配置 TMDB，求片功能不可用")
         return
     try:
         proxies = get_safe_proxies()
-        res = requests.get(f"https://api.themoviedb.org/3/search/multi?api_key={tmdb_key}&query={args}&language=zh-CN&page=1", proxies=proxies, timeout=10)
+        res = tmdb_client.search_multi(args, proxies=proxies, timeout=10, page=1)
         results = [r for r in res.json().get("results", []) if r.get("media_type") in ["movie", "tv"]][:5]
         if not results:
             _send(chat_id, f"📭 未找到与 <b>{args}</b> 相关的影视")
@@ -3052,9 +3045,8 @@ def cmd_request_callback(chat_id, tg_user_id, media_type, tmdb_id, cq_id):
     # 电视剧需要先选季
     if media_type == "tv":
         try:
-            tmdb_key = cfg.get("tmdb_api_key")
             proxies = get_safe_proxies()
-            detail = requests.get(f"https://api.themoviedb.org/3/tv/{tmdb_id}?api_key={tmdb_key}&language=zh-CN", proxies=proxies, timeout=10).json()
+            detail = tmdb_client.get_tv_details(tmdb_id, proxies=proxies, timeout=10).json()
             title = detail.get("name", "未知")
             seasons = detail.get("seasons", [])
             real_seasons = [s for s in seasons if s.get("season_number", 0) > 0]
@@ -3099,10 +3091,11 @@ def _submit_request(chat_id, tg_user_id, media_type, tmdb_id, season):
     uid = binding['emby_user_id']
     uname = binding['emby_username']
     try:
-        tmdb_key = cfg.get("tmdb_api_key")
         proxies = get_safe_proxies()
-        mtype = "movie" if media_type == "movie" else "tv"
-        detail = requests.get(f"https://api.themoviedb.org/3/{mtype}/{tmdb_id}?api_key={tmdb_key}&language=zh-CN", proxies=proxies, timeout=10).json()
+        if media_type == "movie":
+            detail = tmdb_client.get_movie_details(tmdb_id, proxies=proxies, timeout=10).json()
+        else:
+            detail = tmdb_client.get_tv_details(tmdb_id, proxies=proxies, timeout=10).json()
         title = detail.get("title") or detail.get("name", "未知")
         year = (detail.get("release_date") or detail.get("first_air_date") or "")[:4]
         poster_path = detail.get("poster_path", "")
@@ -3424,9 +3417,7 @@ def cmd_password(chat_id, tg_user_id, args):
     uid = binding['emby_user_id']
     try:
         # 先通过登录验证当前密码
-        auth_url = f"{cfg.get('emby_host')}/emby/Users/AuthenticateByName"
-        auth_headers = {"X-Emby-Authorization": 'MediaBrowser Client="EmbyPulse", Device="TGBot", DeviceId="UserBot", Version="1.0.0"'}
-        auth_res = requests.post(auth_url, json={"Username": uname, "Pw": old_pwd}, headers=auth_headers, timeout=10)
+        auth_res = media_api.authenticate_by_name(uname, old_pwd, timeout=10)
         if auth_res.status_code != 200:
             _send(chat_id, "❌ 当前密码错误，请检查后重试")
             return
@@ -3606,9 +3597,7 @@ class UserBot:
         while self.running:
             try:
                 # 使用 long polling，timeout=30 秒
-                res = requests.get(f"https://api.telegram.org/bot{token}/getUpdates",
-                                   params={"offset": self.offset, "timeout": 30},
-                                   proxies=_get_proxies(), timeout=35)
+                res = telegram_client.get_updates(token, params={"offset": self.offset, "timeout": 30}, proxies=_get_proxies(), timeout=35)
                 if res.status_code == 200:
                     updates = res.json().get("result", [])
                     for u in updates:

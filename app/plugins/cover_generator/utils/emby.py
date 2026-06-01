@@ -3,9 +3,12 @@ import logging
 import random
 from typing import List, Optional, Dict, Any
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from app.core.media_adapter import media_api
+from app.infra.clients.media_server_client import media_api
+from app.infra.clients.tmdb_client import tmdb_client
 
 logger = logging.getLogger("uvicorn")
+
+TMDB_IMAGE_FALLBACK_API_KEY = "b0754d4e5c3d4e5a8f9c1e2d3f4a5b6c"
 
 
 def get_libraries() -> List[Dict[str, Any]]:
@@ -201,17 +204,19 @@ def get_tmdb_backdrop(tmdb_id: str, media_type: str = "movie", rng: random.Rando
     
     try:
         import requests
-        from app.core.config import cfg
         from app.utils.proxy_helper import get_safe_proxies
 
         proxies = get_safe_proxies()
         if not proxies:
             return None
-
-        api_key = cfg.get("tmdb_api_key") or "b0754d4e5c3d4e5a8f9c1e2d3f4a5b6c"
         
-        url = f"https://api.themoviedb.org/3/{media_type}/{tmdb_id}/images?api_key={api_key}"
-        res = requests.get(url, timeout=2, proxies=proxies)
+        res = tmdb_client.get_images(
+            media_type,
+            tmdb_id,
+            timeout=2,
+            proxies=proxies,
+            api_key=tmdb_client.api_key or TMDB_IMAGE_FALLBACK_API_KEY,
+        )
         if res.status_code != 200:
             return None
         

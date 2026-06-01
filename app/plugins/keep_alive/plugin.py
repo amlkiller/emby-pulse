@@ -11,6 +11,7 @@ from fastapi import Request
 from app.plugins.base import PluginBase
 from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
 from app.core.config import cfg
+from app.infra.clients.telegram_client import telegram_client
 from app.dao.keep_alive_dao import (
     count_keep_alive_disabled,
     count_keep_alive_unique_users,
@@ -711,12 +712,7 @@ class KeepAlivePlugin(PluginBase):
             proxies = get_safe_proxies()
             data = {"chat_id": chat_id, "text": msg, "parse_mode": "HTML"}
 
-            res = requests.post(
-                f"https://api.telegram.org/bot{user_bot_token}/sendMessage",
-                json=data,
-                proxies=proxies,
-                timeout=15
-            )
+            res = telegram_client.send_message(user_bot_token, data, proxies=proxies, timeout=15)
             if res.status_code == 200:
                 self._log(f"✅ 已通知用户 {emby_name} (TG: {chat_id})")
                 return True

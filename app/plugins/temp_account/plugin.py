@@ -14,6 +14,8 @@ from fastapi import Request
 from app.plugins.base import PluginBase
 from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
 from app.core.config import cfg
+from app.infra.clients.telegram_client import telegram_client
+from app.infra.clients.wecom_client import wecom_client
 from app.dao.temp_account_dao import (
     create_temp_account_with_meta,
     delete_temp_account_record,
@@ -881,12 +883,7 @@ class TempAccountPlugin(PluginBase):
             from app.utils.proxy_helper import get_safe_proxies
             proxies = get_safe_proxies()
             
-            res = requests.post(
-                f"https://api.telegram.org/bot{bot_token}/sendMessage",
-                json={"chat_id": chat_id, "text": message, "parse_mode": "HTML"},
-                proxies=proxies,
-                timeout=10
-            )
+            res = telegram_client.send_message(bot_token, {"chat_id": chat_id, "text": message, "parse_mode": "HTML"}, proxies=proxies, timeout=10)
             return res.status_code == 200
         except Exception as e:
             logger.error(f"[临时账号] TG通知失败: {e}")
@@ -907,11 +904,9 @@ class TempAccountPlugin(PluginBase):
             # 获取 access_token
             from app.utils.proxy_helper import get_safe_wecom_base, get_safe_proxies
             proxy_url = get_safe_wecom_base()
-            token_url = f"{proxy_url}/cgi-bin/gettoken?corpid={corpid}&corpsecret={corpsecret}"
-
             proxies = get_safe_proxies()
             
-            token_res = requests.get(token_url, proxies=proxies, timeout=10)
+            token_res = wecom_client.get_access_token(proxy_url, corpid, corpsecret, proxies=proxies, timeout=10)
             if token_res.status_code != 200:
                 return False
             
@@ -926,7 +921,6 @@ class TempAccountPlugin(PluginBase):
             else:
                 message = f"🔐 临时账号密码更新\n\n用户名: {username}\n新密码: {password}\n\n更新时间: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
             
-            send_url = f"{proxy_url}/cgi-bin/message/send?access_token={access_token}"
             send_data = {
                 "touser": touser,
                 "msgtype": "text",
@@ -934,7 +928,7 @@ class TempAccountPlugin(PluginBase):
                 "text": {"content": message}
             }
             
-            res = requests.post(send_url, json=send_data, proxies=proxies, timeout=10)
+            res = wecom_client.send_message(proxy_url, access_token, send_data, proxies=proxies, timeout=10)
             return res.status_code == 200
         except Exception as e:
             logger.error(f"[临时账号] 企微通知失败: {e}")

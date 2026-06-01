@@ -13,6 +13,7 @@ from app.plugins.base import PluginBase
 from app.routers.auth import is_admin_user  # 🔒 管理员鉴权
 from app.core.config import cfg
 from app.core.event_bus import bus
+from app.infra.clients.tmdb_client import tmdb_client
 
 logger = logging.getLogger("uvicorn")
 
@@ -191,24 +192,13 @@ class HDHivePlugin(PluginBase):
             return result
 
         # 否则用关键词搜索 TMDB
-        tmdb_api_key = cfg.get("tmdb_api_key")
-        if not tmdb_api_key:
+        if not tmdb_client.api_key:
             return {"status": "error", "message": "未配置 TMDB API Key"}
 
         try:
             # 搜索 TMDB
-            movie_res = requests.get(
-                f"https://api.themoviedb.org/3/search/movie",
-                params={"api_key": tmdb_api_key, "query": keyword, "language": "zh-CN", "page": 1},
-                proxies=proxies,
-                timeout=15
-            )
-            tv_res = requests.get(
-                f"https://api.themoviedb.org/3/search/tv",
-                params={"api_key": tmdb_api_key, "query": keyword, "language": "zh-CN", "page": 1},
-                proxies=proxies,
-                timeout=15
-            )
+            movie_res = tmdb_client.search_movie(keyword, proxies=proxies, timeout=15, page=1)
+            tv_res = tmdb_client.search_tv(keyword, proxies=proxies, timeout=15, page=1)
 
             # 收集所有 TMDB 结果（全部）
             tmdb_results = []
@@ -717,8 +707,7 @@ class HDHivePlugin(PluginBase):
             self._notify(chat_id, f"🔍 <b>[影巢搜索]</b> 正在搜索: {keyword}...", platform)
 
         # 1. TMDB 搜索（电影+剧集）
-        tmdb_api_key = cfg.get("tmdb_api_key")
-        if not tmdb_api_key:
+        if not tmdb_client.api_key:
             self._notify(chat_id, "❌ [影巢搜索] 未配置 TMDB API Key", platform)
             return
 
@@ -728,18 +717,8 @@ class HDHivePlugin(PluginBase):
 
         try:
             # 并行搜索电影和剧集（带分页）
-            movie_res = requests.get(
-                f"https://api.themoviedb.org/3/search/movie",
-                params={"api_key": tmdb_api_key, "query": keyword, "language": "zh-CN", "page": tmdb_page},
-                proxies=proxies,
-                timeout=15
-            )
-            tv_res = requests.get(
-                f"https://api.themoviedb.org/3/search/tv",
-                params={"api_key": tmdb_api_key, "query": keyword, "language": "zh-CN", "page": tmdb_page},
-                proxies=proxies,
-                timeout=15
-            )
+            movie_res = tmdb_client.search_movie(keyword, proxies=proxies, timeout=15, page=tmdb_page)
+            tv_res = tmdb_client.search_tv(keyword, proxies=proxies, timeout=15, page=tmdb_page)
 
             tmdb_results = []
             movie_total_pages = 1
