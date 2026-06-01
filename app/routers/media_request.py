@@ -1094,7 +1094,7 @@ def get_safe_top_media(category: str, request: Request):
     
     if not global_items:
         try:
-            from app.routers.stats import api_top_movies
+            from app.domains.playback.stats import api_top_movies
             logger.debug(f"[热播榜] 调用 api_top_movies 获取数据...")
             global_res = api_top_movies(user_id="all", category=category, sort_by="count")
             logger.debug(f"[热播榜] api_top_movies 返回状态: {global_res.get('status')}, 数据量: {len(global_res.get('data', []))}")
@@ -1166,7 +1166,7 @@ def get_safe_latest(limit: int = 15, request: Request = None):
     
     if not global_items:
         try:
-            from app.routers.stats import api_latest_media
+            from app.domains.playback.stats import api_latest_media
             global_res = api_latest_media(limit=40)
             global_items = global_res.get("data", [])
             
@@ -1300,7 +1300,7 @@ def _refresh_community_cache():
         
         # 2. 刷新 safe_latest
         try:
-            from app.routers.stats import api_latest_media
+            from app.domains.playback.stats import api_latest_media
             global_res = api_latest_media(limit=40)
             global_items = global_res.get("data", [])
             if global_items:
@@ -1311,7 +1311,7 @@ def _refresh_community_cache():
         
         # 3. 刷新 safe_top (Movie 和 Episode)
         try:
-            from app.routers.stats import api_top_movies
+            from app.domains.playback.stats import api_top_movies
             for category in ["Movie", "Episode"]:
                 global_res = api_top_movies(user_id="all", category=category, sort_by="count")
                 global_items = global_res.get("data", [])

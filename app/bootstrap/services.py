@@ -40,7 +40,7 @@ def start_user_bot_if_configured() -> None:
 
 
 def start_dashboard_cache_tasks() -> None:
-    from app.routers.stats import preload_dashboard_cache, start_dashboard_cache_refresh_loop
+    from app.domains.playback.stats import preload_dashboard_cache, start_dashboard_cache_refresh_loop
 
     asyncio.create_task(preload_dashboard_cache())
     asyncio.create_task(start_dashboard_cache_refresh_loop())
