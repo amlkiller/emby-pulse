@@ -222,3 +222,36 @@ Routed user-bot registry-owned tables through schema_registry, added tg_user_bin
 ### Next Steps
 
 - None - task complete
+
+
+## Session 7: Auth local users schema registry bootstrap
+
+**Date**: 2026-06-02
+**Task**: Auth local users schema registry bootstrap
+**Branch**: `main`
+
+### Summary
+
+Routed auth local_users schema bootstrap through schema_registry, added TOTP columns and safe ALTER coverage, guarded unsafe SQLite ALTERs, and verified with focused schema tests plus full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f094593` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
