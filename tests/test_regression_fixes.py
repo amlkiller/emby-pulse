@@ -10,7 +10,7 @@ if _repo_root not in sys.path:
 
 
 def test_notify_rule_default_is_enabled_when_missing(monkeypatch):
-    from app.routers import notify_admin
+    from app.domains.notifications import notify_admin
 
     monkeypatch.setattr(notify_admin, "get_notify_rule_row", lambda notify_type: None)
 
@@ -21,7 +21,7 @@ def test_notify_rule_default_is_enabled_when_missing(monkeypatch):
 
 
 def test_notify_rule_respects_saved_disabled_rule(monkeypatch):
-    from app.routers import notify_admin
+    from app.domains.notifications import notify_admin
 
     class FakeRow(dict):
         pass
