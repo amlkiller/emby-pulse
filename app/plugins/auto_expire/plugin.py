@@ -11,7 +11,7 @@ from app.plugins.base import PluginBase
 from app.domains.users.auth import is_admin_user  # 🔒 管理员鉴权
 from app.infra.clients.media_server_client import media_api
 from app.dao.user_dao import delete_user_meta_many, get_user_display_name, list_user_ids_with_expire_date, list_users_with_expire_date
-from app.dao.user_bot_dao import get_tg_user_id_by_emby_id
+from app.domains.users.user_bot_dao import get_tg_user_id_by_emby_id
 
 logger = logging.getLogger("uvicorn")
 
@@ -296,7 +296,7 @@ class AutoExpirePlugin(PluginBase):
         """从缓存或本地数据库获取用户名"""
         # 1. 先尝试从本地数据库获取
         try:
-            from app.dao.user_bot_dao import get_binding_by_emby_id
+            from app.domains.users.user_bot_dao import get_binding_by_emby_id
 
             binding = get_binding_by_emby_id(uid)
             if binding and binding.get("emby_username"):

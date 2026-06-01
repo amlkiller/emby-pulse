@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Request, Response, UploadFile, File, Form, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List
-from app.dao import audit_dao
+from app.infra.db import audit_dao
 from app.domains.system import invitation_dao
 from app.dao import user_dao
-from app.dao import user_bot_dao
+from app.domains.users import user_bot_dao
 from app.infra.clients.media_server_client import media_api
 from app.infra.clients.network_client import network_client
 from app.infra.config.media_server_settings import get_media_server_public_host

@@ -11,7 +11,8 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from app.core.config import REPORT_COVER_URL, FALLBACK_IMAGE_URL
 from app.dao.notification_dao import add_sys_notification
-from app.dao import media_request_dao, user_bot_dao
+from app.dao import media_request_dao
+from app.domains.users import user_bot_dao
 from app.domains.notifications import bot_service_dao, message_dao
 from app.domains.media_requests import gap_dao
 from app.domains.notifications import notify_admin_dao, notify_rule_dao

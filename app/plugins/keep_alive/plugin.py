@@ -23,7 +23,7 @@ from app.plugins.keep_alive.keep_alive_dao import (
     save_keep_alive_violation,
     update_keep_alive_violation_disabled,
 )
-from app.dao.user_bot_dao import get_binding_by_emby_id
+from app.domains.users.user_bot_dao import get_binding_by_emby_id
 from app.dao.user_dao import list_permanent_user_expire_records
 from app.domains.playback.stats_queries import get_user_play_summary
 
