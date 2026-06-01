@@ -90,3 +90,36 @@ Completed the infra database boundary refactor, removed the legacy query_db faca
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: Gap schema bootstrap registry
+
+**Date**: 2026-06-02
+**Task**: Gap schema bootstrap registry
+**Branch**: `main`
+
+### Summary
+
+Routed gap schema bootstrap through schema_registry, added focused regression tests, updated database schema guidance, and verified full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4e4aa55` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
