@@ -123,3 +123,36 @@ Routed gap schema bootstrap through schema_registry, added focused regression te
 ### Next Steps
 
 - None - task complete
+
+
+## Session 4: Dedupe schema bootstrap registry
+
+**Date**: 2026-06-02
+**Task**: Dedupe schema bootstrap registry
+**Branch**: `main`
+
+### Summary
+
+Routed dedupe schema bootstrap through schema_registry, preserved legacy whitelist migration, added focused regression tests, updated database schema guidance, and verified full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0a4342f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
