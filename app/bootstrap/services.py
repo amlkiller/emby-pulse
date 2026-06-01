@@ -1,4 +1,3 @@
-from app.core.session import start_session_cleanup_loop
 from app.infra.config.bot_settings import ensure_strong_webhook_token
 from app.domains.notifications.bot_service import (
     is_user_bot_running,
@@ -6,36 +5,16 @@ from app.domains.notifications.bot_service import (
     stop_notification_services,
 )
 from app.domains.risk.risk_service import start_risk_monitor
+from app.core.session import start_session_cleanup_loop
+from app.utils.proxy_helper import audit_existing_proxy_config
 
 from .user_portal import start_user_portal_thread
 
-
-def ensure_webhook_token() -> None:
-    ensure_strong_webhook_token()
-
-
 def audit_proxy_config() -> None:
     try:
-        from app.utils.proxy_helper import audit_existing_proxy_config
-
         audit_existing_proxy_config()
     except Exception as e:
         print(f"⚠️ proxy_helper 启动自检失败（忽略）: {e}")
-
-
-def start_dashboard_cache_tasks() -> None:
-    from app.domains.playback.stats import start_dashboard_cache_tasks as playback_start_dashboard_cache_tasks
-
-    playback_start_dashboard_cache_tasks()
-
-
-def start_community_cache_refresh() -> None:
-    from app.domains.media_requests.router import start_community_cache_refresh_loop
-
-    start_community_cache_refresh_loop()
-
-def start_session_cleanup() -> None:
-    start_session_cleanup_loop()
 
 
 def print_startup_panel(request_port: int) -> None:
@@ -56,16 +35,19 @@ def print_startup_panel(request_port: int) -> None:
 
 
 def start_bootstrap_services(app, request_port: int) -> None:
-    ensure_webhook_token()
+    ensure_strong_webhook_token()
     audit_proxy_config()
 
     start_notification_services()
     start_user_portal_thread(app, request_port)
     start_risk_monitor()
 
-    start_dashboard_cache_tasks()
-    start_community_cache_refresh()
-    start_session_cleanup()
+    from app.domains.playback.stats import start_dashboard_cache_tasks as playback_start_dashboard_cache_tasks
+    from app.domains.media_requests.router import start_community_cache_refresh_loop
+
+    playback_start_dashboard_cache_tasks()
+    start_community_cache_refresh_loop()
+    start_session_cleanup_loop()
     print_startup_panel(request_port)
 
 
