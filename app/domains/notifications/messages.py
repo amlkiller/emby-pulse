@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request, Depends
 from pydantic import BaseModel
 from typing import Optional
-from app.dao.message_dao import (
+from app.domains.notifications.message_dao import (
     add_notify_block,
     count_active_mutes,
     count_admin_unread_conversations,
