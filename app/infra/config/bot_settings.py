@@ -15,6 +15,14 @@ def get_webhook_token() -> str:
     return cfg.get("webhook_token", "")
 
 
+def get_tg_bot_token() -> str:
+    return cfg.get("tg_bot_token", "")
+
+
+def get_tg_chat_id() -> str:
+    return cfg.get("tg_chat_id", "")
+
+
 def get_webhook_base_url() -> str:
     return cfg.get("emby_public_url", "") or cfg.get("emby_host", "")
 
@@ -45,3 +53,11 @@ def set_bot_setting(field: str, value: Any) -> None:
 
 def get_user_bot_token() -> str:
     return cfg.get("tg_user_bot_token")
+
+
+def get_wecom_aeskey() -> str:
+    return cfg.get("wecom_aeskey") or ""
+
+
+def get_wecom_token() -> str:
+    return cfg.get("wecom_token") or ""

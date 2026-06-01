@@ -8,12 +8,17 @@ from app.infra.config.bot_settings import (
     get_all_bot_settings,
     get_bot_setting_source,
     get_bot_settings_audit_values,
+    get_tg_bot_token,
+    get_tg_chat_id,
     get_user_bot_token,
+    get_wecom_aeskey,
+    get_wecom_token,
     get_webhook_base_url,
     get_webhook_token,
     set_bot_setting,
     should_update_sensitive_bot_setting,
 )
+from app.infra.config.notification_settings import get_wecom_runtime_config
 from app.infra.config.user_bot_settings import (
     get_user_bot_allowed_groups,
     get_user_bot_notify_group_enabled,
@@ -21,6 +26,7 @@ from app.infra.config.user_bot_settings import (
     get_user_bot_open_reg_enabled,
     get_user_bot_reg_quota,
     get_user_bot_reg_quota_mode,
+    set_user_bot_registration_batch_used,
 )
 from app.dao.bot_admin_dao import (
     adjust_lottery_pool,
@@ -332,8 +338,8 @@ def api_send_open_reg_notify(request: Request, data: dict):
 @router.post("/api/bot/test")
 def api_test_bot(request: Request):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    token = cfg.get("tg_bot_token"); chat_id = cfg.get("tg_chat_id")
-    from app.utils.proxy_helper import get_safe_proxies, get_safe_wecom_base
+    token = get_tg_bot_token(); chat_id = get_tg_chat_id()
+    from app.utils.proxy_helper import get_safe_proxies
     
     if not token: return {"status": "error", "message": "请先保存配置"}
     
@@ -350,10 +356,11 @@ def api_test_bot(request: Request):
 @router.post("/api/bot/test_wecom")
 def api_test_wecom(request: Request):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    corpid = cfg.get("wecom_corpid"); corpsecret = cfg.get("wecom_corpsecret"); agentid = cfg.get("wecom_agentid")
+    wecom_config = get_wecom_runtime_config()
+    corpid = wecom_config["corpid"]; corpsecret = wecom_config["corpsecret"]; agentid = wecom_config["agentid"]
     from app.utils.proxy_helper import get_safe_wecom_base
     proxy_url = get_safe_wecom_base()
-    touser = cfg.get("wecom_touser", "@all")
+    touser = wecom_config["touser"]
     
     if not corpid or not corpsecret or not agentid:
         return {"status": "error", "message": "请填写完整的企业微信基础配置"}
@@ -379,7 +386,7 @@ def api_test_wecom(request: Request):
 async def api_test_channel(request: Request):
     """测试频道通知"""
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    token = cfg.get("tg_bot_token")
+    token = get_tg_bot_token()
     if not token: return {"status": "error", "message": "请先配置管理机器人 Token"}
     
     try:
@@ -414,7 +421,7 @@ async def api_test_channel(request: Request):
         return {"status": "error", "message": safe_error_message(e)}
 
 def get_playback_url(item_id):
-    base_url = cfg.get("emby_public_url") or cfg.get("emby_host")
+    base_url = get_webhook_base_url()
     if base_url.endswith('/'): base_url = base_url[:-1]
     return f"{base_url}/web/index.html#!/item?id={item_id}"
 
@@ -425,7 +432,7 @@ async def telegram_webhook(request: Request):
     header_token = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
     body_data = await request.json()
     body_token = body_data.get("secret_token") if isinstance(body_data, dict) else None
-    expected_token = cfg.get("tg_bot_token")
+    expected_token = get_tg_bot_token()
 
     # 🔒 安全：expected_token 未配置时拒绝所有请求
     if not expected_token:
@@ -479,7 +486,7 @@ def search_emby(keyword):
     return []
 
 def send_tg_msg(chat_id, text):
-    token = cfg.get("tg_bot_token")
+    token = get_tg_bot_token()
     from app.utils.proxy_helper import get_safe_proxies
     proxies = get_safe_proxies()
     try: telegram_client.send_message(token, {"chat_id": chat_id,"text": text,"parse_mode": "HTML"}, proxies=proxies, timeout=10)
@@ -489,7 +496,7 @@ def send_tg_msg(chat_id, text):
 def decrypt_wecom_data(encrypt_msg):
     if not AES: 
         raise Exception("环境缺少 pycryptodome 依赖，请在 requirements.txt 中添加并重新 build 镜像")
-    aeskey = cfg.get("wecom_aeskey") or ""
+    aeskey = get_wecom_aeskey()
     if not aeskey: 
         raise Exception("系统未配置 wecom_aeskey")
     
@@ -502,7 +509,7 @@ def decrypt_wecom_data(encrypt_msg):
     return decrypted[20:20+msg_len].decode('utf-8')
 
 def check_wecom_signature(msg_signature, timestamp, nonce, encrypt_msg):
-    token = cfg.get("wecom_token") or ""
+    token = get_wecom_token()
     sort_list = [token, timestamp, nonce, encrypt_msg]
     sort_list.sort()
     sha = hashlib.sha1()
@@ -649,7 +656,7 @@ async def api_clear_reg_logs(request: Request):
 async def api_reset_reg_batch(request: Request):
     """重置批次计数"""
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    cfg.set("user_bot_reg_batch_used", 0)
+    set_user_bot_registration_batch_used(0)
     # 同步重置内存中的 batch_used，避免后台线程把旧值写回
     try:
         from app.services import user_bot_service
