@@ -16,7 +16,8 @@ SYSTEM_TABLES = [
     "dedupe_config", "keep_alive_violations",
     "task_config", "task_translations", "tv_calendar_cache", "tg_reg_logs",
     "local_users", "msg_conversations", "msg_items", "msg_notify_block", "user_mutes",
-    "bot_notify_mutes", "user_audit_logs", "notify_rules", "calendar_notify_config"
+    "bot_notify_mutes", "user_audit_logs", "notify_rules", "calendar_notify_config",
+    "pwa_config", "user_pwa_icons"
 ]
 
 # 🔥 播放数据表（不迁移，保持原库读取）
@@ -234,6 +235,17 @@ TABLE_SCHEMAS = {
     "point_config": """CREATE TABLE IF NOT EXISTS point_config (
         key TEXT PRIMARY KEY,
         value TEXT
+    )""",
+
+    # ==================== PWA 配置 ====================
+    "pwa_config": """CREATE TABLE IF NOT EXISTS pwa_config (
+        key TEXT PRIMARY KEY,
+        value TEXT
+    )""",
+
+    "user_pwa_icons": """CREATE TABLE IF NOT EXISTS user_pwa_icons (
+        user_id TEXT PRIMARY KEY,
+        icon_id TEXT
     )""",
 
     # ==================== 插件系统 ====================

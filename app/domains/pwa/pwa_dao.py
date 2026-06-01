@@ -1,15 +1,11 @@
+from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
 
 
 def ensure_pwa_config_table() -> None:
     with system_store.connect() as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            """CREATE TABLE IF NOT EXISTS pwa_config (
-                key TEXT PRIMARY KEY,
-                value TEXT
-            )"""
-        )
+        ensure_registered_table(cursor, "pwa_config")
         conn.commit()
 
 
@@ -30,12 +26,7 @@ def save_pwa_config_value(key: str, value: str) -> None:
 def ensure_user_pwa_icons_table() -> None:
     with system_store.connect() as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            """CREATE TABLE IF NOT EXISTS user_pwa_icons (
-                user_id TEXT PRIMARY KEY,
-                icon_id TEXT
-            )"""
-        )
+        ensure_registered_table(cursor, "user_pwa_icons")
         conn.commit()
 
 

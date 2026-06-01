@@ -1,0 +1,2 @@
+{"file":"docs/架构审计.md","reason":"Verify the slice moves P2 schema fact-source cleanup forward without expanding scope."}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"Check compliance with schema registry boundary and bootstrap test requirements."}
