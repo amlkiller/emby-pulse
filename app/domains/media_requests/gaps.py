@@ -43,6 +43,7 @@ from app.infra.config.tmdb_settings import get_tmdb_api_key
 logger = logging.getLogger("uvicorn")
 
 router = APIRouter(prefix="/api/gaps", tags=["gaps"])
+_gap_services_started = False
 
 # 模块加载时确保表存在
 def _ensure_gap_tables():
@@ -51,8 +52,6 @@ def _ensure_gap_tables():
         ensure_gap_tables(logger)
     except Exception as e:
         logger.error(f"[缺集管理] 初始化表失败: {e}")
-
-_ensure_gap_tables()
 
 scan_state = {"is_scanning": False, "progress": 0, "total": 0, "current_item": "系统准备中...", "results": [], "error": None}
 state_lock = threading.Lock()
@@ -159,7 +158,14 @@ def _delayed_start_background_sync():
     t = threading.Thread(target=start_after_delay, daemon=True)
     t.start()
 
-_delayed_start_background_sync()
+
+def start_gap_services():
+    global _gap_services_started
+    if _gap_services_started:
+        return
+    _gap_services_started = True
+    _ensure_gap_tables()
+    _delayed_start_background_sync()
 
 def run_scan_task():
     try:

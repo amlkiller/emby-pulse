@@ -42,7 +42,9 @@ def init_dedupe_db():
     except Exception as e:
         logger.error(f"[去重引擎] 自动建表失败: {e}")
 
-init_dedupe_db()
+
+def start_dedupe_services():
+    init_dedupe_db()
 
 def calculate_score(src: dict, strategy: str = "quality", custom_weights: dict = None):
     score = 0
