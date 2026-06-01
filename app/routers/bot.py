@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Request, Response
 from app.schemas.models import BotSettingsModel
-from app.core.config import cfg
 from app.infra.clients.media_server_client import media_api
 from app.infra.clients.telegram_client import telegram_client
 from app.infra.clients.wecom_client import wecom_client

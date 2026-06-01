@@ -6,7 +6,6 @@ import logging
 import random
 import re
 from app.plugins.base import PluginBase
-from app.core.config import cfg
 
 logger = logging.getLogger("uvicorn")
 

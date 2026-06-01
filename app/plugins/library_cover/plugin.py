@@ -13,7 +13,6 @@ from io import BytesIO
 from fastapi import Request, UploadFile, File, Form
 from typing import List, Optional
 from app.plugins.base import PluginBase
-from app.core.config import cfg
 from app.infra.clients.media_server_client import media_api
 from app.routers.auth import is_admin_user
 
