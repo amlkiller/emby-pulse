@@ -6,14 +6,19 @@
 
 ## Overview
 
-The backend lives under `app/` and currently uses a pragmatic FastAPI structure:
+The backend lives under `app/` and currently uses a pragmatic FastAPI structure
+with most HTTP and business modules now grouped under `app/domains/`:
 
 * `app/main.py` is the thin application entrypoint. Keep version constants and app factory wiring here only.
 * `app/bootstrap/` owns application startup wiring: runtime preparation, middleware registration, route mounting, lifespan tasks, database initialization orchestration, logging setup, and the isolated user-portal ASGI wrapper.
 * `app/core/` owns reusable cross-cutting runtime helpers used by multiple backend areas, such as security, sessions, configuration, middleware implementations, and short-lived compatibility shims.
 * `app/infra/` owns infrastructure adapters such as database access, external service clients, and infrastructure-scoped configuration readers.
-* `app/routers/` owns HTTP route handlers and should not accumulate startup/bootstrap work.
-* `app/services/` owns long-running services and business workflows used by routers or startup tasks.
+* `app/domains/` owns domain-local HTTP route handlers, services, DAO/query modules, policy helpers, and background service entrypoints.
+* `app/plugins/` owns the plugin runtime plus built-in plugins.
+
+The old top-level `app/routers/`, `app/services/`, `app/dao/`, and `app/queries/`
+directories are no longer the current target layout in this checkout. Do not add
+new modules there unless a task explicitly asks for a compatibility shim.
 
 ---
 
@@ -35,11 +40,20 @@ app/
 │   │   ├── media_server_client.py
 │   │   ├── moviepilot_client.py
 │   │   └── tmdb_client.py
+│   ├── config/
 │   └── db/
-├── routers/
-├── services/
+├── domains/
+│   ├── media_requests/
+│   ├── notifications/
+│   ├── playback/
+│   ├── points/
+│   ├── reports/
+│   ├── risk/
+│   ├── system/
+│   └── users/
 ├── plugins/
 ├── schemas/
+├── shared/
 ├── utils/
 └── main.py
 ```
@@ -48,17 +62,32 @@ app/
 
 ## Module Organization
 
-Bootstrap code should stay behavior-preserving and orchestration-focused. Do not move business rules into `app/bootstrap/`; if a startup task needs business logic, call the existing router/service function and leave domain behavior in its current layer until that feature is explicitly refactored.
+Bootstrap code should stay behavior-preserving and orchestration-focused. Do not move business rules into `app/bootstrap/`; if a startup task needs business logic, call the existing domain router/service function and leave domain behavior in its current layer until that feature is explicitly refactored.
 
 When splitting large files, move one responsibility at a time and keep route URLs, response shapes, middleware order, and startup side effects stable unless a task explicitly approves behavior changes.
 
 Infrastructure adapters should live under `app/infra/` rather than `app/core/` when they own transport/session/retry behavior for an external dependency. If a temporary compatibility import is needed during a migration, keep it in `app/core/` as a thin re-export only.
 
-Current migration pattern: if a caller only needs generic external transport for file/image downloads or simple reachability probes, route it through `app/infra/clients/network_client.py` instead of leaving direct `requests.get(...)` calls in routers or services. Keep domain parsing, cache decisions, and user-facing error mapping at the caller.
+Current migration pattern: if a caller only needs generic external transport for file/image downloads or simple reachability probes, route it through `app/infra/clients/network_client.py` instead of leaving direct `requests.get(...)` calls in domains or plugins. Keep domain parsing, cache decisions, and user-facing error mapping at the caller.
 
 Current configuration migration pattern: infrastructure-scoped settings readers live under `app/infra/config/` and are used to centralize config access for infra modules before broader service/router config cleanup is tackled.
 
 Current proxy configuration pattern: `app/utils/proxy_helper.py` keeps validation, caching, and audit logging, while raw `proxy_url` / `wecom_proxy_url` reads live under `app/infra/config/proxy_settings.py`.
+
+Domain migration is in the "moved but not fully layered" stage. Several current
+domain files are still intentionally large compatibility-preserving modules. When
+cleaning them up, prefer small behavior-preserving slices:
+
+* `router.py` for HTTP endpoints, dependency checks, template rendering, and response compatibility.
+* `service.py` or named service modules for business orchestration and background workflows.
+* `dao.py` / `*_dao.py` for system database persistence through `system_store`.
+* `queries.py` / `*_queries.py` for playback/read-model queries through `playback_store`.
+* `policy.py` for reusable decision rules.
+* `events.py` for cross-domain event publication or handling.
+
+Do not deepen cross-domain imports into private DAO/query modules. If one domain
+needs another domain's behavior, prefer a public service function, a narrow
+facade, or an event boundary.
 
 ---
 
@@ -71,6 +100,9 @@ Use lowercase module names that describe the application responsibility:
 * `routes.py` for static mounts and router/plugin registration.
 * `lifespan.py` for FastAPI lifespan startup/shutdown tasks.
 * `user_portal.py` for the isolated user portal ASGI wrapper and secondary-port server.
+* Domain modules should use names that describe the slice (`router.py`,
+  `*_dao.py`, `*_queries.py`, `*_service.py`, `policy.py`) rather than generic
+  helpers.
 
 ---
 
@@ -78,12 +110,20 @@ Use lowercase module names that describe the application responsibility:
 
 `app/main.py` should remain a thin example of the desired application entrypoint: constants, `prepare_runtime()`, `create_app()`, exception handler registration, and the `uvicorn.run()` local entrypoint.
 
+`app/bootstrap/routes.py` is the current source of truth for mounted domain
+routers. Add new domain routers there rather than recreating a top-level
+`app/routers/` module.
+
+`app/bootstrap/services.py` is the current startup orchestrator. New long-running
+domain services should expose idempotent start functions and, where practical,
+matching stop functions so lifespan shutdown can eventually become complete.
+
 ## Scenario: External Client Adapter Boundary
 
 ### 1. Scope / Trigger
 
 - Trigger: any backend code that creates or changes HTTP/WebDAV/third-party transport calls for an external service.
-- Applies to routers, services, plugins, utilities, and infrastructure modules under `app/`.
+- Applies to domains, plugins, utilities, and infrastructure modules under `app/`.
 
 ### 2. Signatures
 
@@ -94,7 +134,7 @@ Use lowercase module names that describe the application responsibility:
 ### 3. Contracts
 
 - Transport/session/retry/request construction belongs in `app/infra/clients/`.
-- Routers, services, and plugins may keep business validation, response message mapping, XML/JSON parsing, file persistence, and domain-specific branching.
+- Domains and plugins may keep business validation, response message mapping, XML/JSON parsing, file persistence, and domain-specific branching.
 - Exception classes from the underlying transport library should not force callers to import that library directly; expose the needed exception type or wrap it at the client boundary.
 - Client modules must not depend on routers, concrete domains, or plugin classes.
 
@@ -102,17 +142,17 @@ Use lowercase module names that describe the application responsibility:
 
 - Existing timeout or status-code handling at the caller -> preserve the same branches unless the task explicitly changes behavior.
 - Existing proxy/auth/header behavior -> pass through unchanged or normalize only where existing code already normalized.
-- New direct `requests.*` in a router/service/plugin -> move it behind an infra client unless it is a clearly scoped byte-stream helper that the architecture notes allow to remain.
+- New direct `requests.*` in a domain/plugin -> move it behind an infra client unless it is a clearly scoped byte-stream helper that the architecture notes allow to remain.
 - Caller needs `requests.exceptions.Timeout` or similar -> expose it via the client boundary instead of adding a caller-side `requests` import.
 
 ### 5. Good/Base/Bad Cases
 
 - Good: `app/plugins/user_backup/plugin.py` calls `webdav_client.request("PROPFIND", ...)` while keeping WebDAV XML parsing in the plugin.
-- Base: `app/routers/system.py` keeps user-facing TMDB error messages while calling `tmdb_client.get_configuration(...)`.
+- Base: `app/domains/system/router.py` keeps user-facing TMDB error messages while calling `tmdb_client.get_configuration(...)`.
 - Bad: a plugin imports `requests` only to call `requests.get(...)` against a third-party service.
 - Good: `app/utils/ip_location.py` keeps cache and location cleaning locally while delegating all external IP lookup HTTP calls to `ip_location_client`.
-- Good: `app/routers/system_tools.py` keeps weather cache and fallback ordering locally while delegating QWeather/Amap/wttr transport calls to `weather_client`.
-- Good: `app/routers/system.py` keeps proxy validation and ping response messages locally while delegating probe requests and exception aliases to `network_client`.
+- Good: `app/domains/system/system_tools.py` keeps weather cache and fallback ordering locally while delegating QWeather/Amap/wttr transport calls to `weather_client`.
+- Good: `app/domains/system/router.py` keeps proxy validation and ping response messages locally while delegating probe requests and exception aliases to `network_client`.
 
 ### 6. Tests Required
 

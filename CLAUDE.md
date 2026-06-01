@@ -35,8 +35,9 @@ The project is mid-refactor. Use `架构.md` as the authoritative architecture r
 - `query_db()` has been removed and must not be reintroduced.
 - `app/core/database.py` and `app/core/db_manager.py` compatibility shells have been removed.
 - Database infrastructure lives under `app/infra/db/`, including system store, playback store, schema registry, and migration service.
-- Business access should go through DAO/query modules such as `app/dao/*` and `app/queries/*`, or through domain-local DAO/query modules as the domain migration continues.
-- Direct `sqlite3.connect()` should stay inside the infrastructure database boundary.
+- Business access should go through domain-local DAO/query modules under `app/domains/<domain>/`, or through `app/infra/db/*` for infrastructure operations.
+- Direct `sqlite3.connect()` should stay inside the infrastructure database boundary. Domain code may use `system_store` / `playback_store` and may import sqlite exception types only when needed for compatibility handling.
+- Current cleanup target: schema metadata is not yet fully single-sourced. `app/infra/db/schema_registry.py` delegates to `app/core/db_schemas.py`, while legacy initialization logic still exists in `app/infra/db/database.py` and repair helpers. New work should move toward one schema/migration path instead of adding another DDL source.
 
 ### External Client Boundary
 
@@ -47,24 +48,21 @@ The project is mid-refactor. Use `架构.md` as the authoritative architecture r
 
 ### Configuration Boundary
 
-- Third-stage config access governance is in progress.
+- Third-stage config access governance has largely centralized direct config access.
 - Infrastructure-scoped settings readers live under `app/infra/config/`.
 - Prefer focused readers such as `media_server_settings`, `tmdb_settings`, `notification_settings`, `risk_settings`, `request_portal_settings`, `auth_settings`, `calendar_settings`, `weather_settings`, `report_settings`, and `user_bot_settings`.
 - Avoid adding scattered `cfg.get()` / `cfg.set()` in routers, services, plugins, or domain code.
+- Remaining risk: most settings readers are still thin function wrappers, not typed settings contracts. Keep new readers focused, validated, and explicit about defaults and sensitive values.
 
 ### Domain Migration
 
 - Long-term target: related HTTP entrypoints, schemas, services, DAO/query code, and policies move into `app/domains/<name>/`.
-- Existing migrated domains include `playback`, `media_requests`, `notifications`, `points`, `risk`, `system`, and `users`.
-- `app/routers/*` may contain compatibility shims during migration. For moved router modules, prefer a module-level proxy shim:
-
-```python
-import sys
-from app.domains.<domain> import <module> as _impl
-sys.modules[__name__] = _impl
-```
-
-- Preserve route paths, response shapes, auth behavior, and side effects during migration batches.
+- Current migrated domains include `playback`, `media_requests`, `notifications`, `points`, `risk`, `system`, `users`, `reports`, `proxy`, `plugins`, and `pwa`.
+- `app/routers/`, `app/services/`, `app/dao/`, and `app/queries/` are no longer current top-level code directories in this checkout. Do not create new files there unless a compatibility task explicitly requires it.
+- Preserve route paths, response shapes, auth behavior, and side effects during domain cleanup batches.
+- Current cleanup target: many domain modules are still large moved files rather than clean internal layers. Split behavior-preservingly toward `router.py`, `service.py`, `dao.py`, `queries.py`, `policy.py`, and `events.py` only when a focused task owns that slice.
+- Current dependency risk: `infra/` and `core/` should not depend on concrete domains. Existing reverse dependencies should be treated as cleanup debt, not copied.
+- Current lifecycle risk: startup still directly starts many domain/plugin background loops. New long-running tasks should be idempotent and should expose explicit stop hooks where possible.
 
 ## Key Directories
 
@@ -75,15 +73,20 @@ app/
   core/               # cross-cutting runtime helpers: config, security, sessions, middleware
   infra/
     clients/          # external service adapters
-    config/           # typed/focused settings readers
+    config/           # focused settings readers
     db/               # database infrastructure and migrations
-  domains/            # gradually consolidated business domains
-  routers/            # HTTP routers and compatibility shims during migration
-  services/           # long-running services and business workflows not yet domain-local
-  dao/                # system DB DAO modules during transition
-  queries/            # playback/stat query modules during transition
+  domains/            # HTTP entrypoints, services, DAOs, queries, policies by domain
+    media_requests/
+    notifications/
+    playback/
+    points/
+    reports/
+    risk/
+    system/
+    users/
   plugins/            # plugin system and built-in plugins
   schemas/
+  shared/
   utils/
 templates/
 static/
@@ -98,6 +101,16 @@ tests/
 - Lifecycle hooks include `on_enable()` and `on_disable()`.
 - Pro-only plugins are gated by license checks.
 - Plugin transport calls should also go through `app/infra/clients/`.
+- Plugins currently import some domain internals directly. Prefer public domain service functions or plugin context APIs for new cross-domain interactions; do not deepen imports into private DAO/query internals.
+
+## Current Architecture Debt
+
+- Documentation and specs must be kept aligned with the current `app/domains/` layout; avoid reviving stale `app/routers` / `app/services` guidance.
+- Several domain files remain oversized and mixed-responsibility, especially notification bots, media requests, points, users, playback stats, and report generation.
+- Database schema ownership still has overlap between `schema_registry`, `core.db_schemas`, `infra.db.database`, `db_manager`, and repair helpers.
+- Lifecycle management is still mostly manual threads and startup functions; shutdown coverage is incomplete outside notification services.
+- Cross-domain imports are common. Prefer public service/event boundaries when touching those flows.
+- Test coverage is still narrow for the amount of architecture movement; add focused regression tests when changing startup, migration, domain service, plugin lifecycle, or route response contracts.
 
 ## Development Commands
 

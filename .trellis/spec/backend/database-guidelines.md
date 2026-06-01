@@ -6,6 +6,14 @@
 
 ## Scenario: First-Stage Database Boundary
 
+> Current layout note: this guideline was written while DAO/query modules still
+> lived under transitional top-level `app.dao` and `app.queries` names. In the
+> current checkout, the same boundary applies but most business DAO/query modules
+> now live under `app.domains.<domain>.*_dao` and
+> `app.domains.<domain>.*_queries`. Treat any `app.dao.*` / `app.queries.*`
+> examples below as historical migration names unless the module still exists in
+> this branch.
+
 ### 1. Scope / Trigger
 
 - Trigger: database infrastructure refactor that starts removing `query_db()` from representative modules.
