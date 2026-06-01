@@ -5,8 +5,8 @@ import time
 import json
 import sqlite3
 
-from app.core.db_schemas import SYSTEM_TABLES
 from app.core.security_utils import safe_error_message
+from app.infra.db.schema_registry import SYSTEM_TABLES
 from app.infra.db.system_store import system_store
 
 

@@ -12,7 +12,7 @@ import logging
 import re
 from typing import Dict, List, Tuple, Optional
 from app.core.config import DB_PATH, SYSTEM_DB_PATH
-from app.core.db_schemas import (
+from app.infra.db.schema_registry import (
     SYSTEM_TABLES, PLAYBACK_TABLES, TABLE_SCHEMAS, TABLE_ALTERS,
     PLAYBACK_SCHEMA, CORE_TABLES
 )
@@ -442,8 +442,7 @@ def migrate_tables(
     tables_to_migrate = tables if tables else SYSTEM_TABLES
 
     if tables:
-        from app.core.db_schemas import SYSTEM_TABLES as _STS
-        invalid = [t for t in tables if t not in _STS]
+        invalid = [t for t in tables if t not in SYSTEM_TABLES]
         if invalid:
             raise ValueError(f"非法表名: {invalid}")
     

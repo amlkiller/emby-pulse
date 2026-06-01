@@ -403,11 +403,67 @@ tokens = list_api_tokens(user_id)
 - Existing schema definitions still delegate to `app.core.db_schemas` until ownership is fully moved.
 - `app.infra.db.migration_service` is the new boundary for migration, health, backup, restore, and database-tool deep-check orchestration and currently delegates to existing implementations.
 
+## Scenario: Schema Metadata Registry Boundary
+
+### 1. Scope / Trigger
+
+- Trigger: backend code that needs schema metadata such as system table names, playback table names, create SQL, alter SQL, or core table lists.
+- Applies to `app/infra/db/**`, domain database tools, migration services, health checks, and repair helpers.
+
+### 2. Signatures
+
+- Import schema metadata from `app.infra.db.schema_registry`.
+- Current exports: `SYSTEM_TABLES`, `PLAYBACK_TABLES`, `TABLE_SCHEMAS`, `TABLE_ALTERS`, `PLAYBACK_SCHEMA`, and `CORE_TABLES`.
+
+### 3. Contracts
+
+- `app.infra.db.schema_registry` is the only migration-time import point for schema metadata.
+- During the transition, `schema_registry` may delegate to `app.core.db_schemas`; other app modules must not import `app.core.db_schemas` directly.
+- Runtime modules must not keep local copies of `SYSTEM_TABLES` or `PLAYBACK_TABLES`; use the registry object so table lists cannot drift.
+- This boundary does not authorize behavior changes to DDL, ALTER order, migration mode, or repair semantics.
+
+### 4. Validation & Error Matrix
+
+- New direct `from app.core.db_schemas import ...` outside `schema_registry` -> fail the schema boundary regression test.
+- New local `SYSTEM_TABLES = [...]` / `PLAYBACK_TABLES = [...]` in `app/infra/db/database.py` -> fail the schema boundary regression test.
+- Need a new schema metadata value -> add/export it through `schema_registry`, then update focused tests.
+
+### 5. Good/Base/Bad Cases
+
+- Good: `app.infra.db.database` imports `SYSTEM_TABLES` from `app.infra.db.schema_registry`.
+- Good: `app.domains.system.system_tool_dao` imports `SYSTEM_TABLES` from `app.infra.db.schema_registry`.
+- Base: `app.infra.db.schema_registry` temporarily re-exports values from `app.core.db_schemas`.
+- Bad: `app.infra.db.db_manager` imports `TABLE_SCHEMAS` directly from `app.core.db_schemas`.
+- Bad: `app.infra.db.database` defines its own `SYSTEM_TABLES` list.
+
+### 6. Tests Required
+
+- Focused boundary test: assert `schema_registry` is the only app module, besides `app/core/db_schemas.py` itself, that imports `app.core.db_schemas`.
+- Focused identity test: assert `app.infra.db.database.SYSTEM_TABLES is app.infra.db.schema_registry.SYSTEM_TABLES`.
+- Compile/import check changed database modules with `uv run --with-requirements requirements.txt`.
+- Run the full pytest suite before completing a schema boundary batch.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+from app.core.db_schemas import SYSTEM_TABLES
+```
+
+#### Correct
+
+```python
+from app.infra.db.schema_registry import SYSTEM_TABLES
+```
+
 ---
 
 ## Common Mistakes
 
 - Do not import removed compatibility modules such as `app.core.database` or `app.core.db_manager`.
+- Do not import `app.core.db_schemas` directly outside `app.infra.db.schema_registry`.
+- Do not copy schema metadata lists such as `SYSTEM_TABLES` into runtime modules.
 - Do not add new `query_db()` usage in migrated modules.
 - Do not hide playback API passthrough inside system database helpers.
 - Do not mix route response changes into database access migration.

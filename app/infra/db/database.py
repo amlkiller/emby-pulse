@@ -7,6 +7,7 @@ from app.core.config import DB_PATH, SYSTEM_DB_PATH
 from app.infra.db.notification_dao import add_system_notification
 from app.infra.db.playback_filters import get_base_filter as _get_base_filter
 from app.infra.db.query_perf import get_query_perf_stats
+from app.infra.db.schema_registry import PLAYBACK_TABLES, SYSTEM_TABLES
 
 # 🔥 导出 SYSTEM_DB_PATH 供其他模块使用
 __all__ = ['init_db', 'get_base_filter', 'add_sys_notification',
@@ -35,23 +36,6 @@ def get_db_connection(db_path, timeout=30.0, enable_wal=True):
     return conn
 
 logger = logging.getLogger("uvicorn")
-
-# 🔥 系统数据表清单 - 这些表会迁移到独立系统数据库
-SYSTEM_TABLES = [
-    "users_meta", "invitations", "sys_license", "tg_user_bindings",
-    "tg_user_blacklist", "media_requests", "request_users", "media_feedback",
-    "risk_logs", "sys_notifications", "point_logs", "point_config",
-    "plugin_state", "plugin_logs", "sys_dashboard", "insight_ignores", "notify_mutes",
-    "UserList", "client_blacklist", "gap_records", "gap_config",
-    "gap_perfect_series", "gap_scan_cache", "dedupe_results", "dedupe_whitelist",
-    "dedupe_config", "keep_alive_violations",
-    "task_config", "task_translations", "tv_calendar_cache", "tg_reg_logs",
-    "local_users", "msg_conversations", "msg_items", "msg_notify_block", "user_mutes",
-    "bot_notify_mutes", "notify_rules"
-]
-
-# 🔥 播放数据表（不迁移，保持原库读取）
-PLAYBACK_TABLES = ["PlaybackActivity"]
 
 def check_db_has_data(db_path):
     """检查数据库是否有系统表数据
