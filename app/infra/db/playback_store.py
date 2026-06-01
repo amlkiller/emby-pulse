@@ -5,6 +5,10 @@ import sqlite3
 
 from app.core.config import DB_PATH, cfg
 from app.infra.clients.media_server_client import media_api
+from app.infra.config.media_server_settings import (
+    get_media_server_api_key,
+    get_media_server_host,
+)
 
 from .row import DataRow, to_data_row
 
@@ -63,8 +67,8 @@ class PlaybackStore:
         return cfg.get("playback_data_mode", "sqlite") == "api"
 
     def _query_api(self, sql: str, params, one: bool = False):
-        host = cfg.get("emby_host")
-        token = cfg.get("emby_api_key")
+        host = get_media_server_host()
+        token = get_media_server_api_key()
         if not host or not token:
             print("[API 引擎] ⚠️ 警告: Emby Host 或 Token 未配置，自动降级回 SQLite。")
             return None

@@ -5,7 +5,11 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from app.core.config import cfg
+from app.infra.config.media_server_settings import (
+    get_media_server_api_key,
+    get_media_server_host,
+    get_media_server_type,
+)
 
 logger = logging.getLogger("uvicorn")
 
@@ -23,16 +27,16 @@ class MediaServerAdapter:
 
     @property
     def host(self):
-        return cfg.get("emby_host", "").rstrip('/')
+        return get_media_server_host()
 
     @property
     def api_key(self):
-        return cfg.get("emby_api_key", "")
+        return get_media_server_api_key()
 
     @property
     def server_type(self):
         # 获取类型，转为小写，默认为 emby
-        return cfg.get("server_type", "emby").lower()
+        return get_media_server_type()
 
     def _build_url(self, path: str) -> str:
         """智能路由转换器：解决 Jellyfin 和 Emby 路径差异"""

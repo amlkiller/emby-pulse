@@ -11,7 +11,7 @@ The backend lives under `app/` and currently uses a pragmatic FastAPI structure:
 * `app/main.py` is the thin application entrypoint. Keep version constants and app factory wiring here only.
 * `app/bootstrap/` owns application startup wiring: runtime preparation, middleware registration, route mounting, lifespan tasks, database initialization orchestration, logging setup, and the isolated user-portal ASGI wrapper.
 * `app/core/` owns reusable cross-cutting runtime helpers used by multiple backend areas, such as security, sessions, configuration, middleware implementations, and short-lived compatibility shims.
-* `app/infra/` owns infrastructure adapters such as database access and external service clients.
+* `app/infra/` owns infrastructure adapters such as database access, external service clients, and infrastructure-scoped configuration readers.
 * `app/routers/` owns HTTP route handlers and should not accumulate startup/bootstrap work.
 * `app/services/` owns long-running services and business workflows used by routers or startup tasks.
 
@@ -55,6 +55,8 @@ When splitting large files, move one responsibility at a time and keep route URL
 Infrastructure adapters should live under `app/infra/` rather than `app/core/` when they own transport/session/retry behavior for an external dependency. If a temporary compatibility import is needed during a migration, keep it in `app/core/` as a thin re-export only.
 
 Current migration pattern: if a caller only needs generic external transport for file/image downloads or simple reachability probes, route it through `app/infra/clients/network_client.py` instead of leaving direct `requests.get(...)` calls in routers or services. Keep domain parsing, cache decisions, and user-facing error mapping at the caller.
+
+Current configuration migration pattern: infrastructure-scoped settings readers live under `app/infra/config/` and are used to centralize config access for infra modules before broader service/router config cleanup is tackled.
 
 ---
 
