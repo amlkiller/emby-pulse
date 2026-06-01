@@ -194,8 +194,6 @@ def init_notify_rules_db():
     except Exception as e:
         logger.error(f"Failed to create bot_notify_mutes table: {e}")
 
-init_notify_rules_db()
-
 def get_media_quality_info(item_id: str) -> dict:
     """从 Emby 获取媒体质量信息（分辨率、编码、HDR等）
     
@@ -3326,6 +3324,7 @@ bot = EmbyPulseOrchestrator()
 
 
 def start_notification_services() -> None:
+    init_notify_rules_db()
     bot.start()
 
     try:
