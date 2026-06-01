@@ -15,7 +15,6 @@ def register_static_assets(app: FastAPI) -> None:
 
 def register_routes(app: FastAPI) -> None:
     from app.routers import (
-        api_tokens,
         auth,
         bot as bot_router,
         clients,
@@ -43,7 +42,7 @@ def register_routes(app: FastAPI) -> None:
         webhook,
     )
     from app.domains.playback import calendar, search
-    from app.domains.system import audit, pro
+    from app.domains.system import api_tokens, audit, pro
     from .plugin_routes import register_calendar_notify_routes, register_plugin_routes
 
     app.include_router(views.router)
