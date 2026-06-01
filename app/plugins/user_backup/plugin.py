@@ -18,7 +18,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 
-from app.dao.user_backup_dao import (
+from app.plugins.user_backup.user_backup_dao import (
     get_user_meta_for_backup,
     list_point_logs_for_backup,
     list_tg_bindings_detail_for_backup,
