@@ -12,7 +12,8 @@ import re
 import random
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
-from app.dao import media_request_dao, point_dao, user_dao
+from app.dao import media_request_dao, point_dao
+from app.domains.users import user_dao
 from app.domains.users import user_bot_dao
 from app.domains.system import invitation_dao
 from app.domains.playback import stats_queries

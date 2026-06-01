@@ -1,4 +1,4 @@
-from app.dao.user_dao import get_user_meta, list_all_user_meta, upsert_user_meta_fields
+from app.domains.users.user_dao import get_user_meta, list_all_user_meta, upsert_user_meta_fields
 from app.infra.db.system_store import system_store
 
 

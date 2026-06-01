@@ -17,7 +17,7 @@ from app.domains.notifications import bot_service_dao, message_dao
 from app.domains.media_requests import gap_dao
 from app.domains.notifications import notify_admin_dao, notify_rule_dao
 from app.domains.playback.queries import get_base_filter
-from app.dao import user_dao
+from app.domains.users import user_dao
 from app.infra.db.local_playback_store import insert_bot_playback_history_record
 from app.infra.clients.media_server_client import media_api
 from app.infra.clients.moviepilot_client import moviepilot_client
