@@ -236,3 +236,36 @@ Moved system views permission checks and page-permission map access off private 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 67: Media request gaps public auth facade boundary
+
+**Date**: 2026-06-02
+**Task**: Media request gaps public auth facade boundary
+**Branch**: `main`
+
+### Summary
+
+Moved media request gap admin checks off private users auth imports, routed them through the users public facade, and added import-boundary plus representative authorization regression tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e84c73f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
