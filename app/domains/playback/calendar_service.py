@@ -511,11 +511,3 @@ class CalendarService:
 
 # 单例实例化
 calendar_service = CalendarService()
-
-
-def start_calendar_service() -> None:
-    calendar_service.start()
-
-
-def stop_calendar_service() -> None:
-    calendar_service.stop()
