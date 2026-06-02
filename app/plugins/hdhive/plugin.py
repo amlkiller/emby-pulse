@@ -49,6 +49,9 @@ class HDHivePlugin(PluginBase):
     def on_disable(self):
         self._running = False
         self._stop_event.set()
+        if self._subscribed:
+            bus.unsubscribe("bot.admin_message", self._on_admin_message)
+            self._subscribed = False
         thread = self._checkin_thread
         if thread and thread.is_alive():
             thread.join(timeout=1)
@@ -1690,6 +1693,27 @@ def handle_request_hdhive_callback(data, chat_id, cq_id, platform, tmdb_info=Non
 # ==========================================
 # 求片通知影巢搜索回调（供 bot_service.py 调用）
 # ==========================================
+def _search_hdhive_for_request(plugin, tmdb_id, media_type, title, chat_id, platform):
+    """Search HDHive resources for a media request callback using existing TMDB-select flow."""
+    import hashlib
+
+    res_type = "movie" if media_type == "movie" else "tv"
+    search_key = hashlib.md5(f"req_{tmdb_id}".encode()).hexdigest()[:8]
+    _tmdb_cache[search_key] = {
+        "results": [{
+            "type": res_type,
+            "tmdb_id": tmdb_id,
+            "title": title,
+            "year": ""
+        }],
+        "keyword": title,
+        "page": 1,
+        "total_pages": 1,
+        "total_results": 1
+    }
+    plugin._search_tmdb_select(search_key, res_type, tmdb_id, chat_id, platform)
+
+
 def handle_request_hdhive_search(data, chat_id, cq_id, platform):
     """处理求片通知的影巢搜索回调
 

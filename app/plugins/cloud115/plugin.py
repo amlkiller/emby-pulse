@@ -131,6 +131,9 @@ class Cloud115Plugin(PluginBase):
         logger.info("🔌 [115转存] 插件已启用")
 
     def on_disable(self):
+        if self._subscribed:
+            bus.unsubscribe("bot.admin_message", self._on_admin_message)
+            self._subscribed = False
         logger.info("🔌 [115转存] 插件已禁用")
 
     def get_config_schema(self):

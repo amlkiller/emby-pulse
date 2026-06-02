@@ -248,3 +248,84 @@ def test_season_poster_webhook_subscription_is_idempotent_and_reversible(monkeyp
 
     assert plugin._subscribed is True
     assert fake_bus.handlers == [plugin._on_webhook_event]
+
+
+@pytest.mark.parametrize(
+    "module_path,class_name",
+    [
+        ("app.plugins.cloud115.plugin", "Cloud115Plugin"),
+        ("app.plugins.hdhive.plugin", "HDHivePlugin"),
+    ],
+)
+def test_bot_admin_message_plugin_subscription_is_idempotent_and_reversible(
+    monkeypatch, module_path, class_name
+):
+    class FakeBus:
+        def __init__(self):
+            self.handlers = []
+
+        def subscribe(self, event_type, handler):
+            assert event_type == "bot.admin_message"
+            if handler not in self.handlers:
+                self.handlers.append(handler)
+
+        def unsubscribe(self, event_type, handler):
+            assert event_type == "bot.admin_message"
+            if handler in self.handlers:
+                self.handlers.remove(handler)
+
+    module, plugin = _build_plugin(monkeypatch, module_path, class_name)
+    fake_bus = FakeBus()
+    monkeypatch.setattr(module, "bus", fake_bus)
+
+    if hasattr(module, "threading"):
+        FakeThread.instances = []
+        monkeypatch.setattr(module.threading, "Thread", FakeThread)
+
+    plugin.on_enable()
+    plugin.on_enable()
+
+    assert plugin._subscribed is True
+    assert fake_bus.handlers == [plugin._on_admin_message]
+
+    plugin.on_disable()
+
+    assert plugin._subscribed is False
+    assert fake_bus.handlers == []
+
+    plugin.on_enable()
+
+    assert plugin._subscribed is True
+    assert fake_bus.handlers == [plugin._on_admin_message]
+
+    plugin.on_disable()
+
+    assert plugin._subscribed is False
+    assert fake_bus.handlers == []
+
+    plugin.on_enable()
+
+    assert plugin._subscribed is True
+    assert fake_bus.handlers == [plugin._on_admin_message]
+
+
+def test_hdhive_request_search_helper_uses_existing_tmdb_select_flow(monkeypatch):
+    module, plugin = _build_plugin(monkeypatch, "app.plugins.hdhive.plugin", "HDHivePlugin")
+    calls = []
+
+    def fake_search_tmdb_select(search_key, res_type, tmdb_id, chat_id, platform):
+        calls.append((search_key, res_type, tmdb_id, chat_id, platform))
+
+    monkeypatch.setattr(plugin, "_search_tmdb_select", fake_search_tmdb_select)
+
+    module._search_hdhive_for_request(plugin, 12345, "tv", "Series One", "chat-1", "tg")
+
+    assert len(calls) == 1
+    search_key, res_type, tmdb_id, chat_id, platform = calls[0]
+    assert (res_type, tmdb_id, chat_id, platform) == ("tv", 12345, "chat-1", "tg")
+    assert module._tmdb_cache[search_key]["results"] == [{
+        "type": "tv",
+        "tmdb_id": 12345,
+        "title": "Series One",
+        "year": "",
+    }]
