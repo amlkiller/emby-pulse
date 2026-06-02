@@ -172,18 +172,6 @@ def _start_lock_cleanup():
     _lock_cleanup_thread.start()
 
 
-def _stop_lock_cleanup():
-    global _lock_cleanup_started, _lock_cleanup_thread
-    with _lock_cleanup_lock:
-        if not _lock_cleanup_started:
-            return
-        _lock_cleanup_stop_event.set()
-        thread = _lock_cleanup_thread
-        _lock_cleanup_started = False
-        _lock_cleanup_thread = None
-    if thread and thread.is_alive():
-        thread.join(timeout=1)
-
 # ==================== 权限常量 ====================
 
 ALL_PERMISSIONS = [
@@ -353,7 +341,16 @@ def start_auth_domain_services():
 
 
 def stop_auth_domain_services():
-    _stop_lock_cleanup()
+    global _lock_cleanup_started, _lock_cleanup_thread
+    with _lock_cleanup_lock:
+        if not _lock_cleanup_started:
+            return
+        _lock_cleanup_stop_event.set()
+        thread = _lock_cleanup_thread
+        _lock_cleanup_started = False
+        _lock_cleanup_thread = None
+    if thread and thread.is_alive():
+        thread.join(timeout=1)
 
 
 # ==================== 认证设置 API ====================
