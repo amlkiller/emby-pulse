@@ -836,3 +836,36 @@ Removed redundant notification rule public-service wrapper, pointed rule lookups
 ### Next Steps
 
 - None - task complete
+
+
+## Session 85: Remove calendar notify service wrapper
+
+**Date**: 2026-06-03
+**Task**: Remove calendar notify service wrapper
+**Branch**: `main`
+
+### Summary
+
+Removed the unused calendar notification lifecycle wrapper module, kept bootstrap pointed at calendar_notify.py as the real service owner, added a regression test against wrapper reintroduction, and verified focused/full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `04cb752` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
