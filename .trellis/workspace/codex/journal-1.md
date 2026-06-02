@@ -71,3 +71,36 @@ Removed pure EmbyPulseOrchestrator forwarding methods for notification delivery 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: Remove plugin log alias wrappers
+
+**Date**: 2026-06-03
+**Task**: Remove plugin log alias wrappers
+**Branch**: `Compiled`
+
+### Summary
+
+Removed pure _log compatibility aliases from auto_expire, cloud115, and keep_alive plugins by routing calls directly to PluginBase.log. Left hdhive._log intact because it adds notify=False behavior. Verified compileall, scoped search, and full pytest suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `81baf64` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
