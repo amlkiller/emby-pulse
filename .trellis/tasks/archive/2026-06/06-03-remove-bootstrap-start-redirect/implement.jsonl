@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend guideline entry point for scoped refactor work."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Bootstrap lifecycle and registry ownership conventions."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verification commands must use uv and UTF-8 where needed."}
