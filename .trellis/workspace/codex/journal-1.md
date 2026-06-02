@@ -170,3 +170,36 @@ Removed PluginBase._refresh_config_cache, updated the only caller to use _load_c
 ### Next Steps
 
 - None - task complete
+
+
+## Session 6: Remove user backup DAO aliases
+
+**Date**: 2026-06-03
+**Task**: Remove user backup DAO aliases
+**Branch**: `Compiled`
+
+### Summary
+
+Removed pure user_backup_dao aliases for users.user_dao calls, pointed plugin directly at user_dao, kept backup-specific SQL helpers. Verified compileall, alias search, and full pytest suite with PYTHONIOENCODING=utf-8.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `58ccd61` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
