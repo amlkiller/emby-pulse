@@ -1364,3 +1364,36 @@ Made HDHiveSign retry delays interruptible through the plugin stop event, preser
 ### Next Steps
 
 - None - task complete
+
+
+## Session 101: Notification daemon throttle wait lifecycle convergence
+
+**Date**: 2026-06-03
+**Task**: Notification daemon throttle wait lifecycle convergence
+**Branch**: `main`
+
+### Summary
+
+Made SystemDaemon library and pending-request throttle waits interruptible via the daemon stop event; added stop-hook source assertions and verified focused plus full tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4c01970` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
