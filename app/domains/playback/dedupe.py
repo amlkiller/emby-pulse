@@ -21,7 +21,7 @@ from app.domains.playback.dedupe_dao import (
     remove_dedupe_whitelist_items,
     save_dedupe_config_values,
 )
-from app.domains.users.auth import is_admin_user
+from app.domains.users import public_service as user_service
 from app.core.security_utils import safe_error_message
 
 logger = logging.getLogger("uvicorn")
@@ -376,7 +376,7 @@ class RemoveWhitelistReq(BaseModel):
 @router.post("/scan")
 async def trigger_scan(request: Request, req: ScanReq, bg_tasks: BackgroundTasks):
     # 🔒 管理员专用
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"success": False, "msg": "需要管理员权限"}
     if scan_state["is_scanning"]: return {"success": False, "msg": "系统正在扫描中，请勿重复提交"}
     bg_tasks.add_task(run_dedupe_scan, req.strategy, req.custom_weights, req.excluded_libraries)
@@ -385,7 +385,7 @@ async def trigger_scan(request: Request, req: ScanReq, bg_tasks: BackgroundTasks
 @router.get("/libraries")
 async def get_dedupe_libraries(request: Request):
     # 🔒 管理员专用
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"success": False, "msg": "需要管理员权限"}
     """获取所有媒体库列表（用于去重管理）"""
     try:
@@ -436,14 +436,14 @@ async def get_dedupe_libraries(request: Request):
 @router.get("/status")
 async def get_scan_status(request: Request):
     # 🔒 管理员专用
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"success": False, "msg": "需要管理员权限"}
     return {"success": True, "data": scan_state}
 
 @router.get("/results")
 async def get_results(request: Request):
     # 🔒 管理员专用
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"success": False, "msg": "需要管理员权限"}
     rows = list_dedupe_results()
     result_tree = defaultdict(list)
@@ -473,7 +473,7 @@ async def get_results(request: Request):
 @router.post("/ignore")
 async def ignore_groups(request: Request, req: IgnoreReq):
     # 🔒 管理员专用
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"success": False, "msg": "需要管理员权限"}
     try:
         add_dedupe_whitelist_items(req.items)
@@ -483,7 +483,7 @@ async def ignore_groups(request: Request, req: IgnoreReq):
 @router.get("/whitelist")
 async def get_whitelist(request: Request):
     # 🔒 管理员专用
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"success": False, "msg": "需要管理员权限"}
     rows = list_dedupe_whitelist()
     return {"success": True, "data": [dict(r) for r in rows] if rows else []}
@@ -491,7 +491,7 @@ async def get_whitelist(request: Request):
 @router.post("/whitelist/remove")
 async def remove_whitelist(request: Request, req: RemoveWhitelistReq):
     # 🔒 管理员专用
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"success": False, "msg": "需要管理员权限"}
     try:
         remove_dedupe_whitelist_items(req.group_keys)
@@ -501,7 +501,7 @@ async def remove_whitelist(request: Request, req: RemoveWhitelistReq):
 @router.post("/delete")
 async def delete_items(request: Request, req: DeleteReq):
     # 🔒 管理员专用
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"success": False, "msg": "需要管理员权限"}
     try:
         auth_res = media_api.authenticate_by_name(req.username, req.password, timeout=5)
@@ -537,7 +537,7 @@ async def delete_items(request: Request, req: DeleteReq):
 @router.get("/config")
 async def get_dedupe_config(request: Request):
     # 🔒 管理员专用
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"success": False, "msg": "需要管理员权限"}
     """获取保存的扫描配置"""
     try:
@@ -556,7 +556,7 @@ class SaveConfigReq(BaseModel):
 @router.post("/config")
 async def save_dedupe_config(request: Request, req: SaveConfigReq):
     # 🔒 管理员专用
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"success": False, "msg": "需要管理员权限"}
     """保存扫描配置"""
     try:
