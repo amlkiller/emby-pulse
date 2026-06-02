@@ -816,3 +816,36 @@ Registered plugin-private DAO tables in schema_registry, routed temp-account, se
 ### Next Steps
 
 - None - task complete
+
+
+## Session 25: User bot helper schema registry bootstrap
+
+**Date**: 2026-06-02
+**Task**: User bot helper schema registry bootstrap
+**Branch**: `main`
+
+### Summary
+
+Registered tg_bot_users and tg_channel_bindings in schema_registry, routed user-bot bootstrap through ensure_registered_table, added helper-table smoke coverage, updated backend database guidance, and verified focused checks plus full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ccec28e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
