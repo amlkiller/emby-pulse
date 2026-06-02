@@ -1575,3 +1575,36 @@ Added users and system public facade functions for permission and common templat
 ### Next Steps
 
 - None - task complete
+
+
+## Session 48: Auto-expire notification facade boundary
+
+**Date**: 2026-06-02
+**Task**: Auto-expire notification facade boundary
+**Branch**: `main`
+
+### Summary
+
+Added notification public facade functions for user-bot running state and message sending, moved the auto-expire plugin off private user_bot_service imports, and added facade delegation plus plugin boundary tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c537b8c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
