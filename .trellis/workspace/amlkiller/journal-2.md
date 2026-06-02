@@ -170,3 +170,36 @@ Moved system diagnostics/log/debug/restart/weather route admin checks off privat
 ### Next Steps
 
 - None - task complete
+
+
+## Session 65: System router public auth facade boundary
+
+**Date**: 2026-06-02
+**Task**: System router public auth facade boundary
+**Branch**: `main`
+
+### Summary
+
+Moved system router admin checks off private users auth imports, routed them through the users public facade, and added import-boundary plus representative authorization tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ebd8719` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
