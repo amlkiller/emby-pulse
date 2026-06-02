@@ -1608,3 +1608,36 @@ Added notification public facade functions for user-bot running state and messag
 ### Next Steps
 
 - None - task complete
+
+
+## Session 49: Plugins router public facade boundary
+
+**Date**: 2026-06-02
+**Task**: Plugins router public facade boundary
+**Branch**: `main`
+
+### Summary
+
+Moved the plugins router off private users auth and system views imports, routed admin and permission checks plus template context through public facades, and added boundary and redirect behavior tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7d794ee` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
