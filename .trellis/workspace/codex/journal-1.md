@@ -434,3 +434,36 @@ Removed the pure stop_media_request_services redirect and registered/called stop
 ### Next Steps
 
 - None - task complete
+
+
+## Session 14: Remove system task stop redirect
+
+**Date**: 2026-06-03
+**Task**: Remove system task stop redirect
+**Branch**: `Compiled`
+
+### Summary
+
+Removed the pure stop_system_task_services redirect and registered/called stop_task_poller directly. Verified compileall, focused lifecycle tests, import check, and full pytest suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `71bc702` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
