@@ -1311,3 +1311,36 @@ Centralized simple schema index DDL in TABLE_INDEXES, taught schema_bootstrap an
 ### Next Steps
 
 - None - task complete
+
+
+## Session 40: Notification public service facade
+
+**Date**: 2026-06-02
+**Task**: Notification public service facade
+**Branch**: `main`
+
+### Summary
+
+Added a narrow public notification service facade, migrated external domain and plugin callers away from direct bot_service.bot imports, preserved notification call arguments and return values, added delegation and boundary tests, and verified focused checks plus full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `dd0748f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
