@@ -633,3 +633,37 @@ Moved media requests notification rule lookups through notifications public_serv
 ### Next Steps
 
 - None - task complete
+
+
+## Session 79: Risk user bot notification facade
+
+**Date**: 2026-06-03
+**Task**: Risk user bot notification facade
+**Branch**: `main`
+
+### Summary
+
+Moved risk service user warning and ban notification sends through notifications public_service, added focused boundary tests, and verified compile/import checks, private import scan, focused tests, and full pytest: 389 passed, 3 warnings.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `be183c7` | (see git log) |
+| `daf6734` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
