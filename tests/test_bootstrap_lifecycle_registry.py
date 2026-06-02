@@ -84,7 +84,7 @@ def test_bootstrap_services_use_registry_and_skip_duplicate_starts(monkeypatch):
     monkeypatch.setattr(services, "start_pro_services", record("pro-domain"))
     monkeypatch.setattr(services, "start_system_task_services", record("system-tasks"))
     monkeypatch.setattr(services, "stop_system_task_services", record("stop:system-tasks"))
-    monkeypatch.setattr(services, "start_audit_services", record("audit"))
+    monkeypatch.setattr(services, "init_audit_table", record("audit"))
     monkeypatch.setattr(services, "start_session_services", record("session"))
     monkeypatch.setattr(services, "stop_session_services", record("stop:session"))
     monkeypatch.setattr(services, "disable_enabled_plugins", record("stop:plugin-lifecycle"))
