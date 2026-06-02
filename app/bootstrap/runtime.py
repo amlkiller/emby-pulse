@@ -1,13 +1,14 @@
 import os
 import sqlite3
 import threading
-import time
 
 from app.infra.db.session_dao import clear_sessions_if_table_exists
 from app.core.config import CONFIG_DIR, FONT_DIR
 
 _original_connect = sqlite3.connect
 _patched = False
+_weather_cache_preload_thread = None
+_weather_cache_preload_stop_event = threading.Event()
 
 
 def patch_sqlite_connect() -> None:
@@ -53,10 +54,39 @@ def clear_system_sessions() -> None:
 
 def start_weather_cache_preload() -> None:
     """Preload weather cache in the background after startup."""
+    global _weather_cache_preload_thread
+    if _weather_cache_preload_thread and _weather_cache_preload_thread.is_alive():
+        return
+
+    _weather_cache_preload_stop_event.clear()
+
     def _start_weather_service():
-        time.sleep(10)
+        if _weather_cache_preload_stop_event.wait(10):
+            return
         from app.domains.system.system_tools import preload_weather_cache
 
         preload_weather_cache()
 
-    threading.Thread(target=_start_weather_service, daemon=True).start()
+    _weather_cache_preload_thread = threading.Thread(
+        target=_start_weather_service,
+        daemon=True,
+        name="weather-cache-preload",
+    )
+    _weather_cache_preload_thread.start()
+
+
+def stop_weather_cache_preload() -> None:
+    """Stop delayed weather preload and the refresh loop it may have started."""
+    global _weather_cache_preload_thread
+    _weather_cache_preload_stop_event.set()
+    thread = _weather_cache_preload_thread
+    if thread and thread.is_alive():
+        thread.join(timeout=1)
+    if not thread or not thread.is_alive():
+        _weather_cache_preload_thread = None
+    try:
+        from app.domains.system.system_tools import stop_weather_cache_refresh
+
+        stop_weather_cache_refresh()
+    except Exception as e:
+        print(f"⚠️ [天气缓存] 停止后台刷新失败（忽略）: {e}")

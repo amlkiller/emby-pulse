@@ -143,6 +143,14 @@ flags. Replace long `time.sleep(...)` calls in lifecycle loops with
 This lets `stop_bootstrap_services()` shut down and then restart services in the
 same process during reloads or tests.
 
+Delayed bootstrap preloads still count as lifecycle services. If a preload
+thread waits before importing or starting a domain long-running loop, register
+the preload in `app/bootstrap/services.py` and make its stop hook set the preload
+event, join/clear the preload thread, and call the domain loop's own stop hook.
+The domain loop should expose an idempotent `stop_*()` function that sets its
+stop event, joins briefly, clears stopped thread handles, and allows later
+restart. Do not start delayed daemon threads directly from `prepare_runtime()`.
+
 Bootstrap-started server threads, such as the isolated user portal uvicorn
 server, should save both the thread handle and the server handle. Their stop
 hook should request shutdown through the server handle, join briefly, and clear

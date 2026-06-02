@@ -91,6 +91,7 @@ _weather_cache = {
 WEATHER_CACHE_TTL = 3600  # 1小时缓存
 _weather_refresh_thread = None
 _weather_refresh_running = False
+_weather_refresh_stop_event = threading.Event()
 
 def _fetch_weather_from_api(city: str) -> dict:
     """从天气 API 获取数据（内部函数）"""
@@ -210,13 +211,8 @@ def get_weather_cache(city: str = "北京") -> dict:
 
 def _weather_background_refresh():
     """后台定时刷新天气缓存"""
-    global _weather_refresh_running
-    
-    while _weather_refresh_running:
+    while not _weather_refresh_stop_event.wait(WEATHER_CACHE_TTL):
         try:
-            # 每小时刷新一次
-            time.sleep(WEATHER_CACHE_TTL)
-            
             # 只刷新已缓存的城市（用户请求过的城市）
             if _weather_cache.get("city") and _weather_cache.get("data"):
                 refresh_weather_cache(_weather_cache["city"], silent=True)
@@ -230,10 +226,27 @@ def start_weather_cache_refresh():
     if _weather_refresh_thread and _weather_refresh_thread.is_alive():
         return
     
+    _weather_refresh_stop_event.clear()
     _weather_refresh_running = True
-    _weather_refresh_thread = threading.Thread(target=_weather_background_refresh, daemon=True)
+    _weather_refresh_thread = threading.Thread(
+        target=_weather_background_refresh,
+        daemon=True,
+        name="weather-cache-refresh",
+    )
     _weather_refresh_thread.start()
     print("[天气缓存] 🔄 后台定时刷新已启动（每小时）")
+
+def stop_weather_cache_refresh():
+    """停止天气缓存后台刷新线程"""
+    global _weather_refresh_thread, _weather_refresh_running
+
+    _weather_refresh_running = False
+    _weather_refresh_stop_event.set()
+    thread = _weather_refresh_thread
+    if thread and thread.is_alive():
+        thread.join(timeout=1)
+    if not thread or not thread.is_alive():
+        _weather_refresh_thread = None
 
 def preload_weather_cache():
     """启动时初始化天气缓存服务（不预热，等前端请求时再缓存）"""

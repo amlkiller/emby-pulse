@@ -13,7 +13,6 @@ from app.bootstrap.runtime import (
     clear_system_sessions,
     ensure_runtime_directories,
     patch_sqlite_connect,
-    start_weather_cache_preload,
 )
 from app.core.config import PORT
 from app.core.rate_limiter import initialize_trusted_proxies, start_cleanup_timer
@@ -40,7 +39,6 @@ def prepare_runtime() -> None:
         print(f"[🔒 安全] 安全检查失败: {e}")
 
     initialize_databases()
-    start_weather_cache_preload()
 
 
 def create_app() -> FastAPI:

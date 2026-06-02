@@ -147,3 +147,29 @@ def test_gap_service_stop_resets_active_background_sync(monkeypatch):
     assert gaps._gap_services_started is False
     assert gaps._gap_delayed_start_thread is None
     assert gaps._gap_background_sync_thread is None
+
+
+def test_weather_cache_refresh_stop_resets_state_and_allows_restart(monkeypatch):
+    from app.domains.system import system_tools
+
+    system_tools.stop_weather_cache_refresh()
+    calls = []
+    monkeypatch.setattr(system_tools, "refresh_weather_cache", lambda *args, **kwargs: calls.append(args))
+    monkeypatch.setattr(system_tools, "WEATHER_CACHE_TTL", 60)
+
+    system_tools.start_weather_cache_refresh()
+    system_tools.start_weather_cache_refresh()
+
+    assert system_tools._weather_refresh_running is True
+    assert system_tools._weather_refresh_thread is not None
+
+    system_tools.stop_weather_cache_refresh()
+
+    assert system_tools._weather_refresh_running is False
+    assert system_tools._weather_refresh_thread is None
+    assert calls == []
+
+    system_tools.start_weather_cache_refresh()
+    system_tools.stop_weather_cache_refresh()
+
+    assert system_tools._weather_refresh_running is False

@@ -10,6 +10,31 @@ if _repo_root not in sys.path:
 _REPO_ROOT = Path(_repo_root)
 
 
+class FakeThread:
+    instances = []
+
+    def __init__(self, target=None, args=(), daemon=False, name=None):
+        self.target = target
+        self.args = args
+        self.daemon = daemon
+        self.name = name
+        self.started = False
+        self.alive = False
+        self.join_timeout = None
+        FakeThread.instances.append(self)
+
+    def start(self):
+        self.started = True
+        self.alive = True
+
+    def is_alive(self):
+        return self.alive
+
+    def join(self, timeout=None):
+        self.join_timeout = timeout
+        self.alive = False
+
+
 def test_registry_starts_once_and_stops_in_reverse_order():
     from app.bootstrap.service_registry import BootstrapServiceRegistry
 
@@ -87,6 +112,8 @@ def test_bootstrap_services_use_registry_and_skip_duplicate_starts(monkeypatch):
     monkeypatch.setattr(services, "start_audit_services", record("audit"))
     monkeypatch.setattr(services, "start_session_services", record("session"))
     monkeypatch.setattr(services, "stop_session_services", record("stop:session"))
+    monkeypatch.setattr(services, "start_weather_cache_preload", record("weather-cache-preload"))
+    monkeypatch.setattr(services, "stop_weather_cache_preload", record("stop:weather-cache-preload"))
     monkeypatch.setattr(services, "disable_enabled_plugins", record("stop:plugin-lifecycle"))
     monkeypatch.setattr(services, "print_startup_panel", lambda port: calls.append(f"startup-panel:{port}"))
 
@@ -112,13 +139,15 @@ def test_bootstrap_services_use_registry_and_skip_duplicate_starts(monkeypatch):
         "system-tasks",
         "audit",
         "session",
+        "weather-cache-preload",
         "startup-panel:10308",
     ]
 
     services.stop_bootstrap_services()
 
-    assert calls[-12:] == [
+    assert calls[-13:] == [
         "stop:plugin-lifecycle",
+        "stop:weather-cache-preload",
         "stop:session",
         "stop:system-tasks",
         "stop:auth-domain",
@@ -132,6 +161,36 @@ def test_bootstrap_services_use_registry_and_skip_duplicate_starts(monkeypatch):
         "stop:notifications",
     ]
     services.reset_bootstrap_registry()
+
+
+def test_weather_cache_preload_lifecycle_is_idempotent(monkeypatch):
+    from app.bootstrap import runtime
+
+    runtime.stop_weather_cache_preload()
+    FakeThread.instances = []
+    monkeypatch.setattr(runtime.threading, "Thread", FakeThread)
+
+    runtime.start_weather_cache_preload()
+    runtime.start_weather_cache_preload()
+
+    assert len(FakeThread.instances) == 1
+    thread = FakeThread.instances[0]
+    assert thread.name == "weather-cache-preload"
+    assert thread.daemon is True
+    assert runtime._weather_cache_preload_thread is thread
+
+    runtime.stop_weather_cache_preload()
+
+    assert thread.join_timeout == 1
+    assert runtime._weather_cache_preload_thread is None
+
+
+def test_prepare_runtime_does_not_start_weather_preload_directly():
+    main_source = (_REPO_ROOT / "app/main.py").read_text(encoding="utf-8")
+    services_source = (_REPO_ROOT / "app/bootstrap/services.py").read_text(encoding="utf-8")
+
+    assert "start_weather_cache_preload" not in main_source
+    assert 'registry.register("weather-cache-preload"' in services_source
 
 
 def test_bootstrap_uses_calendar_notify_owner_without_service_wrapper():
