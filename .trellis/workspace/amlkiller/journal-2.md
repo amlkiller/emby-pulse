@@ -368,3 +368,36 @@ Moved calendar notification API admin checks off private users auth imports, rou
 ### Next Steps
 
 - None - task complete
+
+
+## Session 71: Notification router public auth facade boundary
+
+**Date**: 2026-06-02
+**Task**: Notification router public auth facade boundary
+**Branch**: `main`
+
+### Summary
+
+Moved notification center router admin checks off private users auth imports, routed them through the users public facade, and added import-boundary plus representative authorization regression tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `01123a8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
