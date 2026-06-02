@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend guideline index for this schema-registry refactor."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Database ownership and schema bootstrap contracts for registry-owned tables."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Required uv-based Python verification commands."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Avoiding duplicate DDL/ALTER logic while centralizing schema metadata."}
