@@ -121,10 +121,6 @@ class PluginBase:
         with _config_cache_lock:
             return dict(_config_cache.get(self.id, {}))
 
-    def _refresh_config_cache(self):
-        """刷新配置缓存（保存配置后调用）"""
-        self._load_config_to_cache()
-
     def _is_notification_enabled(self):
         """检查插件通知是否启用"""
         config = self._get_config()
@@ -164,8 +160,8 @@ class PluginBase:
         # 发送到全局通知（如果启用）
         if notify and self._is_notification_enabled():
             try:
-                from app.infra.db.notification_dao import add_sys_notification
-                add_sys_notification("plugin", self.name, message, "/plugins")
+                from app.infra.db.notification_dao import add_system_notification
+                add_system_notification("plugin", self.name, message, "/plugins")
             except Exception:
                 pass
 

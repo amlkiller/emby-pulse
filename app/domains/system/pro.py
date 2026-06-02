@@ -77,7 +77,3 @@ async def get_pro_status(request: Request):
             "device": {"max_devices": 10, "current_devices": 0},
         },
     }
-
-
-def start_pro_services() -> None:
-    ensure_pro_schema()

@@ -73,8 +73,8 @@ def test_delete_user_notification_uses_public_rule_before_send_and_preserves_pla
     def fake_send_message(chat_id, text, platform="all"):
         calls.append(("send_message", chat_id, text, platform))
 
-    def fake_add_sys_notification(*args):
-        calls.append(("add_sys_notification", args))
+    def fake_add_system_notification(*args):
+        calls.append(("add_system_notification", args))
 
     monkeypatch.setattr(router, "APP_START_TIME", "2000-01-01T00:00:00")
     monkeypatch.setattr(router, "is_admin_user", lambda request: True)
@@ -92,7 +92,7 @@ def test_delete_user_notification_uses_public_rule_before_send_and_preserves_pla
     monkeypatch.setattr(router, "add_audit_log", lambda **kwargs: calls.append(("add_audit_log", kwargs)))
     monkeypatch.setattr(router.notify_admin, "get_notify_rule", fake_get_notify_rule)
     monkeypatch.setattr(notification_service, "send_message", fake_send_message)
-    monkeypatch.setattr(notification_dao, "add_sys_notification", fake_add_sys_notification)
+    monkeypatch.setattr(notification_dao, "add_system_notification", fake_add_system_notification)
 
     response = router.api_manage_user_delete("user-1", request)
 

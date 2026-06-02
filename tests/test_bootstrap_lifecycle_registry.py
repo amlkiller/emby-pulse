@@ -94,31 +94,31 @@ def test_bootstrap_services_use_registry_and_skip_duplicate_starts(monkeypatch):
     monkeypatch.setattr(services, "start_dashboard_cache_tasks", record("dashboard-cache"))
     monkeypatch.setattr(services, "stop_dashboard_cache_tasks", record("stop:dashboard-cache"))
     monkeypatch.setattr(services, "start_media_request_services", record("media-requests"))
-    monkeypatch.setattr(services, "stop_media_request_services", record("stop:media-requests"))
-    monkeypatch.setattr(services, "start_calendar_service", record("calendar"))
-    monkeypatch.setattr(services, "stop_calendar_service", record("stop:calendar"))
+    monkeypatch.setattr(services, "stop_community_cache_refresh_loop", record("stop:media-requests"))
+    monkeypatch.setattr(services.calendar_service, "start", record("calendar"))
+    monkeypatch.setattr(services.calendar_service, "stop", record("stop:calendar"))
     monkeypatch.setattr(services, "start_notifications_router_services", record("notifications-router"))
     monkeypatch.setattr(services, "start_calendar_notify_services", record("calendar-notify"))
-    monkeypatch.setattr(services, "stop_calendar_notify_services", record("stop:calendar-notify"))
-    monkeypatch.setattr(services, "start_dedupe_services", record("dedupe"))
+    monkeypatch.setattr(services.calendar_notify_service, "stop", record("stop:calendar-notify"))
+    monkeypatch.setattr(services, "init_dedupe_db", record("dedupe"))
     monkeypatch.setattr(services, "start_gap_services", record("gaps"))
     monkeypatch.setattr(services, "stop_gap_services", record("stop:gaps"))
     monkeypatch.setattr(services, "start_auth_domain_services", record("auth-domain"))
     monkeypatch.setattr(services, "stop_auth_domain_services", record("stop:auth-domain"))
-    monkeypatch.setattr(services, "start_user_domain_services", record("user-domain"))
-    monkeypatch.setattr(services, "start_pro_services", record("pro-domain"))
+    monkeypatch.setattr(services, "migrate_admin_disabled", record("user-domain"))
+    monkeypatch.setattr(services, "ensure_pro_schema", record("pro-domain"))
     monkeypatch.setattr(services, "start_system_task_services", record("system-tasks"))
-    monkeypatch.setattr(services, "stop_system_task_services", record("stop:system-tasks"))
-    monkeypatch.setattr(services, "start_audit_services", record("audit"))
+    monkeypatch.setattr(services, "stop_task_poller", record("stop:system-tasks"))
+    monkeypatch.setattr(services, "init_audit_table", record("audit"))
     monkeypatch.setattr(services, "start_session_services", record("session"))
-    monkeypatch.setattr(services, "stop_session_services", record("stop:session"))
     monkeypatch.setattr(services, "start_weather_cache_preload", record("weather-cache-preload"))
     monkeypatch.setattr(services, "stop_weather_cache_preload", record("stop:weather-cache-preload"))
+    monkeypatch.setattr(services, "stop_session_cleanup_loop", record("stop:session"))
     monkeypatch.setattr(services, "disable_enabled_plugins", record("stop:plugin-lifecycle"))
     monkeypatch.setattr(services, "print_startup_panel", lambda port: calls.append(f"startup-panel:{port}"))
 
-    services.start_bootstrap_services(object(), 10308)
-    services.start_bootstrap_services(object(), 10309)
+    services.get_bootstrap_registry(object(), 10308).start_all()
+    services.get_bootstrap_registry(object(), 10309).start_all()
 
     assert calls == [
         "webhook-token",
@@ -201,7 +201,7 @@ def test_bootstrap_uses_calendar_notify_owner_without_service_wrapper():
     assert not (_REPO_ROOT / "app/domains/notifications/calendar_notify_service.py").exists()
     assert (
         "from app.domains.notifications.calendar_notify import "
-        "start_calendar_notify_services, stop_calendar_notify_services"
+        "calendar_notify_service, start_calendar_notify_services"
     ) in services_source
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):

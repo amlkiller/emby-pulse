@@ -63,9 +63,9 @@ def start_weather_cache_preload() -> None:
     def _start_weather_service():
         if _weather_cache_preload_stop_event.wait(10):
             return
-        from app.domains.system.system_tools import preload_weather_cache
+        from app.domains.system.system_tools import start_weather_cache_refresh
 
-        preload_weather_cache()
+        start_weather_cache_refresh()
 
     _weather_cache_preload_thread = threading.Thread(
         target=_start_weather_service,

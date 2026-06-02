@@ -188,6 +188,3 @@ def cleanup_old_audit_logs(days: int = 90):
         logger.error(f"[审计日志] 清理失败: {e}")
         return 0
 
-
-def start_audit_services() -> None:
-    init_audit_table()

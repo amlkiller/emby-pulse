@@ -117,8 +117,8 @@ def test_submit_media_request_uses_public_rule_before_notifications(monkeypatch)
     def fake_send_photo(*args, **kwargs):
         calls.append(("send_photo", args, kwargs))
 
-    def fake_add_sys_notification(*args, **kwargs):
-        calls.append(("add_sys_notification", args, kwargs))
+    def fake_add_system_notification(*args, **kwargs):
+        calls.append(("add_system_notification", args, kwargs))
 
     monkeypatch.setattr(media_requests_router, "_check_user_exists", lambda user_id: True)
     monkeypatch.setattr(
@@ -129,7 +129,7 @@ def test_submit_media_request_uses_public_rule_before_notifications(monkeypatch)
     monkeypatch.setattr(media_requests_router, "get_pulse_url", lambda: "http://pulse.local")
     monkeypatch.setattr(media_requests_router.notify_admin, "get_notify_rule", fake_get_notify_rule)
     monkeypatch.setattr(media_requests_router.notification_service, "send_photo", fake_send_photo)
-    monkeypatch.setattr(media_requests_router, "add_sys_notification", fake_add_sys_notification)
+    monkeypatch.setattr(media_requests_router, "add_system_notification", fake_add_system_notification)
 
     response = asyncio.run(media_requests_router.submit_media_request(request))
 
@@ -138,7 +138,7 @@ def test_submit_media_request_uses_public_rule_before_notifications(monkeypatch)
         index for index, call in enumerate(calls) if call[0] == "send_photo"
     )
     assert calls.index(("get_notify_rule", "request_new")) < next(
-        index for index, call in enumerate(calls) if call[0] == "add_sys_notification"
+        index for index, call in enumerate(calls) if call[0] == "add_system_notification"
     )
     send_photo_call = next(call for call in calls if call[0] == "send_photo")
     assert send_photo_call[2]["platform"] == "tg"
@@ -319,8 +319,8 @@ def test_submit_feedback_uses_public_rule_before_notifications(monkeypatch):
     )
     monkeypatch.setattr(
         media_requests_router,
-        "add_sys_notification",
-        lambda *args, **kwargs: calls.append(("add_sys_notification", args, kwargs)),
+        "add_system_notification",
+        lambda *args, **kwargs: calls.append(("add_system_notification", args, kwargs)),
     )
 
     data = media_requests_router.FeedbackSubmitModel(
@@ -336,7 +336,7 @@ def test_submit_feedback_uses_public_rule_before_notifications(monkeypatch):
         index for index, call in enumerate(calls) if call[0] == "send_photo"
     )
     assert calls.index(("get_notify_rule", "feedback_new")) < next(
-        index for index, call in enumerate(calls) if call[0] == "add_sys_notification"
+        index for index, call in enumerate(calls) if call[0] == "add_system_notification"
     )
     send_photo_call = next(call for call in calls if call[0] == "send_photo")
     assert send_photo_call[2]["platform"] == "wecom"
@@ -388,8 +388,8 @@ def test_user_registration_uses_public_rule_and_preserves_disabled_rule_fallback
     )
     monkeypatch.setattr(
         notification_dao,
-        "add_sys_notification",
-        lambda *args, **kwargs: calls.append(("add_sys_notification", args, kwargs)),
+        "add_system_notification",
+        lambda *args, **kwargs: calls.append(("add_system_notification", args, kwargs)),
     )
     monkeypatch.setattr(media_requests_router, "get_media_server_user_routes", lambda uid: [])
     monkeypatch.setattr(media_requests_router, "get_media_server_main_public_or_host", lambda: "http://emby.local")
@@ -408,7 +408,7 @@ def test_user_registration_uses_public_rule_and_preserves_disabled_rule_fallback
         index for index, call in enumerate(calls) if call[0] == "send_message"
     )
     assert calls.index(("get_notify_rule", "user_register")) < next(
-        index for index, call in enumerate(calls) if call[0] == "add_sys_notification"
+        index for index, call in enumerate(calls) if call[0] == "add_system_notification"
     )
     send_message_call = next(call for call in calls if call[0] == "send_message")
     assert send_message_call[1][0] == "sys_notify"

@@ -117,14 +117,14 @@ def test_update_settings_denies_non_admin_before_side_effects(monkeypatch):
         calls.append(seen_request)
         return False
 
-    def fail_save_config():
+    def fail_save():
         raise AssertionError("settings should not be saved without admin permission")
 
     def fail_probe_settings(*args, **kwargs):
         raise AssertionError("media server should not be probed without admin permission")
 
     monkeypatch.setattr(router.user_service, "is_admin_user", fake_is_admin_user)
-    monkeypatch.setattr(router, "save_config", fail_save_config)
+    monkeypatch.setattr(router.cfg, "save", fail_save)
     monkeypatch.setattr(router.media_api, "probe_settings", fail_probe_settings)
 
     response = router.api_update_settings(data, request)

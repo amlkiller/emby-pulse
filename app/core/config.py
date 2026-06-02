@@ -390,6 +390,3 @@ if not os.getenv("SECRET_KEY"):
             print(f"⚠️ [清理] 删除旧文件失败: {e}")
 
 PORT = int(os.getenv("PORT", "10307"))
-
-def save_config():
-    cfg.save()

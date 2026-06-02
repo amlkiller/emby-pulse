@@ -19,14 +19,12 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 
 from app.plugins.user_backup.user_backup_dao import (
-    get_user_meta_for_backup,
     list_point_logs_for_backup,
     list_tg_bindings_detail_for_backup,
-    list_users_meta_for_backup,
     replace_point_logs_for_backup,
-    upsert_user_meta_for_backup,
 )
 from app.plugins.base import PluginBase
+from app.domains.users import user_dao
 from app.domains.users import public_service as user_service
 from app.infra.clients.media_server_client import media_api
 from app.infra.clients.webdav_client import webdav_client
@@ -77,10 +75,6 @@ class UserBackupPlugin(PluginBase):
         self._last_backup_date = None
         self._webdav_dir_created = False  # WebDAV 目录是否已创建标记
         self._setup_routes()
-        self._ensure_dir()
-
-    def _ensure_dir(self):
-        """确保备份目录存在"""
         os.makedirs(BACKUP_DIR, exist_ok=True)
 
     def _is_pro(self) -> bool:
@@ -166,7 +160,7 @@ class UserBackupPlugin(PluginBase):
             emby_users = res.json()
             
             # 获取本地扩展属性
-            meta_rows = list_users_meta_for_backup()
+            meta_rows = user_dao.list_all_user_meta()
             meta_map = {r['user_id']: dict(r) for r in meta_rows} if meta_rows else {}
             
             # 获取 TG 绑定关系
@@ -823,7 +817,7 @@ class UserBackupPlugin(PluginBase):
                             current_policy = res.json().get('Policy', {})
                         
                         # 获取当前 meta
-                        current_meta = get_user_meta_for_backup(uid)
+                        current_meta = user_dao.get_user_meta(uid)
                         
                         # 更新 meta 字段
                         meta_updates = {}
@@ -969,9 +963,9 @@ class UserBackupPlugin(PluginBase):
                         # 执行更新
                         if meta_updates:
                             if current_meta:
-                                upsert_user_meta_for_backup(uid, meta_updates, datetime.now().isoformat())
+                                user_dao.upsert_user_meta_fields(uid, meta_updates, datetime.now().isoformat())
                             else:
-                                upsert_user_meta_for_backup(uid, meta_updates, datetime.now().isoformat())
+                                user_dao.upsert_user_meta_fields(uid, meta_updates, datetime.now().isoformat())
                         
                         if policy_updates and user_exists:
                             new_policy = {**current_policy, **policy_updates}
@@ -1233,7 +1227,7 @@ class UserBackupPlugin(PluginBase):
     def on_enable(self):
         if self._thread and self._thread.is_alive():
             return
-        self._ensure_dir()
+        os.makedirs(BACKUP_DIR, exist_ok=True)
         self._stop_event.clear()
         self._running = True
         # 启动时检查今天是否已有备份文件，避免重启后重复备份

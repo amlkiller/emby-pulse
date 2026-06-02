@@ -27,11 +27,11 @@ from app.infra.config.user_bot_settings import (
     get_user_bot_allow_routes,
     get_user_bot_block_routes,
     get_user_bot_max_reg,
-    get_user_bot_notify_group_enabled,
-    get_user_bot_notify_user_enabled,
-    get_user_bot_open_reg_enabled,
     get_user_bot_required_channels,
     get_user_bot_required_groups,
+    is_user_bot_open_reg_enabled,
+    is_user_bot_open_reg_notify_group_enabled,
+    is_user_bot_open_reg_notify_user_enabled,
     set_user_bot_open_reg_enabled,
     set_user_bot_token,
     set_user_bot_allowed_groups,
@@ -214,8 +214,8 @@ def _leave_reg_queue():
 
 def _send_open_reg_closed_notify(reason=""):
     """发送开放注册关闭通知"""
-    notify_user = get_user_bot_notify_user_enabled()
-    notify_group = get_user_bot_notify_group_enabled()
+    notify_user = is_user_bot_open_reg_notify_user_enabled()
+    notify_group = is_user_bot_open_reg_notify_group_enabled()
     
     if not notify_user and not notify_group:
         return
@@ -476,8 +476,8 @@ _user_state = {}  # tg_user_id -> {"action": "register_name", ...}
 
 def _send_open_reg_closed_notify(reason=""):
     """发送开放注册关闭通知（名额已满等场景）"""
-    notify_user = get_user_bot_notify_user_enabled()
-    notify_group = get_user_bot_notify_group_enabled()
+    notify_user = is_user_bot_open_reg_notify_user_enabled()
+    notify_group = is_user_bot_open_reg_notify_group_enabled()
     
     if not notify_user and not notify_group:
         return
@@ -809,7 +809,7 @@ def cmd_bind(chat_id, tg_user_id, args, tg_username="", tg_display_name=""):
 
 
 def cmd_register(chat_id, tg_user_id, tg_name):
-    if not get_user_bot_open_reg_enabled():
+    if not is_user_bot_open_reg_enabled():
         _send(chat_id, "❌ 开放注册未开启，请联系管理员获取注册码后使用 /code 注册码")
         return
     if _get_binding(tg_user_id):
@@ -1062,7 +1062,7 @@ def _do_register(chat_id, tg_user_id, custom_name, tg_username="", tg_display_na
     quota = 0
     try:
         # 检查开放注册是否开启
-        if not get_user_bot_open_reg_enabled():
+        if not is_user_bot_open_reg_enabled():
             _send(chat_id, "❌ 开放注册已关闭，请联系管理员获取注册码后使用 /code 注册码")
             return
 
@@ -1375,11 +1375,11 @@ def _do_code_register(chat_id, tg_user_id, custom_name, code, days, tpl_id, rout
 
                 try:
                     from app.domains.notifications.bot_service import bot
-                    from app.infra.db.notification_dao import add_sys_notification
+                    from app.infra.db.notification_dao import add_system_notification
                     days_display = "永久" if (days == -1 or days == 0 or days >= 36500) else f"{days} 天"
                     msg = f"🎟️ <b>新用户注册</b>\n\n👤 {safe_name}\n📅 有效期：{days_display}\n🔗 邀请码：{code}\n📱 注册渠道：TG机器人\n🆔 TG：{tg_user_id}"
                     bot.notifier.send_message("sys_notify", msg, platform="all")
-                    add_sys_notification("user", f"新用户注册: {safe_name}", f"TG机器人注册，有效期 {days_display}", "/users_manage")
+                    add_system_notification("user", f"新用户注册: {safe_name}", f"TG机器人注册，有效期 {days_display}", "/users_manage")
                 except Exception: pass
             except Exception as e:
                 logger.error(f"[注册码] 使用失败: {e}")
@@ -3017,12 +3017,12 @@ def cmd_redeem_callback(chat_id, tg_user_id, item_id, cq_id):
 
         try:
             from app.domains.notifications.bot_service import bot
-            from app.infra.db.notification_dao import add_sys_notification
+            from app.infra.db.notification_dao import add_system_notification
             notify_msg = f"🎁 <b>积分商城兑换</b>\n\n👤 {uname}\n🛒 {target_name}\n💰 {cost} 积分\n📱 来源：TG 用户机器人"
             if target_type == "random_renew":
                 notify_msg += f"\n🎲 随机结果：{actual_days}天"
             bot.notifier.send_message("sys_notify", notify_msg, platform="all")
-            add_sys_notification("points", f"商城订单: {target_name}", f"用户 {uname} 通过TG机器人兑换", "/points")
+            add_system_notification("points", f"商城订单: {target_name}", f"用户 {uname} 通过TG机器人兑换", "/points")
         except Exception: pass
     except Exception as e:
         logger.error(f"[兑换] 执行失败: {e}")
@@ -3168,7 +3168,7 @@ def _submit_request(chat_id, tg_user_id, media_type, tmdb_id, season):
 
         try:
             from app.domains.notifications.bot_service import bot
-            from app.infra.db.notification_dao import add_sys_notification
+            from app.infra.db.notification_dao import add_system_notification
             from app.core.config import REPORT_COVER_URL
             from app.domains.notifications.notify_admin import get_notify_rule
             msg = f"🎬 <b>收到新求片心愿</b>\n\n👤 <b>用户：</b>{uname}\n📺 <b>内容：</b>{title} ({year}){season_str}\n📱 <b>来源：</b>TG 用户机器人\n\n请及时前往后台审批处理。"
@@ -3191,7 +3191,7 @@ def _submit_request(chat_id, tg_user_id, media_type, tmdb_id, season):
                     poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}" if poster_path else REPORT_COVER_URL
                     bot.notifier.send_photo("sys_notify", poster_url, msg, reply_markup=keyboard, platform=platform)
                 if 'web' in channels:
-                    add_sys_notification("request", f"收到新求片: {title}", f"用户 {uname} 通过TG机器人求片", "/requests_admin")
+                    add_system_notification("request", f"收到新求片: {title}", f"用户 {uname} 通过TG机器人求片", "/requests_admin")
         except Exception as e:
             logger.error(f"[求片通知] 发送失败: {e}")
     except Exception as e:

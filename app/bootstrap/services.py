@@ -4,19 +4,19 @@ from app.domains.notifications.bot_service import (
     start_notification_services,
     stop_notification_services,
 )
-from app.domains.playback.calendar_service import start_calendar_service, stop_calendar_service
-from app.domains.notifications.calendar_notify import start_calendar_notify_services, stop_calendar_notify_services
+from app.domains.playback.calendar_service import calendar_service
+from app.domains.notifications.calendar_notify import calendar_notify_service, start_calendar_notify_services
 from app.domains.notifications.router import start_notifications_router_services
-from app.domains.playback.dedupe import start_dedupe_services
+from app.domains.playback.dedupe import init_dedupe_db
 from app.domains.risk.risk_service import start_risk_monitor, stop_risk_monitor
 from app.domains.media_requests.gaps import start_gap_services, stop_gap_services
-from app.domains.media_requests.router import start_media_request_services, stop_media_request_services
-from app.domains.system.pro import start_pro_services
-from app.domains.system.tasks import start_system_task_services, stop_system_task_services
+from app.domains.media_requests.router import start_media_request_services, stop_community_cache_refresh_loop
+from app.domains.system.pro import ensure_pro_schema
+from app.domains.system.tasks import start_system_task_services, stop_task_poller
 from app.domains.users.auth import start_auth_domain_services, stop_auth_domain_services
-from app.domains.users.router import start_user_domain_services
-from app.core.audit_logger import start_audit_services
-from app.core.session import start_session_services, stop_session_services
+from app.domains.users.router import migrate_admin_disabled
+from app.core.audit_logger import init_audit_table
+from app.core.session import start_session_services, stop_session_cleanup_loop
 from app.plugins import disable_enabled_plugins
 from app.utils.proxy_helper import audit_existing_proxy_config
 
@@ -71,18 +71,18 @@ def build_bootstrap_registry(app, request_port: int) -> BootstrapServiceRegistry
     registry.register("user-portal", lambda: start_user_portal_thread(app, request_port), stop_user_portal_thread)
     registry.register("risk-monitor", start_risk_monitor, stop_risk_monitor)
     registry.register("dashboard-cache", start_dashboard_cache_tasks, stop_dashboard_cache_tasks)
-    registry.register("media-requests", start_media_request_services, stop_media_request_services)
-    registry.register("calendar", start_calendar_service, stop_calendar_service)
+    registry.register("media-requests", start_media_request_services, stop_community_cache_refresh_loop)
+    registry.register("calendar", calendar_service.start, calendar_service.stop)
     registry.register("notifications-router", start_notifications_router_services)
-    registry.register("calendar-notify", start_calendar_notify_services, stop_calendar_notify_services)
-    registry.register("dedupe", start_dedupe_services)
+    registry.register("calendar-notify", start_calendar_notify_services, calendar_notify_service.stop)
+    registry.register("dedupe", init_dedupe_db)
     registry.register("gaps", start_gap_services, stop_gap_services)
     registry.register("auth-domain", start_auth_domain_services, stop_auth_domain_services)
-    registry.register("user-domain", start_user_domain_services)
-    registry.register("pro-domain", start_pro_services)
-    registry.register("system-tasks", start_system_task_services, stop_system_task_services)
-    registry.register("audit", start_audit_services)
-    registry.register("session", start_session_services, stop_session_services)
+    registry.register("user-domain", migrate_admin_disabled)
+    registry.register("pro-domain", ensure_pro_schema)
+    registry.register("system-tasks", start_system_task_services, stop_task_poller)
+    registry.register("audit", init_audit_table)
+    registry.register("session", start_session_services, stop_session_cleanup_loop)
     registry.register("weather-cache-preload", start_weather_cache_preload, stop_weather_cache_preload)
     registry.register("plugin-lifecycle", lambda: None, disable_enabled_plugins)
     registry.register("startup-panel", lambda: print_startup_panel(request_port))
@@ -99,10 +99,6 @@ def get_bootstrap_registry(app, request_port: int) -> BootstrapServiceRegistry:
 def reset_bootstrap_registry() -> None:
     global _bootstrap_registry
     _bootstrap_registry = None
-
-
-def start_bootstrap_services(app, request_port: int) -> None:
-    get_bootstrap_registry(app, request_port).start_all()
 
 
 def stop_bootstrap_services() -> None:

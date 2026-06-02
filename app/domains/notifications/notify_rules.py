@@ -10,16 +10,12 @@ from app.core.security_utils import safe_error_message
 
 router = APIRouter(prefix="/api/notify_rules", tags=["Notification Rules"])
 
-def _ensure_bot_notify_mutes_table():
+def start_notify_rules_services():
     """确保 bot_notify_mutes 表存在"""
     try:
         ensure_bot_notify_mutes_table()
     except Exception as e:
         print(f"[降噪管理] 创建表失败: {e}")
-
-
-def start_notify_rules_services():
-    _ensure_bot_notify_mutes_table()
 
 @router.get("/users")
 async def get_emby_users(request: Request):

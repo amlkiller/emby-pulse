@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend guideline entrypoint for verification"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Verify plugin DAO alias removal preserves backup boundaries"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verify uv-based checks are used"}

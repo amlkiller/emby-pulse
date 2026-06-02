@@ -70,7 +70,3 @@ def add_system_notification(notify_type: str, title: str, message: str, action_u
         "INSERT INTO sys_notifications (type, title, message, action_url, created_at) VALUES (?, ?, ?, ?, ?)",
         (notify_type, title, message, action_url, now_str),
     )
-
-
-def add_sys_notification(notify_type: str, title: str, message: str, action_url: str = "") -> None:
-    add_system_notification(notify_type, title, message, action_url)

@@ -59,9 +59,6 @@ from app.core.security_utils import safe_error_message
 
 router = APIRouter()
 
-# 简单日志函数，强制刷新
-def log_msg(msg):
-    print(msg, flush=True)
 
 
 def _check_user_exists(user_id: str) -> bool:
@@ -96,28 +93,28 @@ class UserSendMessageModel(BaseModel):
 @router.get("/api/users/all")
 def get_all_users(request: Request, _admin: dict = Depends(require_admin)):
     """获取所有用户列表（用于发起对话） - 仅管理员"""
-    log_msg(f"[消息中心] get_all_users: 开始获取用户列表")
-    log_msg(f"[消息中心] get_all_users: media_api.host = {media_api.host}")
-    log_msg(f"[消息中心] get_all_users: media_api.api_key = {'***' if media_api.api_key else 'None'}")
+    print(f"[消息中心] get_all_users: 开始获取用户列表", flush=True)
+    print(f"[消息中心] get_all_users: media_api.host = {media_api.host}", flush=True)
+    print(f"[消息中心] get_all_users: media_api.api_key = {'***' if media_api.api_key else 'None'}", flush=True)
     
     try:
         # 从 Emby 获取所有用户
         if media_api and media_api.host and media_api.api_key:
-            log_msg(f"[消息中心] get_all_users: 调用 media_api.get('/Users')")
+            print(f"[消息中心] get_all_users: 调用 media_api.get('/Users')", flush=True)
             users_res = media_api.get("/Users")
-            log_msg(f"[消息中心] get_all_users: users_res={users_res is not None}, status={users_res.status_code if users_res else 'None'}")
+            print(f"[消息中心] get_all_users: users_res={users_res is not None}, status={users_res.status_code if users_res else 'None'}", flush=True)
             if users_res and users_res.status_code == 200:
                 all_users = users_res.json()
-                log_msg(f"[消息中心] get_all_users: 获取到 {len(all_users)} 个用户")
+                print(f"[消息中心] get_all_users: 获取到 {len(all_users)} 个用户", flush=True)
                 
                 user_remarks = {}
                 try:
                     # 从 users_meta 获取备注（Emby 用户备注）
                     for row in list_user_remarks():
                         user_remarks[row["user_id"]] = row["remark"]
-                    log_msg(f"[消息中心] get_all_users: 获取到 {len(user_remarks)} 个用户备注")
+                    print(f"[消息中心] get_all_users: 获取到 {len(user_remarks)} 个用户备注", flush=True)
                 except Exception as e:
-                    log_msg(f"[消息中心] get_all_users: 获取备注失败: {e}")
+                    print(f"[消息中心] get_all_users: 获取备注失败: {e}", flush=True)
                 
                 users = []
                 for u in all_users:
@@ -130,17 +127,17 @@ def get_all_users(request: Request, _admin: dict = Depends(require_admin)):
                         "Remark": remark
                     })
                     if remark:
-                        log_msg(f"[消息中心] get_all_users: 用户 {user_id} 备注为 {remark}")
+                        print(f"[消息中心] get_all_users: 用户 {user_id} 备注为 {remark}", flush=True)
                 # 按名称排序
                 users.sort(key=lambda x: (x.get("Remark") or x.get("Name") or "").lower())
                 return {"status": "success", "users": users}
             else:
-                log_msg(f"[消息中心] 获取用户列表失败: status={users_res.status_code if users_res else 'None'}")
+                print(f"[消息中心] 获取用户列表失败: status={users_res.status_code if users_res else 'None'}", flush=True)
         else:
-            log_msg(f"[消息中心] media_api 未初始化或配置缺失: host={media_api.host if media_api else 'N/A'}")
+            print(f"[消息中心] media_api 未初始化或配置缺失: host={media_api.host if media_api else 'N/A'}", flush=True)
     except Exception as e:
         import traceback
-        log_msg(f"[消息中心] 获取用户列表异常: {e}")
+        print(f"[消息中心] 获取用户列表异常: {e}", flush=True)
         traceback.print_exc()
     
     return {"status": "success", "users": []}
@@ -192,11 +189,11 @@ def search_users(request: Request, q: str = ""):
                             break
                 return {"status": "success", "users": matched}
             else:
-                log_msg(f"[消息中心] 搜索用户失败: status={users_res.status_code if users_res else 'None'}")
+                print(f"[消息中心] 搜索用户失败: status={users_res.status_code if users_res else 'None'}", flush=True)
         else:
-            log_msg("[消息中心] media_api 未初始化")
+            print("[消息中心] media_api 未初始化", flush=True)
     except Exception as e:
-        log_msg(f"[消息中心] 搜索用户异常: {e}")
+        print(f"[消息中心] 搜索用户异常: {e}", flush=True)
     
     return {"status": "success", "users": []}
 
@@ -455,7 +452,7 @@ def user_get_messages(request: Request, page: int = 1, limit: int = 50):
     
     # 检查 Emby 账号是否仍然存在
     if not _check_user_exists(user_id):
-        log_msg(f"[消息中心] 用户 {user_id} 的 Emby 账号已被删除")
+        print(f"[消息中心] 用户 {user_id} 的 Emby 账号已被删除", flush=True)
         request.session.pop("req_user", None)
         return {"status": "error", "message": "账号已被删除，请重新登录", "account_deleted": True}
     
@@ -481,7 +478,7 @@ def user_send_message(data: UserSendMessageModel, request: Request):
     """用户发送消息给管理员"""
     req_user = request.session.get("req_user")
     if not req_user:
-        log_msg("[消息中心] user_send_message: 未登录")
+        print("[消息中心] user_send_message: 未登录", flush=True)
         return {"status": "error", "message": "未登录"}
 
     user_id = req_user.get("Id")
@@ -489,7 +486,7 @@ def user_send_message(data: UserSendMessageModel, request: Request):
     
     # 检查 Emby 账号是否仍然存在
     if not _check_user_exists(user_id):
-        log_msg(f"[消息中心] user_send_message: 用户 {user_id} 的 Emby 账号已被删除")
+        print(f"[消息中心] user_send_message: 用户 {user_id} 的 Emby 账号已被删除", flush=True)
         request.session.pop("req_user", None)
         return {"status": "error", "message": "账号已被删除，请重新登录", "account_deleted": True}
     
@@ -507,7 +504,7 @@ def user_send_message(data: UserSendMessageModel, request: Request):
             msg += "（永久禁言）"
         return {"status": "error", "message": msg}
     
-    log_msg(f"[消息中心] user_send_message: 用户 {username}({user_id}) 发送消息: {data.content[:50]}...")
+    print(f"[消息中心] user_send_message: 用户 {username}({user_id}) 发送消息: {data.content[:50]}...", flush=True)
     
     ensure_msg_tables()
     
@@ -528,14 +525,14 @@ def user_send_message(data: UserSendMessageModel, request: Request):
         sanitize_html(f"用户 {username} 发来新消息"),
     )
     if existed:
-        log_msg(f"[消息中心] user_send_message: 找到已有会话 conv_id={conv_id}")
+        print(f"[消息中心] user_send_message: 找到已有会话 conv_id={conv_id}", flush=True)
     else:
-        log_msg(f"[消息中心] user_send_message: 创建新会话 conv_id={conv_id}")
+        print(f"[消息中心] user_send_message: 创建新会话 conv_id={conv_id}", flush=True)
     
     # 🔥 发送机器人通知给管理员
     _send_bot_notify_for_user_message(user_id, username, data.content, conv_id)
     
-    log_msg(f"[消息中心] user_send_message: 消息发送成功")
+    print(f"[消息中心] user_send_message: 消息发送成功", flush=True)
 
     return {"status": "success", "message": "发送成功"}
 
@@ -1078,10 +1075,10 @@ def _send_bot_notify_for_user_message(user_id: str, username: str, content: str,
         
         # 发送通知
         bot.notifier.send_message("sys_notify", text, reply_markup=reply_markup, platform="all")
-        log_msg(f"[消息中心] 已发送机器人通知: 用户 {username} 的消息")
+        print(f"[消息中心] 已发送机器人通知: 用户 {username} 的消息", flush=True)
         
     except Exception as e:
-        log_msg(f"[消息中心] 发送机器人通知失败: {e}")
+        print(f"[消息中心] 发送机器人通知失败: {e}", flush=True)
 
 
 def _send_bot_reply_to_user(user_id: str, content: str, admin_name: str = "管理员"):
@@ -1096,7 +1093,7 @@ def _send_bot_reply_to_user(user_id: str, content: str, admin_name: str = "管�
         row = get_user_tg_id(user_id)
         
         if not row or not row["tg_id"]:
-            log_msg(f"[消息中心] 用户 {user_id} 未绑定 TG 机器人")
+            print(f"[消息中心] 用户 {user_id} 未绑定 TG 机器人", flush=True)
             return False
         
         tg_id = row["tg_id"]
@@ -1104,11 +1101,11 @@ def _send_bot_reply_to_user(user_id: str, content: str, admin_name: str = "管�
         # 发送消息给用户
         text = f"💌 <b>管理员回复</b>\n\n{content}"
         user_bot.send_message(tg_id, text)
-        log_msg(f"[消息中心] 已通过 TG 机器人回复用户 {user_id}")
+        print(f"[消息中心] 已通过 TG 机器人回复用户 {user_id}", flush=True)
         return True
         
     except Exception as e:
-        log_msg(f"[消息中心] 机器人回复失败: {e}")
+        print(f"[消息中心] 机器人回复失败: {e}", flush=True)
         return False
 
 
@@ -1236,12 +1233,12 @@ def broadcast_message(data: BroadcastModel, request: Request):
 
     success_count, failed = send_broadcast_messages(user_entries, admin_id, admin_name, content)
     for user_id, exc in failed:
-        log_msg(f"[群发消息] 发送给 {user_id} 失败: {exc}")
+        print(f"[群发消息] 发送给 {user_id} 失败: {exc}", flush=True)
     failed_count = len(failed)
     
     # 发送机器人通知
     if success_count > 0:
-        log_msg(f"[群发消息] 成功发送给 {success_count} 个用户")
+        print(f"[群发消息] 成功发送给 {success_count} 个用户", flush=True)
     
     return {
         "status": "success",

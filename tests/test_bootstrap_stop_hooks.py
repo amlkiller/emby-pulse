@@ -7,13 +7,13 @@ if _repo_root not in sys.path:
     sys.path.insert(0, _repo_root)
 
 
-def test_calendar_notify_stop_services_stops_global_service(monkeypatch):
+def test_calendar_notify_service_stop_stops_global_service(monkeypatch):
     from app.domains.notifications import calendar_notify
 
     calls = []
     monkeypatch.setattr(calendar_notify.calendar_notify_service, "stop", lambda: calls.append("stop"))
 
-    calendar_notify.stop_calendar_notify_services()
+    calendar_notify.calendar_notify_service.stop()
 
     assert calls == ["stop"]
 
@@ -95,14 +95,14 @@ def test_system_task_stop_cancels_poller_and_allows_restart():
     from app.domains.system import tasks
 
     async def run_check():
-        tasks.stop_system_task_services()
+        tasks.stop_task_poller()
         tasks.start_task_poller()
 
         poller_task = tasks._poller_task
         assert poller_task is not None
         assert tasks._task_poller_started is True
 
-        tasks.stop_system_task_services()
+        tasks.stop_task_poller()
         await asyncio.sleep(0)
 
         assert poller_task.cancelled()
@@ -142,7 +142,7 @@ def test_auth_lock_cleanup_stop_resets_state_and_allows_restart(monkeypatch):
 def test_session_cleanup_stop_resets_state_and_allows_restart(monkeypatch):
     from app.core import session
 
-    session.stop_session_services()
+    session.stop_session_cleanup_loop()
     calls = []
     monkeypatch.setattr(session, "dao_cleanup_expired_sessions", lambda now: calls.append(now) or 0)
 
@@ -150,12 +150,12 @@ def test_session_cleanup_stop_resets_state_and_allows_restart(monkeypatch):
     assert len(calls) == 1
     assert session._session_cleanup_started is True
 
-    session.stop_session_services()
+    session.stop_session_cleanup_loop()
     assert session._session_cleanup_started is False
     assert session._session_cleanup_thread is None
 
     session.start_session_cleanup_loop(interval_seconds=600)
-    session.stop_session_services()
+    session.stop_session_cleanup_loop()
 
     assert len(calls) == 2
 

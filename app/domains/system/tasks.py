@@ -219,10 +219,6 @@ def start_system_task_services():
     start_task_poller()
 
 
-def stop_system_task_services():
-    stop_task_poller()
-
-
 # ==========================================
 # 2. 初始化自定义别名表 (已迁移到 database.py 统一创建)
 # ==========================================

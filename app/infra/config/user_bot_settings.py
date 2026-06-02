@@ -76,10 +76,6 @@ def set_user_bot_open_reg_enabled(enabled: bool) -> None:
     cfg.set("user_bot_open_reg", enabled)
 
 
-def get_user_bot_open_reg_enabled() -> bool:
-    return is_user_bot_open_reg_enabled()
-
-
 def is_user_bot_open_reg_notify_user_enabled() -> bool:
     return cfg.get("user_bot_open_reg_notify_user", False)
 
@@ -209,10 +205,3 @@ def get_default_user_template_id() -> str:
 def set_default_user_template_id(value: str) -> None:
     cfg.set("default_user_template_id", value)
 
-
-def get_user_bot_notify_user_enabled() -> bool:
-    return is_user_bot_open_reg_notify_user_enabled()
-
-
-def get_user_bot_notify_group_enabled() -> bool:
-    return is_user_bot_open_reg_notify_group_enabled()

@@ -14,7 +14,7 @@ from app.core.config import REPORT_COVER_URL
 from app.infra.clients.moviepilot_client import moviepilot_client
 from app.infra.clients.tmdb_client import tmdb_client
 from app.infra.config.request_portal_settings import get_pulse_url
-from app.infra.db.notification_dao import add_sys_notification
+from app.infra.db.notification_dao import add_system_notification
 from app.domains.media_requests.media_request_dao import (
     claim_registration_invitation,
     create_media_feedback,
@@ -687,7 +687,7 @@ async def submit_media_request(request: Request):
                 
                 # Web 通知中心 - 只有勾选 web 才发送
                 if 'web' in channels:
-                    add_sys_notification("request", f"收到新求片: {title}", f"用户 {uname} 提交了新的心愿单", "/requests_admin")
+                    add_system_notification("request", f"收到新求片: {title}", f"用户 {uname} 提交了新的心愿单", "/requests_admin")
             # else: 关闭状态不发送任何通知
         except Exception as e:
             logger.error(f"[求片通知] 发送失败: {e}")
@@ -1024,7 +1024,7 @@ def submit_feedback(data: FeedbackSubmitModel, request: Request):
             
             # Web 通知中心
             if 'web' in channels:
-                add_sys_notification(
+                add_system_notification(
                     notify_type="system",
                     title=f"⚠️ 资源报错: {uname}",
                     message=f"{data.item_name} - {data.issue_type}",
@@ -1357,10 +1357,6 @@ def stop_community_cache_refresh_loop() -> None:
 def start_media_request_services() -> None:
     ensure_media_request_schema()
     start_community_cache_refresh_loop()
-
-
-def stop_media_request_services() -> None:
-    stop_community_cache_refresh_loop()
 
 
 @router.post("/api/requests/refresh_cache")
@@ -1696,7 +1692,7 @@ async def submit_update_request(request: Request):
             
             year_display = f" ({actual_year})" if actual_year else ""
             
-            add_sys_notification("request", f"收到追新请求: {title}", 
+            add_system_notification("request", f"收到追新请求: {title}", 
                                f"用户 {uname} 请求更新 S{season}E{episodes_str}", "/requests_admin")
             
             msg = f"🔄 <b>收到追新请求</b>\n\n👤 <b>用户：</b>{uname}\n📺 <b>内容：</b>{title}{year_display}\n📀 <b>季集：</b>第 {season} 季 E{episodes_str.replace(',', '-')}集\n\n请及时处理。"
@@ -1781,7 +1777,7 @@ async def submit_update_request_batch(request: Request):
             
             season_detail_str = "\n".join(season_details)
             
-            add_sys_notification("request", f"收到批量追新请求: {series_name}", 
+            add_system_notification("request", f"收到批量追新请求: {series_name}", 
                                f"用户 {uname} 请求更新\n{season_detail_str}", "/requests_admin")
             
             # 🔥 从 TMDB 获取封面
@@ -2048,7 +2044,7 @@ async def user_community_register(data: UserRegisterModel, request: Request):
             
             # 8. 发送通知
             try:
-                from app.infra.db.notification_dao import add_sys_notification
+                from app.infra.db.notification_dao import add_system_notification
                 rule = notify_admin.get_notify_rule('user_register')
                 days_display = "永久" if (days == -1 or days == 0 or days >= 36500) else f"{days} 天"
                 msg = f"🎟️ <b>新用户注册</b>\n\n👤 {safe_name}\n📅 有效期：{days_display}\n🔗 邀请码：{data.code}\n📱 注册渠道：用户社区"
@@ -2063,11 +2059,11 @@ async def user_community_register(data: UserRegisterModel, request: Request):
                     
                     # Web通知中心
                     if 'web' in channels:
-                        add_sys_notification("user", f"新用户注册: {safe_name}", f"用户社区注册，有效期 {days_display}", "/users_manage")
+                        add_system_notification("user", f"新用户注册: {safe_name}", f"用户社区注册，有效期 {days_display}", "/users_manage")
                 else:
                     # 兜底：使用旧方式发送通知
                     notification_service.send_message("sys_notify", msg, platform="all")
-                    add_sys_notification("user", f"新用户注册: {safe_name}", f"用户社区注册，有效期 {days_display}", "/users_manage")
+                    add_system_notification("user", f"新用户注册: {safe_name}", f"用户社区注册，有效期 {days_display}", "/users_manage")
             except Exception as e:
                 logger.error(f"[用户社区注册] 发送通知失败: {e}")
             

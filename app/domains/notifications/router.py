@@ -25,15 +25,11 @@ class MarkReadReq(BaseModel):
     id: Optional[int] = None
 
 
-def _ensure_table():
+def start_notifications_router_services():
     try:
         ensure_notifications_table()
     except Exception as e:
         logger.error(f"[通知中心] 自动建表失败: {e}")
-
-
-def start_notifications_router_services():
-    _ensure_table()
 
 
 @router.get("")

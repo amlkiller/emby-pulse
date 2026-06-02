@@ -1,12 +1,12 @@
 from contextlib import asynccontextmanager
 
-from .services import start_bootstrap_services, stop_bootstrap_services
+from .services import get_bootstrap_registry, stop_bootstrap_services
 
 
 def build_lifespan(request_port: int):
     @asynccontextmanager
     async def lifespan(app):
-        start_bootstrap_services(app, request_port)
+        get_bootstrap_registry(app, request_port).start_all()
 
         yield
 

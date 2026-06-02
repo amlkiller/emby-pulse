@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend guideline entrypoint for DAO alias refactor"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "uv verification requirements"}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Database DAO boundary and verification guidance"}

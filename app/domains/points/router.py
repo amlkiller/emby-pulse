@@ -7,7 +7,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from typing import List, Optional
 from app.core.config import templates
-from app.infra.db.notification_dao import add_sys_notification
+from app.infra.db.notification_dao import add_system_notification
 from app.domains.system import invitation_dao
 from app.domains.users import public_service as user_service
 from app.domains.points import point_dao
@@ -216,7 +216,7 @@ def user_redeem(data: RedeemModel, request: Request):
                 msg += f"⚠️ <b>结果</b>: 此商品需人工发货，请尽快联系用户！"
             
             notification_service.send_message("sys_notify", msg, platform="all")
-            add_sys_notification("points", f"商城订单: {item_name}", f"用户 {user['Name']} 兑换了该商品", "/points")
+            add_system_notification("points", f"商城订单: {item_name}", f"用户 {user['Name']} 兑换了该商品", "/points")
         except Exception: pass
 
         if item_type == "manual":

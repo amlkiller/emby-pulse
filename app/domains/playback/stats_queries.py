@@ -19,10 +19,6 @@ def build_stats_base_filter(user_id_filter):
     return where, params
 
 
-def query_stats(sql: str, params=(), one: bool = False):
-    return playback_store.query(sql, params, one=one)
-
-
 def get_user_last_play(user_id: str):
     return playback_store.query(
         "SELECT ItemName, PlayDuration, DateCreated FROM PlaybackActivity WHERE UserId = ? ORDER BY DateCreated DESC LIMIT 1",

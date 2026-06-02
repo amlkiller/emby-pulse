@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 3
+- **Total Sessions**: 28
 - **Last Active**: 2026-06-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~106 | Active |
+| `journal-1.md` | ~931 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,31 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 28 | 2026-06-03 | Remove weather preload redirect | `788a81e` | `Compiled` |
+| 27 | 2026-06-03 | Remove config save redirect | `db538e8` | `Compiled` |
+| 26 | 2026-06-03 | Remove notification episode zfill redirect | `73a043b` | `Compiled` |
+| 25 | 2026-06-03 | Remove notification message log redirect | `29012c5` | `Compiled` |
+| 24 | 2026-06-03 | Remove plugin directory ensure redirects | `f5b11d7` | `Compiled` |
+| 23 | 2026-06-03 | Remove session manager initialize redirect | `6d02d34` | `Compiled` |
+| 22 | 2026-06-03 | Remove calendar service internal lifecycle redirects | `766b641` | `Compiled` |
+| 21 | 2026-06-03 | Remove bootstrap start redirect | `2ebbcd2` | `Compiled` |
+| 20 | 2026-06-03 | Remove auth domain stop redirect | `57b6f6a` | `Compiled` |
+| 19 | 2026-06-03 | Remove notify rules startup redirect | `49714fa` | `Compiled` |
+| 18 | 2026-06-03 | Remove notifications router startup redirect | `6d972e9` | `Compiled` |
+| 17 | 2026-06-03 | Remove user domain startup redirect | `ef311cf` | `Compiled` |
+| 16 | 2026-06-03 | Remove calendar service lifecycle redirects | `cebbd7f` | `Compiled` |
+| 15 | 2026-06-03 | Remove calendar notify stop redirect | `95836cc` | `Compiled` |
+| 14 | 2026-06-03 | Remove system task stop redirect | `71bc702` | `Compiled` |
+| 13 | 2026-06-03 | Remove media request stop redirect | `42fe0c8` | `Compiled` |
+| 12 | 2026-06-03 | Remove pro startup redirect | `b34cf77` | `Compiled` |
+| 11 | 2026-06-03 | Remove dedupe startup redirect | `b268493` | `Compiled` |
+| 10 | 2026-06-03 | Remove session stop redirect | `843946e` | `Compiled` |
+| 9 | 2026-06-03 | Remove audit startup redirect | `411dcac` | `Compiled` |
+| 8 | 2026-06-03 | Remove playback query_stats alias | `c148b33` | `Compiled` |
+| 7 | 2026-06-03 | Remove user bot settings enabled aliases | `e4043e1` | `Compiled` |
+| 6 | 2026-06-03 | Remove user backup DAO aliases | `58ccd61` | `Compiled` |
+| 5 | 2026-06-03 | Remove plugin config refresh alias | `e7773a9` | `Compiled` |
+| 4 | 2026-06-03 | Remove notification DAO short alias | `9bf53cb` | `Compiled` |
 | 3 | 2026-06-03 | Remove plugin log alias wrappers | `81baf64` | `Compiled` |
 | 2 | 2026-06-03 | Remove notification orchestrator pass-throughs | `a519821` | `Compiled` |
 | 1 | 2026-06-03 | Remove pass-through wrappers | `f6a8bce` | `Compiled` |

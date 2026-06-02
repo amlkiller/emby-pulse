@@ -141,7 +141,7 @@ class SeasonPosterUpdaterPlugin(PluginBase):
                 data = await request.json()
                 save_plugin_config(self.id, data)
                 # 刷新配置缓存
-                self._refresh_config_cache()
+                self._load_config_to_cache()
                 return {"status": "success", "message": "配置已保存"}
             except Exception as e:
                 logger.error(f"[{self.name}] 保存配置失败: {e}")
