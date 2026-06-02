@@ -453,3 +453,36 @@ Routed simple registry-owned startup table creation in app.infra.db.database thr
 ### Next Steps
 
 - None - task complete
+
+
+## Session 14: Point core schema registry bootstrap
+
+**Date**: 2026-06-02
+**Task**: Point core schema registry bootstrap
+**Branch**: `main`
+
+### Summary
+
+Routed point_logs and point_config bootstraps through schema_bootstrap, preserved unregistered point game table DDL, added focused regression coverage, and updated backend database schema-boundary guidance.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f5c9f32` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
