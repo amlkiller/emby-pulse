@@ -1,9 +1,13 @@
+import ast
 import os
 import sys
+from pathlib import Path
 
 _repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _repo_root not in sys.path:
     sys.path.insert(0, _repo_root)
+
+_REPO_ROOT = Path(_repo_root)
 
 
 def test_registry_starts_once_and_stops_in_reverse_order():
@@ -128,3 +132,21 @@ def test_bootstrap_services_use_registry_and_skip_duplicate_starts(monkeypatch):
         "stop:notifications",
     ]
     services.reset_bootstrap_registry()
+
+
+def test_bootstrap_uses_calendar_notify_owner_without_service_wrapper():
+    services_path = _REPO_ROOT / "app/bootstrap/services.py"
+    services_source = services_path.read_text(encoding="utf-8")
+    tree = ast.parse(services_source, filename=str(services_path))
+
+    assert not (_REPO_ROOT / "app/domains/notifications/calendar_notify_service.py").exists()
+    assert (
+        "from app.domains.notifications.calendar_notify import "
+        "start_calendar_notify_services, stop_calendar_notify_services"
+    ) in services_source
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            assert node.module != "app.domains.notifications.calendar_notify_service"
+        elif isinstance(node, ast.Import):
+            imported_modules = {alias.name for alias in node.names}
+            assert "app.domains.notifications.calendar_notify_service" not in imported_modules
