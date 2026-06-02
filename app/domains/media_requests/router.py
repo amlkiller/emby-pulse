@@ -50,6 +50,7 @@ from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读
 # 🔥 补回丢失的这一行：引入基础数据模型
 from app.schemas.models import MediaRequestSubmitModel as BaseSubmitModel
 from app.domains.notifications import public_service as notification_service
+from app.domains.playback import public_service as playback_service
 # 🔥 引入媒体适配器用于创建用户
 from app.infra.clients.media_server_client import media_api
 from app.infra.config.media_server_settings import (
@@ -1093,9 +1094,8 @@ def get_safe_top_media(category: str, request: Request):
     
     if not global_items:
         try:
-            from app.domains.playback.stats import api_top_movies
             logger.debug(f"[热播榜] 调用 api_top_movies 获取数据...")
-            global_res = api_top_movies(user_id="all", category=category, sort_by="count")
+            global_res = playback_service.api_top_movies(user_id="all", category=category, sort_by="count")
             logger.debug(f"[热播榜] api_top_movies 返回状态: {global_res.get('status')}, 数据量: {len(global_res.get('data', []))}")
             global_items = global_res.get("data", [])
             
@@ -1165,8 +1165,7 @@ def get_safe_latest(limit: int = 15, request: Request = None):
     
     if not global_items:
         try:
-            from app.domains.playback.stats import api_latest_media
-            global_res = api_latest_media(limit=40)
+            global_res = playback_service.api_latest_media(limit=40)
             global_items = global_res.get("data", [])
             
             if global_items:
@@ -1299,8 +1298,7 @@ def _refresh_community_cache():
         
         # 2. 刷新 safe_latest
         try:
-            from app.domains.playback.stats import api_latest_media
-            global_res = api_latest_media(limit=40)
+            global_res = playback_service.api_latest_media(limit=40)
             global_items = global_res.get("data", [])
             if global_items:
                 _set_cache("safe_latest", global_items, COMMUNITY_CACHE_TTL_LATEST)
@@ -1310,9 +1308,8 @@ def _refresh_community_cache():
         
         # 3. 刷新 safe_top (Movie 和 Episode)
         try:
-            from app.domains.playback.stats import api_top_movies
             for category in ["Movie", "Episode"]:
-                global_res = api_top_movies(user_id="all", category=category, sort_by="count")
+                global_res = playback_service.api_top_movies(user_id="all", category=category, sort_by="count")
                 global_items = global_res.get("data", [])
                 if global_items:
                     _set_cache(f"safe_top_{category}", global_items[:50], COMMUNITY_CACHE_TTL_TOP)
