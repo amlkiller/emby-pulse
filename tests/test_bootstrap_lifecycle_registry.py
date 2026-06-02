@@ -80,7 +80,7 @@ def test_bootstrap_services_use_registry_and_skip_duplicate_starts(monkeypatch):
     monkeypatch.setattr(services, "stop_gap_services", record("stop:gaps"))
     monkeypatch.setattr(services, "start_auth_domain_services", record("auth-domain"))
     monkeypatch.setattr(services, "stop_auth_domain_services", record("stop:auth-domain"))
-    monkeypatch.setattr(services, "start_user_domain_services", record("user-domain"))
+    monkeypatch.setattr(services, "migrate_admin_disabled", record("user-domain"))
     monkeypatch.setattr(services, "ensure_pro_schema", record("pro-domain"))
     monkeypatch.setattr(services, "start_system_task_services", record("system-tasks"))
     monkeypatch.setattr(services, "stop_task_poller", record("stop:system-tasks"))
