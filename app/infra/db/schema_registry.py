@@ -19,7 +19,11 @@ SYSTEM_TABLES = [
     "msg_conversations", "msg_items", "msg_notify_block", "user_mutes",
     "announcements", "announcement_reads",
     "bot_notify_mutes", "user_audit_logs", "notify_rules", "calendar_notify_config",
-    "pwa_config", "user_pwa_icons"
+    "pwa_config", "user_pwa_icons",
+    "lottery_tickets", "lottery_results", "lottery_winners",
+    "scratch_cards", "scratch_card_slots", "point_checkin_streak",
+    "point_red_packets", "point_red_packet_logs", "point_transfer_logs",
+    "point_rob_logs", "pk_invitations", "pk_logs"
 ]
 
 # 🔥 播放数据表（不迁移，保持原库读取）
@@ -237,6 +241,143 @@ TABLE_SCHEMAS = {
     "point_config": """CREATE TABLE IF NOT EXISTS point_config (
         key TEXT PRIMARY KEY,
         value TEXT
+    )""",
+
+    "lottery_tickets": """CREATE TABLE IF NOT EXISTS lottery_tickets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        username TEXT,
+        numbers TEXT NOT NULL,
+        cost INTEGER,
+        draw_date TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )""",
+
+    "lottery_results": """CREATE TABLE IF NOT EXISTS lottery_results (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        draw_date TEXT NOT NULL UNIQUE,
+        winning_numbers TEXT NOT NULL,
+        total_pool INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )""",
+
+    "lottery_winners": """CREATE TABLE IF NOT EXISTS lottery_winners (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        username TEXT,
+        ticket_id INTEGER,
+        prize_level INTEGER,
+        prize_amount INTEGER,
+        draw_date TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )""",
+
+    "scratch_cards": """CREATE TABLE IF NOT EXISTS scratch_cards (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        total_slots INTEGER DEFAULT 9,
+        filled_slots INTEGER DEFAULT 0,
+        price INTEGER DEFAULT 100,
+        status TEXT DEFAULT 'active',
+        created_by TEXT,
+        chat_id TEXT DEFAULT '',
+        message_id INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )""",
+
+    "scratch_card_slots": """CREATE TABLE IF NOT EXISTS scratch_card_slots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        card_id INTEGER NOT NULL,
+        slot_number INTEGER NOT NULL,
+        prize_amount INTEGER NOT NULL,
+        is_scratched INTEGER DEFAULT 0,
+        user_id TEXT,
+        username TEXT,
+        scratched_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )""",
+
+    "point_checkin_streak": """CREATE TABLE IF NOT EXISTS point_checkin_streak (
+        user_id TEXT PRIMARY KEY,
+        streak_count INTEGER DEFAULT 0,
+        last_checkin DATE
+    )""",
+
+    "point_red_packets": """CREATE TABLE IF NOT EXISTS point_red_packets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        total_amount INTEGER,
+        remain_amount INTEGER,
+        total_count INTEGER,
+        remain_count INTEGER,
+        creator_id TEXT,
+        creator_name TEXT,
+        chat_id TEXT,
+        message_id TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        expires_at DATETIME
+    )""",
+
+    "point_red_packet_logs": """CREATE TABLE IF NOT EXISTS point_red_packet_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        packet_id INTEGER,
+        user_id TEXT,
+        user_name TEXT,
+        amount INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )""",
+
+    "point_transfer_logs": """CREATE TABLE IF NOT EXISTS point_transfer_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        from_user_id TEXT,
+        from_user_name TEXT,
+        to_user_id TEXT,
+        to_user_name TEXT,
+        amount INTEGER,
+        fee INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )""",
+
+    "point_rob_logs": """CREATE TABLE IF NOT EXISTS point_rob_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        from_user_id TEXT,
+        from_user_name TEXT,
+        to_user_id TEXT,
+        to_user_name TEXT,
+        amount INTEGER,
+        success INTEGER DEFAULT 0,
+        counter_amount INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )""",
+
+    "pk_invitations": """CREATE TABLE IF NOT EXISTS pk_invitations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        challenger_id TEXT,
+        challenger_name TEXT,
+        challenger_tg_name TEXT,
+        target_id TEXT,
+        target_name TEXT,
+        target_tg_name TEXT,
+        points INTEGER,
+        chat_id TEXT,
+        message_id TEXT,
+        command_message_id TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        expires_at DATETIME,
+        status TEXT DEFAULT 'pending'
+    )""",
+
+    "pk_logs": """CREATE TABLE IF NOT EXISTS pk_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        challenger_id TEXT,
+        challenger_name TEXT,
+        target_id TEXT,
+        target_name TEXT,
+        points INTEGER,
+        challenger_roll INTEGER,
+        target_roll INTEGER,
+        winner_id TEXT,
+        winner_name TEXT,
+        tax INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )""",
 
     # ==================== PWA 配置 ====================
@@ -589,6 +730,18 @@ TABLE_ALTERS = {
     ],
     "media_feedback": [
         "ALTER TABLE media_feedback ADD COLUMN poster_path TEXT"
+    ],
+    "scratch_cards": [
+        "ALTER TABLE scratch_cards ADD COLUMN chat_id TEXT DEFAULT ''",
+        "ALTER TABLE scratch_cards ADD COLUMN message_id INTEGER DEFAULT 0"
+    ],
+    "point_red_packets": [
+        "ALTER TABLE point_red_packets ADD COLUMN message_id TEXT"
+    ],
+    "pk_invitations": [
+        "ALTER TABLE pk_invitations ADD COLUMN challenger_tg_name TEXT",
+        "ALTER TABLE pk_invitations ADD COLUMN target_tg_name TEXT",
+        "ALTER TABLE pk_invitations ADD COLUMN command_message_id TEXT"
     ],
     "PlaybackActivity": [
         "ALTER TABLE PlaybackActivity ADD COLUMN RemoteEndPoint TEXT",

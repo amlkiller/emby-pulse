@@ -6,6 +6,22 @@ from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
 
 
+_POINT_GAME_TABLES = (
+    "lottery_tickets",
+    "lottery_results",
+    "lottery_winners",
+    "scratch_cards",
+    "scratch_card_slots",
+    "point_checkin_streak",
+    "point_red_packets",
+    "point_red_packet_logs",
+    "point_transfer_logs",
+    "point_rob_logs",
+    "pk_invitations",
+    "pk_logs",
+)
+
+
 def get_point_config() -> dict:
     try:
         rows = system_store.fetch_all("SELECT key, value FROM point_config")
@@ -17,22 +33,9 @@ def get_point_config() -> dict:
 def ensure_lottery_table() -> None:
     with system_store.connect() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='lottery_tickets'")
-        if not cursor.fetchone():
-            cursor.execute(
-                """
-                CREATE TABLE lottery_tickets (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id TEXT NOT NULL,
-                    username TEXT,
-                    numbers TEXT NOT NULL,
-                    cost INTEGER,
-                    draw_date TEXT,
-                    created_at TEXT
-                )
-                """
-            )
-            conn.commit()
+        for table_name in ("lottery_tickets", "lottery_results", "lottery_winners"):
+            ensure_registered_table(cursor, table_name)
+        conn.commit()
 
 
 def ensure_points_schema() -> None:
@@ -41,133 +44,8 @@ def ensure_points_schema() -> None:
         ensure_registered_table(cursor, "users_meta", {"points"})
         ensure_registered_table(cursor, "point_logs")
         ensure_registered_table(cursor, "point_config")
-
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS point_checkin_streak (
-                user_id TEXT PRIMARY KEY,
-                streak_count INTEGER DEFAULT 0,
-                last_checkin DATE
-            )
-            """
-        )
-
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS point_red_packets (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                total_amount INTEGER,
-                remain_amount INTEGER,
-                total_count INTEGER,
-                remain_count INTEGER,
-                creator_id TEXT,
-                creator_name TEXT,
-                chat_id TEXT,
-                message_id TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                expires_at DATETIME
-            )
-            """
-        )
-
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS point_red_packet_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                packet_id INTEGER,
-                user_id TEXT,
-                user_name TEXT,
-                amount INTEGER,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS point_transfer_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                from_user_id TEXT,
-                from_user_name TEXT,
-                to_user_id TEXT,
-                to_user_name TEXT,
-                amount INTEGER,
-                fee INTEGER,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS point_rob_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                from_user_id TEXT,
-                from_user_name TEXT,
-                to_user_id TEXT,
-                to_user_name TEXT,
-                amount INTEGER,
-                success INTEGER DEFAULT 0,
-                counter_amount INTEGER DEFAULT 0,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS pk_invitations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                challenger_id TEXT,
-                challenger_name TEXT,
-                challenger_tg_name TEXT,
-                target_id TEXT,
-                target_name TEXT,
-                target_tg_name TEXT,
-                points INTEGER,
-                chat_id TEXT,
-                message_id TEXT,
-                command_message_id TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                expires_at DATETIME,
-                status TEXT DEFAULT 'pending'
-            )
-            """
-        )
-
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS pk_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                challenger_id TEXT,
-                challenger_name TEXT,
-                target_id TEXT,
-                target_name TEXT,
-                points INTEGER,
-                challenger_roll INTEGER,
-                target_roll INTEGER,
-                winner_id TEXT,
-                winner_name TEXT,
-                tax INTEGER,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-
-        red_packet_columns = cursor.execute("PRAGMA table_info(point_red_packets)").fetchall()
-        red_packet_column_names = [column[1] for column in red_packet_columns]
-        if "message_id" not in red_packet_column_names:
-            cursor.execute("ALTER TABLE point_red_packets ADD COLUMN message_id TEXT")
-
-        columns = cursor.execute("PRAGMA table_info(pk_invitations)").fetchall()
-        column_names = [column[1] for column in columns]
-
-        if "challenger_tg_name" not in column_names:
-            cursor.execute("ALTER TABLE pk_invitations ADD COLUMN challenger_tg_name TEXT")
-        if "target_tg_name" not in column_names:
-            cursor.execute("ALTER TABLE pk_invitations ADD COLUMN target_tg_name TEXT")
-        if "command_message_id" not in column_names:
-            cursor.execute("ALTER TABLE pk_invitations ADD COLUMN command_message_id TEXT")
+        for table_name in _POINT_GAME_TABLES:
+            ensure_registered_table(cursor, table_name)
 
         cursor.execute("SELECT count(*) FROM point_config")
         if cursor.fetchone()[0] == 0:

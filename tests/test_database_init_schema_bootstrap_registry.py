@@ -63,6 +63,21 @@ def test_init_system_db_creates_simple_tables_from_schema_registry(monkeypatch, 
             "last_used_at",
         }.issubset(_columns(conn, "api_tokens"))
         assert {"action", "disabled"}.issubset(_columns(conn, "keep_alive_violations"))
+        assert {"user_id", "numbers", "cost", "draw_date", "created_at"}.issubset(
+            _columns(conn, "lottery_tickets")
+        )
+        assert {"draw_date", "winning_numbers", "total_pool", "created_at"}.issubset(
+            _columns(conn, "lottery_results")
+        )
+        assert {"user_id", "ticket_id", "prize_amount", "draw_date"}.issubset(
+            _columns(conn, "lottery_winners")
+        )
+        assert {"total_slots", "filled_slots", "chat_id", "message_id"}.issubset(
+            _columns(conn, "scratch_cards")
+        )
+        assert {"card_id", "slot_number", "prize_amount", "is_scratched"}.issubset(
+            _columns(conn, "scratch_card_slots")
+        )
 
         indexes = {
             row[1]
@@ -233,6 +248,7 @@ def test_database_system_init_uses_registry_for_selected_simple_tables():
     assert "CREATE TABLE IF NOT EXISTS media_requests" in source
     assert "CREATE TABLE IF NOT EXISTS login_failures" not in source
     assert "CREATE TABLE IF NOT EXISTS api_tokens" not in source
+    assert "ALTER TABLE scratch_cards ADD COLUMN" not in source
 
 
 def test_database_compat_init_uses_registry_for_point_core_tables():

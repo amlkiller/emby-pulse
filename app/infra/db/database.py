@@ -52,6 +52,11 @@ _REGISTRY_SYSTEM_INIT_TABLES = (
     "login_failures",
     "api_tokens",
     "bot_notify_mutes",
+    "lottery_tickets",
+    "lottery_results",
+    "lottery_winners",
+    "scratch_cards",
+    "scratch_card_slots",
 )
 
 _REGISTRY_COMPAT_INIT_TABLES = (
@@ -399,62 +404,6 @@ def _create_system_tables(c):
     c.execute('''CREATE TABLE IF NOT EXISTS tv_series_status (tmdb_id TEXT PRIMARY KEY, series_name TEXT, status TEXT DEFAULT 'continuing', last_checked TEXT, updated_at TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS media_requests (tmdb_id INTEGER, media_type TEXT, title TEXT, year TEXT, poster_path TEXT, status INTEGER DEFAULT 0, season INTEGER DEFAULT 0, reject_reason TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (tmdb_id, season))''')
     
-    # 🔥 彩票系统表
-    c.execute('''CREATE TABLE IF NOT EXISTS lottery_tickets (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id TEXT NOT NULL,
-        username TEXT,
-        numbers TEXT NOT NULL,
-        cost INTEGER,
-        draw_date TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )''')
-    c.execute('''CREATE TABLE IF NOT EXISTS lottery_results (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        draw_date TEXT NOT NULL UNIQUE,
-        winning_numbers TEXT NOT NULL,
-        total_pool INTEGER DEFAULT 0,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )''')
-    c.execute('''CREATE TABLE IF NOT EXISTS lottery_winners (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id TEXT NOT NULL,
-        username TEXT,
-        ticket_id INTEGER,
-        prize_level INTEGER,
-        prize_amount INTEGER,
-        draw_date TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )''')
-    
-    # 🔥 刮刮乐表
-    c.execute('''CREATE TABLE IF NOT EXISTS scratch_cards (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        total_slots INTEGER DEFAULT 9,
-        filled_slots INTEGER DEFAULT 0,
-        price INTEGER DEFAULT 100,
-        status TEXT DEFAULT 'active',
-        created_by TEXT,
-        chat_id TEXT DEFAULT '',
-        message_id INTEGER DEFAULT 0,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )''')
-    try: c.execute("ALTER TABLE scratch_cards ADD COLUMN chat_id TEXT DEFAULT ''")
-    except Exception: pass
-    try: c.execute("ALTER TABLE scratch_cards ADD COLUMN message_id INTEGER DEFAULT 0")
-    except Exception: pass
-    c.execute('''CREATE TABLE IF NOT EXISTS scratch_card_slots (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        card_id INTEGER NOT NULL,
-        slot_number INTEGER NOT NULL,
-        prize_amount INTEGER NOT NULL,
-        is_scratched INTEGER DEFAULT 0,
-        user_id TEXT,
-        username TEXT,
-        scratched_at DATETIME,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )''')
-
     # 🔥 性能优化：创建索引（大幅提升查询速度）
     # 用户元数据索引
     try: c.execute("CREATE INDEX IF NOT EXISTS idx_users_meta_expire ON users_meta(expire_date)")
