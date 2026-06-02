@@ -1859,3 +1859,36 @@ Extracted report poster themes, theme listing, PIL detection, and font loading/c
 ### Next Steps
 
 - None - task complete
+
+
+## Session 116: Refactor points lottery DAO
+
+**Date**: 2026-06-03
+**Task**: Refactor points lottery DAO
+**Branch**: `main`
+
+### Summary
+
+Extracted lottery table bootstrap, ticket purchase/listing, draw context/result persistence, pool info, and result listing into app/domains/points/lottery_dao.py while preserving point_dao compatibility exports. Updated focused schema-registry source assertions and verified compile/import checks, focused point tests, and full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3620686` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
