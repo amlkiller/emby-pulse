@@ -467,3 +467,36 @@ Removed the pure stop_system_task_services redirect and registered/called stop_t
 ### Next Steps
 
 - None - task complete
+
+
+## Session 15: Remove calendar notify stop redirect
+
+**Date**: 2026-06-03
+**Task**: Remove calendar notify stop redirect
+**Branch**: `Compiled`
+
+### Summary
+
+Removed the pure stop_calendar_notify_services redirect and registered/called calendar_notify_service.stop directly. Verified compileall, focused lifecycle tests, import check, and full pytest suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `95836cc` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
