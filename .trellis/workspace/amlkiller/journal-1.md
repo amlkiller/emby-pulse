@@ -1080,3 +1080,36 @@ Registered sessions in the shared schema registry, routed session bootstrap thro
 ### Next Steps
 
 - None - task complete
+
+
+## Session 33: Gap service stop hook
+
+**Date**: 2026-06-02
+**Task**: Gap service stop hook
+**Branch**: `main`
+
+### Summary
+
+Added a stoppable/restartable lifecycle hook for the bootstrap-started gap background refresh service, replaced long gap service sleeps with interruptible stop-event waits, registered the gaps bootstrap stop callback, added focused stop/restart tests, and verified focused checks plus full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6e19823` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
