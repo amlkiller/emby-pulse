@@ -17,6 +17,15 @@ class EventBus:
             if handler not in self.subscribers[event_type]:
                 self.subscribers[event_type].append(handler)
 
+    def unsubscribe(self, event_type: str, handler):
+        with self.lock:
+            handlers = self.subscribers.get(event_type)
+            if not handlers or handler not in handlers:
+                return
+            handlers.remove(handler)
+            if not handlers:
+                self.subscribers.pop(event_type, None)
+
     def publish(self, event_type: str, *args, **kwargs):
         with self.lock:
             handlers = self.subscribers[event_type][:]

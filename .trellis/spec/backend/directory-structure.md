@@ -151,6 +151,13 @@ initial delays and interval waits inside these loops should use
 `self._stop_event.wait(...)` instead of `time.sleep(...)` so plugin disable can
 interrupt scheduler sleeps.
 
+Event-driven plugins should make subscriptions reversible too. If `on_enable()`
+subscribes a handler through `app.core.event_bus.bus`, guard the subscription with
+an instance flag so repeated enables do not register duplicates, and make
+`on_disable()` unsubscribe the same handler and clear the flag. Handlers that may
+already be queued by the event bus should also check the plugin's enabled state
+before starting new asynchronous work.
+
 ## Scenario: External Client Adapter Boundary
 
 ### 1. Scope / Trigger

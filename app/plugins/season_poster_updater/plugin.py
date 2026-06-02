@@ -41,6 +41,7 @@ class SeasonPosterUpdaterPlugin(PluginBase):
 
     def __init__(self):
         super().__init__()
+        self._subscribed = False
         self._setup_routes()
         self._ensure_db()
 
@@ -223,12 +224,17 @@ class SeasonPosterUpdaterPlugin(PluginBase):
         """启用插件"""
         self._ensure_db()
         # 订阅 webhook 事件
-        bus.subscribe("webhook.received", self._on_webhook_event)
+        if not self._subscribed:
+            bus.subscribe("webhook.received", self._on_webhook_event)
+            self._subscribed = True
         self.log("剧集封面自动更新插件已启用", notify=False)
         logger.info(f"🔌 [{self.name}] 插件已启用，已订阅 webhook 事件")
 
     def on_disable(self):
         """禁用插件"""
+        if self._subscribed:
+            bus.unsubscribe("webhook.received", self._on_webhook_event)
+            self._subscribed = False
         self.log("剧集封面自动更新插件已禁用", notify=False)
         logger.info(f"🔌 [{self.name}] 插件已禁用")
 
@@ -239,6 +245,8 @@ class SeasonPosterUpdaterPlugin(PluginBase):
     def _on_webhook_event(self, event: str, data: dict):
         """处理 Webhook 事件"""
         try:
+            if not self._enabled:
+                return
             # 只处理入库相关事件
             if event not in ["library.new", "item.added", "library.updated"]:
                 return

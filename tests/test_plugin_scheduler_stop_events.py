@@ -127,6 +127,8 @@ def _build_plugin(monkeypatch, module_path, class_name):
         monkeypatch.setattr(plugin_class, "_load_history", lambda self: None)
     if hasattr(plugin_class, "_ensure_dir"):
         monkeypatch.setattr(plugin_class, "_ensure_dir", lambda self: None)
+    if hasattr(plugin_class, "_ensure_db"):
+        monkeypatch.setattr(plugin_class, "_ensure_db", lambda self: None)
     if hasattr(plugin_class, "_check_today_backup"):
         monkeypatch.setattr(plugin_class, "_check_today_backup", lambda self: None)
 
@@ -184,3 +186,65 @@ def test_plugin_scheduler_loops_use_interruptible_waits(
 
     assert "_stop_event.wait" in source
     assert "time.sleep" not in source
+
+
+def test_event_bus_unsubscribe_is_idempotent():
+    from app.core.event_bus import EventBus
+
+    event_bus = EventBus()
+
+    def handler(*args, **kwargs):
+        pass
+
+    try:
+        event_bus.subscribe("webhook.received", handler)
+        event_bus.subscribe("webhook.received", handler)
+
+        assert event_bus.subscribers["webhook.received"] == [handler]
+
+        event_bus.unsubscribe("webhook.received", handler)
+        event_bus.unsubscribe("webhook.received", handler)
+
+        assert "webhook.received" not in event_bus.subscribers
+    finally:
+        event_bus.executor.shutdown(wait=True)
+
+
+def test_season_poster_webhook_subscription_is_idempotent_and_reversible(monkeypatch):
+    class FakeBus:
+        def __init__(self):
+            self.handlers = []
+
+        def subscribe(self, event_type, handler):
+            assert event_type == "webhook.received"
+            if handler not in self.handlers:
+                self.handlers.append(handler)
+
+        def unsubscribe(self, event_type, handler):
+            assert event_type == "webhook.received"
+            if handler in self.handlers:
+                self.handlers.remove(handler)
+
+    module, plugin = _build_plugin(
+        monkeypatch,
+        "app.plugins.season_poster_updater.plugin",
+        "SeasonPosterUpdaterPlugin",
+    )
+    fake_bus = FakeBus()
+    monkeypatch.setattr(module, "bus", fake_bus)
+
+    plugin.on_enable()
+    plugin.on_enable()
+
+    assert plugin._subscribed is True
+    assert fake_bus.handlers == [plugin._on_webhook_event]
+
+    plugin.on_disable()
+
+    assert plugin._subscribed is False
+    assert fake_bus.handlers == []
+
+    plugin.on_enable()
+
+    assert plugin._subscribed is True
+    assert fake_bus.handlers == [plugin._on_webhook_event]
