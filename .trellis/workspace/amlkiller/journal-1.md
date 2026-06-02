@@ -1872,3 +1872,36 @@ Removed the unused private users auth import from playback search and added an i
 ### Next Steps
 
 - None - task complete
+
+
+## Session 57: Playback dedupe public auth facade boundary
+
+**Date**: 2026-06-02
+**Task**: Playback dedupe public auth facade boundary
+**Branch**: `main`
+
+### Summary
+
+Moved playback dedupe admin checks off private users auth imports, routed them through the users public facade, and added import-boundary plus status/config authorization tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `125b607` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
