@@ -1014,3 +1014,36 @@ Centralized PlaybackActivity startup and local fallback bootstrap through the sc
 ### Next Steps
 
 - None - task complete
+
+
+## Session 31: Audit log schema registry bootstrap
+
+**Date**: 2026-06-02
+**Task**: Audit log schema registry bootstrap
+**Branch**: `main`
+
+### Summary
+
+Registered audit_logs in the shared schema registry, routed audit logger bootstrap through ensure_registered_table while preserving local indexes, added focused DAO smoke and no-local-DDL regression tests, updated database spec guidance, and verified focused checks plus full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8d4c862` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
