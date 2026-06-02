@@ -1496,3 +1496,36 @@ Hardened risk settings readers and writers with typed defaults, boolean normaliz
 ### Next Steps
 
 - None - task complete
+
+
+## Session 105: DB settings typed contract convergence
+
+**Date**: 2026-06-03
+**Task**: DB settings typed contract convergence
+**Branch**: `main`
+
+### Summary
+
+Hardened DB config readers so playback data mode canonicalizes to supported modes and slow query thresholds coerce to positive integers; added focused regression tests and ran the full suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `27c3ee3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
