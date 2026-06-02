@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request
-from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.domains.users import public_service as user_service  # 🔒 引入管理员权限检查
 from pydantic import BaseModel
 from app.infra.clients.media_server_client import media_api
 from app.domains.playback.insight_dao import (
@@ -46,7 +46,7 @@ class BatchUnignoreModel(BaseModel):
 # --- 单条忽略 ---
 @router.post("/api/insight/ignore")
 def ignore_item(data: IgnoreModel, request: Request):
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
         save_insight_ignore(data.item_id, data.item_name)
         return {"status": "success"}
@@ -56,7 +56,7 @@ def ignore_item(data: IgnoreModel, request: Request):
 # --- 🔥 新增：批量原子忽略 (彻底解决并发锁死问题) ---
 @router.post("/api/insight/ignore_batch")
 def ignore_items_batch(data: BatchIgnoreModel, request: Request):
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
         save_insight_ignores(data.items)
         return {"status": "success"}
@@ -66,7 +66,7 @@ def ignore_items_batch(data: BatchIgnoreModel, request: Request):
 # --- 批量恢复 ---
 @router.post("/api/insight/unignore_batch")
 def unignore_items_batch(data: BatchUnignoreModel, request: Request):
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
         delete_insight_ignores(data.item_ids)
         return {"status": "success"}
@@ -75,7 +75,7 @@ def unignore_items_batch(data: BatchUnignoreModel, request: Request):
 
 @router.get("/api/insight/ignores")
 def get_ignored_items(request: Request):
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     rows = list_insight_ignores()
     return {"status": "success", "data": [dict(r) for r in rows] if rows else []}
 
@@ -169,7 +169,7 @@ def scan_library_quality(request: Request):
     """ 质量盘点核心引擎（分页并发获取 + 24小时缓存） """
     user = request.session.get("user")
     if not user: return {"status": "error", "message": "Unauthorized"}
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     
     force_refresh = request.query_params.get("force_refresh") == "true"
     current_time = time.time()
