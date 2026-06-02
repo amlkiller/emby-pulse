@@ -849,3 +849,36 @@ Registered tg_bot_users and tg_channel_bindings in schema_registry, routed user-
 ### Next Steps
 
 - None - task complete
+
+
+## Session 26: User tags schema registry bootstrap
+
+**Date**: 2026-06-02
+**Task**: User tags schema registry bootstrap
+**Branch**: `main`
+
+### Summary
+
+Registered user_tags in schema_registry, routed system database startup through ensure_registered_table, added user-tag DAO smoke coverage, updated backend database guidance, and verified focused checks plus full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d3dca20` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
