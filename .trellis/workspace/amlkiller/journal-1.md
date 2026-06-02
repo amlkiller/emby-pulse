@@ -948,3 +948,36 @@ Routed init_db compatibility creation for invitations, sys_license, and tg_user_
 ### Next Steps
 
 - None - task complete
+
+
+## Session 29: Media request schema registry batch
+
+**Date**: 2026-06-02
+**Task**: Media request schema registry batch
+**Branch**: `main`
+
+### Summary
+
+Routed media_requests and request_users bootstrap through schema registry while preserving legacy rebuild migrations; moved database init media request DDL to registry lists; added focused registry/bootstrap regression tests; verified focused tests, compileall, ruff, diff check, and full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `eb84646` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
