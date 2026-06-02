@@ -335,3 +335,36 @@ Removed stop_session_services, a pure redirect to stop_session_cleanup_loop. Boo
 ### Next Steps
 
 - None - task complete
+
+
+## Session 11: Remove dedupe startup redirect
+
+**Date**: 2026-06-03
+**Task**: Remove dedupe startup redirect
+**Branch**: `Compiled`
+
+### Summary
+
+Removed start_dedupe_services, a pure redirect to init_dedupe_db. Bootstrap now registers init_dedupe_db directly, and the lifecycle test patches the real startup function. Left init_dedupe_db behavior unchanged and continued to skip config/variable accessors, DAO SQL helpers, and wrappers with adaptation/orchestration semantics. Verified alias search, compileall, UTF-8 import check, focused bootstrap lifecycle tests, and full pytest suite: 385 passed, 3 warnings.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b268493` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
