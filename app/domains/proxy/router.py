@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Response, Request, Depends, HTTPException
 from fastapi.responses import RedirectResponse, FileResponse, StreamingResponse
-from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.domains.users import public_service as user_service  # 🔒 引入管理员权限检查
 from app.core.security import require_login, require_any_login, is_admin_session  # 🔒 统一登录依赖
 from app.infra.clients.tmdb_client import tmdb_client
 from app.infra.clients.media_server_client import media_api  # 🔥 引入媒体服务器客户端
@@ -422,7 +422,7 @@ def clear_image_cache(request: Request, item_ids: list = None):
     """
     # 🔒 安全：需要登录
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "未授权"}
     
     try:
