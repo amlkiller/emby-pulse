@@ -9,7 +9,7 @@ import threading
 logger = logging.getLogger("uvicorn")
 from collections import deque
 from fastapi import APIRouter, Request
-from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.domains.users import public_service as user_service
 from app.domains.system.system_tool_dao import check_system_db_readwrite, check_system_table_integrity
 from app.infra.db.perf_stats import get_query_perf_stats
 from app.infra.clients.network_client import network_client
@@ -30,7 +30,7 @@ router = APIRouter(prefix="/api/system", tags=["System Tools"])
 @router.get("/perf")
 def api_perf_status(request: Request):
     """性能状态概览（管理员）"""
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
 
     process = None
@@ -334,7 +334,7 @@ async def network_check(request: Request):
     # 🔒 安全检查：必须登录且为管理员
     if not request.session.get("user"):
         return {"error": "未授权"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"error": "需要管理员权限"}
     
     proxies = get_safe_proxies()
@@ -388,7 +388,7 @@ async def get_logs(request: Request, lines: int = 150):
     user = request.session.get("user")
     if not user:
         return {"success": False, "msg": "未授权"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"success": False, "msg": "需要管理员权限"}
 
     try:
@@ -407,7 +407,7 @@ async def toggle_debug(req: Request):
     user = req.session.get("user")
     if not user:
         return {"success": False, "msg": "未授权"}
-    if not is_admin_user(req):
+    if not user_service.is_admin_user(req):
         return {"success": False, "msg": "需要管理员权限"}
 
     data = await req.json()
@@ -441,7 +441,7 @@ async def restart_system(req: Request):
     # 🔒 安全检查：必须登录且为管理员
     if not req.session.get("user"):
         return {"success": False, "msg": "未授权"}
-    if not is_admin_user(req):
+    if not user_service.is_admin_user(req):
         return {"success": False, "msg": "需要管理员权限"}
 
     import os, signal, threading
@@ -459,7 +459,7 @@ def api_weather(request: Request, city: str = "北京"):
     # 🔒 安全检查：必须登录且为管理员
     if not request.session.get("user"):
         return {"error": "未授权"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"error": "需要管理员权限"}
     
     return get_weather_cache(city)
@@ -471,7 +471,7 @@ def api_weather_refresh(request: Request, city: str = "北京"):
     # 🔒 安全检查：必须登录且为管理员
     if not request.session.get("user"):
         return {"success": False, "message": "未授权"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"success": False, "message": "需要管理员权限"}
     
     success = refresh_weather_cache(city)
@@ -486,7 +486,7 @@ def api_weather_status(request: Request):
     # 🔒 安全检查：必须登录且为管理员
     if not request.session.get("user"):
         return {"error": "未授权"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"error": "需要管理员权限"}
     
     global _weather_cache
