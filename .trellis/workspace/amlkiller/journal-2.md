@@ -1760,3 +1760,36 @@ Extracted playback dashboard cache and refresh lifecycle implementation from the
 ### Next Steps
 
 - None - task complete
+
+
+## Session 113: Extract points scratch card dao
+
+**Date**: 2026-06-03
+**Task**: Extract points scratch card dao
+**Branch**: `main`
+
+### Summary
+
+Extracted scratch card persistence functions from the large points point_dao module into a domain-local scratch_card_dao while preserving point_dao compatibility imports and existing point game behavior. Verified with compile checks, focused points tests, import compatibility check, and full pytest suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `01f497d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
