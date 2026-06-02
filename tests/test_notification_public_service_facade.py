@@ -60,6 +60,10 @@ class FakeUserBotService:
         self.calls.append(("_send", chat_id, text, reply_markup))
         return {"ok": True}
 
+    def _tg_api(self, method, data=None, token=None):
+        self.calls.append(("_tg_api", method, data, token))
+        return {"ok": True, "method": method}
+
 
 def test_notification_public_service_delegates_and_returns(monkeypatch):
     from app.domains.notifications import public_service
@@ -83,6 +87,10 @@ def test_notification_public_service_delegates_and_returns(monkeypatch):
     assert public_service.push_report_now("user", "weekly", "dark") == "push-result"
     assert public_service.is_user_bot_running() is True
     assert public_service.send_user_bot_message("user-chat", "user text", {"inline": []}) == {"ok": True}
+    assert public_service.send_user_bot_photo("user-chat", "poster-url", "caption text") == {
+        "ok": True,
+        "method": "sendPhoto",
+    }
 
     assert bot.calls == [
         ("send_message", "chat", "text", "HTML", {"k": "v"}, "tg"),
@@ -91,7 +99,20 @@ def test_notification_public_service_delegates_and_returns(monkeypatch):
         ("send_to_channels", "poster", "caption", {"keyboard": True}),
         ("push_now", "user", "weekly", "dark"),
     ]
-    assert user_bot_service.calls == [("_send", "user-chat", "user text", {"inline": []})]
+    assert user_bot_service.calls == [
+        ("_send", "user-chat", "user text", {"inline": []}),
+        (
+            "_tg_api",
+            "sendPhoto",
+            {
+                "chat_id": "user-chat",
+                "photo": "poster-url",
+                "caption": "caption text",
+                "parse_mode": "HTML",
+            },
+            None,
+        ),
+    ]
 
 
 def test_notification_public_service_get_notify_rule_delegates(monkeypatch):

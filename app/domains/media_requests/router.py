@@ -857,8 +857,6 @@ def batch_manage_action(data: BulkAdminActionModel, request: Request):
                 logger.info(f"[状态变更通知] 共 {len(notify_items)} 个工单需要通知，TG绑定数: {len(tg_bindings)}")
                 
                 # 🔥 发送通知
-                from app.domains.notifications.user_bot_service import _send, _tg_api
-                
                 for ni in notify_items:
                     req_row = ni['request']
                     title = req_row['title']
@@ -916,9 +914,9 @@ def batch_manage_action(data: BulkAdminActionModel, request: Request):
                             logger.info(f"[状态变更通知] 发送通知: user_id={user_id}, tg_id={tg_id}, action={data.action}")
                             try:
                                 if img_url:
-                                    _tg_api("sendPhoto", {"chat_id": int(tg_id), "photo": img_url, "caption": msg, "parse_mode": "HTML"})
+                                    notification_service.send_user_bot_photo(int(tg_id), img_url, msg)
                                 else:
-                                    _send(int(tg_id), msg)
+                                    notification_service.send_user_bot_message(int(tg_id), msg)
                                 logger.info(f"[状态变更通知] 发送成功: tg_id={tg_id}")
                             except Exception as e3:
                                 logger.error(f"[状态变更通知] 发送失败: tg_id={tg_id}, error={e3}")

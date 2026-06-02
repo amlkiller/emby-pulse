@@ -2,7 +2,7 @@ import asyncio
 import ast
 import sys
 from pathlib import Path
-from types import ModuleType, SimpleNamespace
+from types import SimpleNamespace
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -69,8 +69,34 @@ def _assert_no_private_notify_admin_import(path):
     assert violations == []
 
 
+def _assert_no_private_notification_user_bot_import(path):
+    rel_path = path.relative_to(_REPO_ROOT).as_posix()
+    tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(rel_path))
+    violations = []
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            imported_names = {alias.name for alias in node.names}
+            if node.module == "app.domains.notifications.user_bot_service":
+                violations.append(f"{rel_path}:{node.lineno}")
+            if node.module == "app.domains.notifications" and (
+                "user_bot_service" in imported_names or "*" in imported_names
+            ):
+                violations.append(f"{rel_path}:{node.lineno}")
+        elif isinstance(node, ast.Import):
+            imported_modules = {alias.name for alias in node.names}
+            if "app.domains.notifications.user_bot_service" in imported_modules:
+                violations.append(f"{rel_path}:{node.lineno}")
+
+    assert violations == []
+
+
 def test_media_requests_router_does_not_import_private_notification_notify_admin():
     _assert_no_private_notify_admin_import(_REPO_ROOT / "app/domains/media_requests/router.py")
+
+
+def test_media_requests_router_does_not_import_private_notification_user_bot_service():
+    _assert_no_private_notification_user_bot_import(_REPO_ROOT / "app/domains/media_requests/router.py")
 
 
 def test_submit_media_request_uses_public_rule_before_notifications(monkeypatch):
@@ -127,9 +153,6 @@ def test_batch_manage_action_uses_public_rule_before_status_notify_queries(monke
 
     calls = []
     request = SimpleNamespace(session={"user": {"Id": "admin"}})
-    fake_user_bot_service = ModuleType("app.domains.notifications.user_bot_service")
-    fake_user_bot_service._send = lambda *args, **kwargs: calls.append(("_send", args, kwargs))
-    fake_user_bot_service._tg_api = lambda *args, **kwargs: calls.append(("_tg_api", args, kwargs))
 
     def fake_get_notify_rule(notify_type):
         calls.append(("get_notify_rule", notify_type))
@@ -139,7 +162,6 @@ def test_batch_manage_action_uses_public_rule_before_status_notify_queries(monke
         calls.append(("list_request_status_notify_items", items))
         return [], []
 
-    monkeypatch.setitem(sys.modules, "app.domains.notifications.user_bot_service", fake_user_bot_service)
     monkeypatch.setattr(media_requests_router.user_service, "is_admin_user", lambda request: True)
     monkeypatch.setattr(media_requests_router, "get_media_request", lambda *args: None)
     monkeypatch.setattr(media_requests_router, "get_moviepilot_url", lambda: None)
@@ -169,6 +191,107 @@ def test_batch_manage_action_uses_public_rule_before_status_notify_queries(monke
     assert response == {"status": "success", "message": "操作已执行"}
     assert calls.index(("get_notify_rule", "request_status")) < next(
         index for index, call in enumerate(calls) if call[0] == "list_request_status_notify_items"
+    )
+
+
+def test_batch_manage_action_uses_public_user_bot_facade_for_status_notifications(monkeypatch):
+    from app.domains.media_requests import router as media_requests_router
+
+    calls = []
+    request = SimpleNamespace(session={"user": {"Id": "admin"}})
+    notify_items = [
+        {
+            "tmdb_id": 100,
+            "season": 0,
+            "request": {
+                "title": "Poster Movie",
+                "year": "2026",
+                "media_type": "movie",
+                "season": 0,
+                "episodes": "",
+                "poster_path": "/poster.jpg",
+            },
+            "users": [{"user_id": "user-photo", "username": "Photo User"}],
+        },
+        {
+            "tmdb_id": 200,
+            "season": 1,
+            "request": {
+                "title": "Text Show",
+                "year": "2025",
+                "media_type": "tv",
+                "season": 1,
+                "episodes": "1,2",
+                "poster_path": "",
+            },
+            "users": [
+                {"user_id": "user-text", "username": "Text User"},
+                {"user_id": "user-unbound", "username": "Unbound User"},
+            ],
+        },
+    ]
+
+    def fake_get_notify_rule(notify_type):
+        calls.append(("get_notify_rule", notify_type))
+        return {"enabled": 1, "channels": ["tg_bot"]}
+
+    monkeypatch.setattr(media_requests_router.user_service, "is_admin_user", lambda request: True)
+    monkeypatch.setattr(media_requests_router, "get_media_request", lambda *args: None)
+    monkeypatch.setattr(media_requests_router, "get_moviepilot_url", lambda: None)
+    monkeypatch.setattr(
+        media_requests_router,
+        "update_media_request_status",
+        lambda *args: calls.append(("update_media_request_status", args)),
+    )
+    monkeypatch.setattr(media_requests_router.notification_service, "get_notify_rule", fake_get_notify_rule)
+    monkeypatch.setattr(
+        media_requests_router,
+        "list_request_status_notify_items",
+        lambda items: calls.append(("list_request_status_notify_items", items))
+        or (notify_items, ["user-photo", "user-text", "user-unbound"]),
+    )
+    monkeypatch.setattr(
+        media_requests_router,
+        "list_tg_bindings",
+        lambda user_ids: calls.append(("list_tg_bindings", user_ids))
+        or {"user-photo": "123", "user-text": "456"},
+    )
+    monkeypatch.setattr(
+        media_requests_router.notification_service,
+        "send_user_bot_photo",
+        lambda *args, **kwargs: calls.append(("send_user_bot_photo", args, kwargs)),
+    )
+    monkeypatch.setattr(
+        media_requests_router.notification_service,
+        "send_user_bot_message",
+        lambda *args, **kwargs: calls.append(("send_user_bot_message", args, kwargs)),
+    )
+
+    data = media_requests_router.BulkAdminActionModel(
+        items=[{"tmdb_id": 100, "season": 0}, {"tmdb_id": 200, "season": 1}],
+        action="approve",
+    )
+    response = media_requests_router.batch_manage_action(data, request)
+
+    assert response == {"status": "success", "message": "操作已执行"}
+    send_calls = [call for call in calls if call[0].startswith("send_user_bot_")]
+    assert len(send_calls) == 2
+    assert send_calls[0] == (
+        "send_user_bot_photo",
+        (
+            123,
+            "https://image.tmdb.org/t/p/w300/poster.jpg",
+            "🚀 <b>求片状态更新</b>\n\n📺 <b>内容：</b>Poster Movie (2026)\n📢 <b>状态：</b>审批通过，正在下载中",
+        ),
+        {},
+    )
+    assert send_calls[1] == (
+        "send_user_bot_message",
+        (
+            456,
+            "🚀 <b>求片状态更新</b>\n\n📺 <b>内容：</b>Text Show S1E1-2 (2025)\n📢 <b>状态：</b>审批通过，正在下载中",
+        ),
+        {},
     )
 
 

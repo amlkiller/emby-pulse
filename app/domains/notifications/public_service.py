@@ -57,6 +57,13 @@ def send_user_bot_message(chat_id, text, reply_markup=None):
     return _get_user_bot_service()._send(chat_id, text, reply_markup)
 
 
+def send_user_bot_photo(chat_id, photo, caption, parse_mode="HTML"):
+    return _get_user_bot_service()._tg_api(
+        "sendPhoto",
+        {"chat_id": chat_id, "photo": photo, "caption": caption, "parse_mode": parse_mode},
+    )
+
+
 def get_notify_rule(notify_type):
     from app.domains.notifications.notify_admin import get_notify_rule as notify_admin_get_notify_rule
 
