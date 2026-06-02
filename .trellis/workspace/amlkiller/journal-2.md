@@ -935,3 +935,36 @@ Removed the points router get_point_config alias, pointed notification lottery p
 ### Next Steps
 
 - None - task complete
+
+
+## Session 88: Remove users router cache wrappers
+
+**Date**: 2026-06-03
+**Task**: Remove users router cache wrappers
+**Branch**: `main`
+
+### Summary
+
+Removed users.router cache forwarding wrappers, pointed user management cache reads and invalidations directly at users.public_service, and verified compile/import scans plus focused and full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `fc1c192` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
