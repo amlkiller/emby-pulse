@@ -139,10 +139,12 @@ def test_dedupe_bootstrap_migrates_legacy_whitelist_to_registry_shape(monkeypatc
 def test_dedupe_bootstrap_uses_schema_registry_instead_of_local_dedupe_ddl():
     source = (_REPO_ROOT / "app/domains/playback/dedupe_dao.py").read_text(encoding="utf-8")
 
-    assert "from app.infra.db.schema_registry import TABLE_ALTERS, TABLE_SCHEMAS" in source
-    assert "TABLE_SCHEMAS[\"dedupe_whitelist\"]" in source
-    assert "cursor.execute(TABLE_SCHEMAS[table_name])" in source
-    assert "TABLE_ALTERS.get(table_name, [])" in source
+    assert "from app.infra.db.schema_bootstrap import ensure_registered_table" in source
+    assert "from app.infra.db.schema_registry import TABLE_ALTERS, TABLE_SCHEMAS" not in source
+    assert 'ensure_registered_table(cursor, "dedupe_whitelist")' in source
+    assert "ensure_registered_table(cursor, table_name)" in source
+    assert "TABLE_SCHEMAS[" not in source
+    assert "TABLE_ALTERS.get" not in source
 
     assert "CREATE TABLE IF NOT EXISTS dedupe_whitelist" not in source
     assert "CREATE TABLE IF NOT EXISTS dedupe_results" not in source

@@ -1,20 +1,10 @@
 import json
-import sqlite3
 
-from app.infra.db.schema_registry import TABLE_ALTERS, TABLE_SCHEMAS
+from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
 
 
 DEDUPE_TABLES = ("dedupe_whitelist", "dedupe_results", "dedupe_config")
-
-
-def _apply_table_alters(cursor, table_name: str) -> None:
-    for alter_sql in TABLE_ALTERS.get(table_name, []):
-        try:
-            cursor.execute(alter_sql)
-        except sqlite3.OperationalError as exc:
-            if "duplicate column name" not in str(exc).lower():
-                raise
 
 
 def init_dedupe_tables(logger=None) -> None:
@@ -31,7 +21,7 @@ def init_dedupe_tables(logger=None) -> None:
             cursor.execute("SELECT item_id, item_name, created_at FROM dedupe_whitelist")
             old_data = cursor.fetchall()
             cursor.execute("DROP TABLE IF EXISTS dedupe_whitelist")
-            cursor.execute(TABLE_SCHEMAS["dedupe_whitelist"])
+            ensure_registered_table(cursor, "dedupe_whitelist")
             for row in old_data:
                 if row[0]:
                     cursor.execute(
@@ -41,12 +31,11 @@ def init_dedupe_tables(logger=None) -> None:
             if logger:
                 logger.info(f"[去重引擎] 已迁移 {len(old_data)} 条白名单记录")
         else:
-            cursor.execute(TABLE_SCHEMAS["dedupe_whitelist"])
+            ensure_registered_table(cursor, "dedupe_whitelist")
 
         for table_name in DEDUPE_TABLES:
             if table_name != "dedupe_whitelist":
-                cursor.execute(TABLE_SCHEMAS[table_name])
-            _apply_table_alters(cursor, table_name)
+                ensure_registered_table(cursor, table_name)
 
         conn.commit()
 
