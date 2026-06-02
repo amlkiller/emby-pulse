@@ -72,7 +72,7 @@ Current migration pattern: if a caller only needs generic external transport for
 
 Current configuration migration pattern: infrastructure-scoped settings readers live under `app/infra/config/` and are used to centralize config access for infra modules before broader service/router config cleanup is tackled. These readers should expose a typed contract rather than raw `cfg.get()` values: define defaults, empty-value behavior, allowed enum values, numeric lower/upper bounds where relevant, boolean string handling, and whether writes are normalized before persistence.
 
-When multiple settings modules need the same primitive normalization, keep the reusable helper inside `app/infra/config/` rather than copying private coercion functions. For example, use `app.infra.config.coercion.coerce_positive_int()` for positive integer settings such as cache TTLs and thresholds, and keep module-local constants for each setting's default and semantic bounds.
+When multiple settings modules need the same primitive normalization, keep the reusable helper inside `app/infra/config/` rather than copying private coercion functions. For example, use `app.infra.config.coercion.coerce_positive_int()` for positive integer settings such as cache TTLs, thresholds, worker counts, and queue sizes; pass `minimum` / `maximum` when the setting has explicit bounds, and keep module-local constants for each setting's default and semantic bounds.
 
 Current proxy configuration pattern: `app/utils/proxy_helper.py` keeps validation, caching, and audit logging, while raw `proxy_url` / `wecom_proxy_url` reads live under `app/infra/config/proxy_settings.py`.
 

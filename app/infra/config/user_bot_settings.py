@@ -7,6 +7,9 @@ _REG_QUOTA_MODES = {"total", "batch"}
 _ROUTE_MODE_DEFAULT = "block"
 _ROUTE_MODES = {"block", "allow"}
 _REG_DAYS_DEFAULT = 30
+_WORKER_COUNT_DEFAULT = 16
+_WORKER_COUNT_MIN = 4
+_WORKER_COUNT_MAX = 50
 
 
 def _coerce_enum(value, *, supported: set, default: str) -> str:
@@ -17,10 +20,12 @@ def _coerce_enum(value, *, supported: set, default: str) -> str:
 
 
 def get_user_bot_worker_count() -> int:
-    try:
-        return max(4, min(int(cfg.get("user_bot_worker_count") or 16), 50))
-    except Exception:
-        return 16
+    return coerce_positive_int(
+        cfg.get("user_bot_worker_count", _WORKER_COUNT_DEFAULT),
+        _WORKER_COUNT_DEFAULT,
+        minimum=_WORKER_COUNT_MIN,
+        maximum=_WORKER_COUNT_MAX,
+    )
 
 
 def get_user_bot_restriction_cache_ttl() -> int:

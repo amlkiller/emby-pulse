@@ -3,20 +3,33 @@ import logging
 import secrets
 
 from app.core.config import cfg
+from app.infra.config.coercion import coerce_positive_int
+
+
+_BOT_WORKER_COUNT_DEFAULT = 8
+_BOT_WORKER_COUNT_MIN = 2
+_BOT_WORKER_COUNT_MAX = 32
+_LIBRARY_NOTIFY_QUEUE_MAX_DEFAULT = 300
+_LIBRARY_NOTIFY_QUEUE_MAX_MIN = 50
+_LIBRARY_NOTIFY_QUEUE_MAX_MAX = 2000
 
 
 def get_bot_worker_count() -> int:
-    try:
-        return max(2, min(int(cfg.get("bot_worker_count") or 8), 32))
-    except Exception:
-        return 8
+    return coerce_positive_int(
+        cfg.get("bot_worker_count", _BOT_WORKER_COUNT_DEFAULT),
+        _BOT_WORKER_COUNT_DEFAULT,
+        minimum=_BOT_WORKER_COUNT_MIN,
+        maximum=_BOT_WORKER_COUNT_MAX,
+    )
 
 
 def get_library_notify_queue_max() -> int:
-    try:
-        return max(50, min(int(cfg.get("library_notify_queue_max") or 300), 2000))
-    except Exception:
-        return 300
+    return coerce_positive_int(
+        cfg.get("library_notify_queue_max", _LIBRARY_NOTIFY_QUEUE_MAX_DEFAULT),
+        _LIBRARY_NOTIFY_QUEUE_MAX_DEFAULT,
+        minimum=_LIBRARY_NOTIFY_QUEUE_MAX_MIN,
+        maximum=_LIBRARY_NOTIFY_QUEUE_MAX_MAX,
+    )
 
 
 def get_all_bot_settings() -> dict:
