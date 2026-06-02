@@ -1133,3 +1133,36 @@ Made CalendarNotifyService scheduler thread named, cleanup-aware, restart-safe, 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 94: Dedupe schema bootstrap convergence
+
+**Date**: 2026-06-03
+**Task**: Dedupe schema bootstrap convergence
+**Branch**: `main`
+
+### Summary
+
+Routed dedupe registry-owned table creation and compatible alters through schema_bootstrap.ensure_registered_table while preserving legacy whitelist migration; updated focused tests and backend database spec.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e9738c1` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
