@@ -1212,3 +1212,36 @@ Made Cloud115 and HDHive bot.admin_message subscriptions reversible on plugin di
 ### Next Steps
 
 - None - task complete
+
+
+## Session 37: Risk monitor event subscription stop
+
+**Date**: 2026-06-02
+**Task**: Risk monitor event subscription stop
+**Branch**: `main`
+
+### Summary
+
+Made the bootstrap-started risk monitor track and remove EventBus subscriptions on stop, preserved start idempotency and thread lifecycle behavior, added focused start/stop/restart subscription regression coverage, and verified focused checks plus full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ff830c1` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
