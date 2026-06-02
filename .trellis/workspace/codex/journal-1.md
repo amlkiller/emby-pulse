@@ -269,3 +269,36 @@ Removed the pure stats_queries.query_stats forwarding wrapper, pointed playback 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 9: Remove audit startup redirect
+
+**Date**: 2026-06-03
+**Task**: Remove audit startup redirect
+**Branch**: `Compiled`
+
+### Summary
+
+Removed start_audit_services, a pure function redirect to init_audit_table. Bootstrap now registers init_audit_table directly, and the lifecycle test patches the real startup function. Left configuration/variable accessors untouched per scope. Verified alias search, compileall, UTF-8 import check, focused bootstrap lifecycle tests, and full pytest suite: 385 passed, 3 warnings.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `411dcac` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

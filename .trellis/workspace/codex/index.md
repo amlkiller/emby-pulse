@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 8
+- **Total Sessions**: 9
 - **Last Active**: 2026-06-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~271 | Active |
+| `journal-1.md` | ~304 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 9 | 2026-06-03 | Remove audit startup redirect | `411dcac` | `Compiled` |
 | 8 | 2026-06-03 | Remove playback query_stats alias | `c148b33` | `Compiled` |
 | 7 | 2026-06-03 | Remove user bot settings enabled aliases | `e4043e1` | `Compiled` |
 | 6 | 2026-06-03 | Remove user backup DAO aliases | `58ccd61` | `Compiled` |
