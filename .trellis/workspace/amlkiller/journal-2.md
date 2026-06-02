@@ -500,3 +500,36 @@ Routed notification message center admin checks through the users public service
 ### Next Steps
 
 - None - task complete
+
+
+## Session 75: Playback stats auth facade boundary
+
+**Date**: 2026-06-02
+**Task**: Playback stats auth facade boundary
+**Branch**: `main`
+
+### Summary
+
+Routed playback stats admin checks through the users public service facade, added focused boundary regression tests, and verified the full pytest suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c5adfa0` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
