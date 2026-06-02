@@ -56,13 +56,9 @@ def check_login(request: Request) -> bool:
     # 用户端登录：session 中有 req_user
     return request.session.get("user") is not None or request.session.get("req_user") is not None
 
-def check_admin_login(request: Request) -> bool:
-    """检查是否为管理员登录（管理API，仅后台管理员）"""
-    return user_service.is_admin_user(request)
-
 def require_admin_login(request: Request):
     """要求管理员登录"""
-    if not check_admin_login(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     return None
 
@@ -1587,7 +1583,7 @@ def _get_added_stats_sync():
 @router.get("/api/system/monitor")
 def api_system_monitor(request: Request):
     # 🔒 管理员专用：只检查后台登录
-    if not check_admin_login(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     try:
         # 🔥 interval=0 立即返回（非阻塞），使用上次采样值

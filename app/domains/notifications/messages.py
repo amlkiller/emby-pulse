@@ -201,11 +201,6 @@ def search_users(request: Request, q: str = ""):
     return {"status": "success", "users": []}
 
 
-def _ensure_msg_tables():
-    """确保消息表存在"""
-    ensure_msg_tables()
-
-
 @router.get("/api/messages/conversations")
 def get_conversations(request: Request, page: int = 1, limit: int = 20):
     """获取会话列表（管理端）"""
@@ -216,7 +211,7 @@ def get_conversations(request: Request, page: int = 1, limit: int = 20):
         return {"status": "error", "message": "需要管理员权限"}
 
     # 确保表存在
-    _ensure_msg_tables()
+    ensure_msg_tables()
 
     offset = (page - 1) * limit
     
@@ -294,7 +289,7 @@ def get_conversation(user_id: str, request: Request, page: int = 1, limit: int =
         return {"status": "error", "message": "需要管理员权限"}
 
     # 确保表存在
-    _ensure_msg_tables()
+    ensure_msg_tables()
 
     # 查找或创建会话
     row = get_conversation_by_user(user_id)
@@ -364,7 +359,7 @@ def send_message(data: SendMessageModel, request: Request):
         return {"status": "error", "message": "需要管理员权限"}
 
     # 确保表存在
-    _ensure_msg_tables()
+    ensure_msg_tables()
 
     admin_name = user.get("Name", "管理员")
 
@@ -403,7 +398,7 @@ def admin_reply(data: ReplyModel, request: Request):
         return {"status": "error", "message": "需要管理员权限"}
 
     # 确保表存在
-    _ensure_msg_tables()
+    ensure_msg_tables()
 
     admin_name = user.get("Name", "管理员")
 
@@ -428,7 +423,7 @@ def get_unread_count(request: Request):
         return {"status": "error", "message": "需要管理员权限"}
 
     # 确保表存在
-    _ensure_msg_tables()
+    ensure_msg_tables()
 
     return {"status": "success", "count": count_admin_unread_conversations()}
 
@@ -464,7 +459,7 @@ def user_get_messages(request: Request, page: int = 1, limit: int = 50):
         request.session.pop("req_user", None)
         return {"status": "error", "message": "账号已被删除，请重新登录", "account_deleted": True}
     
-    _ensure_msg_tables()
+    ensure_msg_tables()
     offset = (page - 1) * limit
     result = get_user_messages(user_id, limit, offset)
     if not result:
@@ -514,7 +509,7 @@ def user_send_message(data: UserSendMessageModel, request: Request):
     
     log_msg(f"[消息中心] user_send_message: 用户 {username}({user_id}) 发送消息: {data.content[:50]}...")
     
-    _ensure_msg_tables()
+    ensure_msg_tables()
     
     # 获取用户头像
     try:
@@ -589,7 +584,7 @@ def get_notify_block_list(request: Request):
     if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
-    _ensure_msg_tables()
+    ensure_msg_tables()
     
     rows = list_notify_blocks()
     blocked = [dict(row) for row in rows] if rows else []
@@ -610,7 +605,7 @@ def block_notify(user_id: str, request: Request):
     if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
-    _ensure_msg_tables()
+    ensure_msg_tables()
     
     if not add_notify_block(user_id):
         return {"status": "success", "message": "已屏蔽"}
@@ -627,7 +622,7 @@ def unblock_notify(user_id: str, request: Request):
     if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
-    _ensure_msg_tables()
+    ensure_msg_tables()
     
     remove_notify_block(user_id)
     
@@ -651,14 +646,9 @@ class UnmuteModel(BaseModel):
     user_ids: list
 
 
-def _ensure_mute_table():
-    """确保禁言表存在"""
-    ensure_mute_table()
-
-
 def _is_user_muted(user_id: str) -> tuple:
     """检查用户是否被禁言，返回 (is_muted, mute_info)"""
-    _ensure_mute_table()
+    ensure_mute_table()
     row = get_active_mute(user_id)
     
     if not row:
@@ -672,17 +662,12 @@ def _is_user_muted(user_id: str) -> tuple:
             until = datetime.strptime(mute_info["muted_until"], "%Y-%m-%d %H:%M:%S")
             if datetime.now() > until:
                 # 已过期，自动解禁
-                _unmute_user(user_id)
+                set_user_unmuted(user_id)
                 return False, None
         except:
             pass
     
     return True, mute_info
-
-
-def _unmute_user(user_id: str):
-    """解除用户禁言"""
-    set_user_unmuted(user_id)
 
 
 def _get_user_info(user_id: str) -> dict:
@@ -714,7 +699,7 @@ def get_mute_list(request: Request, page: int = 1, limit: int = 20):
     if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
-    _ensure_mute_table()
+    ensure_mute_table()
     
     # 查询禁言用户
     offset = (page - 1) * limit
@@ -748,7 +733,7 @@ def mute_user(data: MuteUserModel, request: Request):
     if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
-    _ensure_mute_table()
+    ensure_mute_table()
     
     admin_id = user.get("Id", "")
     admin_name = user.get("Name", "管理员")
@@ -797,7 +782,7 @@ def batch_mute_users(data: BatchMuteModel, request: Request):
     if not data.user_ids:
         return {"status": "error", "message": "未选择用户"}
     
-    _ensure_mute_table()
+    ensure_mute_table()
     
     admin_id = user.get("Id", "")
     admin_name = user.get("Name", "管理员")
@@ -846,7 +831,7 @@ def unmute_users(data: UnmuteModel, request: Request):
     if not data.user_ids:
         return {"status": "error", "message": "未选择用户"}
     
-    _ensure_mute_table()
+    ensure_mute_table()
     
     set_users_unmuted(data.user_ids)
     
@@ -862,7 +847,7 @@ def unmute_single_user(user_id: str, request: Request):
     if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
-    _ensure_mute_table()
+    ensure_mute_table()
     
     set_user_unmuted(user_id)
     
@@ -902,11 +887,6 @@ class AnnouncementUpdateModel(BaseModel):
     priority: Optional[int] = None
 
 
-def _ensure_announcement_table():
-    """确保公告表存在"""
-    ensure_announcement_tables()
-
-
 @router.get("/api/announcements")
 def get_announcements(request: Request, active_only: bool = False):
     """获取公告列表（管理端）"""
@@ -916,7 +896,7 @@ def get_announcements(request: Request, active_only: bool = False):
     if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
-    _ensure_announcement_table()
+    ensure_announcement_tables()
     
     rows = list_announcements(active_only)
     announcements = [dict(row) for row in rows] if rows else []
@@ -932,7 +912,7 @@ def create_announcement(data: AnnouncementModel, request: Request):
     if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
-    _ensure_announcement_table()
+    ensure_announcement_tables()
     
     admin_id = user.get("Id", "")
     admin_name = user.get("Name", "管理员")
@@ -958,7 +938,7 @@ def update_announcement(ann_id: int, data: AnnouncementUpdateModel, request: Req
     if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
-    _ensure_announcement_table()
+    ensure_announcement_tables()
     
     updates = {}
     if data.title is not None:
@@ -987,7 +967,7 @@ def delete_announcement(ann_id: int, request: Request):
     if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
-    _ensure_announcement_table()
+    ensure_announcement_tables()
     
     delete_announcement_by_id(ann_id)
     
@@ -1001,7 +981,7 @@ def increment_announcement_view(ann_id: int, request: Request):
     if not user:
         return {"status": "error", "message": "请先登录"}
 
-    _ensure_announcement_table()
+    ensure_announcement_tables()
     
     increment_announcement_view_count(ann_id)
     
@@ -1019,7 +999,7 @@ def user_get_announcements(request: Request):
         return {"status": "error", "message": "请先登录"}
     
     user_id = user.get('Id', '')
-    _ensure_announcement_table()
+    ensure_announcement_tables()
     
     announcements = list_active_announcements_with_reads(user_id)
     
@@ -1034,7 +1014,7 @@ def mark_announcement_read(ann_id: int, request: Request):
         return {"status": "error", "message": "请先登录"}
     
     user_id = user.get('Id', '')
-    _ensure_announcement_table()
+    ensure_announcement_tables()
     
     mark_announcement_read_record(ann_id, user_id)
     
@@ -1184,7 +1164,7 @@ def delete_conversation(user_id: str, request: Request):
     if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
-    _ensure_msg_tables()
+    ensure_msg_tables()
     
     try:
         if delete_conversation_by_user(user_id):
@@ -1205,7 +1185,7 @@ def delete_all_conversations(request: Request):
     if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
-    _ensure_msg_tables()
+    ensure_msg_tables()
     
     try:
         delete_all_conversations_records()
@@ -1236,7 +1216,7 @@ def broadcast_message(data: BroadcastModel, request: Request):
     if not data.content or not data.content.strip():
         return {"status": "error", "message": "消息内容不能为空"}
     
-    _ensure_msg_tables()
+    ensure_msg_tables()
     
     admin_name = user.get("Name", "管理员")
     admin_id = user.get("Id", "")

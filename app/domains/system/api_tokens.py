@@ -6,7 +6,7 @@ from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 import hashlib
-from app.domains.system.api_token_dao import (
+from app.infra.db.api_token_store import (
     create_api_token_record,
     delete_api_token,
     list_api_tokens,

@@ -23,10 +23,6 @@ _session_cleanup_stop_event = threading.Event()
 _session_cleanup_thread = None
 
 
-def init_session_table():
-    ensure_session_table()
-
-
 def create_session(data: Dict[str, Any] = None) -> str:
     session_id = secrets.token_urlsafe(32)
     now = time.time()
@@ -51,10 +47,6 @@ def get_session(session_id: str) -> Optional[Dict[str, Any]]:
 def update_session(session_id: str, data: Dict[str, Any]) -> bool:
     dao_update_session(session_id, data)
     return True
-
-
-def delete_session(session_id: str):
-    dao_delete_session(session_id)
 
 
 def cleanup_expired_sessions():
@@ -148,7 +140,7 @@ class SessionDict:
         old_id = self._session_id
         # 先从待保存队列里把旧 id 摘掉，否则随后 save_modified 会把空数据回写到旧行
         self._manager.discard_pending(old_id)
-        delete_session(old_id)
+        dao_delete_session(old_id)
         new_id = create_session({})
         self._session_id = new_id
         self._data = {}
@@ -173,7 +165,7 @@ class SessionManager:
 
     def _ensure_init(self):
         if not self._initialized:
-            init_session_table()
+            ensure_session_table()
             self._initialized = True
 
     def initialize(self):
@@ -198,7 +190,7 @@ class SessionManager:
             update_session(session_id, data)
 
     def delete_session(self, session_id: str):
-        delete_session(session_id)
+        dao_delete_session(session_id)
         self._modified_sessions.pop(session_id, None)
 
     def discard_pending(self, session_id: str):

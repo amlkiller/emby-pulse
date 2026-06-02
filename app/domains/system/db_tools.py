@@ -7,24 +7,25 @@
 from fastapi import APIRouter, Request, BackgroundTasks
 from fastapi.responses import JSONResponse
 from typing import Optional, List
+from app.core.config import DB_PATH
+from app.infra.db.db_manager import (
+    BACKUP_DIR,
+    check_old_db_tables,
+    check_system_tables,
+    delete_backup,
+    ensure_tables,
+    full_health_check,
+    get_backup_list,
+    migrate_tables,
+    restore_backup,
+)
 from app.infra.db.migration_service import (
     backup_existing_databases,
     backup_old_database,
     backup_system_database,
-    check_old_db_tables,
-    check_system_tables,
     deep_check_system_database,
-    delete_backup,
-    ensure_tables,
-    full_health_check,
-    get_backup_directory,
-    get_backup_list,
-    get_system_table_names,
-    migrate_tables,
-    old_database_exists,
-    old_database_path,
-    restore_backup,
 )
+from app.infra.db.schema_registry import SYSTEM_TABLES
 from app.domains.users import public_service as user_service
 import os
 from app.core.rate_limiter import get_client_ip
@@ -158,7 +159,7 @@ async def api_db_backup(request: Request):
     return {
         "success": success,
         "backups": results,
-        "backup_dir": get_backup_directory()
+        "backup_dir": BACKUP_DIR
     }
 
 
@@ -173,7 +174,7 @@ async def api_list_backups(request: Request):
     
     return {
         "success": True,
-        "backup_dir": get_backup_directory(),
+        "backup_dir": BACKUP_DIR,
         "backups": get_backup_list()
     }
 
@@ -233,18 +234,17 @@ async def api_db_migrate(
     )
     
     # 检查旧数据库是否存在
-    if not old_database_exists():
+    if not os.path.exists(DB_PATH):
         return {
             "success": False,
             "error": "源数据库不存在，无法迁移",
-            "old_db_path": old_database_path()
+            "old_db_path": DB_PATH
         }
     
     # 解析要迁移的表
-    system_tables = get_system_table_names()
     tables_list = None
     if tables:
-        tables_list = [t.strip() for t in tables.split(",") if t.strip() and t.strip() in system_tables]
+        tables_list = [t.strip() for t in tables.split(",") if t.strip() and t.strip() in SYSTEM_TABLES]
         if not tables_list:
             return {"success": False, "error": "指定的表名均不在系统表列表中"}
     
@@ -296,7 +296,7 @@ async def api_db_restore(request: Request):
     if ".." in backup_path.split("/") or ".." in backup_path.split("\\"):
         return {"success": False, "error": "无效的备份文件路径"}
     real_backup = os.path.realpath(backup_path)
-    real_backup_dir = os.path.realpath(get_backup_directory())
+    real_backup_dir = os.path.realpath(BACKUP_DIR)
     if not real_backup.startswith(real_backup_dir + os.sep) and real_backup != real_backup_dir:
         return {"success": False, "error": "无效的备份文件路径"}
     
@@ -337,7 +337,7 @@ async def api_full_check(request: Request):
             results["actions"].append(f"已添加字段: {len(results['repair']['added_columns'])} 个")
     
     # 3. 检查是否需要迁移
-    if old_database_exists():
+    if os.path.exists(DB_PATH):
         migration_check = check_old_db_tables()
         if migration_check["migratable_tables"]:
             # 自动增量迁移

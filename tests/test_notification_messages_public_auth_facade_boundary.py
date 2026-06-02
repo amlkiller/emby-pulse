@@ -58,7 +58,7 @@ def test_get_conversations_denies_non_admin_before_dao_or_media_side_effects(mon
     )
 
     monkeypatch.setattr(notification_messages.user_service, "is_admin_user", fake_is_admin_user)
-    monkeypatch.setattr(notification_messages, "_ensure_msg_tables", fail_ensure_msg_tables)
+    monkeypatch.setattr(notification_messages, "ensure_msg_tables", fail_ensure_msg_tables)
     monkeypatch.setattr(notification_messages, "list_conversations", fail_list_conversations)
     monkeypatch.setattr(notification_messages, "count_conversations", fail_count_conversations)
     monkeypatch.setattr(notification_messages, "media_api", media_api)
@@ -87,7 +87,7 @@ def test_get_conversations_allows_admin_through_public_facade(monkeypatch):
         return True
 
     def fake_ensure_msg_tables():
-        calls.append(("_ensure_msg_tables",))
+        calls.append(("ensure_msg_tables",))
 
     def fake_list_conversations(limit, offset):
         calls.append(("list_conversations", limit, offset))
@@ -111,7 +111,7 @@ def test_get_conversations_allows_admin_through_public_facade(monkeypatch):
     media_api = SimpleNamespace(host="http://emby", api_key="token", get=fake_media_get)
 
     monkeypatch.setattr(notification_messages.user_service, "is_admin_user", fake_is_admin_user)
-    monkeypatch.setattr(notification_messages, "_ensure_msg_tables", fake_ensure_msg_tables)
+    monkeypatch.setattr(notification_messages, "ensure_msg_tables", fake_ensure_msg_tables)
     monkeypatch.setattr(notification_messages, "list_conversations", fake_list_conversations)
     monkeypatch.setattr(notification_messages, "count_conversations", fake_count_conversations)
     monkeypatch.setattr(notification_messages, "get_local_user_profile_by_emby_id", fake_get_local_user_profile_by_emby_id)
@@ -139,7 +139,7 @@ def test_get_conversations_allows_admin_through_public_facade(monkeypatch):
     }
     assert calls == [
         ("is_admin_user", request),
-        ("_ensure_msg_tables",),
+        ("ensure_msg_tables",),
         ("list_conversations", 5, 5),
         ("count_conversations",),
         ("media_get", "/Users"),

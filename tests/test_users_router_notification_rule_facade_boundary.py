@@ -79,7 +79,7 @@ def test_delete_user_notification_uses_public_rule_before_send_and_preserves_pla
     monkeypatch.setattr(router, "APP_START_TIME", "2000-01-01T00:00:00")
     monkeypatch.setattr(router, "is_admin_user", lambda request: True)
     monkeypatch.setattr(router, "media_api", FakeMediaApi())
-    monkeypatch.setattr(router, "invalidate_emby_users_cache", lambda: calls.append(("invalidate_cache",)))
+    monkeypatch.setattr(router.user_service, "invalidate_emby_users_cache", lambda: calls.append(("invalidate_cache",)))
     monkeypatch.setattr(
         router,
         "user_dao",

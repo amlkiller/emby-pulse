@@ -104,10 +104,6 @@ _BLACKLIST_CACHE_TTL = 300  # 缓存5分钟
 _restriction_cache = {}  # tg_user_id -> {"passed": bool, "missing_channels": list, "missing_groups": list, "cached_at": timestamp}
 _restriction_cache_lock = threading.Lock()
 
-def _get_restriction_cache_ttl():
-    """从配置获取缓存时间，默认 120 秒"""
-    return get_user_bot_restriction_cache_ttl()
-
 # 🚀 Emby 账号状态缓存
 _emby_account_cache = {}  # user_id -> {"exists": bool, "cached_at": timestamp}
 _EMBY_ACCOUNT_CACHE_TTL = 60  # 缓存60秒
@@ -272,17 +268,13 @@ def _ensure_user_bot_tables():
         logger.error(f"用户机器人表初始化失败: {e}")
 
 
-def _get_proxies():
-    return get_safe_proxies()
-
-
 def _tg_api(method, data=None, token=None):
     tk = token or get_user_bot_token()
     if not tk:
         return None
     try:
         # 缩短超时时间，快速失败
-        r = telegram_client.post_api(tk, method, json=data, proxies=_get_proxies(), timeout=8)
+        r = telegram_client.post_api(tk, method, json=data, proxies=get_safe_proxies(), timeout=8)
         return r.json() if r.status_code == 200 else None
     except:
         return None
@@ -341,7 +333,7 @@ def _check_user_restrictions(tg_user_id: str) -> dict:
         return result
     
     # 🔥 检查缓存（缓存有效期内完全信任，不做任何 API 调用）
-    cache_ttl = _get_restriction_cache_ttl()
+    cache_ttl = get_user_bot_restriction_cache_ttl()
     with _restriction_cache_lock:
         cached = _restriction_cache.get(tg_user_id)
         if cached and cached["passed"] and (time.time() - cached["cached_at"] < cache_ttl):
@@ -1511,7 +1503,7 @@ def _delete_messages_later(chat_id, message_ids, delay_seconds=30):
         for msg_id in message_ids:
             if msg_id:
                 try:
-                    telegram_client.post_api(token, "deleteMessage", json={"chat_id": chat_id, "message_id": msg_id}, proxies=_get_proxies(), timeout=10)
+                    telegram_client.post_api(token, "deleteMessage", json={"chat_id": chat_id, "message_id": msg_id}, proxies=get_safe_proxies(), timeout=10)
                 except:
                     pass
     threading.Thread(target=delete_messages, daemon=True).start()
@@ -3629,7 +3621,7 @@ class UserBot:
         while self.running:
             try:
                 # 使用 long polling，timeout=30 秒
-                res = telegram_client.get_updates(token, params={"offset": self.offset, "timeout": 30}, proxies=_get_proxies(), timeout=35)
+                res = telegram_client.get_updates(token, params={"offset": self.offset, "timeout": 30}, proxies=get_safe_proxies(), timeout=35)
                 if res.status_code == 200:
                     updates = res.json().get("result", [])
                     for u in updates:

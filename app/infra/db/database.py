@@ -5,8 +5,6 @@ import datetime  # 🔥 新增导入 datetime 模块
 import shutil
 from app.core.config import DB_PATH, SYSTEM_DB_PATH
 from app.infra.db.notification_dao import add_system_notification
-from app.infra.db.playback_filters import get_base_filter as _get_base_filter
-from app.infra.db.query_perf import get_query_perf_stats
 from app.infra.db.schema_bootstrap import ensure_playback_table, ensure_registered_table
 from app.infra.db.schema_registry import PLAYBACK_TABLES, SYSTEM_TABLES
 
@@ -98,9 +96,9 @@ _REGISTRY_COMPAT_NOTIFICATION_INIT_TABLES = (
 )
 
 # 🔥 导出 SYSTEM_DB_PATH 供其他模块使用
-__all__ = ['init_db', 'get_base_filter', 'add_sys_notification',
+__all__ = ['init_db', 'add_sys_notification',
            'DB_PATH', 'SYSTEM_DB_PATH', 'auto_migrate_system_db', 'get_db_connection',
-           'get_query_perf_stats', 'PLAYBACK_TABLES', 'SYSTEM_TABLES']
+           'PLAYBACK_TABLES', 'SYSTEM_TABLES']
 
 # 🔥 统一数据库连接函数 - 解决 "database is locked" 问题
 def get_db_connection(db_path, timeout=30.0, enable_wal=True):
@@ -452,9 +450,6 @@ def init_db(skip_migration=False):
     except Exception as e:
         print(f"❌ 消息表初始化错误: {e}")
 
-
-def get_base_filter(user_id_filter):
-    return _get_base_filter(user_id_filter)
 
 # 👇 核心修复：强制获取北京时间并显式写入，拒绝使用 SQLite 默认的 UTC 零时区！
 def add_sys_notification(notify_type: str, title: str, message: str, action_url: str = ""):

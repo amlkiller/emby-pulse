@@ -16,7 +16,7 @@ from app.domains.media_requests.public_service import remove_gap_from_scan_state
 from app.domains.users import user_bot_dao
 from app.domains.notifications import bot_service_dao, message_dao
 from app.domains.notifications import notify_admin_dao, notify_rule_dao
-from app.domains.playback.queries import get_base_filter
+from app.infra.db.playback_filters import get_base_filter
 from app.domains.users import user_dao
 from app.infra.db.local_playback_store import insert_bot_playback_history_record
 from app.infra.clients.media_server_client import media_api
@@ -61,10 +61,7 @@ from app.utils.ip_location import get_location, get_isp
 
 logger = logging.getLogger("uvicorn")
 
-def _get_bot_worker_count() -> int:
-    return get_bot_worker_count()
-
-_BOT_WORKER_COUNT = _get_bot_worker_count()
+_BOT_WORKER_COUNT = get_bot_worker_count()
 _bot_executor = ThreadPoolExecutor(max_workers=_BOT_WORKER_COUNT, thread_name_prefix="notify-bot")
 _bot_executor_slots = threading.BoundedSemaphore(_BOT_WORKER_COUNT * 4)
 
@@ -1609,7 +1606,7 @@ class NotificationBot:
                 if not tmdb_id and item.get("SeriesProviderIds"): tmdb_id = item.get("SeriesProviderIds", {}).get("Tmdb")
                 if tmdb_id and tmdb_client.api_key:
                     try:
-                        proxies = self._get_proxies()
+                        proxies = get_safe_proxies()
                         if raw_type == "Movie":
                             tmdb_res = tmdb_client.get_movie_details(tmdb_id, proxies=proxies, timeout=5)
                         else:
@@ -1635,9 +1632,6 @@ class NotificationBot:
             self.send_message(chat_id, msg, platform="all")
         else: self._cmd_stats(chat_id, 'yesterday', platform="all")
 
-    def _get_proxies(self):
-        return get_safe_proxies()
-
     def _check_admin_permission(self, chat_id, user_id):
         """检查用户是否有管理员权限
         
@@ -1659,7 +1653,7 @@ class NotificationBot:
         
         # 检查用户是否是群组管理员
         try:
-            proxies = self._get_proxies()
+            proxies = get_safe_proxies()
             # 获取群组信息
             res = telegram_client.get_api(token, "getChatMember", params={"chat_id": chat_id, "user_id": user_id}, proxies=proxies, timeout=10)
             if res.status_code == 200:
@@ -2020,7 +2014,7 @@ class NotificationBot:
         photo_bytes = None
         if isinstance(photo_io, str):
             try: 
-                res = network_client.get(photo_io, proxies=self._get_proxies() if "tmdb" in photo_io.lower() else None, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+                res = network_client.get(photo_io, proxies=get_safe_proxies() if "tmdb" in photo_io.lower() else None, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
                 if res.status_code == 200: photo_bytes = res.content
             except Exception: pass
         else: photo_bytes = photo_io.read()
@@ -2029,7 +2023,7 @@ class NotificationBot:
         if wecom_photo_io is not None and wecom_photo_io != photo_io:
             if isinstance(wecom_photo_io, str):
                 try: 
-                    res = network_client.get(wecom_photo_io, proxies=self._get_proxies() if "tmdb" in wecom_photo_io.lower() else None, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+                    res = network_client.get(wecom_photo_io, proxies=get_safe_proxies() if "tmdb" in wecom_photo_io.lower() else None, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
                     if res.status_code == 200: wecom_photo_bytes = res.content
                 except Exception: pass
             else: wecom_photo_bytes = wecom_photo_io.read()
@@ -2062,7 +2056,7 @@ class NotificationBot:
                     data = {"chat_id": tg_cid, "caption": caption, "parse_mode": parse_mode}
                     if reply_markup: data["reply_markup"] = json.dumps(reply_markup)
                     if photo_bytes:
-                        r = telegram_client.send_photo(get_notify_tg_bot_token(), data=data, files={"photo": ("image.jpg", io.BytesIO(photo_bytes), "image/jpeg")}, proxies=self._get_proxies(), timeout=20)
+                        r = telegram_client.send_photo(get_notify_tg_bot_token(), data=data, files={"photo": ("image.jpg", io.BytesIO(photo_bytes), "image/jpeg")}, proxies=get_safe_proxies(), timeout=20)
                         logger.info(f"[Bot] TG photo response: {r.status_code} - {r.text[:300] if r.text else 'empty'}")
                         if r.status_code == 200:
                             try:
@@ -2110,7 +2104,7 @@ class NotificationBot:
                 try:
                     data = {"chat_id": tg_cid, "text": text, "parse_mode": parse_mode}
                     if reply_markup: data["reply_markup"] = json.dumps(reply_markup)
-                    r = telegram_client.send_message(get_notify_tg_bot_token(), data, proxies=self._get_proxies(), timeout=10)
+                    r = telegram_client.send_message(get_notify_tg_bot_token(), data, proxies=get_safe_proxies(), timeout=10)
                     if r.status_code == 200:
                         try:
                             tmdb_id = _extract_request_tmdb_id(reply_markup)
@@ -2140,7 +2134,7 @@ class NotificationBot:
             if reply_markup:
                 data["reply_markup"] = json.dumps(reply_markup)
             
-            r = telegram_client.post_api(get_notify_tg_bot_token(), "editMessageText", json=data, proxies=self._get_proxies(), timeout=10)
+            r = telegram_client.post_api(get_notify_tg_bot_token(), "editMessageText", json=data, proxies=get_safe_proxies(), timeout=10)
             logger.info(f"[Bot] TG edit response: {r.status_code}")
             return r.status_code == 200
         except Exception as e:
@@ -2155,7 +2149,7 @@ class NotificationBot:
             admin_ids = [c.strip() for c in raw_cids.replace('，', ',').split(',') if c.strip()]
             
             try:
-                res = telegram_client.get_updates(token, params={"offset": self.offset, "timeout": 30}, proxies=self._get_proxies(), timeout=35)
+                res = telegram_client.get_updates(token, params={"offset": self.offset, "timeout": 30}, proxies=get_safe_proxies(), timeout=35)
                 if res.status_code == 200:
                     for u in res.json().get("result", []):
                         self.offset = u["update_id"] + 1
@@ -2192,7 +2186,7 @@ class NotificationBot:
     def _handle_callback(self, cq):
         data = cq.get("data", ""); cid = str(cq["message"]["chat"]["id"])
         mid = cq["message"]["message_id"]; cq_id = cq["id"]; token = get_notify_tg_bot_token()
-        proxies = self._get_proxies() 
+        proxies = get_safe_proxies()
         
         # 🔥 权限检查：对于管理类操作，检查用户是否有权限
         if data.startswith("req_") or data.startswith("feed_"):
@@ -2513,7 +2507,7 @@ class NotificationBot:
             {"command": "whois", "description": "👤 查询绑定信息"},
             {"command": "help", "description": "🤖 帮助菜单"}
         ]
-        try: telegram_client.post_api(token, "setMyCommands", json={"commands": cmds}, proxies=self._get_proxies(), timeout=10)
+        try: telegram_client.post_api(token, "setMyCommands", json={"commands": cmds}, proxies=get_safe_proxies(), timeout=10)
         except Exception: pass
 
     def _is_admin(self, cid, platform="tg"):

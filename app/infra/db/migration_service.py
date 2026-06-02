@@ -9,71 +9,18 @@ import os
 from app.core.config import DB_PATH
 from app.core.security_utils import safe_error_message
 from app.infra.db import db_manager
-from app.infra.db.database import auto_migrate_system_db, init_db  # noqa: F401
 from app.infra.db.schema_registry import SYSTEM_TABLES, TABLE_ALTERS
 from app.infra.db.system_store import system_store
 
 
-def full_health_check():
-    return db_manager.full_health_check()
-
-
-def ensure_tables():
-    return db_manager.ensure_tables()
-
-
-def check_system_tables():
-    return db_manager.check_system_tables()
-
-
-def check_old_db_tables():
-    return db_manager.check_old_db_tables()
-
-
-def migrate_tables(mode="incremental", tables=None):
-    return db_manager.migrate_tables(mode=mode, tables=tables)
-
-
-def get_backup_list():
-    return db_manager.get_backup_list()
-
-
-def delete_backup(filename: str):
-    return db_manager.delete_backup(filename)
-
-
-def restore_backup(backup_path: str):
-    return db_manager.restore_backup(backup_path)
-
-
-def get_backup_directory() -> str:
-    return db_manager.BACKUP_DIR
-
-
-def get_system_table_names():
-    return SYSTEM_TABLES
-
-
-def old_database_exists() -> bool:
-    return os.path.exists(DB_PATH)
-
-
-def old_database_path() -> str:
-    return DB_PATH
-
-
-def system_database_exists() -> bool:
-    return os.path.exists(system_store.db_path)
-
-
 def backup_system_database():
-    if system_database_exists():
+    if os.path.exists(system_store.db_path):
         return db_manager.backup_database(system_store.db_path)
     return None
 
 
 def backup_old_database():
-    if old_database_exists():
+    if os.path.exists(DB_PATH):
         return db_manager.backup_database(DB_PATH)
     return None
 
@@ -92,7 +39,7 @@ def backup_existing_databases():
 def deep_check_system_database():
     results = {
         "system_db": {
-            "exists": system_database_exists(),
+            "exists": os.path.exists(system_store.db_path),
             "path": system_store.db_path,
             "size_mb": 0,
             "tables": {},
@@ -108,7 +55,7 @@ def deep_check_system_database():
         }
     )
 
-    if not system_database_exists():
+    if not os.path.exists(system_store.db_path):
         results["system_db"]["scan_log"][0]["status"] = "error"
         results["system_db"]["scan_log"][0]["message"] = "数据库文件不存在"
         results["missing_tables"] = list(SYSTEM_TABLES)

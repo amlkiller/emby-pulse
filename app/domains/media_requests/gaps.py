@@ -39,6 +39,7 @@ from app.infra.clients.tmdb_client import tmdb_client
 from app.infra.config.media_server_settings import get_media_server_host, get_media_server_main_public_or_host
 from app.infra.config.moviepilot_settings import get_moviepilot_token, get_moviepilot_url
 from app.infra.config.tmdb_settings import get_tmdb_api_key
+from app.utils.proxy_helper import get_safe_proxies
 
 logger = logging.getLogger("uvicorn")
 
@@ -64,10 +65,6 @@ def update_progress(item_name=None):
     with state_lock:
         scan_state["progress"] += 1
         if item_name: scan_state["current_item"] = f"分析剧集: {item_name[:20]}"
-
-def _get_proxies():
-    from app.utils.proxy_helper import get_safe_proxies
-    return get_safe_proxies()
 
 def get_admin_user_id():
     try:
@@ -205,7 +202,7 @@ def run_scan_task():
     try:
         logger.info("[缺集扫描] 开始扫描任务...")
         host = get_media_server_host(); tmdb_key = get_tmdb_api_key(); admin_id = get_admin_user_id()
-        proxies = _get_proxies(); today = datetime.now().strftime("%Y-%m-%d")
+        proxies = get_safe_proxies(); today = datetime.now().strftime("%Y-%m-%d")
         
         if not admin_id:
             logger.error("[缺集扫描] 无法获取管理员用户ID")
@@ -598,7 +595,7 @@ def search_hdhive_for_gap(request: Request = None, payload: dict = None):
                 keyword += f" S{str(season).zfill(2)}"
             search_data["keyword"] = keyword
 
-        proxies = _get_proxies()
+        proxies = get_safe_proxies()
         
         # 如果有 TMDB ID，直接查影巢
         if tmdb_id:

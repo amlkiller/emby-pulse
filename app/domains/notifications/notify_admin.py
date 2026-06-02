@@ -4,7 +4,7 @@ from app.domains.users import public_service as user_service
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from app.domains.notifications.notify_admin_dao import (
-    ensure_notify_rules_table as ensure_notify_rules_table_data,
+    ensure_notify_rules_table,
     get_notify_rule_row,
     list_notify_rule_rows,
     save_notify_rules,
@@ -18,9 +18,6 @@ import json
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates", autoescape=True)
-def ensure_notify_rules_table():
-    """确保 notify_rules 表存在"""
-    ensure_notify_rules_table_data()
 
 # ==================== 通知规则读取函数 ====================
 def get_notify_rule(notify_type: str) -> dict:

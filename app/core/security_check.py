@@ -13,18 +13,13 @@ from app.infra.config.user_bot_settings import get_user_bot_token_or_empty
 
 logger = logging.getLogger("uvicorn")
 
-def generate_secure_token(length: int = 32) -> str:
-    """生成安全的随机 Token"""
-    return secrets.token_urlsafe(length)
-
-
 def check_webhook_token():
     """检查 Webhook Token 是否为默认值"""
     current_token = get_webhook_token()
     default_tokens = ["embypulse", "emby", "test", "123456", "password", ""]
     
     if current_token in default_tokens:
-        new_token = generate_secure_token(24)
+        new_token = secrets.token_urlsafe(24)
         set_webhook_token(new_token)
         logger.warning("🔒 [安全] 检测到默认/空 Webhook Token，已自动生成安全 Token")
         logger.warning(f"   新 Token: {new_token[:8]}****{new_token[-8:]}")

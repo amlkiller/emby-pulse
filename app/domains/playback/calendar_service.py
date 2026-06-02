@@ -18,6 +18,7 @@ from app.domains.playback.calendar_dao import (
 )
 from app.infra.clients.media_server_client import media_api
 from app.infra.clients.tmdb_client import tmdb_client
+from app.utils.proxy_helper import get_safe_proxies
 
 # 初始化日志记录器
 logger = logging.getLogger("uvicorn")
@@ -84,11 +85,6 @@ class CalendarService:
             self._background_sync_thread = None
         if thread and thread.is_alive():
             thread.join(timeout=1)
-
-    def _get_proxies(self):
-        """获取全局代理配置，用于 TMDB 请求"""
-        from app.utils.proxy_helper import get_safe_proxies
-        return get_safe_proxies()
 
     def mark_episode_ready(self, series_id, season, episode):
         """
@@ -188,7 +184,7 @@ class CalendarService:
         # 5. 第三层逻辑：如果本地无数据或强制刷新，执行异步抓取
         if not has_db_data or force_refresh:
             week_data = {i: [] for i in range(7)} # 重置结果集
-            proxies = self._get_proxies()
+            proxies = get_safe_proxies()
             
             # 🔥 清理已删除剧集的缓存
             self._clean_deleted_series_cache()

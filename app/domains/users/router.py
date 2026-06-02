@@ -407,15 +407,6 @@ def api_get_libraries(request: Request):
         return {"status": "error", "message": "媒体服务器 API 返回异常"}
     except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
-# ==================== 🔥 用户列表缓存 ====================
-def get_emby_users_cached():
-    """获取 Emby 用户列表(带缓存)"""
-    return user_service.get_emby_users_cached()
-
-def invalidate_emby_users_cache():
-    """清除用户列表缓存(用户变更时调用)"""
-    user_service.invalidate_emby_users_cache()
-
 @router.get("/api/manage/users")
 def api_manage_users(request: Request, refresh: bool = False):
     # 🔒 安全检查：必须管理员
@@ -424,14 +415,14 @@ def api_manage_users(request: Request, refresh: bool = False):
 
     # 如果请求强制刷新,清除缓存
     if refresh:
-        invalidate_emby_users_cache()
+        user_service.invalidate_emby_users_cache()
 
     public_host = get_media_server_public_host()
     if public_host.endswith('/'): public_host = public_host[:-1]
 
     try:
         # 🔥 使用缓存的用户列表
-        emby_users = get_emby_users_cached()
+        emby_users = user_service.get_emby_users_cached()
         if emby_users is None:
             return {"status": "error", "message": "媒体服务器无法连接"}
         meta_rows = user_dao.list_all_user_meta()
@@ -914,7 +905,7 @@ def api_manage_user_library(data: UserUpdateModelEx, request: Request):
     # 🔒 Emby 不可用时拒绝，避免本地/远端权限错位
     if not media_api.health_check():
         return {"status": "error", "message": "Emby 服务不可用，请稍后重试"}
-    invalidate_emby_users_cache()
+    user_service.invalidate_emby_users_cache()
     try:
         # 获取用户当前 Policy
         p_res = media_api.get(f"/Users/{data.user_id}")
@@ -960,7 +951,7 @@ def api_manage_user_update(data: UserUpdateModelEx, request: Request):
     if not media_api.health_check():
         return {"status": "error", "message": "Emby 服务不可用，请稍后重试"}
     # 🔥 清除用户缓存
-    invalidate_emby_users_cache()
+    user_service.invalidate_emby_users_cache()
     try:
         exist = user_dao.get_user_meta(data.user_id)
         # 获取旧的 Emby Policy 用于对比变更
@@ -1186,7 +1177,7 @@ def api_manage_user_new(data: NewUserModelEx, request: Request):
     if not media_api.health_check():
         return {"status": "error", "message": "Emby 服务不可用，请稍后重试"}
     # 🔥 清除用户缓存
-    invalidate_emby_users_cache()
+    user_service.invalidate_emby_users_cache()
     try:
         res = media_api.post("/Users/New", json={"Name": data.name})
         if res.status_code != 200: return {"status": "error", "message": f"创建失败: {res.text}"}
@@ -1259,7 +1250,7 @@ def api_manage_user_delete(user_id: str, request: Request):
         return {"status": "error", "message": "Emby 服务不可用，请稍后重试"}
 
     # 🔥 清除用户缓存
-    invalidate_emby_users_cache()
+    user_service.invalidate_emby_users_cache()
 
     # 检查是否已验证
     verified = request.session.get("delete_verified", False)

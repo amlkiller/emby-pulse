@@ -10,11 +10,6 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 
-def _generate_csp_nonce() -> str:
-    """Generate a cryptographic nonce for CSP script-src."""
-    return secrets.token_urlsafe(24)
-
-
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """
     Adds security headers to prevent common attacks:
@@ -28,7 +23,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         # Generate per-request CSP nonce and store for template access
-        nonce = _generate_csp_nonce()
+        nonce = secrets.token_urlsafe(24)
         request.state.csp_nonce = nonce
 
         response = await call_next(request)

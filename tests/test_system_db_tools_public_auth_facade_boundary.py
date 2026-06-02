@@ -137,7 +137,7 @@ def test_db_backup_allows_admin_through_public_facade(monkeypatch):
     monkeypatch.setattr(audit_logger, "log_audit", fake_log_audit)
     monkeypatch.setattr(db_tools, "get_client_ip", lambda request: "127.0.0.1")
     monkeypatch.setattr(db_tools, "backup_existing_databases", fake_backup_existing_databases)
-    monkeypatch.setattr(db_tools, "get_backup_directory", lambda: "/backups")
+    monkeypatch.setattr(db_tools, "BACKUP_DIR", "/backups")
 
     response = asyncio.run(db_tools.api_db_backup(request))
 

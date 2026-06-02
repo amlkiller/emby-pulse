@@ -77,16 +77,14 @@ def test_users_public_service_exposes_page_permission_map(monkeypatch):
     assert public_service.get_page_permission_map() is permission_map
 
 
-def test_users_router_cache_helpers_use_public_service(monkeypatch):
-    from app.domains.users import router
+def test_users_router_uses_public_service_cache_owner():
+    path = _REPO_ROOT / "app/domains/users/router.py"
+    source = path.read_text(encoding="utf-8")
 
-    seen = []
-    monkeypatch.setattr(router.user_service, "get_emby_users_cached", lambda: ["cached-user"])
-    monkeypatch.setattr(router.user_service, "invalidate_emby_users_cache", lambda: seen.append("invalidated"))
-
-    assert router.get_emby_users_cached() == ["cached-user"]
-    assert router.invalidate_emby_users_cache() is None
-    assert seen == ["invalidated"]
+    assert "def get_emby_users_cached(" not in source
+    assert "def invalidate_emby_users_cache(" not in source
+    assert "user_service.get_emby_users_cached()" in source
+    assert "user_service.invalidate_emby_users_cache()" in source
 
 
 def test_selected_external_callers_use_real_user_dao_for_persistence_calls():

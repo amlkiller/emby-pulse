@@ -12,10 +12,6 @@ def get_local_playback_db_path() -> str:
     return DB_PATH
 
 
-def _ensure_playback_ip_columns(cursor) -> None:
-    ensure_playback_table(cursor)
-
-
 def fetch_playback_ip_rows(item_ids, user_ids):
     if not item_ids or not user_ids:
         return []
@@ -59,7 +55,7 @@ def insert_webhook_playback_ip_record(
     conn = sqlite3.connect(get_local_playback_db_path())
     try:
         cursor = conn.cursor()
-        _ensure_playback_ip_columns(cursor)
+        ensure_playback_table(cursor)
 
         cursor.execute(
             """
@@ -101,7 +97,7 @@ def insert_bot_playback_history_record(
     conn = sqlite3.connect(get_local_playback_db_path())
     try:
         cursor = conn.cursor()
-        _ensure_playback_ip_columns(cursor)
+        ensure_playback_table(cursor)
         cursor.execute(
             """
             INSERT INTO PlaybackActivity
