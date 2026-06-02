@@ -16,6 +16,12 @@ def is_admin_user(request) -> bool:
     return auth_is_admin_user(request)
 
 
+def check_permission(request, page: str) -> bool:
+    from app.domains.users.auth import check_permission as auth_check_permission
+
+    return auth_check_permission(request, page)
+
+
 def get_emby_users_cached():
     """Get Emby users with the same short-lived cache used by the users router."""
     if _emby_users_cache["data"] and time.time() < _emby_users_cache["expires"]:

@@ -3,18 +3,16 @@ import random
 import json
 import os
 from fastapi import APIRouter, Request, Depends, HTTPException
-from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from typing import List, Optional
 from app.core.config import templates
 from app.infra.db.notification_dao import add_sys_notification
 from app.domains.system import public_service as system_service
+from app.domains.users import public_service as user_service
 from app.domains.points import point_dao
 from app.infra.clients.media_server_client import media_api
 from app.domains.notifications import public_service as notification_service
-
-from app.domains.users.auth import check_permission
 
 router = APIRouter()
 from app.core.security_utils import safe_error_message
@@ -36,16 +34,14 @@ class BatchPointsModel(BaseModel): user_ids: List[str]; amount: int; reason: str
 
 @router.get("/points")
 async def points_page(request: Request):
-    from app.domains.system.views import get_common_vars
-
     if not request.session.get("user"):
         return RedirectResponse("/login", status_code=303)
     
     # 权限检查
-    if not check_permission(request, "points"):
+    if not user_service.check_permission(request, "points"):
         return RedirectResponse("/?no_permission=1", status_code=303)
 
-    return templates.TemplateResponse("points.html", get_common_vars(request, "points", {
+    return templates.TemplateResponse("points.html", system_service.get_common_vars(request, "points", {
         "user": request.session.get("user"),
         "is_pro": True
     }))
@@ -64,14 +60,14 @@ def get_points_config(request: Request):
 # 👇 注意：这里移除了 Depends，让普通用户也能访问，用来保存“签到”设置
 @router.post("/api/points/config")
 async def save_points_config(request: Request):
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     data = await request.json()
     point_dao.save_point_config_values(data.get('configs', {}))
     return {"status": "success", "message": "全局配置已保存"}
 
 @router.get("/api/points/users")
 def get_users_points(request: Request, page: int = 1, page_size: int = 20):
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     if not media_api.health_check():
         return {"status": "error", "message": "Emby 服务不可用，请稍后重试"}
     try:
@@ -109,7 +105,7 @@ def get_users_points(request: Request, page: int = 1, page_size: int = 20):
 # 👇 批量发钱功能依然严格锁死！
 @router.post("/api/points/batch_update")
 def batch_update_points(data: BatchPointsModel, request: Request):
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     # 🔒 Emby 不可用时拒绝批量改积分（用户名映射依赖 Emby）
     if not media_api.health_check():
         return {"status": "error", "message": "Emby 服务不可用，请稍后重试"}
@@ -124,7 +120,7 @@ def batch_update_points(data: BatchPointsModel, request: Request):
 @router.get("/api/points/logs")
 def get_point_logs(request: Request, user_id: str = None, page: int = 1, page_size: int = 50, action_type: str = None):
     """获取积分流水（支持分页和筛选）"""
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
         result = point_dao.list_point_logs(user_id=user_id, page=page, page_size=page_size, action_type=action_type)
         
@@ -436,7 +432,7 @@ def grab_red_packet(data: GrabRedPacketModel, request: Request):
 @router.get("/api/points/red_packet/logs")
 def get_red_packet_logs(request: Request, packet_id: int):
     """获取红包领取记录"""
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     
     try:
         logs = point_dao.list_red_packet_logs(packet_id)
@@ -451,7 +447,7 @@ def get_red_packet_logs(request: Request, packet_id: int):
 @router.get("/api/points/rank")
 def get_points_rank(request: Request, limit: int = 10):
     """获取积分排行榜"""
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     
     try:
         rows = point_dao.list_point_rank(limit)

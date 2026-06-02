@@ -87,6 +87,25 @@ def test_system_public_service_delegates_invitation_calls(monkeypatch):
     ]
 
 
+def test_system_public_service_delegates_common_vars(monkeypatch):
+    from app.domains.system import public_service, views
+
+    calls = []
+    request = object()
+
+    def fake_get_common_vars(seen_request, active_page, extra_vars=None):
+        calls.append((seen_request, active_page, extra_vars))
+        return {"active_page": active_page, **(extra_vars or {})}
+
+    monkeypatch.setattr(views, "get_common_vars", fake_get_common_vars)
+
+    assert public_service.get_common_vars(request, "points", {"is_pro": True}) == {
+        "active_page": "points",
+        "is_pro": True,
+    }
+    assert calls == [(request, "points", {"is_pro": True})]
+
+
 def test_selected_external_callers_do_not_import_private_system_invitation_dao():
     checked_paths = [
         _REPO_ROOT / "app/domains/points/router.py",

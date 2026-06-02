@@ -143,6 +143,22 @@ def test_users_public_service_delegates_admin_check(monkeypatch):
     assert calls == [request]
 
 
+def test_users_public_service_delegates_permission_check(monkeypatch):
+    from app.domains.users import auth, public_service
+
+    calls = []
+    request = object()
+
+    def fake_check_permission(seen_request, page):
+        calls.append((seen_request, page))
+        return True
+
+    monkeypatch.setattr(auth, "check_permission", fake_check_permission)
+
+    assert public_service.check_permission(request, "points") is True
+    assert calls == [(request, "points")]
+
+
 def test_users_router_cache_helpers_use_public_service(monkeypatch):
     from app.domains.users import router
 
