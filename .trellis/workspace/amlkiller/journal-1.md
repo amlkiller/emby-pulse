@@ -1773,3 +1773,36 @@ Moved PWA router admin checks off private users auth imports, routed them throug
 ### Next Steps
 
 - None - task complete
+
+
+## Session 54: Risk router public auth facade boundary
+
+**Date**: 2026-06-02
+**Task**: Risk router public auth facade boundary
+**Branch**: `main`
+
+### Summary
+
+Moved risk router admin checks off private users auth imports, routed them through the users public facade, and added import-boundary plus risk config authorization tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7f54565` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
