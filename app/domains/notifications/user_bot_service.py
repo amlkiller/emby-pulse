@@ -14,6 +14,7 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from app.domains.media_requests import public_service as media_request_service
 from app.domains.points import point_dao
+from app.domains.system import invitation_dao
 from app.domains.users import user_dao
 from app.domains.users import user_bot_dao
 from app.domains.system import public_service as system_service
@@ -1346,7 +1347,7 @@ def _do_code_register(chat_id, tg_user_id, custom_name, code, days, tpl_id, rout
                     else:
                         block_routes = routes
 
-                system_service.save_code_registration_meta_and_finish_invitation(
+                invitation_dao.save_code_registration_meta_and_finish_invitation(
                     code,
                     uid,
                     expire,

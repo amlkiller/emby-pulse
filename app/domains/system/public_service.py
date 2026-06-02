@@ -15,11 +15,6 @@ def claim_invitation_usage(code: str, used_by: str) -> bool:
     return invitation_dao.claim_invitation_usage(code, used_by)
 
 
-save_code_registration_meta_and_finish_invitation = (
-    invitation_dao.save_code_registration_meta_and_finish_invitation
-)
-
-
 def renew_user_with_invitation_code(code: str, used_by: str, user_id: str):
     return invitation_dao.renew_user_with_invitation_code(code, used_by, user_id)
 

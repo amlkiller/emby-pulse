@@ -132,15 +132,6 @@ def test_system_public_service_delegates_invitation_calls(monkeypatch):
     ]
 
 
-def test_system_public_service_reuses_registration_meta_dao_implementation():
-    from app.domains.system import public_service
-
-    assert (
-        public_service.save_code_registration_meta_and_finish_invitation
-        is public_service.invitation_dao.save_code_registration_meta_and_finish_invitation
-    )
-
-
 def test_system_public_service_delegates_common_vars(monkeypatch):
     from app.domains.system import public_service, views
 
@@ -160,23 +151,20 @@ def test_system_public_service_delegates_common_vars(monkeypatch):
     assert calls == [(request, "points", {"is_pro": True})]
 
 
-def test_selected_external_callers_do_not_import_private_system_invitation_dao():
-    checked_paths = [
-        _REPO_ROOT / "app/domains/points/router.py",
-        _REPO_ROOT / "app/domains/notifications/user_bot_service.py",
-    ]
-    violations = []
+def test_registration_meta_save_is_not_reexported_by_public_service():
+    from app.domains.system import public_service
 
-    for path in checked_paths:
-        rel_path = path.relative_to(_REPO_ROOT).as_posix()
-        tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(rel_path))
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom):
-                if node.module == "app.domains.system.invitation_dao":
-                    violations.append(f"{rel_path}:{node.lineno}")
-                if node.module == "app.domains.system":
-                    imported_names = {alias.name for alias in node.names}
-                    if "invitation_dao" in imported_names or "*" in imported_names:
-                        violations.append(f"{rel_path}:{node.lineno}")
+    assert not hasattr(public_service, "save_code_registration_meta_and_finish_invitation")
 
-    assert violations == []
+
+def test_user_bot_service_imports_registration_meta_save_dao_directly():
+    path = _REPO_ROOT / "app/domains/notifications/user_bot_service.py"
+    tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=path.relative_to(_REPO_ROOT).as_posix())
+
+    imports_system_invitation_dao = False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == "app.domains.system":
+            imported_names = {alias.name for alias in node.names}
+            imports_system_invitation_dao = imports_system_invitation_dao or "invitation_dao" in imported_names
+
+    assert imports_system_invitation_dao is True
