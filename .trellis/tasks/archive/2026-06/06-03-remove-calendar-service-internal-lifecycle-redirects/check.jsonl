@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend guideline entry point for scoped refactor review."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Confirm lifecycle behavior remains behavior-preserving."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Confirm verification commands follow project uv convention."}
