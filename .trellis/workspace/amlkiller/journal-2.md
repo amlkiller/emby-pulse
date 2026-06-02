@@ -533,3 +533,36 @@ Routed playback stats admin checks through the users public service facade, adde
 ### Next Steps
 
 - None - task complete
+
+
+## Session 76: Users invitation system facade boundary
+
+**Date**: 2026-06-02
+**Task**: Users invitation system facade boundary
+**Branch**: `main`
+
+### Summary
+
+Routed users-router invitation management through the system public service facade, added facade delegation and boundary tests, and verified the full pytest suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7050714` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
