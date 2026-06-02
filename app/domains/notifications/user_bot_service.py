@@ -3562,6 +3562,7 @@ class UserBot:
         self.poll_thread = None
         self.scheduler_thread = None  # 🔥 定时任务线程
         self.offset = 0
+        self._stop_event = threading.Event()
 
     def start(self):
         if not _is_pro():
@@ -3572,12 +3573,27 @@ class UserBot:
             return
         if self.running:
             return
+        for attr in ("poll_thread", "scheduler_thread"):
+            thread = getattr(self, attr)
+            if thread and thread.is_alive():
+                return
+            if thread:
+                setattr(self, attr, None)
+        self._stop_event.clear()
         self.running = True
         self._set_commands()
-        self.poll_thread = threading.Thread(target=self._polling_loop, daemon=True)
+        self.poll_thread = threading.Thread(
+            target=self._polling_loop,
+            daemon=True,
+            name="user-bot-polling",
+        )
         self.poll_thread.start()
         # 🔥 启动定时任务线程
-        self.scheduler_thread = threading.Thread(target=self._scheduler_loop, daemon=True)
+        self.scheduler_thread = threading.Thread(
+            target=self._scheduler_loop,
+            daemon=True,
+            name="user-bot-scheduler",
+        )
         self.scheduler_thread.start()
         # 🔒 加载 batch_used 内存值 + 启动定时落盘线程
         _load_batch_used_from_cfg()
@@ -3586,12 +3602,19 @@ class UserBot:
 
     def stop(self):
         self.running = False
+        self._stop_event.set()
         # 同步 flush 一次防止丢失增量
         _batch_flush_stop.set()
         try:
             _flush_batch_used(force=True)
         except Exception:
             logger.exception("[UserBot] stop 时 flush batch_used 失败")
+        for attr in ("poll_thread", "scheduler_thread"):
+            thread = getattr(self, attr)
+            if thread and thread.is_alive():
+                thread.join(timeout=1)
+            if not thread or not thread.is_alive():
+                setattr(self, attr, None)
 
     def _set_commands(self):
         cmds = [
@@ -3618,7 +3641,7 @@ class UserBot:
 
     def _polling_loop(self):
         token = get_user_bot_token()
-        while self.running:
+        while self.running and not self._stop_event.is_set():
             try:
                 # 使用 long polling，timeout=30 秒
                 res = telegram_client.get_updates(token, params={"offset": self.offset, "timeout": 30}, proxies=get_safe_proxies(), timeout=35)
@@ -3641,17 +3664,19 @@ class UserBot:
                         except Exception as e:
                             logger.error(f"[UserBot] 处理消息异常: {e}")
                 else:
-                    time.sleep(3)
+                    if self._stop_event.wait(3):
+                        return
             except Exception as e:
                 logger.debug(f"[UserBot] polling 异常: {e}")
-                time.sleep(5)
+                if self._stop_event.wait(5):
+                    return
 
     def _scheduler_loop(self):
         """定时任务循环"""
-        import time as _time
-        _time.sleep(30)  # 等待服务完全启动
+        if self._stop_event.wait(30):  # 等待服务完全启动
+            return
         
-        while self.running:
+        while self.running and not self._stop_event.is_set():
             try:
                 # 检查是否需要执行彩票开奖
                 config = point_dao.get_point_config()
@@ -3704,11 +3729,13 @@ class UserBot:
                     logger.error(f"[PK] 处理过期邀请失败: {e}")
                 
                 # 每60秒检查一次
-                _time.sleep(60)
+                if self._stop_event.wait(60):
+                    return
                 
             except Exception as e:
                 logger.error(f"[UserBot] 定时任务异常: {e}")
-                _time.sleep(60)
+                if self._stop_event.wait(60):
+                    return
 
     def _on_message(self, msg):
         text = (msg.get("text") or "").strip()
