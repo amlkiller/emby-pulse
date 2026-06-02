@@ -1047,3 +1047,36 @@ Registered audit_logs in the shared schema registry, routed audit logger bootstr
 ### Next Steps
 
 - None - task complete
+
+
+## Session 32: Session schema registry bootstrap
+
+**Date**: 2026-06-02
+**Task**: Session schema registry bootstrap
+**Branch**: `main`
+
+### Summary
+
+Registered sessions in the shared schema registry, routed session bootstrap through ensure_registered_table while preserving the expiry index, added focused session DAO smoke and no-local-DDL regression tests, updated database spec guidance, and verified focused checks plus full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `999a735` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
