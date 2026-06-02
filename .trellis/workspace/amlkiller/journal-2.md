@@ -1331,3 +1331,36 @@ Routed db_manager.migrate_tables target table setup through schema_bootstrap.ens
 ### Next Steps
 
 - None - task complete
+
+
+## Session 100: HDHiveSign retry wait lifecycle convergence
+
+**Date**: 2026-06-03
+**Task**: HDHiveSign retry wait lifecycle convergence
+**Branch**: `main`
+
+### Summary
+
+Made HDHiveSign retry delays interruptible through the plugin stop event, preserving normal retry behavior while allowing plugin disable to skip pending retries; added focused lifecycle regression tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1119117` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
