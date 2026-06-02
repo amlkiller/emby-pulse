@@ -7,7 +7,7 @@ from app.domains.notifications.bot_service import (
 from app.domains.playback.calendar_service import start_calendar_service, stop_calendar_service
 from app.domains.notifications.calendar_notify import start_calendar_notify_services, stop_calendar_notify_services
 from app.domains.notifications.router import start_notifications_router_services
-from app.domains.playback.dedupe import start_dedupe_services
+from app.domains.playback.dedupe import init_dedupe_db
 from app.domains.risk.risk_service import start_risk_monitor, stop_risk_monitor
 from app.domains.media_requests.gaps import start_gap_services, stop_gap_services
 from app.domains.media_requests.router import start_media_request_services, stop_media_request_services
@@ -74,7 +74,7 @@ def build_bootstrap_registry(app, request_port: int) -> BootstrapServiceRegistry
     registry.register("calendar", start_calendar_service, stop_calendar_service)
     registry.register("notifications-router", start_notifications_router_services)
     registry.register("calendar-notify", start_calendar_notify_services, stop_calendar_notify_services)
-    registry.register("dedupe", start_dedupe_services)
+    registry.register("dedupe", init_dedupe_db)
     registry.register("gaps", start_gap_services, stop_gap_services)
     registry.register("auth-domain", start_auth_domain_services, stop_auth_domain_services)
     registry.register("user-domain", start_user_domain_services)

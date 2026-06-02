@@ -43,9 +43,6 @@ def init_dedupe_db():
         logger.error(f"[去重引擎] 自动建表失败: {e}")
 
 
-def start_dedupe_services():
-    init_dedupe_db()
-
 def calculate_score(src: dict, strategy: str = "quality", custom_weights: dict = None):
     score = 0
     video = next((s for s in src.get("MediaStreams", []) if s.get("Type") == "Video"), {})

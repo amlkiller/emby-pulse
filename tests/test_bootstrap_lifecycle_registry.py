@@ -75,7 +75,7 @@ def test_bootstrap_services_use_registry_and_skip_duplicate_starts(monkeypatch):
     monkeypatch.setattr(services, "start_notifications_router_services", record("notifications-router"))
     monkeypatch.setattr(services, "start_calendar_notify_services", record("calendar-notify"))
     monkeypatch.setattr(services, "stop_calendar_notify_services", record("stop:calendar-notify"))
-    monkeypatch.setattr(services, "start_dedupe_services", record("dedupe"))
+    monkeypatch.setattr(services, "init_dedupe_db", record("dedupe"))
     monkeypatch.setattr(services, "start_gap_services", record("gaps"))
     monkeypatch.setattr(services, "stop_gap_services", record("stop:gaps"))
     monkeypatch.setattr(services, "start_auth_domain_services", record("auth-domain"))
