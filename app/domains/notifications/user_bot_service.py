@@ -12,7 +12,7 @@ import re
 import random
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
-from app.domains.media_requests import media_request_dao
+from app.domains.media_requests import public_service as media_request_service
 from app.domains.points import point_dao
 from app.domains.users import user_dao
 from app.domains.users import user_bot_dao
@@ -3133,7 +3133,7 @@ def _submit_request(chat_id, tg_user_id, media_type, tmdb_id, season):
         poster_path = detail.get("poster_path", "")
         poster = f"https://image.tmdb.org/t/p/w500{poster_path}" if poster_path else ""
 
-        submit_result = media_request_dao.submit_single_media_request(
+        submit_result = media_request_service.submit_single_media_request(
             uid,
             uname,
             int(tmdb_id),
@@ -3213,7 +3213,7 @@ def cmd_myrequests(chat_id, tg_user_id, msg_id=None):
     
     uid = binding['emby_user_id']
     try:
-        rows = media_request_dao.list_user_recent_requests(uid)
+        rows = media_request_service.list_user_recent_requests(uid)
         if not rows:
             _reply(chat_id, "📋 <b>我的求片</b>\n\n暂无求片记录",
                   reply_markup={"inline_keyboard": [[{"text": "🎬 去求片", "callback_data": "ub_menu_request"}, {"text": "🔙 主菜单", "callback_data": "ub_back_menu"}]]}, msg_id=msg_id)
