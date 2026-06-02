@@ -97,7 +97,7 @@ class EmbyRestartPlugin(PluginBase):
         last_check_minute = -1
         last_cron_check = None  # 🔥 cron 模式上次检查时间
         
-        while self.scheduler_running:
+        while not self._stop_event.is_set():
             try:
                 now = datetime.datetime.now()
                 current_minute = now.hour * 60 + now.minute

@@ -155,7 +155,7 @@ class ViewReportPlugin(PluginBase):
 
     def _scheduler_loop(self):
         """调度循环 - 每分钟检查一次"""
-        while self.scheduler_running:
+        while not self._stop_event.is_set():
             try:
                 now = datetime.datetime.now()
                 now_str = now.strftime("%Y-%m-%d %H:%M")

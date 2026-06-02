@@ -108,6 +108,15 @@ def get_enabled_plugins() -> List[PluginBase]:
     return [p for p in _registry.values() if p.enabled]
 
 
+def disable_enabled_plugins() -> None:
+    """Disable currently enabled plugin instances without changing persisted state."""
+    for plugin in list(get_enabled_plugins()):
+        try:
+            plugin.disable()
+        except Exception as e:
+            logger.error(f"停止插件 {plugin.id} 失败: {e}")
+
+
 def set_plugin_enabled(plugin_id: str, enabled: bool) -> bool:
     plugin = _registry.get(plugin_id)
     if not plugin:

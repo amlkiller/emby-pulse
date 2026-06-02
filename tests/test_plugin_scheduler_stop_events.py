@@ -210,6 +210,37 @@ def test_event_bus_unsubscribe_is_idempotent():
         event_bus.executor.shutdown(wait=True)
 
 
+def test_disable_enabled_plugins_invokes_enabled_plugin_disable_hooks(monkeypatch):
+    import app.plugins as plugins
+
+    class FakePlugin:
+        def __init__(self, plugin_id, enabled):
+            self.id = plugin_id
+            self.enabled = enabled
+            self.disable_calls = 0
+
+        def disable(self):
+            self.disable_calls += 1
+            self.enabled = False
+
+    enabled_plugin = FakePlugin("enabled", True)
+    disabled_plugin = FakePlugin("disabled", False)
+    monkeypatch.setattr(
+        plugins,
+        "_registry",
+        {
+            enabled_plugin.id: enabled_plugin,
+            disabled_plugin.id: disabled_plugin,
+        },
+    )
+
+    plugins.disable_enabled_plugins()
+    plugins.disable_enabled_plugins()
+
+    assert enabled_plugin.disable_calls == 1
+    assert disabled_plugin.disable_calls == 0
+
+
 def test_season_poster_webhook_subscription_is_idempotent_and_reversible(monkeypatch):
     class FakeBus:
         def __init__(self):
