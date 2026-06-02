@@ -1595,3 +1595,36 @@ Hardened report top-query and dashboard cache numeric settings to use the shared
 ### Next Steps
 
 - None - task complete
+
+
+## Session 108: User bot registration settings contract convergence
+
+**Date**: 2026-06-03
+**Task**: User bot registration settings contract convergence
+**Branch**: `main`
+
+### Summary
+
+Hardened user bot registration-related settings with canonical quota and route modes, bounded registration integers, normalized writes, focused contract tests, registration concurrency tests, and full-suite verification.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `961325d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
