@@ -269,3 +269,36 @@ Moved media request gap admin checks off private users auth imports, routed them
 ### Next Steps
 
 - None - task complete
+
+
+## Session 68: Notification notify rules public auth facade boundary
+
+**Date**: 2026-06-02
+**Task**: Notification notify rules public auth facade boundary
+**Branch**: `main`
+
+### Summary
+
+Moved notification mute-rule admin checks off private users auth imports, routed them through the users public facade, and added import-boundary plus representative authorization regression tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e887847` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
