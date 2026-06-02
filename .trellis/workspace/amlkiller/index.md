@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 105
+- **Total Sessions**: 106
 - **Last Active**: 2026-06-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~1531 | Active |
+| `journal-2.md` | ~1564 | Active |
 | `journal-1.md` | ~1973 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 106 | 2026-06-03 | Calendar settings TTL contract convergence | `7b4df76` | `main` |
 | 105 | 2026-06-03 | DB settings typed contract convergence | `27c3ee3` | `main` |
 | 104 | 2026-06-03 | Risk settings typed contract convergence | `f3c40e0` | `main` |
 | 103 | 2026-06-03 | User bot batch flush thread lifecycle convergence | `b761d59` | `main` |

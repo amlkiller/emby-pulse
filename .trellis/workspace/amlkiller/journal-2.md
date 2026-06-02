@@ -1529,3 +1529,36 @@ Hardened DB config readers so playback data mode canonicalizes to supported mode
 ### Next Steps
 
 - None - task complete
+
+
+## Session 106: Calendar settings TTL contract convergence
+
+**Date**: 2026-06-03
+**Task**: Calendar settings TTL contract convergence
+**Branch**: `main`
+
+### Summary
+
+Hardened calendar cache TTL settings so reads and writes normalize to positive integers, added a reusable infra config coercion helper used by DB settings, documented the helper convention, and verified focused plus full tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7b4df76` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
