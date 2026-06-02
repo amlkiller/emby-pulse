@@ -1509,3 +1509,36 @@ Added a playback public facade for user play summaries, moved the keep-alive plu
 ### Next Steps
 
 - None - task complete
+
+
+## Session 46: Plugin admin auth public service boundary
+
+**Date**: 2026-06-02
+**Task**: Plugin admin auth public service boundary
+**Branch**: `main`
+
+### Summary
+
+Exposed admin checks through the users public facade, moved built-in plugin admin checks off the private users auth module, and added facade/import boundary tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0b4c173` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
