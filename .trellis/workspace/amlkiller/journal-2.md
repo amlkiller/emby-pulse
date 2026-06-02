@@ -1463,3 +1463,36 @@ Made the user bot batch-used flush daemon stop with a saved-handle lifecycle hel
 ### Next Steps
 
 - None - task complete
+
+
+## Session 104: Risk settings typed contract convergence
+
+**Date**: 2026-06-03
+**Task**: Risk settings typed contract convergence
+**Branch**: `main`
+
+### Summary
+
+Hardened risk settings readers and writers with typed defaults, boolean normalization, numeric clamping, supported violation actions, focused tests, and a spec note for typed config-reader contracts.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f3c40e0` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
