@@ -1,35 +1,11 @@
+from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
 
 
 def ensure_keep_alive_violations_table() -> None:
     with system_store.connect() as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS keep_alive_violations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id TEXT NOT NULL,
-                user_name TEXT NOT NULL,
-                year_month TEXT NOT NULL,
-                hours REAL DEFAULT 0,
-                days INTEGER DEFAULT 0,
-                min_hours REAL DEFAULT 0,
-                min_days INTEGER DEFAULT 0,
-                action TEXT DEFAULT 'warn',
-                disabled INTEGER DEFAULT 0,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(user_id, year_month)
-            )
-            """
-        )
-        try:
-            cursor.execute("ALTER TABLE keep_alive_violations ADD COLUMN action TEXT DEFAULT 'warn'")
-        except Exception:
-            pass
-        try:
-            cursor.execute("ALTER TABLE keep_alive_violations ADD COLUMN disabled INTEGER DEFAULT 0")
-        except Exception:
-            pass
+        ensure_registered_table(cursor, "keep_alive_violations")
         conn.commit()
 
 

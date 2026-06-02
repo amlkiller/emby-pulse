@@ -1,32 +1,21 @@
 import json
 from datetime import datetime
 
+from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
+
+_PLUGIN_REGISTRY_TABLES = (
+    "plugin_state",
+    "plugin_logs",
+)
 
 
 def ensure_plugin_tables() -> None:
     with system_store.connect(timeout=10) as conn:
         conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS plugin_state (
-                plugin_id TEXT PRIMARY KEY,
-                enabled INTEGER DEFAULT 0,
-                config TEXT DEFAULT '{}'
-            )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS plugin_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                plugin_id TEXT NOT NULL,
-                level TEXT DEFAULT 'info',
-                message TEXT NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
+        cursor = conn.cursor()
+        for table_name in _PLUGIN_REGISTRY_TABLES:
+            ensure_registered_table(cursor, table_name)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_plugin_logs_plugin_id ON plugin_logs(plugin_id)")
         conn.commit()
 
