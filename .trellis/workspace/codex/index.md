@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 23
+- **Total Sessions**: 24
 - **Last Active**: 2026-06-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~766 | Active |
+| `journal-1.md` | ~799 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 24 | 2026-06-03 | Remove plugin directory ensure redirects | `f5b11d7` | `Compiled` |
 | 23 | 2026-06-03 | Remove session manager initialize redirect | `6d02d34` | `Compiled` |
 | 22 | 2026-06-03 | Remove calendar service internal lifecycle redirects | `766b641` | `Compiled` |
 | 21 | 2026-06-03 | Remove bootstrap start redirect | `2ebbcd2` | `Compiled` |

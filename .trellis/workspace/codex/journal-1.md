@@ -764,3 +764,36 @@ Inlined SessionManager initialization logic into initialize(), switched internal
 ### Next Steps
 
 - None - task complete
+
+
+## Session 24: Remove plugin directory ensure redirects
+
+**Date**: 2026-06-03
+**Task**: Remove plugin directory ensure redirects
+**Branch**: `Compiled`
+
+### Summary
+
+Removed two private plugin _ensure_dir helpers that only forwarded to os.makedirs; constructors and enable hooks now ensure directories directly. Verified compile, imports, plugin-focused tests, and the full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f5b11d7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
