@@ -1359,10 +1359,6 @@ def start_media_request_services() -> None:
     start_community_cache_refresh_loop()
 
 
-def stop_media_request_services() -> None:
-    stop_community_cache_refresh_loop()
-
-
 @router.post("/api/requests/refresh_cache")
 def refresh_community_cache_api(request: Request):
     """手动刷新用户社区首页缓存（管理员接口）"""

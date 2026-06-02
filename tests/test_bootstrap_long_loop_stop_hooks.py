@@ -59,7 +59,7 @@ def test_risk_monitor_stop_resets_state_and_allows_restart(monkeypatch):
 def test_media_request_refresh_loop_stop_resets_state_and_allows_restart(monkeypatch):
     from app.domains.media_requests import router
 
-    router.stop_media_request_services()
+    router.stop_community_cache_refresh_loop()
     calls = []
     monkeypatch.setattr(router, "_refresh_community_cache", lambda: calls.append("refresh"))
 
@@ -68,14 +68,14 @@ def test_media_request_refresh_loop_stop_resets_state_and_allows_restart(monkeyp
     assert router._community_refresh_started is True
     assert router._community_refresh_thread is not None
 
-    router.stop_media_request_services()
+    router.stop_community_cache_refresh_loop()
 
     assert router._community_refresh_started is False
     assert router._community_refresh_thread is None
     assert calls == []
 
     router.start_community_cache_refresh_loop()
-    router.stop_media_request_services()
+    router.stop_community_cache_refresh_loop()
 
     assert router._community_refresh_started is False
 

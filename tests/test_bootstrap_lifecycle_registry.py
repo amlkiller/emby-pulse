@@ -69,7 +69,7 @@ def test_bootstrap_services_use_registry_and_skip_duplicate_starts(monkeypatch):
     monkeypatch.setattr(services, "start_dashboard_cache_tasks", record("dashboard-cache"))
     monkeypatch.setattr(services, "stop_dashboard_cache_tasks", record("stop:dashboard-cache"))
     monkeypatch.setattr(services, "start_media_request_services", record("media-requests"))
-    monkeypatch.setattr(services, "stop_media_request_services", record("stop:media-requests"))
+    monkeypatch.setattr(services, "stop_community_cache_refresh_loop", record("stop:media-requests"))
     monkeypatch.setattr(services, "start_calendar_service", record("calendar"))
     monkeypatch.setattr(services, "stop_calendar_service", record("stop:calendar"))
     monkeypatch.setattr(services, "start_notifications_router_services", record("notifications-router"))

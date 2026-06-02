@@ -10,7 +10,7 @@ from app.domains.notifications.router import start_notifications_router_services
 from app.domains.playback.dedupe import init_dedupe_db
 from app.domains.risk.risk_service import start_risk_monitor, stop_risk_monitor
 from app.domains.media_requests.gaps import start_gap_services, stop_gap_services
-from app.domains.media_requests.router import start_media_request_services, stop_media_request_services
+from app.domains.media_requests.router import start_media_request_services, stop_community_cache_refresh_loop
 from app.domains.system.pro import ensure_pro_schema
 from app.domains.system.tasks import start_system_task_services, stop_system_task_services
 from app.domains.users.auth import start_auth_domain_services, stop_auth_domain_services
@@ -70,7 +70,7 @@ def build_bootstrap_registry(app, request_port: int) -> BootstrapServiceRegistry
     registry.register("user-portal", lambda: start_user_portal_thread(app, request_port), stop_user_portal_thread)
     registry.register("risk-monitor", start_risk_monitor, stop_risk_monitor)
     registry.register("dashboard-cache", start_dashboard_cache_tasks, stop_dashboard_cache_tasks)
-    registry.register("media-requests", start_media_request_services, stop_media_request_services)
+    registry.register("media-requests", start_media_request_services, stop_community_cache_refresh_loop)
     registry.register("calendar", start_calendar_service, stop_calendar_service)
     registry.register("notifications-router", start_notifications_router_services)
     registry.register("calendar-notify", start_calendar_notify_services, stop_calendar_notify_services)
