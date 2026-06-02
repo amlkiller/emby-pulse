@@ -4,7 +4,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from app.domains.playback.calendar_service import calendar_service
 from app.core.config import templates
-from app.domains.system import public_service as system_service
+from app.domains.system.views import get_common_vars
 from app.domains.users import public_service as user_service
 from app.infra.config.calendar_settings import get_calendar_public_url, set_calendar_cache_ttl
 
@@ -35,7 +35,7 @@ async def calendar_page(request: Request):
     public_url = get_calendar_public_url()
     if public_url and public_url.endswith('/'): public_url = public_url[:-1]
 
-    return templates.TemplateResponse("calendar.html", system_service.get_common_vars(request, "calendar", {
+    return templates.TemplateResponse("calendar.html", get_common_vars(request, "calendar", {
         "emby_public_url": public_url,
         "is_pro": _check_pro_status()
     }))

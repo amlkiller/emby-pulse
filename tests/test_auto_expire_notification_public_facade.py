@@ -24,7 +24,7 @@ def test_auto_expire_user_reminder_uses_notification_public_facade(monkeypatch):
 
     calls = []
     monkeypatch.setattr(
-        module.user_service,
+        module.user_bot_dao,
         "get_tg_user_id_by_emby_id",
         lambda user_id: calls.append(("lookup", user_id)) or "tg-1",
     )
@@ -53,7 +53,7 @@ def test_auto_expire_user_reminder_skips_when_user_bot_stopped(monkeypatch):
 
     calls = []
     monkeypatch.setattr(
-        module.user_service,
+        module.user_bot_dao,
         "get_tg_user_id_by_emby_id",
         lambda user_id: calls.append(("lookup", user_id)) or "tg-1",
     )

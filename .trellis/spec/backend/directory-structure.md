@@ -89,6 +89,13 @@ Do not deepen cross-domain imports into private DAO/query modules. If one domain
 needs another domain's behavior, prefer a public service function, a narrow
 facade, or an event boundary.
 
+Public service modules are semantic boundaries, not re-export bins. Keep a
+`public_service.py` function only when it adds boundary value such as permission
+policy, cache ownership, lazy runtime lookup, exception handling, normalization,
+or cross-call orchestration. If a function only forwards arguments to a DAO,
+query module, service object, or view helper without additional behavior, remove
+the wrapper and point callers at the module that performs the work.
+
 Foundation layers must not import concrete domains. `app/core/` and `app/infra/`
 can expose shared stores, query helpers, and compatibility functions, but they
 must not import `app.domains.*`. If a helper is needed by both infra/core and a

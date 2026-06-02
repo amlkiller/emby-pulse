@@ -9,7 +9,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 
-def test_users_router_does_not_import_private_system_invitation_dao():
+def test_users_router_imports_invitation_dao_directly_without_system_public_service():
     path = _REPO_ROOT / "app/domains/users/router.py"
     rel_path = path.relative_to(_REPO_ROOT).as_posix()
     tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(rel_path))
@@ -18,21 +18,21 @@ def test_users_router_does_not_import_private_system_invitation_dao():
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
             imported_names = {alias.name for alias in node.names}
-            if node.module == "app.domains.system.invitation_dao":
+            if node.module == "app.domains.system.public_service":
                 violations.append(f"{rel_path}:{node.lineno}")
             if node.module == "app.domains.system" and (
-                "invitation_dao" in imported_names or "*" in imported_names
+                "public_service" in imported_names or "*" in imported_names
             ):
                 violations.append(f"{rel_path}:{node.lineno}")
         elif isinstance(node, ast.Import):
             imported_modules = {alias.name for alias in node.names}
-            if "app.domains.system.invitation_dao" in imported_modules:
+            if "app.domains.system.public_service" in imported_modules:
                 violations.append(f"{rel_path}:{node.lineno}")
 
     assert violations == []
 
 
-def test_get_invites_denies_non_admin_before_system_service_side_effects(monkeypatch):
+def test_get_invites_denies_non_admin_before_invitation_dao_side_effects(monkeypatch):
     from app.domains.users import router
 
     request = SimpleNamespace(session={"user": {"Id": "u1"}})
@@ -42,16 +42,16 @@ def test_get_invites_denies_non_admin_before_system_service_side_effects(monkeyp
         calls.append(("is_admin_user", seen_request))
         return False
 
-    def fail_system_service_call(*args, **kwargs):
-        raise AssertionError("system_service should not be called without admin permission")
+    def fail_invitation_dao_call(*args, **kwargs):
+        raise AssertionError("invitation_dao should not be called without admin permission")
 
     monkeypatch.setattr(router, "is_admin_user", fake_is_admin_user)
     monkeypatch.setattr(
         router,
-        "system_service",
+        "invitation_dao",
         SimpleNamespace(
-            list_admin_invitations=fail_system_service_call,
-            list_invitation_usage_stats=fail_system_service_call,
+            list_admin_invitations=fail_invitation_dao_call,
+            list_invitation_usage_stats=fail_invitation_dao_call,
         ),
     )
 
@@ -61,7 +61,7 @@ def test_get_invites_denies_non_admin_before_system_service_side_effects(monkeyp
     assert calls == [("is_admin_user", request)]
 
 
-def test_get_invites_admin_success_uses_system_service_and_preserves_response(monkeypatch):
+def test_get_invites_admin_success_uses_invitation_dao_and_preserves_response(monkeypatch):
     from app.domains.users import router
 
     request = SimpleNamespace(session={"user": {"Id": "admin"}})
@@ -106,7 +106,7 @@ def test_get_invites_admin_success_uses_system_service_and_preserves_response(mo
     monkeypatch.setattr(router, "get_user_portal_url", fake_get_user_portal_url)
     monkeypatch.setattr(
         router,
-        "system_service",
+        "invitation_dao",
         SimpleNamespace(
             list_admin_invitations=fake_list_admin_invitations,
             list_invitation_usage_stats=fake_list_invitation_usage_stats,

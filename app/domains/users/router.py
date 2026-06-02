@@ -2,7 +2,7 @@ from fastapi import APIRouter, Request, Response, UploadFile, File, Form, Depend
 from pydantic import BaseModel
 from typing import Optional, List
 from app.infra.db import audit_dao
-from app.domains.system import public_service as system_service
+from app.domains.system import invitation_dao
 from app.domains.users import user_dao
 from app.domains.users import user_bot_dao
 from app.infra.clients.media_server_client import media_api
@@ -797,7 +797,7 @@ def api_gen_invite(data: InviteGenModelLocal, request: Request):
         req_free_count = data.req_free_count if data.req_free_count is not None else -1
         codes = [secrets.token_hex(4) for _ in range(count)]
         created_at = datetime.datetime.now().isoformat()
-        system_service.create_invitation_codes(
+        invitation_dao.create_invitation_codes(
             codes,
             data.days,
             created_at,
@@ -831,7 +831,7 @@ def api_get_invites(request: Request, code_type: str = "all"):
     if not request.session.get("user"): return {"status": "error"}
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
-        rows = system_service.list_admin_invitations(code_type)
+        rows = invitation_dao.list_admin_invitations(code_type)
         data = [dict(r) for r in rows] if rows else []
         # 添加邀请链接
         portal_url = get_user_portal_url().rstrip('/')
@@ -841,7 +841,7 @@ def api_get_invites(request: Request, code_type: str = "all"):
 
         # 计算统计数据(按类型分组)
         stats = {"all": {"total": 0, "used": 0, "unused": 0}, "register": {"total": 0, "used": 0, "unused": 0}, "renew": {"total": 0, "used": 0, "unused": 0}}
-        all_rows = system_service.list_invitation_usage_stats()
+        all_rows = invitation_dao.list_invitation_usage_stats()
         if all_rows:
             for r in all_rows:
                 t = r['type'] or 'register'
@@ -864,7 +864,7 @@ def api_export_invites(request: Request, code_type: str = "all"):
     if not request.session.get("user"): return {"status": "error"}
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
-        rows = system_service.list_invitation_export_rows(code_type)
+        rows = invitation_dao.list_invitation_export_rows(code_type)
         if not rows:
             return {"status": "error", "message": "无数据"}
         portal_url = get_user_portal_url().rstrip('/')
@@ -892,7 +892,7 @@ def api_manage_invites_batch(data: InviteBatchModelLocal, request: Request):
         ip_address = get_client_ip(request)
 
         if data.action == "delete":
-            system_service.delete_invitation_codes(data.codes)
+            invitation_dao.delete_invitation_codes(data.codes)
             # 记录审计日志
             add_audit_log(
                 admin_id=admin_user.get("id", ""),

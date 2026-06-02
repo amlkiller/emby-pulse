@@ -13,7 +13,8 @@ from app.plugins.base import PluginBase
 from app.domains.users import public_service as user_service
 from app.infra.clients.media_server_client import media_api
 from app.infra.config.user_visibility_settings import get_hidden_users
-from app.domains.reports import public_service as report_service
+from app.domains.reports import report_queries
+from app.domains.reports import report_service as report_generator_service
 
 logger = logging.getLogger("uvicorn")
 
@@ -489,15 +490,15 @@ class ViewReportPlugin(PluginBase):
             content_limit = min(content_limit, 10)
         
         # 总播放量（排除指定类型和黑名单用户）
-        total_plays = report_service.count_report_plays(report_where, report_params)
+        total_plays = report_queries.count_report_plays(report_where, report_params)
         
         # 总播放时长（排除指定类型和黑名单用户）
-        total_duration = report_service.sum_report_duration(report_where, report_params)
+        total_duration = report_queries.sum_report_duration(report_where, report_params)
         # 🔥 使用标准四舍五入（与 JavaScript toFixed 一致）
         total_hours = round(total_duration / 3600, 1)
         
         # 活跃用户数（排除指定类型和黑名单用户）
-        active_users = report_service.count_report_distinct_users(report_where, report_params)
+        active_users = report_queries.count_report_distinct_users(report_where, report_params)
         
         # 日均播放量
         avg_daily_plays = round(total_plays / days, 1) if days > 0 else total_plays
@@ -506,7 +507,7 @@ class ViewReportPlugin(PluginBase):
         user_map = self._get_user_map()
         
         # 活跃用户排行（排除指定类型和黑名单用户）
-        top_users_res = report_service.list_report_top_users(report_where, report_params, users_limit)
+        top_users_res = report_queries.list_report_top_users(report_where, report_params, users_limit)
         top_users_list = []
         for i, u in enumerate(top_users_res or []):
             # 🔥 使用批量获取的映射表
@@ -521,7 +522,7 @@ class ViewReportPlugin(PluginBase):
         # 热门内容 - 区分剧集和电影（按时长排序，排除指定类型和黑名单用户）
         # 🔥 增加查询数量，为媒体库过滤预留空间
         query_limit = max(200, content_limit * 10)
-        all_content = report_service.list_report_content_items(report_where, report_params, query_limit)
+        all_content = report_queries.list_report_content_items(report_where, report_params, query_limit)
         
         # 🔥 获取排除的媒体库配置
         exclude_libraries = config.get('exclude_libraries', [])
@@ -683,7 +684,7 @@ class ViewReportPlugin(PluginBase):
     def _generate_poster(self, report_type: str, stats: dict, theme: str = None):
         """生成海报图片 - 支持主题选择"""
         try:
-            if not report_service.has_pillow_support():
+            if not report_generator_service.HAS_PIL:
                 return None
             
             config = self._get_config()
@@ -710,7 +711,7 @@ class ViewReportPlugin(PluginBase):
             tv_list = stats.get('tv_list_raw', [])
             movie_list = stats.get('movie_list_raw', [])
             
-            poster = report_service.generate_daily_poster(period, tv_list, movie_list, theme)
+            poster = report_generator_service.report_gen.generate_daily_poster(period, tv_list, movie_list, theme)
             return poster
         except Exception as e:
             logger.error(f"[{self.name}] 生成海报失败: {e}")
@@ -1059,7 +1060,7 @@ async def preview_poster(request: Request, report_type: str, theme: str = 'cinem
     if report_type not in ['daily', 'weekly', 'monthly']:
         return {"success": False, "message": "无效的报告类型"}
     try:
-        if not report_service.has_pillow_support():
+        if not report_generator_service.HAS_PIL:
             return {"success": False, "message": "Pillow 未安装"}
         
         # 使用统一数据源：先查询统计数据
@@ -1084,7 +1085,7 @@ async def preview_poster(request: Request, report_type: str, theme: str = 'cinem
         tv_list = stats.get('tv_list_raw', [])
         movie_list = stats.get('movie_list_raw', [])
         
-        poster = report_service.generate_daily_poster(period, tv_list, movie_list, theme)
+        poster = report_generator_service.report_gen.generate_daily_poster(period, tv_list, movie_list, theme)
         if poster:
             return Response(content=poster.read(), media_type="image/jpeg")
         return {"success": False, "message": "海报生成失败"}
