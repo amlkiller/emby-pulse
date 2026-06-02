@@ -1344,3 +1344,36 @@ Added a narrow public notification service facade, migrated external domain and 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 41: Users public service facade
+
+**Date**: 2026-06-02
+**Task**: Users public service facade
+**Branch**: `main`
+
+### Summary
+
+Added a narrow public users service facade, migrated selected external domains and plugins away from direct users DAO/router cache imports, preserved cache and DAO call behavior, fixed a touched-file undefined user_bot_settings reference, added delegation and boundary tests, and verified focused checks plus full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `61b8813` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
