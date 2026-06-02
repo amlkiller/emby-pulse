@@ -672,8 +672,7 @@ async def submit_media_request(request: Request):
                 ]}
             
             # 🔥 使用 notify_rules 配置控制通知渠道
-            from app.domains.notifications.notify_admin import get_notify_rule
-            rule = get_notify_rule('request_new')
+            rule = notification_service.get_notify_rule('request_new')
             if rule and rule.get('enabled'):
                 channels = rule.get('channels', [])
                 platform = "none"
@@ -847,8 +846,7 @@ def batch_manage_action(data: BulkAdminActionModel, request: Request):
     # 🔥 批量通知用户（审批通过、入库完成、拒绝、手动接单、影巢转存完成）
     if data.action in ["approve", "finish", "reject", "manual", "hdhive_done"]:
         try:
-            from app.domains.notifications.notify_admin import get_notify_rule
-            rule = get_notify_rule('request_status')
+            rule = notification_service.get_notify_rule('request_status')
             logger.info(f"[状态变更通知] action={data.action}, rule={rule}")
             
             if rule and rule.get('enabled') and 'tg_bot' in rule.get('channels', []):
@@ -1012,8 +1010,7 @@ def submit_feedback(data: FeedbackSubmitModel, request: Request):
     
     # 🔥 使用 notify_rules 配置控制通知渠道
     try:
-        from app.domains.notifications.notify_admin import get_notify_rule
-        rule = get_notify_rule('feedback_new')
+        rule = notification_service.get_notify_rule('feedback_new')
         
         if rule and rule.get('enabled'):
             channels = rule.get('channels', [])
@@ -2059,10 +2056,7 @@ async def user_community_register(data: UserRegisterModel, request: Request):
             # 8. 发送通知
             try:
                 from app.infra.db.notification_dao import add_sys_notification
-                from app.domains.notifications import public_service as notification_service
-                from app.domains.notifications.notify_admin import get_notify_rule
-                
-                rule = get_notify_rule('user_register')
+                rule = notification_service.get_notify_rule('user_register')
                 days_display = "永久" if (days == -1 or days == 0 or days >= 36500) else f"{days} 天"
                 msg = f"🎟️ <b>新用户注册</b>\n\n👤 {safe_name}\n📅 有效期：{days_display}\n🔗 邀请码：{data.code}\n📱 注册渠道：用户社区"
                 
