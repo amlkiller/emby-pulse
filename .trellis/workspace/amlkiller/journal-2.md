@@ -1,0 +1,40 @@
+# Journal - amlkiller (Part 2)
+
+> Continuation from `journal-1.md` (archived at ~2000 lines)
+> Started: 2026-06-02
+
+---
+
+
+
+## Session 60: System tasks public auth facade boundary
+
+**Date**: 2026-06-02
+**Task**: System tasks public auth facade boundary
+**Branch**: `main`
+
+### Summary
+
+Moved system task route admin checks off private users auth imports, routed them through the users public facade, and added import-boundary plus task config/translation/start authorization tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4d65354` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
