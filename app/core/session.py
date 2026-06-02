@@ -163,19 +163,16 @@ class SessionManager:
         self._modified_sessions: Dict[str, Dict[str, Any]] = {}
         self._initialized = False
 
-    def _ensure_init(self):
+    def initialize(self):
         if not self._initialized:
             ensure_session_table()
             self._initialized = True
-
-    def initialize(self):
-        self._ensure_init()
 
     def mark_modified(self, session_id: str, data: Dict[str, Any]):
         self._modified_sessions[session_id] = data
 
     def get_or_create_session(self, session_id: Optional[str]) -> SessionDict:
-        self._ensure_init()
+        self.initialize()
         if session_id:
             data = get_session(session_id)
             if data is not None:
