@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Request
-from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.domains.users import public_service as user_service  # 🔒 引入管理员权限检查
 from pydantic import BaseModel
 import json
 from app.domains.risk.risk_dao import (
@@ -44,7 +44,7 @@ def get_online_status(request: Request):
     # 🔒 安全检查：必须管理员
     if not request.session.get("user"):
         return {"error": "未授权"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"error": "需要管理员权限"}
     
     if not media_api.host or not media_api.api_key: return {"error": "未配置 Emby 服务器信息"}
@@ -129,7 +129,7 @@ def api_kick_session(req: ActionRequest, request: Request):
     # 🔒 安全检查：必须管理员
     if not request.session.get("user"):
         raise HTTPException(status_code=401, detail="未授权")
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
     # 1. 发送常规 Stop 指令 (给官方客户端面子)
@@ -148,7 +148,7 @@ def api_ban_user(req: ActionRequest, request: Request):
     # 🔒 安全检查：必须管理员
     if not request.session.get("user"):
         raise HTTPException(status_code=401, detail="未授权")
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
     if ban_user(req.user_id):
@@ -162,7 +162,7 @@ def api_unban_user(req: ActionRequest, request: Request):
     # 🔒 安全检查：必须管理员
     if not request.session.get("user"):
         raise HTTPException(status_code=401, detail="未授权")
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
     if unban_user(req.user_id):
@@ -176,7 +176,7 @@ def get_user_status(user_id: str, request: Request):
     # 🔒 安全检查：必须管理员
     if not request.session.get("user"):
         return {"error": "未授权"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"error": "需要管理员权限"}
     
     try:
@@ -198,7 +198,7 @@ def get_risk_logs(request: Request):
     # 🔒 安全检查：必须管理员
     if not request.session.get("user"):
         return {"error": "未授权"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"error": "需要管理员权限"}
     
     try:
@@ -212,7 +212,7 @@ def get_risk_config(request: Request):
     # 🔒 安全检查：必须管理员
     if not request.session.get("user"):
         return {"error": "未授权"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"error": "需要管理员权限"}
     
     return {
@@ -228,7 +228,7 @@ def update_risk_config(req: ConfigRequest, request: Request):
     # 🔒 安全检查：必须管理员
     if not request.session.get("user"):
         raise HTTPException(status_code=401, detail="未授权")
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
     set_risk_control_enabled(req.enable_risk_control)
@@ -243,7 +243,7 @@ def get_risk_summary(request: Request):
     # 🔒 安全检查：必须管理员
     if not request.session.get("user"):
         return {"error": "未授权"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"error": "需要管理员权限"}
     
     try:
