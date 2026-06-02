@@ -1892,3 +1892,36 @@ Extracted lottery table bootstrap, ticket purchase/listing, draw context/result 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 117: Refactor points red packet DAO
+
+**Date**: 2026-06-03
+**Task**: Refactor points red packet DAO
+**Branch**: `main`
+
+### Summary
+
+Extracted red-packet log listing, message-id persistence, packet creation, and packet grabbing into app/domains/points/red_packet_dao.py while preserving point_dao compatibility exports. Verified compile/import checks, focused point tests, and the full test suite from the completed slice verification.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `63ef6aa` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
