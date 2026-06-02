@@ -769,3 +769,37 @@ Routed notification bot stats poster generation through reports.public_service, 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 83: Merge Compiled wrapper cleanup
+
+**Date**: 2026-06-03
+**Task**: Merge Compiled wrapper cleanup
+**Branch**: `main`
+
+### Summary
+
+Merged Compiled into main using Compiled's wrapper-removal direction, resolved conflicts by deleting redundant playback/reports/system public-service wrappers, redirected remaining callsites to real implementation modules, verified compile/import checks and full pytest, then archived the merged invitation DAO replacement task.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8d3361f` | (see git log) |
+| `9f3cd0a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
