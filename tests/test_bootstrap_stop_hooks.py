@@ -64,7 +64,7 @@ def test_auth_lock_cleanup_stop_resets_state_and_allows_restart(monkeypatch):
 def test_session_cleanup_stop_resets_state_and_allows_restart(monkeypatch):
     from app.core import session
 
-    session.stop_session_services()
+    session.stop_session_cleanup_loop()
     calls = []
     monkeypatch.setattr(session, "dao_cleanup_expired_sessions", lambda now: calls.append(now) or 0)
 
@@ -72,12 +72,12 @@ def test_session_cleanup_stop_resets_state_and_allows_restart(monkeypatch):
     assert len(calls) == 1
     assert session._session_cleanup_started is True
 
-    session.stop_session_services()
+    session.stop_session_cleanup_loop()
     assert session._session_cleanup_started is False
     assert session._session_cleanup_thread is None
 
     session.start_session_cleanup_loop(interval_seconds=600)
-    session.stop_session_services()
+    session.stop_session_cleanup_loop()
 
     assert len(calls) == 2
 

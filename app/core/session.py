@@ -204,7 +204,3 @@ session_manager = SessionManager()
 def start_session_services() -> None:
     session_manager.initialize()
     start_session_cleanup_loop()
-
-
-def stop_session_services() -> None:
-    stop_session_cleanup_loop()
