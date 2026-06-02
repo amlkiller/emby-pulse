@@ -8,7 +8,7 @@ from app.domains.system.pro_license_dao import (
     replace_license,
 )
 from app.core.license import get_machine_id
-from app.domains.users.auth import is_admin_user
+from app.domains.users import public_service as user_service
 
 logger = logging.getLogger("uvicorn")
 router = APIRouter()
@@ -29,7 +29,7 @@ class ActivateModel(BaseModel):
 @router.post("/api/pro/activate")
 async def activate_pro(data: ActivateModel, request: Request):
     """激活 Pro（本地直通）"""
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
 
     key = data.license_key.strip()
@@ -49,7 +49,7 @@ async def activate_pro(data: ActivateModel, request: Request):
 @router.get("/api/pro/status")
 async def get_pro_status(request: Request):
     """获取 Pro 状态"""
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "权限不足"}
 
     try:

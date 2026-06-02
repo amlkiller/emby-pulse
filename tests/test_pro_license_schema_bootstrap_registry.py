@@ -118,7 +118,7 @@ def test_pro_status_route_keeps_existing_device_payload(monkeypatch, tmp_path):
     _use_temp_system_db(monkeypatch, tmp_path)
     pro_license_dao.ensure_pro_schema()
     pro_license_dao.replace_license("abcdef123456", "machine-a")
-    monkeypatch.setattr(pro, "is_admin_user", lambda request: True)
+    monkeypatch.setattr(pro.user_service, "is_admin_user", lambda request: True)
 
     import asyncio
 
