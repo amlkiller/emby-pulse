@@ -12,6 +12,7 @@ import logging
 import re
 from typing import Dict, List, Tuple, Optional
 from app.core.config import DB_PATH, SYSTEM_DB_PATH
+from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.schema_registry import (
     SYSTEM_TABLES, PLAYBACK_TABLES, TABLE_SCHEMAS, TABLE_ALTERS,
     PLAYBACK_SCHEMA, CORE_TABLES
@@ -477,7 +478,7 @@ def migrate_tables(
                 
                 # 确保目标表存在
                 if table in TABLE_SCHEMAS:
-                    new_cursor.execute(TABLE_SCHEMAS[table])
+                    ensure_registered_table(new_cursor, table)
                 else:
                     # 使用源表结构创建
                     new_cursor.execute(schema_row[0])

@@ -404,6 +404,7 @@ tokens = list_api_tokens(user_id)
 - `app.infra.db.schema_bootstrap.ensure_playback_table(cursor, only_columns=None)` is the shared helper for registry-backed `PlaybackActivity` creation from `PLAYBACK_SCHEMA` plus compatible `TABLE_ALTERS["PlaybackActivity"]`.
 - `app.core.db_schemas` is only a compatibility re-export for older imports during migration.
 - `app.infra.db.migration_service` is the new boundary for migration, health, backup, restore, and database-tool deep-check orchestration and currently delegates to existing implementations.
+- `app.infra.db.db_manager.migrate_tables()` must create or upgrade registry-owned migration target tables through `schema_bootstrap.ensure_registered_table(...)` so migrated tables receive registered compatible columns and simple indexes before data copy.
 
 ## Scenario: Schema Metadata Registry Boundary
 
@@ -428,6 +429,7 @@ tokens = list_api_tokens(user_id)
 - Repair helpers for registry-owned tables must create tables from `TABLE_SCHEMAS` / `PLAYBACK_SCHEMA` and apply compatible entries from `TABLE_ALTERS`; do not keep a second handwritten DDL copy in the repair path.
 - Small bootstrap helpers for registry-owned system tables must also create tables from `TABLE_SCHEMAS` and apply compatible entries from `TABLE_ALTERS`; do not keep local `CREATE TABLE` / registry-owned `ALTER TABLE` copies in DAO bootstrap paths.
 - Small bootstrap helpers for `PlaybackActivity`, including compatibility startup and local webhook/bot fallback writes, must use `ensure_playback_table(...)`; do not keep local `PLAYBACK_SCHEMA` copies or local playback `ALTER TABLE` loops.
+- Migration target creation for registry-owned system tables must use `ensure_registered_table(...)`; raw `TABLE_SCHEMAS[table]` execution skips registered `TABLE_ALTERS` and `TABLE_INDEXES` and can leave migrated destination schemas behind startup/repair schemas.
 - If more than one DAO needs to ensure a registry-owned table or column, use `schema_bootstrap.ensure_registered_table(...)` instead of copying PRAGMA/ALTER loops or importing another domain DAO for its bootstrap helper.
 - This boundary does not authorize behavior changes to DDL, ALTER order, migration mode, or repair semantics.
 
@@ -465,6 +467,7 @@ tokens = list_api_tokens(user_id)
 - New local plugin-private table DDL in `app.plugins.temp_account.temp_account_dao`, `app.plugins.season_poster_updater.season_poster_dao`, `app.plugins.emby_restart.emby_restart_dao`, or `app.plugins.smart_collections.smart_collection_dao` for registry-owned `temp_accounts`, `temp_account_password_history`, `season_poster_logs`, `season_poster_cache`, `emby_restart_history`, `smart_collections`, `smart_collection_items`, or `smart_collection_sync_logs` -> fail focused plugin-private bootstrap/schema registry tests.
 - New local `ALTER TABLE temp_accounts ADD COLUMN` in `app.plugins.temp_account.temp_account_dao.ensure_temp_account_tables()` -> fail focused plugin-private bootstrap/schema registry tests; compatible optional columns belong in `TABLE_ALTERS["temp_accounts"]`.
 - New local `PlaybackActivity` table DDL or playback `ALTER TABLE ... ADD COLUMN` in `app.infra.db.local_playback_store` -> fail focused local playback bootstrap/schema registry tests; webhook and bot fallback writes must use `ensure_playback_table(...)`.
+- Raw `new_cursor.execute(TABLE_SCHEMAS[table])` in `app.infra.db.db_manager.migrate_tables()` -> fail focused migration/schema registry tests; migration target setup must apply registered alters and indexes through `ensure_registered_table(...)`.
 - New cross-domain import solely to reuse a schema bootstrap helper -> fail architecture review; move the helper to `app.infra.db.schema_bootstrap` or another infra/shared boundary.
 - Need a new schema metadata value -> add/export it through `schema_registry`, then update focused tests.
 - Need a new simple table index -> add it to `TABLE_INDEXES` in `app.infra.db.schema_registry` and let `schema_bootstrap.ensure_registered_table(...)` / `ensure_playback_table(...)` apply it; do not add local `CREATE INDEX` execution in DAOs or `app.infra.db.database`.
@@ -498,6 +501,7 @@ tokens = list_api_tokens(user_id)
 - Good: `app.infra.db.database.init_db()` routes ALTER-sensitive registry-owned compatibility tables such as `invitations`, `sys_license`, and `tg_user_bindings` through `_REGISTRY_COMPAT_SENSITIVE_INIT_TABLES` plus `schema_bootstrap.ensure_registered_table(...)`, relying on `TABLE_ALTERS` for compatible optional columns.
 - Good: `app.infra.db.database.init_db()` routes compatibility `sys_notifications` creation through `schema_bootstrap.ensure_registered_table(...)` so registered columns such as `is_cleared` are applied consistently.
 - Good: `app.infra.db.database.init_db()` routes late message-center system table compatibility initialization for `msg_conversations`, `msg_items`, and `msg_notify_block` through a small table list plus `schema_bootstrap.ensure_registered_table(...)`.
+- Good: `app.infra.db.db_manager.migrate_tables()` uses `schema_bootstrap.ensure_registered_table(new_cursor, table)` for registry-owned destination tables before copying rows, preserving migration result payloads while applying registered columns and indexes.
 - Good: `app.domains.points.point_dao.ensure_points_schema()` creates registry-owned `point_logs`, `point_config`, lottery, scratch-card, check-in, red-packet, transfer, robbery, and PK tables through `schema_bootstrap.ensure_registered_table(...)`, preserves default config insertion, and relies on `TABLE_ALTERS` for compatible optional columns such as `scratch_cards.chat_id`, `scratch_cards.message_id`, `point_red_packets.message_id`, and PK invitation Telegram/message columns.
 - Good: `app.domains.notifications.calendar_notify_dao.ensure_calendar_notify_config_table()` uses `schema_bootstrap.ensure_registered_table(...)` for `calendar_notify_config` and keeps only the singleton default-row insert local.
 - Good: `app.domains.pwa.pwa_dao` creates registry-owned `pwa_config` and `user_pwa_icons` tables through `schema_bootstrap.ensure_registered_table(...)` and keeps config/icon reads and writes local to the DAO.
@@ -542,6 +546,7 @@ tokens = list_api_tokens(user_id)
 - Focused PWA bootstrap test: run `ensure_pwa_config_table()` and `ensure_user_pwa_icons_table()` against a temporary database and assert registry-backed table creation, config/icon DAO smoke paths, and no local duplicate `pwa_config` or `user_pwa_icons` DDL in the DAO source.
 - Focused plugin DAO bootstrap test: run plugin table and keep-alive violation bootstrap helpers against a temporary database and assert registry-backed table creation, registered keep-alive ALTER application, registered plugin-log index creation, DAO smoke paths, and no local duplicate `plugin_state`, `plugin_logs`, or `keep_alive_violations` DDL/ALTER/index SQL in DAO sources.
 - Focused plugin-private bootstrap test: run temp-account, season-poster, Emby-restart, and smart-collection bootstrap helpers against a temporary database and assert registry-backed table creation, registered `temp_accounts` ALTER application for legacy table shapes, selected DAO smoke paths, and no local duplicate registry-owned table DDL/ALTER in DAO sources.
+- Focused db-manager migration test: run `migrate_tables()` against temporary source/destination databases and assert registry-backed target creation applies a registered ALTER column, applies a registered index, preserves copied rows, and no raw `TABLE_SCHEMAS[table]` execution remains in the migration target path.
 - Compile/import check changed database modules with `uv run --with-requirements requirements.txt`.
 - Run the full pytest suite before completing a schema boundary batch.
 
@@ -557,6 +562,18 @@ from app.core.db_schemas import SYSTEM_TABLES
 
 ```python
 from app.infra.db.schema_registry import SYSTEM_TABLES
+```
+
+#### Wrong
+
+```python
+new_cursor.execute(TABLE_SCHEMAS[table])
+```
+
+#### Correct
+
+```python
+ensure_registered_table(new_cursor, table)
 ```
 
 ---
