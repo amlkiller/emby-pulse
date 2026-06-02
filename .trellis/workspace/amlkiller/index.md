@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 101
+- **Total Sessions**: 102
 - **Last Active**: 2026-06-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~1399 | Active |
+| `journal-2.md` | ~1432 | Active |
 | `journal-1.md` | ~1973 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 102 | 2026-06-03 | System task poller cancellation lifecycle convergence | `2962960` | `main` |
 | 101 | 2026-06-03 | Notification daemon throttle wait lifecycle convergence | `4c01970` | `main` |
 | 100 | 2026-06-03 | HDHiveSign retry wait lifecycle convergence | `1119117` | `main` |
 | 99 | 2026-06-03 | DB manager migration schema bootstrap convergence | `6da751e` | `main` |

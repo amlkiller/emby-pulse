@@ -1397,3 +1397,36 @@ Made SystemDaemon library and pending-request throttle waits interruptible via t
 ### Next Steps
 
 - None - task complete
+
+
+## Session 102: System task poller cancellation lifecycle convergence
+
+**Date**: 2026-06-03
+**Task**: System task poller cancellation lifecycle convergence
+**Branch**: `main`
+
+### Summary
+
+Made the bootstrap-started Emby scheduled-task poller use an explicit started-state loop predicate instead of an unconditional async loop, and added lifecycle source assertions while preserving cancellation/restart behavior.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2962960` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
