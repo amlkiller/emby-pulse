@@ -1067,3 +1067,36 @@ Made NotificationBot Telegram polling thread stoppable, joinable, and restartabl
 ### Next Steps
 
 - None - task complete
+
+
+## Session 92: User bot polling lifecycle convergence
+
+**Date**: 2026-06-03
+**Task**: User bot polling lifecycle convergence
+**Branch**: `main`
+
+### Summary
+
+Made UserBot polling and scheduler threads stoppable, joinable, and restart-safe; replaced lifecycle sleeps with stop-event waits and added regression coverage for normal and still-alive worker handles.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `dc62fcf` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
