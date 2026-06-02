@@ -7,7 +7,7 @@ from app.infra.clients.media_server_client import media_api
 from app.infra.clients.tmdb_client import tmdb_client
 from app.infra.config.stats_settings import get_dashboard_cache_ttl
 from app.infra.config.user_visibility_settings import get_hidden_users
-from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.domains.users import public_service as user_service  # 🔒 引入管理员权限检查
 import re
 import datetime
 import asyncio
@@ -58,7 +58,7 @@ def check_login(request: Request) -> bool:
 
 def check_admin_login(request: Request) -> bool:
     """检查是否为管理员登录（管理API，仅后台管理员）"""
-    return is_admin_user(request)
+    return user_service.is_admin_user(request)
 
 def require_admin_login(request: Request):
     """要求管理员登录"""
@@ -197,7 +197,7 @@ def api_dashboard(request: Request, user_id: Optional[str] = None):
 def api_get_libraries(request: Request):
     """获取媒体库列表（管理员显示所有媒体库）"""
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     try:
         # 🔥 管理员登录后显示所有媒体库（使用 /Library/VirtualFolders）
@@ -429,7 +429,7 @@ def api_latest_media(request: Request = None, limit: int = 60):
 @router.get("/api/stats/live")
 def api_live_sessions(request: Request):
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     try:
         # 🚀 替换为 media_api
@@ -441,7 +441,7 @@ def api_live_sessions(request: Request):
 @router.get("/api/live")
 def api_live_sessions_legacy(request: Request):
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     return api_live_sessions(request)
 
@@ -912,7 +912,7 @@ def api_poster_data(request: Request, user_id: Optional[str] = None, period: str
 @router.get("/api/stats/top_users_list")
 def api_top_users_list(request: Request, period: str = 'all'):
     # 🔒 安全检查：仅管理员可查看全站用户排名
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     try:
         where_base, params = build_stats_base_filter('all')
@@ -1362,7 +1362,7 @@ async def api_preload_status(request: Request):
     前端可以据此判断是否需要等待
     """
     # 🔒 管理后台聚合状态，仅管理员可访问
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
     entry = _get_dashboard_cache_entry(_DASHBOARD_PRELOAD_KEY)
@@ -1402,7 +1402,7 @@ def stop_dashboard_cache_tasks() -> None:
 @router.get("/api/dashboard/init")
 async def api_dashboard_init(request: Request, user_id: Optional[str] = None):
     # 🔒 管理后台首屏聚合接口，仅管理员可访问
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     """
     仪表盘首屏聚合接口 - 核心数据快速返回
