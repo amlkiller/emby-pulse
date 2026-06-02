@@ -467,3 +467,36 @@ Moved notification bot admin checks off private users auth imports, routed them 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 74: Notification messages auth facade boundary
+
+**Date**: 2026-06-02
+**Task**: Notification messages auth facade boundary
+**Branch**: `main`
+
+### Summary
+
+Routed notification message center admin checks through the users public service facade, added focused boundary regression tests, and verified the full pytest suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4d2e08d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
