@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 16
+- **Total Sessions**: 17
 - **Last Active**: 2026-06-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~535 | Active |
+| `journal-1.md` | ~568 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 17 | 2026-06-03 | Remove user domain startup redirect | `ef311cf` | `Compiled` |
 | 16 | 2026-06-03 | Remove calendar service lifecycle redirects | `cebbd7f` | `Compiled` |
 | 15 | 2026-06-03 | Remove calendar notify stop redirect | `95836cc` | `Compiled` |
 | 14 | 2026-06-03 | Remove system task stop redirect | `71bc702` | `Compiled` |

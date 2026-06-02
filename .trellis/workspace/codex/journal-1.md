@@ -533,3 +533,36 @@ Removed pure start_calendar_service and stop_calendar_service redirects and regi
 ### Next Steps
 
 - None - task complete
+
+
+## Session 17: Remove user domain startup redirect
+
+**Date**: 2026-06-03
+**Task**: Remove user domain startup redirect
+**Branch**: `Compiled`
+
+### Summary
+
+Removed the pure start_user_domain_services redirect and registered migrate_admin_disabled directly. Verified compileall, focused lifecycle/user meta tests, import check, and full pytest suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ef311cf` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
