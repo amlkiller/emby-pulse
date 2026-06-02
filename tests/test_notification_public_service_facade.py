@@ -1,12 +1,15 @@
 import ast
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 
-class FakeBot:
+class FakeNotifier:
     def __init__(self):
         self.calls = []
 
@@ -45,6 +48,12 @@ class FakeBot:
     def send_to_channels(self, photo_io, caption, keyboard=None):
         self.calls.append(("send_to_channels", photo_io, caption, keyboard))
         return "channels-result"
+
+
+class FakeBot:
+    def __init__(self):
+        self.calls = []
+        self.notifier = FakeNotifier()
 
     def push_now(self, user_id, period, theme):
         self.calls.append(("push_now", user_id, period, theme))
@@ -93,11 +102,13 @@ def test_notification_public_service_delegates_and_returns(monkeypatch):
     }
 
     assert bot.calls == [
+        ("push_now", "user", "weekly", "dark"),
+    ]
+    assert bot.notifier.calls == [
         ("send_message", "chat", "text", "HTML", {"k": "v"}, "tg"),
         ("send_photo", "chat", "photo", "caption", "HTML", {"button": 1}, "wecom", "wecom-photo"),
         ("edit_message", "chat", 42, "edited", "HTML", {"inline": True}, "tg"),
         ("send_to_channels", "poster", "caption", {"keyboard": True}),
-        ("push_now", "user", "weekly", "dark"),
     ]
     assert user_bot_service.calls == [
         ("_send", "user-chat", "user text", {"inline": []}),

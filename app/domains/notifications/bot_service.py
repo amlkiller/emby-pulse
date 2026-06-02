@@ -3321,32 +3321,9 @@ class EmbyPulseOrchestrator:
         
     def push_now(self, user_id, period, theme):
         return self.notifier._cmd_stats("sys_notify", period, platform="all")
-        
-    def add_library_task(self, item):
-        self.daemon.add_library_task(item)
-        
+
     def push_playback_event(self, data, action="start"):
         bus.publish("webhook.received", f"playback.{action}", data)
-
-    def _handle_message(self, text, cid, platform="tg"):
-        self.notifier._handle_message(text, cid, platform)
-
-    def _handle_callback(self, cq):
-        self.notifier._handle_callback(cq)
-
-    def send_message(self, chat_id, text, parse_mode="HTML", reply_markup=None, platform="all"):
-        self.notifier.send_message(chat_id, text, parse_mode, reply_markup, platform)
-
-    def edit_message(self, chat_id, message_id, text, parse_mode="HTML", reply_markup=None, platform="tg"):
-        """编辑已发送的消息（仅支持 Telegram）"""
-        self.notifier.edit_message(chat_id, message_id, text, parse_mode, reply_markup, platform)
-
-    def send_photo(self, chat_id, photo_io, caption, parse_mode="HTML", reply_markup=None, platform="all", wecom_photo_io=None):
-        self.notifier.send_photo(chat_id, photo_io, caption, parse_mode, reply_markup, platform, wecom_photo_io)
-
-    def send_to_channels(self, photo_io, caption, keyboard=None):
-        """发送消息到配置的频道（供插件调用）"""
-        self.notifier.send_to_channels(photo_io, caption, keyboard)
 
 bot = EmbyPulseOrchestrator()
 
