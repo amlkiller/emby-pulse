@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 42
+- **Total Sessions**: 43
 - **Last Active**: 2026-06-02
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1412 | Active |
+| `journal-1.md` | ~1445 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 43 | 2026-06-02 | Plugin scheduler lifecycle stop hooks | `119e58b` | `main` |
 | 42 | 2026-06-02 | Media requests public service facade | `e262912` | `main` |
 | 41 | 2026-06-02 | Users public service facade | `61b8813` | `main` |
 | 40 | 2026-06-02 | Notification public service facade | `dd0748f` | `main` |

@@ -1410,3 +1410,36 @@ Added a narrow public media requests service facade, migrated selected notificat
 ### Next Steps
 
 - None - task complete
+
+
+## Session 43: Plugin scheduler lifecycle stop hooks
+
+**Date**: 2026-06-02
+**Task**: Plugin scheduler lifecycle stop hooks
+**Branch**: `main`
+
+### Summary
+
+Added plugin shutdown cleanup through the bootstrap service registry, made remaining scheduler loops stop-event driven, and covered lifecycle shutdown/restart behavior with tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `119e58b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
