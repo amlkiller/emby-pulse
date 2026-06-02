@@ -981,3 +981,36 @@ Routed media_requests and request_users bootstrap through schema registry while 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 30: Playback schema registry bootstrap
+
+**Date**: 2026-06-02
+**Task**: Playback schema registry bootstrap
+**Branch**: `main`
+
+### Summary
+
+Centralized PlaybackActivity startup and local fallback bootstrap through the schema registry helper. Added registered playback compatible columns including ItemType, removed local playback DDL/ALTER copies, updated focused regression tests and database spec guidance, and verified focused checks plus full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0096da8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

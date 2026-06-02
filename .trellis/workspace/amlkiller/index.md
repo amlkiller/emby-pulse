@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 29
+- **Total Sessions**: 30
 - **Last Active**: 2026-06-02
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~983 | Active |
+| `journal-1.md` | ~1016 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 30 | 2026-06-02 | Playback schema registry bootstrap | `0096da8` | `main` |
 | 29 | 2026-06-02 | Media request schema registry batch | `eb84646` | `main` |
 | 28 | 2026-06-02 | Compat sensitive schema registry bootstrap | `4b46379` | `main` |
 | 27 | 2026-06-02 | TV series status schema registry bootstrap | `056ab69` | `main` |
