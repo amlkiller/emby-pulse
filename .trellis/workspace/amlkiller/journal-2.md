@@ -1661,3 +1661,36 @@ Hardened notification worker and queue sizing settings with shared bounded integ
 ### Next Steps
 
 - None - task complete
+
+
+## Session 110: Weather settings source contract convergence
+
+**Date**: 2026-06-03
+**Task**: Weather settings source contract convergence
+**Branch**: `main`
+
+### Summary
+
+Hardened the weather provider setting with canonical source normalization, added regression tests for reader and writer behavior, preserved QWeather host runtime/raw contracts, and verified focused plus full test suites.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `efce4c4` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
