@@ -11,6 +11,7 @@ from app.infra.config.risk_settings import (
     is_risk_sys_notification_enabled,
 )
 from app.infra.db.notification_dao import add_system_notification
+from app.domains.notifications import public_service as notification_service
 from app.domains.risk.risk_dao import (
     create_risk_log,
     get_tg_user_id_for_emby_user,
@@ -135,8 +136,7 @@ def _send_user_warning(user_id, username, current_count, limit, devices_info):
                f"如有疑问，请联系管理员。")
         
         # 通过用户机器人发送消息
-        from app.domains.notifications.user_bot_service import _send
-        _send(tg_user_id, msg)
+        notification_service.send_user_bot_message(tg_user_id, msg)
         logger.info(f"✅ [风控警告] 已向用户 {username} (TG: {tg_user_id}) 发送警告消息")
     except Exception as e:
         logger.error(f"❌ [风控警告] 发送用户警告失败: {e}")
@@ -160,8 +160,7 @@ def _send_user_ban_notify(user_id, username, current_count, limit, devices_info)
                f"📌 如需解封，请联系管理员。")
         
         # 通过用户机器人发送消息
-        from app.domains.notifications.user_bot_service import _send
-        _send(tg_user_id, msg)
+        notification_service.send_user_bot_message(tg_user_id, msg)
         logger.info(f"✅ [风控封禁] 已向用户 {username} (TG: {tg_user_id}) 发送封禁通知")
     except Exception as e:
         logger.error(f"❌ [风控封禁] 发送封禁通知失败: {e}")
