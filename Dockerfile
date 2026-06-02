@@ -9,10 +9,14 @@ WORKDIR /workspace
 # 修改这里自定义版本号
 ENV APP_VERSION=1.4.6
 ENV TZ=Asia/Shanghai
+ENV PATH="/workspace/.venv/bin:$PATH"
+ENV UV_COMPILE_BYTECODE=1
+ENV UV_LINK_MODE=copy
 
-# 先装依赖，利用 Docker 层缓存
-COPY requirements.txt .
-RUN pip install --no-cache-dir --no-compile -r requirements.txt
+# 先按锁文件安装依赖，利用 Docker 层缓存
+COPY --from=ghcr.io/astral-sh/uv:0.11.7 /uv /uvx /bin/
+COPY pyproject.toml uv.lock ./
+RUN uv sync --locked --no-dev --no-install-project
 
 COPY --from=builder /build/app ./app
 COPY run.py ./run.py

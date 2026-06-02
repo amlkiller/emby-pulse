@@ -21,6 +21,7 @@ Managed by Trellis. Edits outside this block are preserved; edits inside may be 
 <!-- TRELLIS:END -->
 
 Session note for future Codex turns:
-- Use `uv run --with-requirements requirements.txt ...` for any Python command that imports or executes project code.
+- Use `uv sync --locked` to install project dependencies from `uv.lock`.
+- Use `uv run ...` for any Python command that imports or executes project code.
 - On Windows, set `PYTHONIOENCODING='utf-8'` when output may contain Chinese text or emoji.
-- Do not report bare `python` or bare `uv run` dependency failures as code regressions.
+- Do not report bare `python` dependency failures as code regressions until reproduced through `uv run`.

@@ -4,76 +4,82 @@
 
 ---
 
-## Scenario: Python Commands Must Use `uv run`
+## Scenario: Python Commands Must Use The Locked uv Project
 
 ### 1. Scope / Trigger
 
 - Trigger: any backend verification command that imports project modules, runs tests, compiles Python files, or executes Python helper scripts.
 - Applies to Codex/AI sessions and developer terminal commands in this repository.
-- This project has `requirements.txt` but no `pyproject.toml`; running bare `python ...` or bare `uv run ...` can use the wrong interpreter environment and produce false failures such as missing `jinja2` or `requests`.
+- This project uses `pyproject.toml` plus `uv.lock` as the source of truth for Python dependencies. `requirements.txt` is a compatibility export only.
 
 ### 2. Signatures
 
-- Import check: `uv run --with-requirements requirements.txt python -c "<imports>"`
-- Compile check: `uv run --with-requirements requirements.txt python -m compileall <paths>`
-- Test suite: `uv run --with-requirements requirements.txt --with pytest pytest tests/ -v`
-- Windows PowerShell UTF-8 import check when project startup prints Unicode: `$env:PYTHONIOENCODING='utf-8'; uv run --with-requirements requirements.txt python -c "<imports>"`
+- Install dependencies: `uv sync --locked`
+- Import check: `uv run python -c "<imports>"`
+- Compile check: `uv run python -m compileall <paths>`
+- Test suite: `uv run pytest tests/ -v`
+- Windows PowerShell UTF-8 import check when project startup prints Unicode: `$env:PYTHONIOENCODING='utf-8'; uv run python -c "<imports>"`
 
 ### 3. Contracts
 
-- All Python commands that touch project code must be executed through `uv run --with-requirements requirements.txt`.
-- Do not diagnose missing project dependencies from a bare `python` or bare `uv run` result unless the same command also fails with `--with-requirements requirements.txt`.
+- Update dependencies in `pyproject.toml`, then regenerate `uv.lock` with `uv lock`.
+- Run commands that touch project code through `uv run` so they use the locked project environment.
+- Run `uv sync --locked` before verification when the environment may be stale.
+- Do not diagnose missing project dependencies from a bare `python` result unless the same command also fails through `uv run`.
 - On Windows consoles, set `PYTHONIOENCODING=utf-8` or use an equivalent UTF-8 Python mode when command output may include emoji or Chinese text.
-- Keep command output interpretation scoped: dependency/environment failures are not code regressions until reproduced in the project `uv` environment.
+- Keep command output interpretation scoped: dependency/environment failures are not code regressions until reproduced in the locked `uv` environment.
 
 ### 4. Validation & Error Matrix
 
-- Bare `python -c "import app..."` reports `AssertionError: jinja2 must be installed` -> rerun with `uv run --with-requirements requirements.txt`; treat the first result as invalid environment evidence.
-- Bare `uv run python -c "import app..."` reports `ModuleNotFoundError: No module named 'requests'` -> rerun with `--with-requirements requirements.txt`; bare `uv run` did not load project dependencies.
-- Bare `python ...` reports `UnicodeEncodeError: 'gbk' codec can't encode ...` on Windows -> rerun with `PYTHONIOENCODING=utf-8` plus `uv run --with-requirements requirements.txt`.
-- `uv run --with-requirements requirements.txt ...` reports syntax/import errors inside changed modules -> treat as a real code issue and fix.
-- `uv run --with-requirements requirements.txt --with pytest pytest ...` fails tests -> inspect and fix the test failure, not the command environment.
+- Bare `python -c "import app..."` reports missing packages -> rerun with `uv run python -c "import app..."`; treat the first result as invalid environment evidence.
+- `uv run python -c "import app..."` reports syntax/import errors inside changed modules -> treat as a real code issue and fix.
+- Bare `python ...` reports `UnicodeEncodeError: 'gbk' codec can't encode ...` on Windows -> rerun with `PYTHONIOENCODING=utf-8` plus `uv run`.
+- `uv sync --locked` reports that the lockfile needs an update -> run `uv lock`, inspect the dependency diff, then rerun `uv sync --locked`.
+- `uv run pytest tests/ -v` fails tests -> inspect and fix the test failure, not the command environment.
 
 ### 5. Good/Base/Bad Cases
 
-- Good: `$env:PYTHONIOENCODING='utf-8'; uv run --with-requirements requirements.txt python -c "import app.routers.clients; print('imports ok')"`
-- Base: `uv run --with-requirements requirements.txt python -m compileall app/dao/client_dao.py app/routers/clients.py`
-- Good: `uv run --with-requirements requirements.txt --with pytest pytest tests/ -v`
-- Bad: `python -c "import app.routers.clients"` followed by reporting missing `jinja2` as a project failure.
-- Bad: `uv run python -c "import app.routers.clients"` followed by reporting missing `requests` as a project failure.
+- Good: `uv sync --locked`
+- Good: `$env:PYTHONIOENCODING='utf-8'; uv run python -c "import app.domains.notifications.router; print('imports ok')"`
+- Base: `uv run python -m compileall app/domains/notifications/router.py tests/test_notification_router_public_auth_facade_boundary.py`
+- Good: `uv run pytest tests/ -v`
+- Bad: `python -c "import app.domains.notifications.router"` followed by reporting missing `jinja2` as a project failure.
+- Bad: editing `requirements.txt` directly as the dependency source of truth.
 
 ### 6. Tests Required
 
-- For focused backend refactors, run `uv run --with-requirements requirements.txt python -m compileall <changed-python-files>`.
-- For import-sensitive changes, run an import check through `uv run --with-requirements requirements.txt python -c ...`; add `PYTHONIOENCODING=utf-8` on Windows if startup output includes non-ASCII text.
-- For behavior changes or before final completion, run `uv run --with-requirements requirements.txt --with pytest pytest tests/ -v` unless the user explicitly narrows verification scope.
+- For focused backend refactors, run `uv run python -m compileall <changed-python-files>`.
+- For import-sensitive changes, run an import check through `uv run python -c ...`; add `PYTHONIOENCODING=utf-8` on Windows if startup output includes non-ASCII text.
+- For behavior changes or before final completion, run `uv run pytest tests/ -v` unless the user explicitly narrows verification scope.
 
 ### 7. Wrong vs Correct
 
 #### Wrong
 
 ```powershell
-python -c "import app.routers.clients"
+python -c "import app.domains.notifications.router"
 ```
 
 #### Correct
 
 ```powershell
-$env:PYTHONIOENCODING='utf-8'; uv run --with-requirements requirements.txt python -c "import app.routers.clients"
+$env:PYTHONIOENCODING='utf-8'; uv run python -c "import app.domains.notifications.router"
 ```
 
 ---
 
 ## Forbidden Patterns
 
-- Do not run project Python verification with bare `python` or bare `uv run` and treat dependency errors as actionable code failures.
-- Do not omit `--with-requirements requirements.txt`; imports can still initialize project dependencies.
+- Do not run project Python verification with bare `python` and treat dependency errors as actionable code failures.
+- Do not edit `requirements.txt` as the primary dependency manifest.
+- Do not use `uv run --with-requirements requirements.txt` for project verification; use the locked project environment instead.
 
 ---
 
 ## Required Patterns
 
-- Use `uv run --with-requirements requirements.txt` for Python commands that execute or import repository code.
+- Use `pyproject.toml` and `uv.lock` as the dependency source of truth.
+- Use `uv run` for Python commands that execute or import repository code.
 - Mention when verification could not be completed and include the exact `uv run` command that failed or was skipped.
 
 ---
@@ -88,6 +94,7 @@ $env:PYTHONIOENCODING='utf-8'; uv run --with-requirements requirements.txt pytho
 
 ## Code Review Checklist
 
-- [ ] Verification commands use `uv run --with-requirements requirements.txt`.
+- [ ] Dependency changes are represented in `pyproject.toml` and `uv.lock`.
+- [ ] Verification commands use `uv run`.
 - [ ] Windows Unicode output is handled with UTF-8 mode when needed.
 - [ ] Dependency errors are reproduced under `uv run` before being reported as code issues.

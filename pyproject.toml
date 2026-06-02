@@ -1,0 +1,34 @@
+[project]
+name = "embypulse-next"
+version = "1.4.6"
+description = "FastAPI management and monitoring hub for Emby media servers."
+requires-python = ">=3.9"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "requests",
+    "jinja2",
+    "python-multipart",
+    "itsdangerous",
+    "aiofiles",
+    "pycryptodome==3.20.0",
+    "psutil",
+    "pypinyin",
+    "Pillow",
+    "numpy",
+    "bcrypt",
+    "openpyxl",
+    "pyotp",
+    "qrcode",
+    "croniter",
+    "python-dotenv",
+    "PyJWT",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+]
+
+[tool.uv]
+package = false

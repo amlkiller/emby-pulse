@@ -1,5 +1,6 @@
 __pycache__/
 *.pyc
+/.venv/
 .env
 .DS_Store
 # 忽略配置文件夹里的内容，但保留文件夹本身

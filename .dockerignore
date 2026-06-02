@@ -12,6 +12,7 @@
 __pycache__
 *.pyc
 venv/
+.venv/
 .env
 
 # 3. 忽略系统文件

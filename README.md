@@ -382,21 +382,21 @@ A: 反代未把浏览器看到的真实域名/协议传到容器内部。请在 
 ## 🧪 本地开发
 
 ```bash
-# 1. 安装依赖（推荐使用 uv）
-pip install -r requirements.txt
+# 1. 安装锁定依赖（推荐使用 uv）
+uv sync --locked
 
 # 2. 复制并填写环境变量
 cp .env.example .env
 
 # 3. 启动
-python run.py
-# 或：uvicorn app.main:app --host 0.0.0.0 --port 10307
+uv run python run.py
+# 或：uv run uvicorn app.main:app --host 0.0.0.0 --port 10307
 ```
 
 **运行测试：**
 
 ```bash
-uv run --with pytest pytest tests/ -v
+uv run pytest tests/ -v
 ```
 
 > Windows 控制台输出含 Emoji，建议设置 `PYTHONIOENCODING=utf-8` 以避免 GBK 编码错误。

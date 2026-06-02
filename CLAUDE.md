@@ -114,27 +114,30 @@ tests/
 
 ## Development Commands
 
-Use `uv run --with-requirements requirements.txt` for any Python command that imports or executes project code.
+Use `uv sync --locked` to install dependencies from `uv.lock`, then use `uv run` for any Python command that imports or executes project code.
 
 ```powershell
+# Install locked dependencies
+uv sync --locked
+
 # Compile focused files
-$env:PYTHONIOENCODING='utf-8'; uv run --with-requirements requirements.txt python -m compileall app tests
+$env:PYTHONIOENCODING='utf-8'; uv run python -m compileall app tests
 
 # Smoke-test app import
-$env:PYTHONIOENCODING='utf-8'; uv run --with-requirements requirements.txt python -c "from app.main import app; print(len(app.routes))"
+$env:PYTHONIOENCODING='utf-8'; uv run python -c "from app.main import app; print(len(app.routes))"
 
 # Full test suite
-$env:PYTHONIOENCODING='utf-8'; uv run --with-requirements requirements.txt --with pytest pytest tests/ -v
+$env:PYTHONIOENCODING='utf-8'; uv run pytest tests/ -v
 ```
 
-Do not report bare `python` or bare `uv run` dependency failures as code regressions.
+Do not report bare `python` dependency failures as code regressions until reproduced through `uv run`.
 
 ## Running Locally
 
 ```powershell
-pip install -r requirements.txt
+uv sync --locked
 copy .env.example .env
-python run.py
+uv run python run.py
 ```
 
 Windows console output may include Chinese or emoji; set `PYTHONIOENCODING=utf-8` when running commands that print application startup output.
