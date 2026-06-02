@@ -46,6 +46,48 @@ class FakeInvitationDao:
         self.calls.append(("renew_user_with_invitation_code", code, used_by, user_id))
         return {"days": 7, "new_exp": "2026-06-09"}, None
 
+    def create_invitation_codes(
+        self,
+        codes,
+        days,
+        created_at,
+        template_user_id,
+        code_type,
+        routes,
+        route_mode,
+        req_free,
+        req_free_count,
+    ):
+        self.calls.append(
+            (
+                "create_invitation_codes",
+                codes,
+                days,
+                created_at,
+                template_user_id,
+                code_type,
+                routes,
+                route_mode,
+                req_free,
+                req_free_count,
+            )
+        )
+
+    def list_admin_invitations(self, code_type="all"):
+        self.calls.append(("list_admin_invitations", code_type))
+        return [{"code": "reg-code", "type": "register"}]
+
+    def list_invitation_usage_stats(self):
+        self.calls.append(("list_invitation_usage_stats",))
+        return [{"type": "register", "used_count": 0, "used_by": ""}]
+
+    def list_invitation_export_rows(self, code_type="all"):
+        self.calls.append(("list_invitation_export_rows", code_type))
+        return [{"code": "reg-code", "type": "register", "days": 30}]
+
+    def delete_invitation_codes(self, codes):
+        self.calls.append(("delete_invitation_codes", codes))
+
 
 def test_system_public_service_delegates_invitation_calls(monkeypatch):
     from app.domains.system import public_service
@@ -70,6 +112,27 @@ def test_system_public_service_delegates_invitation_calls(monkeypatch):
         {"days": 7, "new_exp": "2026-06-09"},
         None,
     )
+    assert public_service.create_invitation_codes(
+        ["code-1", "code-2"],
+        30,
+        "2026-06-02T10:00:00",
+        "template-user",
+        "register",
+        "r1,r2",
+        "allow",
+        1,
+        5,
+    ) is None
+    assert public_service.list_admin_invitations("register") == [
+        {"code": "reg-code", "type": "register"}
+    ]
+    assert public_service.list_invitation_usage_stats() == [
+        {"type": "register", "used_count": 0, "used_by": ""}
+    ]
+    assert public_service.list_invitation_export_rows("renew") == [
+        {"code": "reg-code", "type": "register", "days": 30}
+    ]
+    assert public_service.delete_invitation_codes(["code-1", "code-2"]) is None
 
     assert invitation_dao.calls == [
         ("get_available_registration_invitation", "reg-code"),
@@ -84,6 +147,22 @@ def test_system_public_service_delegates_invitation_calls(monkeypatch):
             "/b",
         ),
         ("renew_user_with_invitation_code", "renew-code", "User", "u1"),
+        (
+            "create_invitation_codes",
+            ["code-1", "code-2"],
+            30,
+            "2026-06-02T10:00:00",
+            "template-user",
+            "register",
+            "r1,r2",
+            "allow",
+            1,
+            5,
+        ),
+        ("list_admin_invitations", "register"),
+        ("list_invitation_usage_stats",),
+        ("list_invitation_export_rows", "renew"),
+        ("delete_invitation_codes", ["code-1", "code-2"]),
     ]
 
 
