@@ -1,26 +1,19 @@
 import json
 import time
 
+from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
 
 SESSION_TABLE = "sessions"
+SESSION_INDEX_SQL = "CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)"
 
 
 def ensure_session_table() -> None:
     with system_store.connect() as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            f"""
-            CREATE TABLE IF NOT EXISTS {SESSION_TABLE} (
-                session_id TEXT PRIMARY KEY,
-                data TEXT NOT NULL DEFAULT '{{}}',
-                created_at REAL NOT NULL,
-                expires_at REAL NOT NULL
-            )
-            """
-        )
+        ensure_registered_table(cursor, SESSION_TABLE)
         try:
-            cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_sessions_expires ON {SESSION_TABLE}(expires_at)")
+            cursor.execute(SESSION_INDEX_SQL)
         except Exception:
             pass
         conn.commit()

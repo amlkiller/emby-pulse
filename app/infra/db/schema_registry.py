@@ -22,7 +22,7 @@ SYSTEM_TABLES = [
     "local_users", "login_failures", "api_tokens",
     "msg_conversations", "msg_items", "msg_notify_block", "user_mutes",
     "announcements", "announcement_reads",
-    "bot_notify_mutes", "audit_logs", "user_audit_logs", "notify_rules", "calendar_notify_config",
+    "bot_notify_mutes", "sessions", "audit_logs", "user_audit_logs", "notify_rules", "calendar_notify_config",
     "pwa_config", "user_pwa_icons",
     "lottery_tickets", "lottery_results", "lottery_winners",
     "scratch_cards", "scratch_card_slots", "point_checkin_streak",
@@ -785,6 +785,14 @@ TABLE_SCHEMAS = {
         event_type TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (user_id, event_type)
+    )""",
+
+    # ==================== 系统会话 ====================
+    "sessions": """CREATE TABLE IF NOT EXISTS sessions (
+        session_id TEXT PRIMARY KEY,
+        data TEXT NOT NULL DEFAULT '{}',
+        created_at REAL NOT NULL,
+        expires_at REAL NOT NULL
     )""",
 
     # ==================== 系统审计日志 ====================
