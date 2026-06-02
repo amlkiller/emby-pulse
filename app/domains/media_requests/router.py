@@ -50,6 +50,7 @@ from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读
 # 🔥 补回丢失的这一行：引入基础数据模型
 from app.schemas.models import MediaRequestSubmitModel as BaseSubmitModel
 from app.domains.notifications import public_service as notification_service
+from app.domains.notifications import notify_admin
 from app.domains.playback import stats as playback_stats
 # 🔥 引入媒体适配器用于创建用户
 from app.infra.clients.media_server_client import media_api
@@ -673,7 +674,7 @@ async def submit_media_request(request: Request):
                 ]}
             
             # 🔥 使用 notify_rules 配置控制通知渠道
-            rule = notification_service.get_notify_rule('request_new')
+            rule = notify_admin.get_notify_rule('request_new')
             if rule and rule.get('enabled'):
                 channels = rule.get('channels', [])
                 platform = "none"
@@ -847,7 +848,7 @@ def batch_manage_action(data: BulkAdminActionModel, request: Request):
     # 🔥 批量通知用户（审批通过、入库完成、拒绝、手动接单、影巢转存完成）
     if data.action in ["approve", "finish", "reject", "manual", "hdhive_done"]:
         try:
-            rule = notification_service.get_notify_rule('request_status')
+            rule = notify_admin.get_notify_rule('request_status')
             logger.info(f"[状态变更通知] action={data.action}, rule={rule}")
             
             if rule and rule.get('enabled') and 'tg_bot' in rule.get('channels', []):
@@ -1009,7 +1010,7 @@ def submit_feedback(data: FeedbackSubmitModel, request: Request):
     
     # 🔥 使用 notify_rules 配置控制通知渠道
     try:
-        rule = notification_service.get_notify_rule('feedback_new')
+        rule = notify_admin.get_notify_rule('feedback_new')
         
         if rule and rule.get('enabled'):
             channels = rule.get('channels', [])
@@ -2051,7 +2052,7 @@ async def user_community_register(data: UserRegisterModel, request: Request):
             # 8. 发送通知
             try:
                 from app.infra.db.notification_dao import add_sys_notification
-                rule = notification_service.get_notify_rule('user_register')
+                rule = notify_admin.get_notify_rule('user_register')
                 days_display = "永久" if (days == -1 or days == 0 or days >= 36500) else f"{days} 天"
                 msg = f"🎟️ <b>新用户注册</b>\n\n👤 {safe_name}\n📅 有效期：{days_display}\n🔗 邀请码：{data.code}\n📱 注册渠道：用户社区"
                 

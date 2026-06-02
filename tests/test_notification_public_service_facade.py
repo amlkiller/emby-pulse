@@ -115,23 +115,10 @@ def test_notification_public_service_delegates_and_returns(monkeypatch):
     ]
 
 
-def test_notification_public_service_get_notify_rule_delegates(monkeypatch):
-    from app.domains.notifications import notify_admin, public_service
+def test_notification_public_service_does_not_expose_notify_rule_wrapper():
+    from app.domains.notifications import public_service
 
-    calls = []
-
-    def fake_get_notify_rule(notify_type):
-        calls.append(("get_notify_rule", notify_type))
-        return {"notify_type": notify_type, "enabled": 1, "channels": ["tg_bot"]}
-
-    monkeypatch.setattr(notify_admin, "get_notify_rule", fake_get_notify_rule)
-
-    assert public_service.get_notify_rule("user_delete") == {
-        "notify_type": "user_delete",
-        "enabled": 1,
-        "channels": ["tg_bot"],
-    }
-    assert calls == [("get_notify_rule", "user_delete")]
+    assert not hasattr(public_service, "get_notify_rule")
 
 
 def test_auto_expire_plugin_does_not_import_private_notification_user_bot_service():

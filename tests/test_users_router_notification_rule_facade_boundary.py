@@ -33,27 +33,23 @@ class FakeMediaApi:
         return FakeMediaResponse(204)
 
 
-def test_users_router_does_not_import_private_notification_notify_admin():
+def test_users_router_imports_notification_rule_owner_directly():
     path = _REPO_ROOT / "app/domains/users/router.py"
     rel_path = path.relative_to(_REPO_ROOT).as_posix()
     tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(rel_path))
-    violations = []
+    imports_notify_admin = False
 
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
             imported_names = {alias.name for alias in node.names}
-            if node.module == "app.domains.notifications.notify_admin":
-                violations.append(f"{rel_path}:{node.lineno}")
-            if node.module == "app.domains.notifications" and (
-                "notify_admin" in imported_names or "*" in imported_names
-            ):
-                violations.append(f"{rel_path}:{node.lineno}")
+            if node.module == "app.domains.notifications" and "notify_admin" in imported_names:
+                imports_notify_admin = True
         elif isinstance(node, ast.Import):
             imported_modules = {alias.name for alias in node.names}
             if "app.domains.notifications.notify_admin" in imported_modules:
-                violations.append(f"{rel_path}:{node.lineno}")
+                imports_notify_admin = True
 
-    assert violations == []
+    assert imports_notify_admin is True
 
 
 def test_delete_user_notification_uses_public_rule_before_send_and_preserves_platform(monkeypatch):
@@ -94,7 +90,7 @@ def test_delete_user_notification_uses_public_rule_before_send_and_preserves_pla
     )
     monkeypatch.setattr(router, "get_client_ip", lambda request: "127.0.0.1")
     monkeypatch.setattr(router, "add_audit_log", lambda **kwargs: calls.append(("add_audit_log", kwargs)))
-    monkeypatch.setattr(notification_service, "get_notify_rule", fake_get_notify_rule)
+    monkeypatch.setattr(router.notify_admin, "get_notify_rule", fake_get_notify_rule)
     monkeypatch.setattr(notification_service, "send_message", fake_send_message)
     monkeypatch.setattr(notification_dao, "add_sys_notification", fake_add_sys_notification)
 

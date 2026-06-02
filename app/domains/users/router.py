@@ -5,6 +5,7 @@ from app.infra.db import audit_dao
 from app.domains.system import invitation_dao
 from app.domains.users import user_dao
 from app.domains.users import user_bot_dao
+from app.domains.notifications import notify_admin
 from app.infra.clients.media_server_client import media_api
 from app.infra.clients.network_client import network_client
 from app.infra.config.media_server_settings import get_media_server_public_host
@@ -1309,7 +1310,7 @@ def api_manage_user_delete(user_id: str, request: Request):
                 from app.infra.db.notification_dao import add_sys_notification
                 from app.domains.notifications import public_service as notification_service
 
-                rule = notification_service.get_notify_rule('user_delete')
+                rule = notify_admin.get_notify_rule('user_delete')
                 if rule and rule.get('enabled'):
                     channels = rule.get('channels', [])
                     msg = f"🗑️ <b>用户删除通知</b>\n\n👤 <b>用户:</b>{user_name}\n👮 <b>操作人:</b>{admin_name}\n🕒 <b>时间:</b>{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"

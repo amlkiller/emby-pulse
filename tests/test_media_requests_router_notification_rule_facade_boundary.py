@@ -47,26 +47,22 @@ class FakeMediaApi:
         return FakeMediaResponse(status_code=204, payload={})
 
 
-def _assert_no_private_notify_admin_import(path):
+def _assert_imports_notification_notify_admin(path):
     rel_path = path.relative_to(_REPO_ROOT).as_posix()
     tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(rel_path))
-    violations = []
+    imports_notify_admin = False
 
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
             imported_names = {alias.name for alias in node.names}
-            if node.module == "app.domains.notifications.notify_admin":
-                violations.append(f"{rel_path}:{node.lineno}")
-            if node.module == "app.domains.notifications" and (
-                "notify_admin" in imported_names or "*" in imported_names
-            ):
-                violations.append(f"{rel_path}:{node.lineno}")
+            if node.module == "app.domains.notifications" and "notify_admin" in imported_names:
+                imports_notify_admin = True
         elif isinstance(node, ast.Import):
             imported_modules = {alias.name for alias in node.names}
             if "app.domains.notifications.notify_admin" in imported_modules:
-                violations.append(f"{rel_path}:{node.lineno}")
+                imports_notify_admin = True
 
-    assert violations == []
+    assert imports_notify_admin is True
 
 
 def _assert_no_private_notification_user_bot_import(path):
@@ -91,8 +87,8 @@ def _assert_no_private_notification_user_bot_import(path):
     assert violations == []
 
 
-def test_media_requests_router_does_not_import_private_notification_notify_admin():
-    _assert_no_private_notify_admin_import(_REPO_ROOT / "app/domains/media_requests/router.py")
+def test_media_requests_router_imports_notification_rule_owner_directly():
+    _assert_imports_notification_notify_admin(_REPO_ROOT / "app/domains/media_requests/router.py")
 
 
 def test_media_requests_router_does_not_import_private_notification_user_bot_service():
@@ -131,7 +127,7 @@ def test_submit_media_request_uses_public_rule_before_notifications(monkeypatch)
         lambda *args: calls.append(("submit_new_media_request", args)) or {"ok": True},
     )
     monkeypatch.setattr(media_requests_router, "get_pulse_url", lambda: "http://pulse.local")
-    monkeypatch.setattr(media_requests_router.notification_service, "get_notify_rule", fake_get_notify_rule)
+    monkeypatch.setattr(media_requests_router.notify_admin, "get_notify_rule", fake_get_notify_rule)
     monkeypatch.setattr(media_requests_router.notification_service, "send_photo", fake_send_photo)
     monkeypatch.setattr(media_requests_router, "add_sys_notification", fake_add_sys_notification)
 
@@ -170,7 +166,7 @@ def test_batch_manage_action_uses_public_rule_before_status_notify_queries(monke
         "update_media_request_status",
         lambda *args: calls.append(("update_media_request_status", args)),
     )
-    monkeypatch.setattr(media_requests_router.notification_service, "get_notify_rule", fake_get_notify_rule)
+    monkeypatch.setattr(media_requests_router.notify_admin, "get_notify_rule", fake_get_notify_rule)
     monkeypatch.setattr(
         media_requests_router,
         "list_request_status_notify_items",
@@ -243,7 +239,7 @@ def test_batch_manage_action_uses_public_user_bot_facade_for_status_notification
         "update_media_request_status",
         lambda *args: calls.append(("update_media_request_status", args)),
     )
-    monkeypatch.setattr(media_requests_router.notification_service, "get_notify_rule", fake_get_notify_rule)
+    monkeypatch.setattr(media_requests_router.notify_admin, "get_notify_rule", fake_get_notify_rule)
     monkeypatch.setattr(
         media_requests_router,
         "list_request_status_notify_items",
@@ -315,7 +311,7 @@ def test_submit_feedback_uses_public_rule_before_notifications(monkeypatch):
         lambda *args: calls.append(("create_media_feedback", args)) or 42,
     )
     monkeypatch.setattr(media_requests_router, "get_pulse_url", lambda: "http://pulse.local")
-    monkeypatch.setattr(media_requests_router.notification_service, "get_notify_rule", fake_get_notify_rule)
+    monkeypatch.setattr(media_requests_router.notify_admin, "get_notify_rule", fake_get_notify_rule)
     monkeypatch.setattr(
         media_requests_router.notification_service,
         "send_photo",
@@ -384,7 +380,7 @@ def test_user_registration_uses_public_rule_and_preserves_disabled_rule_fallback
         "invalidate_emby_users_cache",
         lambda: calls.append(("invalidate_emby_users_cache",)),
     )
-    monkeypatch.setattr(media_requests_router.notification_service, "get_notify_rule", fake_get_notify_rule)
+    monkeypatch.setattr(media_requests_router.notify_admin, "get_notify_rule", fake_get_notify_rule)
     monkeypatch.setattr(
         media_requests_router.notification_service,
         "send_message",
