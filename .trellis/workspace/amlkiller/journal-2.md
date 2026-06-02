@@ -335,3 +335,36 @@ Moved notification admin API checks off private users auth imports, routed them 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 70: Notification calendar notify public auth facade boundary
+
+**Date**: 2026-06-02
+**Task**: Notification calendar notify public auth facade boundary
+**Branch**: `main`
+
+### Summary
+
+Moved calendar notification API admin checks off private users auth imports, routed them through the users public facade, and added import-boundary plus representative authorization regression tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8e46e61` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
