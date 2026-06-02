@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 88
+- **Total Sessions**: 89
 - **Last Active**: 2026-06-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~970 | Active |
+| `journal-2.md` | ~1003 | Active |
 | `journal-1.md` | ~1973 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 89 | 2026-06-03 | Weather cache lifecycle convergence | `818e504` | `main` |
 | 88 | 2026-06-03 | Remove users router cache wrappers | `fc1c192` | `main` |
 | 87 | 2026-06-03 | Remove points config router alias | `c1b3a5b` | `main` |
 | 86 | 2026-06-03 | Move template context to shared owner | `96566b8` | `main` |

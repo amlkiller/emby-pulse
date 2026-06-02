@@ -968,3 +968,36 @@ Removed users.router cache forwarding wrappers, pointed user management cache re
 ### Next Steps
 
 - None - task complete
+
+
+## Session 89: Weather cache lifecycle convergence
+
+**Date**: 2026-06-03
+**Task**: Weather cache lifecycle convergence
+**Branch**: `main`
+
+### Summary
+
+Moved weather cache preload into bootstrap lifecycle registry, added stop hooks for delayed preload and weather refresh loop, and verified lifecycle tests plus full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `818e504` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
