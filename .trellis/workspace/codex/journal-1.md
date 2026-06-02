@@ -236,3 +236,36 @@ Removed three pure user_bot_settings enabled aliases, updated notification calle
 ### Next Steps
 
 - None - task complete
+
+
+## Session 8: Remove playback query_stats alias
+
+**Date**: 2026-06-03
+**Task**: Remove playback query_stats alias
+**Branch**: `Compiled`
+
+### Summary
+
+Removed the pure stats_queries.query_stats forwarding wrapper, pointed playback stats and notification bot report callers directly at playback_store.query, and updated boundary tests to monkeypatch the real playback store boundary. Verified precise alias search, compileall, UTF-8 import check, and full pytest suite: 385 passed, 3 warnings.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c148b33` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
