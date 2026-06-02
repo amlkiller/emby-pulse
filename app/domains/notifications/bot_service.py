@@ -19,6 +19,7 @@ from app.domains.notifications import notify_admin_dao, notify_rule_dao
 from app.infra.db.playback_filters import get_base_filter
 from app.domains.users import user_dao
 from app.infra.db.local_playback_store import insert_bot_playback_history_record
+from app.infra.db.playback_store import playback_store
 from app.infra.clients.media_server_client import media_api
 from app.infra.clients.moviepilot_client import moviepilot_client
 from app.infra.clients.network_client import network_client
@@ -1624,7 +1625,7 @@ class NotificationBot:
         chat_id = "sys_notify"
         # 🔥 时区修复：强制增加 'localtime'，与本地北京时间保持严格对齐
         where = "WHERE DateCreated >= date('now', 'localtime', '-1 day', 'start of day') AND DateCreated < date('now', 'localtime', 'start of day')"
-        res = stats_queries.query_stats(f"SELECT COUNT(*) as c FROM PlaybackActivity {where}")
+        res = playback_store.query(f"SELECT COUNT(*) as c FROM PlaybackActivity {where}")
         count = res[0]['c'] if res else 0
         if count == 0:
             yesterday_str = (datetime.date.today() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
@@ -2767,21 +2768,21 @@ class NotificationBot:
                 params = tuple(exclude_types)
 
         try:
-            plays_res = stats_queries.query_stats(f"SELECT COUNT(*) as c FROM PlaybackActivity {where}{exclude_sql}", params)
+            plays_res = playback_store.query(f"SELECT COUNT(*) as c FROM PlaybackActivity {where}{exclude_sql}", params)
             if not plays_res: raise Exception("DB Error")
             plays = plays_res[0]['c']
-            dur_res = stats_queries.query_stats(f"SELECT SUM(PlayDuration) as c FROM PlaybackActivity {where}{exclude_sql}", params)
+            dur_res = playback_store.query(f"SELECT SUM(PlayDuration) as c FROM PlaybackActivity {where}{exclude_sql}", params)
             dur = dur_res[0]['c'] if dur_res and dur_res[0]['c'] else 0
             # 🔥 使用格式化字符串，确保四舍五入一致
             hours_str = f"{dur / 3600:.1f}"
-            users_res = stats_queries.query_stats(f"SELECT COUNT(DISTINCT UserId) as c FROM PlaybackActivity {where}{exclude_sql}", params)
+            users_res = playback_store.query(f"SELECT COUNT(DISTINCT UserId) as c FROM PlaybackActivity {where}{exclude_sql}", params)
             users = users_res[0]['c'] if users_res else 0
             
             # 日均播放
             avg_plays_str = f"{plays / days:.1f}" if days > 0 else str(plays)
 
             # 用户排行
-            top_users = stats_queries.query_stats(f"SELECT UserId, SUM(PlayDuration) as t FROM PlaybackActivity {where}{exclude_sql} GROUP BY UserId ORDER BY t DESC LIMIT 5", params)
+            top_users = playback_store.query(f"SELECT UserId, SUM(PlayDuration) as t FROM PlaybackActivity {where}{exclude_sql} GROUP BY UserId ORDER BY t DESC LIMIT 5", params)
             user_str = ""
             if top_users:
                 for i, u in enumerate(top_users):
@@ -2794,7 +2795,7 @@ class NotificationBot:
             else: user_str = "暂无数据\n"
 
             # 🔥 内容排行 - 区分剧集和电影，按时长排序
-            all_content = stats_queries.query_stats(f"SELECT ItemName, ItemId, ItemType, COUNT(*) as C, COALESCE(SUM(PlayDuration), 0) as Duration FROM PlaybackActivity {where}{exclude_sql} GROUP BY ItemName ORDER BY Duration DESC LIMIT 100", params)
+            all_content = playback_store.query(f"SELECT ItemName, ItemId, ItemType, COUNT(*) as C, COALESCE(SUM(PlayDuration), 0) as Duration FROM PlaybackActivity {where}{exclude_sql} GROUP BY ItemName ORDER BY Duration DESC LIMIT 100", params)
             
             # 分离剧集和电影
             tv_pattern = re.compile(r' - [sS]\d|第.+[集期]|EP?\d', re.IGNORECASE)
@@ -2950,7 +2951,7 @@ class NotificationBot:
 
     def _cmd_recent(self, cid, platform):
         try:
-            rows = stats_queries.query_stats("SELECT UserId, ItemName, DateCreated FROM PlaybackActivity ORDER BY DateCreated DESC LIMIT 10")
+            rows = playback_store.query("SELECT UserId, ItemName, DateCreated FROM PlaybackActivity ORDER BY DateCreated DESC LIMIT 10")
             if not rows: return self.send_message(cid, "📭 无记录", platform=platform)
             
             msg = "📜 <b>最近播放记录 (Top 10)</b>\n\n"

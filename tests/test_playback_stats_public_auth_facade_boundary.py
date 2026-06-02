@@ -46,13 +46,13 @@ def test_get_libraries_denies_non_admin_before_query_or_media_side_effects(monke
     def fail_get_admin_user_id():
         raise AssertionError("admin media user should not be queried without admin permission")
 
-    def fail_query_stats(*args, **kwargs):
+    def fail_playback_query(*args, **kwargs):
         raise AssertionError("stats queries should not run without admin permission")
 
     monkeypatch.setattr(stats.user_service, "is_admin_user", fake_is_admin_user)
     monkeypatch.setattr(stats.media_api, "get", fail_media_get)
     monkeypatch.setattr(stats, "get_admin_user_id", fail_get_admin_user_id)
-    monkeypatch.setattr(stats, "query_stats", fail_query_stats)
+    monkeypatch.setattr(stats.playback_store, "query", fail_playback_query)
 
     response = stats.api_get_libraries(request)
 
@@ -102,13 +102,13 @@ def test_get_libraries_allows_admin_through_public_facade(monkeypatch):
         calls.append(("get_admin_user_id",))
         return "admin-id"
 
-    def fail_query_stats(*args, **kwargs):
+    def fail_playback_query(*args, **kwargs):
         raise AssertionError("library listing should not query playback stats")
 
     monkeypatch.setattr(stats.user_service, "is_admin_user", fake_is_admin_user)
     monkeypatch.setattr(stats.media_api, "get", fake_media_get)
     monkeypatch.setattr(stats, "get_admin_user_id", fake_get_admin_user_id)
-    monkeypatch.setattr(stats, "query_stats", fail_query_stats)
+    monkeypatch.setattr(stats.playback_store, "query", fail_playback_query)
 
     response = stats.api_get_libraries(request)
 
