@@ -783,3 +783,36 @@ Registered point game tables in schema_registry, routed database startup and poi
 ### Next Steps
 
 - None - task complete
+
+
+## Session 24: Plugin private schema registry bootstrap
+
+**Date**: 2026-06-02
+**Task**: Plugin private schema registry bootstrap
+**Branch**: `main`
+
+### Summary
+
+Registered plugin-private DAO tables in schema_registry, routed temp-account, season-poster, Emby-restart, and smart-collection bootstraps through schema_bootstrap, moved temp-account compatible ALTERs into TABLE_ALTERS, added focused registry/legacy-upgrade/DAO smoke coverage, updated backend database guidance, and verified focused checks plus full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `fce8075` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
