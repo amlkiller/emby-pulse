@@ -1,7 +1,7 @@
 import asyncio
 import datetime
 from fastapi import APIRouter, Request
-from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.domains.users import public_service as user_service
 from pydantic import BaseModel
 from app.infra.db.notification_dao import add_system_notification
 from app.domains.system.task_dao import (
@@ -114,7 +114,7 @@ class TaskConfigModel(BaseModel):
 
 @router.get("/api/tasks/config")
 async def get_task_config(request: Request):
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
         return {"status": "success", "enable_notify": is_task_notify_enabled()}
     except Exception as e:
@@ -122,7 +122,7 @@ async def get_task_config(request: Request):
 
 @router.post("/api/tasks/config")
 async def set_task_config(data: TaskConfigModel, request: Request):
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
         set_task_notify_enabled(data.enable_notify)
         return {"status": "success"}
@@ -232,7 +232,7 @@ class TranslationModel(BaseModel):
 
 @router.post("/api/tasks/translate")
 async def translate_task(data: TranslationModel, request: Request):
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     
     orig = data.original_name.strip()
     trans = data.translated_name.strip()
@@ -252,7 +252,7 @@ async def translate_task(data: TranslationModel, request: Request):
 # ==========================================
 @router.get("/api/tasks")
 async def get_tasks(request: Request):
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     
     try:
         res = media_api.get("/ScheduledTasks", timeout=5)
@@ -290,7 +290,7 @@ async def get_tasks(request: Request):
 
 @router.post("/api/tasks/{task_id}/start")
 async def start_task(task_id: str, request: Request):
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
         media_api.post(f"/ScheduledTasks/Running/{task_id}", timeout=5)
         return {"status": "success"}
@@ -299,7 +299,7 @@ async def start_task(task_id: str, request: Request):
 
 @router.post("/api/tasks/{task_id}/stop")
 async def stop_task(task_id: str, request: Request):
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
         media_api.delete(f"/ScheduledTasks/Running/{task_id}", timeout=5)
         return {"status": "success"}
