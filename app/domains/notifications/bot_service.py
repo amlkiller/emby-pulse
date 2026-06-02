@@ -759,7 +759,8 @@ class SystemDaemon:
                             if episodes_only: self._push_episode_group(group_id, episodes_only)
                 else:
                     self._push_single_item(group_items[0])
-                time.sleep(2) 
+                if self._stop_event.wait(2):
+                    return
             except Exception as e:
                 logger.error(f"[入库通知] 处理失败: {e}")
 
@@ -898,7 +899,8 @@ class SystemDaemon:
                             if sn in local_seasons:
                                 media_request_dao.mark_sync_request_finished(tid, sn)
                                 logger.info(f"[入库同步] 求片已入库: tmdb_id={tid}, season={sn}")
-                time.sleep(0.5) 
+                if self._stop_event.wait(0.5):
+                    return
         except Exception as e: 
             logger.error(f"[入库同步] 定时同步异常: {e}")
 
