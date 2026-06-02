@@ -17,7 +17,7 @@ from app.domains.pwa.pwa_dao import (
     save_pwa_config_value,
     set_user_pwa_icon,
 )
-from app.domains.users.auth import is_admin_user
+from app.domains.users import public_service as user_service
 
 router = APIRouter()
 
@@ -149,7 +149,7 @@ async def upload_custom_icon(request: Request, file: UploadFile = File(...)):
     if not user:
         raise HTTPException(status_code=401, detail="未登录")
     
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
     if not file.content_type or not file.content_type.startswith("image/"):
@@ -221,7 +221,7 @@ async def set_default_icon(request: Request):
     if not user:
         raise HTTPException(status_code=401, detail="未登录")
     
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
     data = await request.json()
@@ -241,7 +241,7 @@ async def set_app_name(request: Request):
     if not user:
         raise HTTPException(status_code=401, detail="未登录")
     
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
     data = await request.json()
@@ -263,7 +263,7 @@ async def delete_custom_icon(icon_id: str, request: Request):
     if not user:
         raise HTTPException(status_code=401, detail="未登录")
     
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         raise HTTPException(status_code=403, detail="需要管理员权限")
     
     # 不能删除内置图标
