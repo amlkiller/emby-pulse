@@ -500,3 +500,36 @@ Removed the pure stop_calendar_notify_services redirect and registered/called ca
 ### Next Steps
 
 - None - task complete
+
+
+## Session 16: Remove calendar service lifecycle redirects
+
+**Date**: 2026-06-03
+**Task**: Remove calendar service lifecycle redirects
+**Branch**: `Compiled`
+
+### Summary
+
+Removed pure start_calendar_service and stop_calendar_service redirects and registered calendar_service.start/stop directly. Verified compileall, focused lifecycle tests, import check, and full pytest suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `cebbd7f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
