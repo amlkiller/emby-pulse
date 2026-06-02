@@ -566,3 +566,36 @@ Routed users-router invitation management through the system public service faca
 ### Next Steps
 
 - None - task complete
+
+
+## Session 77: Users notification rule facade boundary
+
+**Date**: 2026-06-02
+**Task**: Users notification rule facade boundary
+**Branch**: `main`
+
+### Summary
+
+Routed users-router delete notification rule lookup through the notifications public service facade, added focused boundary tests, and verified the full pytest suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d1fd179` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
