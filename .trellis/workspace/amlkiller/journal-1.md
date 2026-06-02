@@ -651,3 +651,36 @@ Routed init_db compatibility sys_notifications creation through schema_bootstrap
 ### Next Steps
 
 - None - task complete
+
+
+## Session 20: Plugin DAO schema registry bootstrap batch
+
+**Date**: 2026-06-02
+**Task**: Plugin DAO schema registry bootstrap batch
+**Branch**: `main`
+
+### Summary
+
+Routed plugin_state, plugin_logs, and keep_alive_violations bootstrap paths through schema_bootstrap; preserved plugin log index and DAO behavior; added focused plugin DAO registry tests; updated backend schema-boundary guidance; verified focused checks and full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1dae17d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
