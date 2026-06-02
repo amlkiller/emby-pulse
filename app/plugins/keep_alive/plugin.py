@@ -13,6 +13,7 @@ from app.infra.clients.media_server_client import media_api
 from app.infra.clients.telegram_client import telegram_client
 from app.infra.config.notification_settings import get_notify_bot_runtime_config
 from app.infra.config.user_bot_settings import get_user_bot_token_or_empty
+from app.domains.playback import public_service as playback_service
 from app.domains.users import public_service as user_service
 from app.plugins.keep_alive.keep_alive_dao import (
     count_keep_alive_disabled,
@@ -24,7 +25,6 @@ from app.plugins.keep_alive.keep_alive_dao import (
     save_keep_alive_violation,
     update_keep_alive_violation_disabled,
 )
-from app.domains.playback.stats_queries import get_user_play_summary
 
 logger = logging.getLogger("uvicorn")
 
@@ -404,7 +404,7 @@ class KeepAlivePlugin(PluginBase):
 
             # 查询上月播放数据
             try:
-                row = get_user_play_summary(uid, start_str, end_str)
+                row = playback_service.get_user_play_summary(uid, start_str, end_str)
             except Exception as e:
                 self._log(f"❌ 查询用户 {uname} 播放数据失败: {e}", level="error")
                 continue
