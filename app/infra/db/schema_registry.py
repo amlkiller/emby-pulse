@@ -948,6 +948,58 @@ TABLE_ALTERS = {
     ]
 }
 
+# Registry-owned indexes. Table creation, compatible alters, and simple indexes
+# should stay together so init, repair, and DAO bootstraps use one schema source.
+TABLE_INDEXES = {
+    "users_meta": [
+        "CREATE INDEX IF NOT EXISTS idx_users_meta_expire ON users_meta(expire_date)",
+    ],
+    "login_failures": [
+        "CREATE INDEX IF NOT EXISTS idx_login_failures_key ON login_failures(lock_key)",
+        "CREATE INDEX IF NOT EXISTS idx_login_failures_type ON login_failures(lock_type)",
+        "CREATE INDEX IF NOT EXISTS idx_login_failures_locked ON login_failures(locked_until)",
+    ],
+    "api_tokens": [
+        "CREATE INDEX IF NOT EXISTS idx_api_tokens_user ON api_tokens(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_api_tokens_token ON api_tokens(token)",
+    ],
+    "risk_logs": [
+        "CREATE INDEX IF NOT EXISTS idx_risk_logs_user ON risk_logs(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_risk_logs_time ON risk_logs(created_at)",
+    ],
+    "point_logs": [
+        "CREATE INDEX IF NOT EXISTS idx_point_logs_user ON point_logs(user_id)",
+    ],
+    "media_requests": [
+        "CREATE INDEX IF NOT EXISTS idx_media_requests_status ON media_requests(status)",
+    ],
+    "request_admin_messages": [
+        "CREATE INDEX IF NOT EXISTS idx_request_admin_messages_tmdb ON request_admin_messages(tmdb_id)",
+    ],
+    "msg_conversations": [
+        "CREATE INDEX IF NOT EXISTS idx_msg_conversations_user ON msg_conversations(user_id)",
+    ],
+    "msg_items": [
+        "CREATE INDEX IF NOT EXISTS idx_msg_items_conv ON msg_items(conversation_id)",
+    ],
+    "plugin_logs": [
+        "CREATE INDEX IF NOT EXISTS idx_plugin_logs_plugin_id ON plugin_logs(plugin_id)",
+    ],
+    "sessions": [
+        "CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)",
+    ],
+    "audit_logs": [
+        "CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_logs(timestamp)",
+        "CREATE INDEX IF NOT EXISTS idx_audit_user_id ON audit_logs(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs(action)",
+    ],
+    "PlaybackActivity": [
+        "CREATE INDEX IF NOT EXISTS idx_playback_user_date ON PlaybackActivity(UserId, DateCreated)",
+        "CREATE INDEX IF NOT EXISTS idx_playback_date ON PlaybackActivity(DateCreated)",
+        "CREATE INDEX IF NOT EXISTS idx_playback_item ON PlaybackActivity(ItemId)",
+    ],
+}
+
 # 🔥 核心表定义 - 用于检测是否有数据
 CORE_TABLES = ["users_meta"]  # 只要 users_meta 有数据就认为系统库已初始化
 

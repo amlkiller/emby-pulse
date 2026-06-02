@@ -96,4 +96,4 @@ def test_audit_logger_bootstrap_uses_schema_registry_instead_of_local_table_ddl(
 
     assert 'ensure_registered_table(cursor, "audit_logs")' in source
     assert "CREATE TABLE IF NOT EXISTS audit_logs" not in source
-    assert "CREATE INDEX IF NOT EXISTS idx_audit_timestamp" in source
+    assert "CREATE INDEX IF NOT EXISTS idx_audit_timestamp" not in source

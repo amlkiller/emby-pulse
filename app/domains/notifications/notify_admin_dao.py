@@ -1,13 +1,13 @@
 import json
 
-from app.infra.db.schema_registry import TABLE_SCHEMAS
+from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
 
 
 def ensure_notify_rules_table() -> None:
     with system_store.connect() as conn:
         cursor = conn.cursor()
-        cursor.execute(TABLE_SCHEMAS["notify_rules"])
+        ensure_registered_table(cursor, "notify_rules")
         conn.commit()
 
 

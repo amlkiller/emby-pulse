@@ -8,7 +8,7 @@ if str(_repo_root) not in sys.path:
     sys.path.insert(0, str(_repo_root))
 
 from app.domains.system import system_tool_dao  # noqa: E402
-from app.infra.db.schema_registry import PLAYBACK_SCHEMA, TABLE_ALTERS, TABLE_SCHEMAS  # noqa: E402
+from app.infra.db.schema_registry import PLAYBACK_SCHEMA, TABLE_ALTERS, TABLE_INDEXES, TABLE_SCHEMAS  # noqa: E402
 from app.infra.db.system_store import system_store  # noqa: E402
 
 
@@ -63,6 +63,17 @@ def test_repair_creates_missing_tables_from_schema_registry(monkeypatch, tmp_pat
         for column_name in ("episodes", "request_type", "series_id"):
             assert column_name in media_request_columns
             assert column_name in TABLE_SCHEMAS["media_requests"]
+        indexes = {
+            row[1]
+            for row in conn.execute(
+                "SELECT type, name FROM sqlite_master WHERE type = 'index'"
+            ).fetchall()
+        }
+
+    assert "idx_users_meta_expire" in indexes
+    assert "idx_media_requests_status" in indexes
+    assert "idx_playback_date" in indexes
+    assert any("idx_users_meta_expire" in sql for sql in TABLE_INDEXES["users_meta"])
 
 
 def test_repair_applies_registered_alters_to_existing_tables(monkeypatch, tmp_path):
@@ -114,6 +125,8 @@ def test_repair_applies_registered_alters_to_existing_tables(monkeypatch, tmp_pa
 def test_repair_helper_uses_schema_registry_imports_instead_of_local_repair_ddl():
     source = (_repo_root / "app/domains/system/system_tool_dao.py").read_text(encoding="utf-8")
 
+    assert "from app.infra.db.schema_bootstrap import apply_registered_indexes" in source
     assert "from app.infra.db.schema_registry import PLAYBACK_SCHEMA, SYSTEM_TABLES, TABLE_ALTERS, TABLE_SCHEMAS" in source
+    assert "apply_registered_indexes(cursor, table_name)" in source
     for table_name in REPAIRED_TABLES:
         assert f"CREATE TABLE IF NOT EXISTS {table_name}" not in source

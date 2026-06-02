@@ -83,8 +83,7 @@ def test_small_bootstrap_helpers_do_not_keep_local_registry_owned_ddl():
     notification_source = (_REPO_ROOT / "app/infra/db/notification_dao.py").read_text(encoding="utf-8")
     system_tool_source = (_REPO_ROOT / "app/domains/system/system_tool_dao.py").read_text(encoding="utf-8")
 
-    assert "TABLE_SCHEMAS[\"sys_notifications\"]" in notification_source
-    assert "TABLE_ALTERS[\"sys_notifications\"]" in notification_source
+    assert 'ensure_registered_table(cursor, "sys_notifications")' in notification_source
     assert "CREATE TABLE IF NOT EXISTS sys_notifications" not in notification_source
     assert "ALTER TABLE sys_notifications ADD COLUMN is_cleared" not in notification_source
 

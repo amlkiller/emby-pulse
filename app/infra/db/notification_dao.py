@@ -1,20 +1,13 @@
 import datetime
-import sqlite3
 
-from app.infra.db.schema_registry import TABLE_ALTERS, TABLE_SCHEMAS
+from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
 
 
 def ensure_notifications_table() -> None:
     with system_store.connect() as conn:
         cursor = conn.cursor()
-        cursor.execute(TABLE_SCHEMAS["sys_notifications"])
-        for alter_sql in TABLE_ALTERS["sys_notifications"]:
-            try:
-                cursor.execute(alter_sql)
-            except sqlite3.OperationalError as exc:
-                if "duplicate column" not in str(exc).lower():
-                    raise
+        ensure_registered_table(cursor, "sys_notifications")
         conn.commit()
 
 

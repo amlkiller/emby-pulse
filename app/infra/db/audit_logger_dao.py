@@ -5,19 +5,11 @@ from datetime import datetime
 from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
 
-AUDIT_INDEX_SQL = (
-    "CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_logs(timestamp)",
-    "CREATE INDEX IF NOT EXISTS idx_audit_user_id ON audit_logs(user_id)",
-    "CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs(action)",
-)
-
 
 def ensure_audit_table() -> None:
     with system_store.connect() as conn:
         cursor = conn.cursor()
         ensure_registered_table(cursor, "audit_logs")
-        for index_sql in AUDIT_INDEX_SQL:
-            cursor.execute(index_sql)
         conn.commit()
 
 

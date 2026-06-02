@@ -11,5 +11,6 @@ from app.infra.db.schema_registry import (  # noqa: F401
     PLAYBACK_TABLES,
     SYSTEM_TABLES,
     TABLE_ALTERS,
+    TABLE_INDEXES,
     TABLE_SCHEMAS,
 )

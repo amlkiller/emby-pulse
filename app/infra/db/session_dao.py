@@ -5,17 +5,12 @@ from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
 
 SESSION_TABLE = "sessions"
-SESSION_INDEX_SQL = "CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)"
 
 
 def ensure_session_table() -> None:
     with system_store.connect() as conn:
         cursor = conn.cursor()
         ensure_registered_table(cursor, SESSION_TABLE)
-        try:
-            cursor.execute(SESSION_INDEX_SQL)
-        except Exception:
-            pass
         conn.commit()
 
 

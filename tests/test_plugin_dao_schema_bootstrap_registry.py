@@ -150,6 +150,7 @@ def test_plugin_bootstraps_do_not_keep_local_registry_owned_ddl():
     assert "ensure_registered_table(cursor, table_name)" in plugin_source
     assert "CREATE TABLE IF NOT EXISTS plugin_state" not in plugin_source
     assert "CREATE TABLE IF NOT EXISTS plugin_logs" not in plugin_source
+    assert "CREATE INDEX IF NOT EXISTS idx_plugin_logs_plugin_id" not in plugin_source
 
     assert 'ensure_registered_table(cursor, "keep_alive_violations")' in keep_alive_source
     assert "CREATE TABLE IF NOT EXISTS keep_alive_violations" not in keep_alive_source

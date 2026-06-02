@@ -184,11 +184,11 @@ def test_selected_notification_bootstraps_use_schema_registry_instead_of_local_d
         ),
     }
 
-    assert "TABLE_SCHEMAS[\"request_admin_messages\"]" in sources["bot_service_dao"]
-    assert "TABLE_SCHEMAS[\"bot_notify_mutes\"]" in sources["notify_rule_dao"]
-    assert "TABLE_SCHEMAS[\"notify_rules\"]" in sources["notify_admin_dao"]
-    assert "TABLE_SCHEMAS[table_name]" in sources["message_dao"]
-    assert "TABLE_SCHEMAS[\"user_mutes\"]" in sources["message_dao"]
+    assert 'ensure_registered_table(cursor, "request_admin_messages")' in sources["bot_service_dao"]
+    assert 'ensure_registered_table(cursor, "bot_notify_mutes")' in sources["notify_rule_dao"]
+    assert 'ensure_registered_table(cursor, "notify_rules")' in sources["notify_admin_dao"]
+    assert "ensure_registered_table(cursor, table_name)" in sources["message_dao"]
+    assert 'ensure_registered_table(cursor, "user_mutes")' in sources["message_dao"]
     assert "ANNOUNCEMENT_TABLES" in sources["message_dao"]
     assert "ensure_registered_table(cursor, table_name)" in sources["message_dao"]
 
@@ -208,3 +208,5 @@ def test_selected_notification_bootstraps_use_schema_registry_instead_of_local_d
     for source_name, patterns in forbidden.items():
         for pattern in patterns:
             assert pattern not in sources[source_name]
+
+    assert "CREATE INDEX IF NOT EXISTS idx_request_admin_messages_tmdb" not in sources["bot_service_dao"]

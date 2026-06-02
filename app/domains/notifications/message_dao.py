@@ -1,5 +1,4 @@
 from app.infra.db.schema_bootstrap import ensure_registered_table
-from app.infra.db.schema_registry import TABLE_SCHEMAS
 from app.infra.db.system_store import system_store
 
 
@@ -11,7 +10,7 @@ def ensure_msg_tables() -> None:
     with system_store.connect() as conn:
         cursor = conn.cursor()
         for table_name in MESSAGE_TABLES:
-            cursor.execute(TABLE_SCHEMAS[table_name])
+            ensure_registered_table(cursor, table_name)
         conn.commit()
 
 
@@ -215,7 +214,8 @@ def remove_notify_block(user_id: str) -> None:
 
 def ensure_mute_table() -> None:
     with system_store.connect() as conn:
-        conn.execute(TABLE_SCHEMAS["user_mutes"])
+        cursor = conn.cursor()
+        ensure_registered_table(cursor, "user_mutes")
         conn.commit()
 
 

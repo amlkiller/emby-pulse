@@ -1,12 +1,11 @@
-from app.infra.db.schema_registry import TABLE_SCHEMAS
+from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
 
 
 def ensure_request_admin_messages_table() -> None:
     with system_store.connect() as conn:
         cursor = conn.cursor()
-        cursor.execute(TABLE_SCHEMAS["request_admin_messages"])
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_request_admin_messages_tmdb ON request_admin_messages(tmdb_id)")
+        ensure_registered_table(cursor, "request_admin_messages")
         conn.commit()
 
 

@@ -89,4 +89,4 @@ def test_session_bootstrap_uses_schema_registry_instead_of_local_table_ddl():
 
     assert "ensure_registered_table(cursor, SESSION_TABLE)" in source
     assert "CREATE TABLE IF NOT EXISTS sessions" not in source
-    assert "CREATE INDEX IF NOT EXISTS idx_sessions_expires" in source
+    assert "CREATE INDEX IF NOT EXISTS idx_sessions_expires" not in source

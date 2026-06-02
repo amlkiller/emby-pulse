@@ -1,11 +1,11 @@
-from app.infra.db.schema_registry import TABLE_SCHEMAS
+from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
 
 
 def ensure_bot_notify_mutes_table() -> None:
     with system_store.connect() as conn:
         cursor = conn.cursor()
-        cursor.execute(TABLE_SCHEMAS["bot_notify_mutes"])
+        ensure_registered_table(cursor, "bot_notify_mutes")
         conn.commit()
 
 

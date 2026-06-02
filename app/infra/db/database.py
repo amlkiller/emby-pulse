@@ -394,43 +394,6 @@ def _create_system_tables(c):
     for table_name in _REGISTRY_SYSTEM_INIT_TABLES:
         ensure_registered_table(c, table_name)
 
-    # 🔒 安全：登录失败锁定表（持久化，防止重启后丢失）
-    try: c.execute("CREATE INDEX IF NOT EXISTS idx_login_failures_key ON login_failures(lock_key)")
-    except Exception: pass
-    try: c.execute("CREATE INDEX IF NOT EXISTS idx_login_failures_type ON login_failures(lock_type)")
-    except Exception: pass
-    try: c.execute("CREATE INDEX IF NOT EXISTS idx_login_failures_locked ON login_failures(locked_until)")
-    except Exception: pass
-
-    # 🔑 API Token 表（用于第三方应用调用）
-    try: c.execute("CREATE INDEX IF NOT EXISTS idx_api_tokens_user ON api_tokens(user_id)")
-    except Exception: pass
-    try: c.execute("CREATE INDEX IF NOT EXISTS idx_api_tokens_token ON api_tokens(token)")
-    except Exception: pass
-
-    # 🔥 性能优化：创建索引（大幅提升查询速度）
-    # 用户元数据索引
-    try: c.execute("CREATE INDEX IF NOT EXISTS idx_users_meta_expire ON users_meta(expire_date)")
-    except Exception: pass
-    # 风控日志索引
-    try: c.execute("CREATE INDEX IF NOT EXISTS idx_risk_logs_user ON risk_logs(user_id)")
-    except Exception: pass
-    try: c.execute("CREATE INDEX IF NOT EXISTS idx_risk_logs_time ON risk_logs(created_at)")
-    except Exception: pass
-    # 积分日志索引
-    try: c.execute("CREATE INDEX IF NOT EXISTS idx_point_logs_user ON point_logs(user_id)")
-    except Exception: pass
-    # 媒体请求索引
-    try: c.execute("CREATE INDEX IF NOT EXISTS idx_media_requests_status ON media_requests(status)")
-    except Exception: pass
-    try: c.execute("CREATE INDEX IF NOT EXISTS idx_request_admin_messages_tmdb ON request_admin_messages(tmdb_id)")
-    except Exception: pass
-    # 消息索引
-    try: c.execute("CREATE INDEX IF NOT EXISTS idx_msg_conversations_user ON msg_conversations(user_id)")
-    except Exception: pass
-    try: c.execute("CREATE INDEX IF NOT EXISTS idx_msg_items_conv ON msg_items(conversation_id)")
-    except Exception: pass
-
 
 def init_db(skip_migration=False):
     """初始化所有数据库
@@ -471,18 +434,6 @@ def init_db(skip_migration=False):
         # 💰 积分系统（确保表存在）
         for table_name in _REGISTRY_COMPAT_INIT_TABLES:
             ensure_registered_table(c, table_name)
-
-        # 🔥 性能优化：创建索引（大幅提升查询速度）
-        # 播放历史表索引
-        try: c.execute("CREATE INDEX IF NOT EXISTS idx_playback_user_date ON PlaybackActivity(UserId, DateCreated)")
-        except Exception: pass
-        try: c.execute("CREATE INDEX IF NOT EXISTS idx_playback_date ON PlaybackActivity(DateCreated)")
-        except Exception: pass
-        try: c.execute("CREATE INDEX IF NOT EXISTS idx_playback_item ON PlaybackActivity(ItemId)")
-        except Exception: pass
-        # 用户元数据索引
-        try: c.execute("CREATE INDEX IF NOT EXISTS idx_users_meta_expire ON users_meta(expire_date)")
-        except Exception: pass
 
         conn.commit()
         conn.close()

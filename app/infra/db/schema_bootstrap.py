@@ -1,6 +1,6 @@
 from typing import Optional
 
-from app.infra.db.schema_registry import PLAYBACK_SCHEMA, TABLE_ALTERS, TABLE_SCHEMAS
+from app.infra.db.schema_registry import PLAYBACK_SCHEMA, TABLE_ALTERS, TABLE_INDEXES, TABLE_SCHEMAS
 
 
 def column_name_from_alter(alter_sql: str) -> str:
@@ -22,8 +22,10 @@ def registered_alter_columns(table_name: str) -> set[str]:
 def ensure_registered_table(cursor, table_name: str, only_columns: Optional[set[str]] = None) -> set[str]:
     cursor.execute(TABLE_SCHEMAS[table_name])
     columns = table_columns(cursor, table_name)
+    columns = apply_registered_alters(cursor, table_name, columns, only_columns)
+    apply_registered_indexes(cursor, table_name, columns)
 
-    return apply_registered_alters(cursor, table_name, columns, only_columns)
+    return columns
 
 
 def apply_registered_alters(
@@ -43,7 +45,24 @@ def apply_registered_alters(
     return columns
 
 
+def index_column_names(index_sql: str) -> set[str]:
+    columns_part = index_sql.rsplit("(", 1)[1].split(")", 1)[0]
+    return {column.strip().split()[0].strip('"`[]') for column in columns_part.split(",")}
+
+
+def apply_registered_indexes(cursor, table_name: str, columns: Optional[set[str]] = None) -> None:
+    if columns is None:
+        columns = table_columns(cursor, table_name)
+
+    for index_sql in TABLE_INDEXES.get(table_name, []):
+        if not index_column_names(index_sql).issubset(columns):
+            continue
+        cursor.execute(index_sql)
+
+
 def ensure_playback_table(cursor, only_columns: Optional[set[str]] = None) -> set[str]:
     cursor.execute(PLAYBACK_SCHEMA)
     columns = table_columns(cursor, "PlaybackActivity")
-    return apply_registered_alters(cursor, "PlaybackActivity", columns, only_columns)
+    columns = apply_registered_alters(cursor, "PlaybackActivity", columns, only_columns)
+    apply_registered_indexes(cursor, "PlaybackActivity", columns)
+    return columns

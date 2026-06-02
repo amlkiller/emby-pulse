@@ -6,6 +6,7 @@ import json
 import sqlite3
 
 from app.core.security_utils import safe_error_message
+from app.infra.db.schema_bootstrap import apply_registered_indexes
 from app.infra.db.schema_registry import PLAYBACK_SCHEMA, SYSTEM_TABLES, TABLE_ALTERS, TABLE_SCHEMAS
 from app.infra.db.system_store import system_store
 
@@ -132,6 +133,8 @@ def repair_core_system_tables():
 
                 column_name = _column_name_from_add_column(alter_sql)
                 results.append(_upgrade_message(table_name, column_name))
+
+            apply_registered_indexes(cursor, table_name)
 
         conn.commit()
     return results

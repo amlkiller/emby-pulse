@@ -16,7 +16,6 @@ def ensure_plugin_tables() -> None:
         cursor = conn.cursor()
         for table_name in _PLUGIN_REGISTRY_TABLES:
             ensure_registered_table(cursor, table_name)
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_plugin_logs_plugin_id ON plugin_logs(plugin_id)")
         conn.commit()
 
 
