@@ -45,7 +45,7 @@ from app.domains.notifications.bot_admin_dao import (
     update_tg_binding_names,
 )
 from app.domains.notifications.bot_service import bot
-from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.domains.users import public_service as user_service
 import threading
 import base64
 import struct
@@ -68,7 +68,7 @@ router = APIRouter()
 @router.get("/api/bot/settings")
 def api_get_bot_settings(request: Request):
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     
     all_config = get_all_bot_settings()
     
@@ -141,7 +141,7 @@ def api_get_bot_settings(request: Request):
 @router.post("/api/bot/settings")
 def api_save_bot_settings(data: BotSettingsModel, request: Request):
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     
     # 🔒 安全：检查是否应该更新敏感字段
     # 🔥 记录变更前的值（用于审计日志）
@@ -264,7 +264,7 @@ def api_save_bot_settings(data: BotSettingsModel, request: Request):
 @router.post("/api/bot/open_reg_notify")
 def api_send_open_reg_notify(request: Request, data: dict):
     """发送开放注册状态变更通知"""
-    if not is_admin_user(request): 
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
     is_open = data.get("is_open", False)
@@ -336,7 +336,7 @@ def api_send_open_reg_notify(request: Request, data: dict):
 
 @router.post("/api/bot/test")
 def api_test_bot(request: Request):
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     token = get_tg_bot_token(); chat_id = get_tg_chat_id()
     from app.utils.proxy_helper import get_safe_proxies
     
@@ -354,7 +354,7 @@ def api_test_bot(request: Request):
 
 @router.post("/api/bot/test_wecom")
 def api_test_wecom(request: Request):
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     wecom_config = get_wecom_runtime_config()
     corpid = wecom_config["corpid"]; corpsecret = wecom_config["corpsecret"]; agentid = wecom_config["agentid"]
     from app.utils.proxy_helper import get_safe_wecom_base
@@ -384,7 +384,7 @@ def api_test_wecom(request: Request):
 @router.post("/api/bot/test_channel")
 async def api_test_channel(request: Request):
     """测试频道通知"""
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     token = get_tg_bot_token()
     if not token: return {"status": "error", "message": "请先配置管理机器人 Token"}
     
@@ -584,7 +584,7 @@ async def wecom_webhook_post(request: Request, msg_signature: str = "", timestam
 # ==========================================
 @router.get("/api/bot/user_blacklist")
 def api_get_user_blacklist(request: Request):
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
         rows = list_user_blacklist()
         return {"status": "success", "data": [dict(r) for r in rows]}
@@ -594,7 +594,7 @@ def api_get_user_blacklist(request: Request):
 
 @router.post("/api/bot/user_blacklist/add")
 async def api_add_user_blacklist(request: Request):
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     data = await request.json()
     tg_id = data.get("tg_user_id", "").strip()
     reason = data.get("reason", "管理员手动添加")
@@ -606,7 +606,7 @@ async def api_add_user_blacklist(request: Request):
 
 @router.post("/api/bot/user_blacklist/remove")
 async def api_remove_user_blacklist(request: Request):
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     data = await request.json()
     tg_id = data.get("tg_user_id", "").strip()
     if not tg_id: return {"status": "error"}
@@ -622,7 +622,7 @@ async def api_remove_user_blacklist(request: Request):
 @router.get("/api/bot/reg_logs")
 def api_get_reg_logs(request: Request, days: int = 7):
     """获取开放注册日志"""
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
         rows = list_registration_logs(days)
         return {"status": "success", "data": [dict(r) for r in rows]}
@@ -633,7 +633,7 @@ def api_get_reg_logs(request: Request, days: int = 7):
 @router.get("/api/bot/reg_stats")
 def api_get_reg_stats(request: Request):
     """获取注册统计信息"""
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
         return {"status": "success", "data": get_registration_stats()}
     except Exception as e:
@@ -643,7 +643,7 @@ def api_get_reg_stats(request: Request):
 @router.post("/api/bot/reg_logs/clear")
 async def api_clear_reg_logs(request: Request):
     """清空注册日志"""
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
         clear_registration_logs()
         return {"status": "success"}
@@ -654,7 +654,7 @@ async def api_clear_reg_logs(request: Request):
 @router.post("/api/bot/reg_batch_reset")
 async def api_reset_reg_batch(request: Request):
     """重置批次计数"""
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     set_user_bot_registration_batch_used(0)
     # 同步重置内存中的 batch_used，避免后台线程把旧值写回
     try:
@@ -670,7 +670,7 @@ async def api_reset_reg_batch(request: Request):
 @router.get("/api/bot/reg_quota_status")
 async def api_get_reg_quota_status(request: Request):
     """获取名额状态（用于前端显示）"""
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     from app.domains.notifications import user_bot_service
 
     quota_mode = get_user_bot_reg_quota_mode()
@@ -711,7 +711,7 @@ async def api_get_reg_quota_status(request: Request):
 @router.post("/api/bot/sync_tg_usernames")
 def api_sync_tg_usernames(request: Request):
     """同步已绑定用户的 TG 用户名和显示名称"""
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
 
     try:
         # 获取所有已绑定用户
@@ -783,7 +783,7 @@ def api_sync_tg_usernames(request: Request):
 @router.get("/api/bot/tg_bindings")
 def api_get_tg_bindings(request: Request):
     """获取已绑定用户列表"""
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
 
     try:
         rows = list_tg_bindings()
@@ -806,7 +806,7 @@ def api_get_tg_bindings(request: Request):
 @router.post("/api/bot/lottery_draw")
 def api_lottery_draw(request: Request):
     """手动开奖彩票"""
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     
     try:
         from app.domains.notifications.user_bot_service import do_lottery_draw
@@ -834,7 +834,7 @@ def api_lottery_draw(request: Request):
 @router.post("/api/bot/lottery_reset")
 def api_lottery_reset(request: Request):
     """清除今日开奖记录"""
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
 
     try:
         today = datetime.datetime.now().strftime('%Y-%m-%d')
@@ -857,7 +857,7 @@ def api_lottery_reset(request: Request):
 @router.post("/api/bot/lottery_fix_pool")
 def api_lottery_fix_pool(request: Request):
     """修复奖池：重新计算正确的奖池值"""
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
 
     try:
         today = datetime.datetime.now().strftime('%Y-%m-%d')
@@ -885,7 +885,7 @@ def api_lottery_fix_pool(request: Request):
 @router.post("/api/bot/scratch_clear")
 def api_scratch_clear(request: Request):
     """清除当前刮刮卡"""
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
 
     try:
         result = clear_active_scratch_card()
@@ -902,7 +902,7 @@ def api_scratch_clear(request: Request):
 @router.get("/api/bot/lottery_pool")
 def api_lottery_pool(request: Request):
     """获取当前奖池信息"""
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
 
     try:
         from app.domains.points.router import get_point_config
@@ -943,7 +943,7 @@ def api_lottery_pool(request: Request):
 @router.post("/api/bot/lottery_init_pool")
 def api_lottery_init_pool(request: Request, data: dict):
     """设置初始奖池"""
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
 
     try:
         init_pool = int(data.get("init_pool", 0))
