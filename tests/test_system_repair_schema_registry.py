@@ -125,7 +125,7 @@ def test_repair_applies_registered_alters_to_existing_tables(monkeypatch, tmp_pa
 def test_repair_helper_uses_schema_registry_imports_instead_of_local_repair_ddl():
     source = (_repo_root / "app/domains/system/system_tool_dao.py").read_text(encoding="utf-8")
 
-    assert "from app.infra.db.schema_bootstrap import apply_registered_indexes" in source
+    assert "from app.infra.db.schema_bootstrap import apply_registered_indexes, ensure_registered_table" in source
     assert "from app.infra.db.schema_registry import PLAYBACK_SCHEMA, SYSTEM_TABLES, TABLE_ALTERS, TABLE_SCHEMAS" in source
     assert "apply_registered_indexes(cursor, table_name)" in source
     for table_name in REPAIRED_TABLES:

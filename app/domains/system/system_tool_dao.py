@@ -6,7 +6,7 @@ import json
 import sqlite3
 
 from app.core.security_utils import safe_error_message
-from app.infra.db.schema_bootstrap import apply_registered_indexes
+from app.infra.db.schema_bootstrap import apply_registered_indexes, ensure_registered_table
 from app.infra.db.schema_registry import PLAYBACK_SCHEMA, SYSTEM_TABLES, TABLE_ALTERS, TABLE_SCHEMAS
 from app.infra.db.system_store import system_store
 
@@ -142,8 +142,9 @@ def repair_core_system_tables():
 
 def get_dashboard_layout():
     with system_store.connect() as conn:
-        conn.execute(TABLE_SCHEMAS["sys_dashboard"])
-        row = conn.execute("SELECT layout_json FROM sys_dashboard WHERE id = 1").fetchone()
+        cursor = conn.cursor()
+        ensure_registered_table(cursor, "sys_dashboard")
+        row = cursor.execute("SELECT layout_json FROM sys_dashboard WHERE id = 1").fetchone()
         if row and row[0]:
             return json.loads(row[0])
     return None
@@ -151,8 +152,9 @@ def get_dashboard_layout():
 
 def save_dashboard_layout(data) -> None:
     with system_store.connect() as conn:
-        conn.execute(TABLE_SCHEMAS["sys_dashboard"])
-        conn.execute(
+        cursor = conn.cursor()
+        ensure_registered_table(cursor, "sys_dashboard")
+        cursor.execute(
             "INSERT OR REPLACE INTO sys_dashboard (id, layout_json) VALUES (1, ?)",
             (json.dumps(data, ensure_ascii=False),),
         )

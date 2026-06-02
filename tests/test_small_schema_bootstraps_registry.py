@@ -87,5 +87,6 @@ def test_small_bootstrap_helpers_do_not_keep_local_registry_owned_ddl():
     assert "CREATE TABLE IF NOT EXISTS sys_notifications" not in notification_source
     assert "ALTER TABLE sys_notifications ADD COLUMN is_cleared" not in notification_source
 
-    assert "TABLE_SCHEMAS[\"sys_dashboard\"]" in system_tool_source
+    assert 'ensure_registered_table(cursor, "sys_dashboard")' in system_tool_source
+    assert 'TABLE_SCHEMAS["sys_dashboard"]' not in system_tool_source
     assert "CREATE TABLE IF NOT EXISTS sys_dashboard" not in system_tool_source
