@@ -55,6 +55,12 @@ def start_dashboard_cache_tasks() -> None:
     playback_start_dashboard_cache_tasks()
 
 
+def stop_dashboard_cache_tasks() -> None:
+    from app.domains.playback.stats import stop_dashboard_cache_tasks as playback_stop_dashboard_cache_tasks
+
+    playback_stop_dashboard_cache_tasks()
+
+
 def build_bootstrap_registry(app, request_port: int) -> BootstrapServiceRegistry:
     registry = BootstrapServiceRegistry()
     registry.register("webhook-token", ensure_strong_webhook_token)
@@ -62,7 +68,7 @@ def build_bootstrap_registry(app, request_port: int) -> BootstrapServiceRegistry
     registry.register("notifications", start_notification_services, stop_notification_services)
     registry.register("user-portal", lambda: start_user_portal_thread(app, request_port), stop_user_portal_thread)
     registry.register("risk-monitor", start_risk_monitor, stop_risk_monitor)
-    registry.register("dashboard-cache", start_dashboard_cache_tasks)
+    registry.register("dashboard-cache", start_dashboard_cache_tasks, stop_dashboard_cache_tasks)
     registry.register("media-requests", start_media_request_services, stop_media_request_services)
     registry.register("calendar", start_calendar_service, stop_calendar_service)
     registry.register("notifications-router", start_notifications_router_services)

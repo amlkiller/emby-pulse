@@ -80,3 +80,39 @@ def test_session_cleanup_stop_resets_state_and_allows_restart(monkeypatch):
     session.stop_session_services()
 
     assert len(calls) == 2
+
+
+def test_dashboard_cache_stop_cancels_tasks_and_allows_restart(monkeypatch):
+    async def run_check():
+        from app.domains.playback import stats
+
+        stats.stop_dashboard_cache_tasks()
+
+        async def fake_preload_dashboard_cache(*args, **kwargs):
+            await asyncio.sleep(60)
+
+        monkeypatch.setattr(stats, "preload_dashboard_cache", fake_preload_dashboard_cache)
+
+        stats.start_dashboard_cache_tasks()
+
+        preload_task = stats._dashboard_preload_task
+        refresh_task = stats._dashboard_refresh_task
+        assert preload_task is not None
+        assert refresh_task is not None
+        assert stats._dashboard_cache_tasks_started is True
+
+        stats.stop_dashboard_cache_tasks()
+        await asyncio.sleep(0)
+
+        assert preload_task.cancelled()
+        assert refresh_task.cancelled()
+        assert stats._dashboard_preload_task is None
+        assert stats._dashboard_refresh_task is None
+        assert stats._dashboard_cache_tasks_started is False
+
+        stats.start_dashboard_cache_tasks()
+        stats.stop_dashboard_cache_tasks()
+
+        assert stats._dashboard_cache_tasks_started is False
+
+    asyncio.run(run_check())

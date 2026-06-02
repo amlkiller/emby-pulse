@@ -1263,6 +1263,8 @@ async def _fetch_trend(user_id: str) -> dict:
 # 预热状态标记
 _preload_started = False
 _dashboard_cache_tasks_started = False
+_dashboard_preload_task = None
+_dashboard_refresh_task = None
 _last_refresh_log_time = 0  # 上次打印刷新日志的时间
 
 async def preload_dashboard_cache(silent: bool = False, cache_key: str = _DASHBOARD_PRELOAD_KEY, user_id=None):
@@ -1325,30 +1327,33 @@ async def start_dashboard_cache_refresh_loop():
     """
     global _last_refresh_log_time
     
-    while True:
-        await asyncio.sleep(60)
-        try:
-            now = time.time()
-            active_keys = [
-                key for key, last_access in list(_dashboard_last_access.items())
-                if now - last_access <= _DASHBOARD_ACTIVE_WINDOW
-            ]
-            for cache_key in active_keys:
-                entry = _get_dashboard_cache_entry(cache_key)
-                cache_age = now - entry.get("ts", 0) if entry.get("ts", 0) > 0 else 999
-                if cache_age >= _DASHBOARD_CACHE_TTL:
-                    await preload_dashboard_cache(
-                        silent=True,
-                        cache_key=cache_key,
-                        user_id=_dashboard_cache_user_ids.get(cache_key),
-                    )
-                    # 每5分钟打印一次刷新日志（避免刷屏）
-                    if now - _last_refresh_log_time >= 300:
-                        _last_refresh_log_time = now
-                        print("[🔥 缓存] 后台刷新完成，下次刷新: 60秒后")
-        except Exception as e:
-            # 刷新失败不打印日志，避免刷屏
-            pass
+    try:
+        while True:
+            await asyncio.sleep(60)
+            try:
+                now = time.time()
+                active_keys = [
+                    key for key, last_access in list(_dashboard_last_access.items())
+                    if now - last_access <= _DASHBOARD_ACTIVE_WINDOW
+                ]
+                for cache_key in active_keys:
+                    entry = _get_dashboard_cache_entry(cache_key)
+                    cache_age = now - entry.get("ts", 0) if entry.get("ts", 0) > 0 else 999
+                    if cache_age >= _DASHBOARD_CACHE_TTL:
+                        await preload_dashboard_cache(
+                            silent=True,
+                            cache_key=cache_key,
+                            user_id=_dashboard_cache_user_ids.get(cache_key),
+                        )
+                        # 每5分钟打印一次刷新日志（避免刷屏）
+                        if now - _last_refresh_log_time >= 300:
+                            _last_refresh_log_time = now
+                            print("[🔥 缓存] 后台刷新完成，下次刷新: 60秒后")
+            except Exception as e:
+                # 刷新失败不打印日志，避免刷屏
+                pass
+    except asyncio.CancelledError:
+        raise
 
 @router.get("/api/dashboard/preload_status")
 async def api_preload_status(request: Request):
@@ -1376,12 +1381,22 @@ async def api_preload_status(request: Request):
 
 
 def start_dashboard_cache_tasks() -> None:
-    global _dashboard_cache_tasks_started
+    global _dashboard_cache_tasks_started, _dashboard_preload_task, _dashboard_refresh_task
     if _dashboard_cache_tasks_started:
         return
     _dashboard_cache_tasks_started = True
-    asyncio.create_task(preload_dashboard_cache())
-    asyncio.create_task(start_dashboard_cache_refresh_loop())
+    _dashboard_preload_task = asyncio.create_task(preload_dashboard_cache())
+    _dashboard_refresh_task = asyncio.create_task(start_dashboard_cache_refresh_loop())
+
+
+def stop_dashboard_cache_tasks() -> None:
+    global _dashboard_cache_tasks_started, _dashboard_preload_task, _dashboard_refresh_task
+    for task in (_dashboard_preload_task, _dashboard_refresh_task):
+        if task and not task.done():
+            task.cancel()
+    _dashboard_preload_task = None
+    _dashboard_refresh_task = None
+    _dashboard_cache_tasks_started = False
 
 
 @router.get("/api/dashboard/init")
