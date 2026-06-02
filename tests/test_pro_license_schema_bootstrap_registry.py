@@ -140,8 +140,10 @@ def test_pro_status_route_keeps_existing_device_payload(monkeypatch, tmp_path):
 def test_pro_license_bootstrap_uses_schema_registry_instead_of_local_ddl():
     source = (_REPO_ROOT / "app/domains/system/pro_license_dao.py").read_text(encoding="utf-8")
 
-    assert "from app.infra.db.schema_registry import TABLE_ALTERS, TABLE_SCHEMAS" in source
-    assert "TABLE_SCHEMAS[\"sys_license\"]" in source
-    assert "TABLE_ALTERS.get(table_name, [])" in source
+    assert "from app.infra.db.schema_bootstrap import ensure_registered_table" in source
+    assert "from app.infra.db.schema_registry import TABLE_ALTERS, TABLE_SCHEMAS" not in source
+    assert 'ensure_registered_table(cursor, "sys_license")' in source
+    assert "TABLE_SCHEMAS[" not in source
+    assert "TABLE_ALTERS.get" not in source
     assert "CREATE TABLE IF NOT EXISTS sys_license" not in source
     assert "ALTER TABLE sys_license ADD COLUMN" not in source
