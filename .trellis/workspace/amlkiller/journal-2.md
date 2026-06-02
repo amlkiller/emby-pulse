@@ -203,3 +203,36 @@ Moved system router admin checks off private users auth imports, routed them thr
 ### Next Steps
 
 - None - task complete
+
+
+## Session 66: System views public users facade boundary
+
+**Date**: 2026-06-02
+**Task**: System views public users facade boundary
+**Branch**: `main`
+
+### Summary
+
+Moved system views permission checks and page-permission map access off private users auth imports, exposed the permission map through the users public facade, and added import-boundary plus page-permission regression tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `72c3443` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
