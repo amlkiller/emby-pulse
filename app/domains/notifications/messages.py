@@ -54,7 +54,7 @@ from app.infra.config.notification_settings import (
 )
 from app.core.security_utils import sanitize_html, sanitize_rich_html
 from app.core.security import require_admin
-from app.domains.users.auth import is_admin_user
+from app.domains.users import public_service as user_service
 from app.core.security_utils import safe_error_message
 
 router = APIRouter()
@@ -152,7 +152,7 @@ def search_users(request: Request, q: str = ""):
     user = request.session.get("user")
     if not user:
         return {"status": "error", "message": "未登录"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
     if not q or len(q) < 2:
@@ -212,7 +212,7 @@ def get_conversations(request: Request, page: int = 1, limit: int = 20):
     user = request.session.get("user")
     if not user:
         return {"status": "error", "message": "未登录"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
 
     # 确保表存在
@@ -290,7 +290,7 @@ def get_conversation(user_id: str, request: Request, page: int = 1, limit: int =
     user = request.session.get("user")
     if not user:
         return {"status": "error", "message": "未登录"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
 
     # 确保表存在
@@ -360,7 +360,7 @@ def send_message(data: SendMessageModel, request: Request):
     user = request.session.get("user")
     if not user:
         return {"status": "error", "message": "未登录"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
 
     # 确保表存在
@@ -399,7 +399,7 @@ def admin_reply(data: ReplyModel, request: Request):
     user = request.session.get("user")
     if not user:
         return {"status": "error", "message": "未登录"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
 
     # 确保表存在
@@ -424,7 +424,7 @@ def get_unread_count(request: Request):
     user = request.session.get("user")
     if not user:
         return {"status": "error", "message": "未登录"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
 
     # 确保表存在
@@ -439,7 +439,7 @@ def mark_read(conversation_id: int, request: Request):
     user = request.session.get("user")
     if not user:
         return {"status": "error", "message": "未登录"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
 
     mark_admin_read(conversation_id)
@@ -586,7 +586,7 @@ def get_notify_block_list(request: Request):
     user = request.session.get("user")
     if not user:
         return {"status": "error", "message": "未登录"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
     _ensure_msg_tables()
@@ -607,7 +607,7 @@ def block_notify(user_id: str, request: Request):
     user = request.session.get("user")
     if not user:
         return {"status": "error", "message": "未登录"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
     _ensure_msg_tables()
@@ -624,7 +624,7 @@ def unblock_notify(user_id: str, request: Request):
     user = request.session.get("user")
     if not user:
         return {"status": "error", "message": "未登录"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
     _ensure_msg_tables()
@@ -711,7 +711,7 @@ def get_mute_list(request: Request, page: int = 1, limit: int = 20):
     user = request.session.get("user")
     if not user:
         return {"status": "error", "message": "未登录"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
     _ensure_mute_table()
@@ -745,7 +745,7 @@ def mute_user(data: MuteUserModel, request: Request):
     user = request.session.get("user")
     if not user:
         return {"status": "error", "message": "未登录"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
     _ensure_mute_table()
@@ -791,7 +791,7 @@ def batch_mute_users(data: BatchMuteModel, request: Request):
     user = request.session.get("user")
     if not user:
         return {"status": "error", "message": "未登录"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
     if not data.user_ids:
@@ -840,7 +840,7 @@ def unmute_users(data: UnmuteModel, request: Request):
     user = request.session.get("user")
     if not user:
         return {"status": "error", "message": "未登录"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
     if not data.user_ids:
@@ -859,7 +859,7 @@ def unmute_single_user(user_id: str, request: Request):
     user = request.session.get("user")
     if not user:
         return {"status": "error", "message": "未登录"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
     _ensure_mute_table()
@@ -875,7 +875,7 @@ def check_mute_status(user_id: str, request: Request):
     user = request.session.get("user")
     if not user:
         return {"status": "error", "message": "未登录"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
     is_muted, mute_info = _is_user_muted(user_id)
@@ -913,7 +913,7 @@ def get_announcements(request: Request, active_only: bool = False):
     user = request.session.get("user")
     if not user:
         return {"status": "error", "message": "未登录"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
     _ensure_announcement_table()
@@ -929,7 +929,7 @@ def create_announcement(data: AnnouncementModel, request: Request):
     user = request.session.get("user")
     if not user:
         return {"status": "error", "message": "未登录"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
     _ensure_announcement_table()
@@ -955,7 +955,7 @@ def update_announcement(ann_id: int, data: AnnouncementUpdateModel, request: Req
     user = request.session.get("user")
     if not user:
         return {"status": "error", "message": "未登录"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
     _ensure_announcement_table()
@@ -984,7 +984,7 @@ def delete_announcement(ann_id: int, request: Request):
     user = request.session.get("user")
     if not user:
         return {"status": "error", "message": "未登录"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
     _ensure_announcement_table()
@@ -1145,7 +1145,7 @@ def get_msg_bot_config(request: Request):
     user = request.session.get("user")
     if not user:
         return {"status": "error", "message": "未登录"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
     return {
@@ -1164,7 +1164,7 @@ def set_msg_bot_config(data: MsgBotConfigModel, request: Request):
     user = request.session.get("user")
     if not user:
         return {"status": "error", "message": "未登录"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
     set_message_bot_notify_enabled(data.enabled)
@@ -1181,7 +1181,7 @@ def delete_conversation(user_id: str, request: Request):
     user = request.session.get("user")
     if not user:
         return {"status": "error", "message": "未登录"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
     _ensure_msg_tables()
@@ -1202,7 +1202,7 @@ def delete_all_conversations(request: Request):
     user = request.session.get("user")
     if not user:
         return {"status": "error", "message": "未登录"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
     _ensure_msg_tables()
@@ -1227,7 +1227,7 @@ def broadcast_message(data: BroadcastModel, request: Request):
     user = request.session.get("user")
     if not user:
         return {"status": "error", "message": "未登录"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
     if not data.user_ids:
