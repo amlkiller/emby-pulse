@@ -882,3 +882,36 @@ Registered user_tags in schema_registry, routed system database startup through 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 27: TV series status schema registry bootstrap
+
+**Date**: 2026-06-02
+**Task**: TV series status schema registry bootstrap
+**Branch**: `main`
+
+### Summary
+
+Registered tv_series_status in schema_registry, routed system database startup through ensure_registered_table, added calendar-status DAO smoke coverage, updated backend database guidance, and verified focused checks plus full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `056ab69` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
