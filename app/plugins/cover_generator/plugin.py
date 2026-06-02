@@ -48,10 +48,6 @@ class CoverGeneratorPlugin(PluginBase):
     def __init__(self):
         super().__init__()
         self._setup_routes()
-        self._ensure_dir()
-
-    def _ensure_dir(self):
-        """确保输出目录存在"""
         os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     def _setup_routes(self):
@@ -506,7 +502,7 @@ class CoverGeneratorPlugin(PluginBase):
             return FileResponse(filepath)
 
     def on_enable(self):
-        self._ensure_dir()
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
         logger.info("🔌 [封面生成] 插件已启用")
 
     def on_disable(self):
@@ -531,7 +527,6 @@ class CoverGeneratorPlugin(PluginBase):
     def _is_pro(self):
         """检查 Pro 授权"""
         return True
-
 
 
 

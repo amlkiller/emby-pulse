@@ -75,10 +75,6 @@ class UserBackupPlugin(PluginBase):
         self._last_backup_date = None
         self._webdav_dir_created = False  # WebDAV 目录是否已创建标记
         self._setup_routes()
-        self._ensure_dir()
-
-    def _ensure_dir(self):
-        """确保备份目录存在"""
         os.makedirs(BACKUP_DIR, exist_ok=True)
 
     def _is_pro(self) -> bool:
@@ -1231,7 +1227,7 @@ class UserBackupPlugin(PluginBase):
     def on_enable(self):
         if self._thread and self._thread.is_alive():
             return
-        self._ensure_dir()
+        os.makedirs(BACKUP_DIR, exist_ok=True)
         self._stop_event.clear()
         self._running = True
         # 启动时检查今天是否已有备份文件，避免重启后重复备份
