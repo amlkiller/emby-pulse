@@ -1,6 +1,6 @@
 # 通知管理路由
 from fastapi import APIRouter, Request
-from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.domains.users import public_service as user_service
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from app.domains.notifications.notify_admin_dao import (
@@ -120,7 +120,7 @@ def api_get_notify_types(request: Request):
     """获取通知类型定义"""
     # 🔥 安全：必须登录才能访问
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "请先登录"}
     return {"status": "success", "data": NOTIFY_TYPES, "channels": CHANNEL_OPTIONS}
 
@@ -130,7 +130,7 @@ def api_get_notify_rules(request: Request):
     """获取通知规则配置"""
     # 🔥 安全：必须登录才能访问
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "请先登录"}
     
     ensure_notify_rules_table()
@@ -169,7 +169,7 @@ def api_save_notify_rules(request: Request, data: dict):
     if not user:
         return {"status": "error", "message": "请先登录"}
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
 
     rules = data.get("rules", {})
@@ -189,7 +189,7 @@ def api_get_channels_config(request: Request):
     if not user:
         return {"status": "error", "message": "请先登录"}
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
 
     return {"status": "success", "data": get_notification_channels_config()}
@@ -203,7 +203,7 @@ def api_save_channels_config(request: Request, data: dict):
     if not user:
         return {"status": "error", "message": "请先登录"}
     # 🔒 安全检查：必须管理员（该接口可修改 TG Token / Webhook，必须严格校验）
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
 
     try:
