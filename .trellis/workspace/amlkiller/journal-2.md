@@ -38,3 +38,36 @@ Moved system task route admin checks off private users auth imports, routed them
 ### Next Steps
 
 - None - task complete
+
+
+## Session 61: System audit public auth facade boundary
+
+**Date**: 2026-06-02
+**Task**: System audit public auth facade boundary
+**Branch**: `main`
+
+### Summary
+
+Moved system audit page/API admin checks off private users auth imports, routed them through the users public facade, and added import-boundary plus redirect/JSON/admin-success authorization tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `596df30` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
