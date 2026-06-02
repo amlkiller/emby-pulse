@@ -25,7 +25,7 @@ from app.infra.db.migration_service import (
     old_database_path,
     restore_backup,
 )
-from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.domains.users import public_service as user_service
 import os
 from app.core.rate_limiter import get_client_ip
 
@@ -39,7 +39,7 @@ async def api_db_health(request: Request):
     返回系统数据库和旧数据库的完整状态
     """
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return JSONResponse(status_code=403, content={"error": "需要管理员权限"})
     
     return full_health_check()
@@ -52,7 +52,7 @@ async def api_db_check(request: Request):
     返回缺失的表和字段
     """
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return JSONResponse(status_code=403, content={"error": "需要管理员权限"})
     
     result = check_system_tables()
@@ -75,7 +75,7 @@ async def api_db_deep_check(request: Request):
     深度检测 - 返回详细的检测结果，包括所有表的扫描状态
     """
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return JSONResponse(status_code=403, content={"error": "需要管理员权限"})
 
     return deep_check_system_database()
@@ -87,7 +87,7 @@ async def api_migration_check(request: Request):
     检查可迁移的旧数据库表
     """
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return JSONResponse(status_code=403, content={"error": "需要管理员权限"})
     
     return check_old_db_tables()
@@ -99,7 +99,7 @@ async def api_db_repair(request: Request):
     修复数据库 - 创建缺失的表和字段
     """
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return JSONResponse(status_code=403, content={"error": "需要管理员权限"})
     
     # 🔒 审计日志
@@ -136,7 +136,7 @@ async def api_db_backup(request: Request):
     备份数据库
     """
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return JSONResponse(status_code=403, content={"error": "需要管理员权限"})
     
     # 🔒 审计日志
@@ -168,7 +168,7 @@ async def api_list_backups(request: Request):
     获取备份文件列表
     """
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return JSONResponse(status_code=403, content={"error": "需要管理员权限"})
     
     return {
@@ -184,7 +184,7 @@ async def api_delete_backup(request: Request, filename: str):
     删除备份文件
     """
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return JSONResponse(status_code=403, content={"error": "需要管理员权限"})
     
     # 🔒 审计日志
@@ -217,7 +217,7 @@ async def api_db_migrate(
         tables: 指定要迁移的表（逗号分隔），不指定则迁移全部系统表
     """
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return JSONResponse(status_code=403, content={"error": "需要管理员权限"})
     
     # 🔒 审计日志
@@ -271,7 +271,7 @@ async def api_db_restore(request: Request):
     从备份恢复数据库
     """
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return JSONResponse(status_code=403, content={"error": "需要管理员权限"})
     
     body = await request.json()
@@ -311,7 +311,7 @@ async def api_full_check(request: Request):
     自动备份 + 修复缺失表 + 迁移数据（如果有）
     """
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return JSONResponse(status_code=403, content={"error": "需要管理员权限"})
     
     results = {
