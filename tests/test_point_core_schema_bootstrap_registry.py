@@ -255,20 +255,26 @@ def test_point_lottery_helper_uses_registry_owned_tables(monkeypatch, tmp_path):
 
 
 def test_point_core_bootstrap_uses_schema_registry_for_owned_tables_only():
-    source = (_REPO_ROOT / "app/domains/points/point_dao.py").read_text(encoding="utf-8")
+    sources = {
+        "point_dao.py": (_REPO_ROOT / "app/domains/points/point_dao.py").read_text(encoding="utf-8"),
+        "lottery_dao.py": (_REPO_ROOT / "app/domains/points/lottery_dao.py").read_text(encoding="utf-8"),
+    }
+    combined_source = "\n".join(sources.values())
 
-    assert "from app.infra.db.schema_bootstrap import ensure_registered_table" in source
-    assert 'ensure_registered_table(cursor, "users_meta", {"points"})' in source
-    assert 'ensure_registered_table(cursor, "point_logs")' in source
-    assert 'ensure_registered_table(cursor, "point_config")' in source
-    assert "for table_name in _POINT_GAME_TABLES:" in source
-    assert "ensure_registered_table(cursor, table_name)" in source
-    assert "CREATE TABLE IF NOT EXISTS point_logs" not in source
-    assert "CREATE TABLE IF NOT EXISTS point_config" not in source
+    assert "from app.infra.db.schema_bootstrap import ensure_registered_table" in sources["point_dao.py"]
+    assert "from app.infra.db.schema_bootstrap import ensure_registered_table" in sources["lottery_dao.py"]
+    assert 'ensure_registered_table(cursor, "users_meta", {"points"})' in sources["point_dao.py"]
+    assert 'ensure_registered_table(cursor, "point_logs")' in sources["point_dao.py"]
+    assert 'ensure_registered_table(cursor, "point_config")' in sources["point_dao.py"]
+    assert "for table_name in _POINT_GAME_TABLES:" in sources["point_dao.py"]
+    assert "ensure_registered_table(cursor, table_name)" in sources["point_dao.py"]
+    assert 'ensure_registered_table(cursor, table_name)' in sources["lottery_dao.py"]
+    assert "CREATE TABLE IF NOT EXISTS point_logs" not in combined_source
+    assert "CREATE TABLE IF NOT EXISTS point_config" not in combined_source
     for table_name in POINT_GAME_TABLES:
-        assert f"CREATE TABLE IF NOT EXISTS {table_name}" not in source
-        assert f"CREATE TABLE {table_name}" not in source
+        assert f"CREATE TABLE IF NOT EXISTS {table_name}" not in combined_source
+        assert f"CREATE TABLE {table_name}" not in combined_source
 
-    assert "ALTER TABLE scratch_cards ADD COLUMN" not in source
-    assert "ALTER TABLE point_red_packets ADD COLUMN" not in source
-    assert "ALTER TABLE pk_invitations ADD COLUMN" not in source
+    assert "ALTER TABLE scratch_cards ADD COLUMN" not in combined_source
+    assert "ALTER TABLE point_red_packets ADD COLUMN" not in combined_source
+    assert "ALTER TABLE pk_invitations ADD COLUMN" not in combined_source
