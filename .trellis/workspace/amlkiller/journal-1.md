@@ -1641,3 +1641,36 @@ Moved the plugins router off private users auth and system views imports, routed
 ### Next Steps
 
 - None - task complete
+
+
+## Session 50: Playback calendar public facade boundary
+
+**Date**: 2026-06-02
+**Task**: Playback calendar public facade boundary
+**Branch**: `main`
+
+### Summary
+
+Moved the playback calendar router off private users auth and system views imports, routed page permission/admin checks and template context through public facades, and added boundary plus behavior tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2dd1107` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
