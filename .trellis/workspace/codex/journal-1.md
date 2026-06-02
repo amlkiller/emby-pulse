@@ -203,3 +203,36 @@ Removed pure user_backup_dao aliases for users.user_dao calls, pointed plugin di
 ### Next Steps
 
 - None - task complete
+
+
+## Session 7: Remove user bot settings enabled aliases
+
+**Date**: 2026-06-03
+**Task**: Remove user bot settings enabled aliases
+**Branch**: `Compiled`
+
+### Summary
+
+Removed three pure user_bot_settings enabled aliases, updated notification callers to use canonical is_user_bot_open_reg* predicates directly, and kept config keys/defaults unchanged. Verified alias search, compileall, import check with PYTHONIOENCODING=utf-8, and full pytest suite: 385 passed, 3 warnings.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e4043e1` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

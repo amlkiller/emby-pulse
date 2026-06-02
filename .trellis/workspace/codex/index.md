@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 6
+- **Total Sessions**: 7
 - **Last Active**: 2026-06-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~205 | Active |
+| `journal-1.md` | ~238 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 7 | 2026-06-03 | Remove user bot settings enabled aliases | `e4043e1` | `Compiled` |
 | 6 | 2026-06-03 | Remove user backup DAO aliases | `58ccd61` | `Compiled` |
 | 5 | 2026-06-03 | Remove plugin config refresh alias | `e7773a9` | `Compiled` |
 | 4 | 2026-06-03 | Remove notification DAO short alias | `9bf53cb` | `Compiled` |
