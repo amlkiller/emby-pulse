@@ -6,7 +6,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from app.core.audit_logger import get_audit_logs, get_audit_stats, AUDIT_ACTIONS
 from app.infra.db.audit_dao import list_user_audit_logs_since
-from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.domains.users import public_service as user_service
 from app.shared.version import APP_VERSION
 import time
 import os
@@ -24,7 +24,7 @@ async def audit_page(request: Request):
         from fastapi.responses import RedirectResponse
         return RedirectResponse("/login")
     # 🔒 仅管理员可访问审计页面
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         from fastapi.responses import RedirectResponse
         return RedirectResponse("/login")
 
@@ -47,7 +47,7 @@ async def api_get_audit_logs(
     查询审计日志（合并两个表）
     """
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return JSONResponse(status_code=403, content={"error": "需要管理员权限"})
     
     import json
@@ -149,7 +149,7 @@ async def api_get_audit_stats(request: Request, days: int = 7):
     获取审计日志统计
     """
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return JSONResponse(status_code=403, content={"error": "需要管理员权限"})
     
     stats = get_audit_stats(days=days)
@@ -166,7 +166,7 @@ async def api_get_audit_actions(request: Request):
     获取所有审计操作类型
     """
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return JSONResponse(status_code=403, content={"error": "需要管理员权限"})
     
     return {
