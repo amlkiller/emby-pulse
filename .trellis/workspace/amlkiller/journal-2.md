@@ -1826,3 +1826,36 @@ Extracted user community cache state, refresh implementation, and lifecycle loop
 ### Next Steps
 
 - None - task complete
+
+
+## Session 115: Refactor report rendering assets
+
+**Date**: 2026-06-03
+**Task**: Refactor report rendering assets
+**Branch**: `main`
+
+### Summary
+
+Extracted report poster themes, theme listing, PIL detection, and font loading/cache helpers into app/domains/reports/report_assets.py while keeping report_service compatibility exports. Verified compile/import checks, focused reports router tests, and full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4f851a7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
