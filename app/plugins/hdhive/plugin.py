@@ -1201,16 +1201,22 @@ class HDHivePlugin(PluginBase):
             message_id: 消息ID（如果提供则编辑消息）
         """
         try:
-            from app.domains.notifications.bot_service import bot
+            from app.domains.notifications import public_service as notification_service
             if message_id and platform == "tg":
                 # 编辑已有消息
                 logger.info(f"[_notify] 编辑消息: chat_id={chat_id}, message_id={message_id}, platform={platform}")
-                result = bot.edit_message(chat_id, message_id, text, reply_markup=reply_markup, platform=platform)
+                result = notification_service.edit_message(
+                    chat_id,
+                    message_id,
+                    text,
+                    reply_markup=reply_markup,
+                    platform=platform,
+                )
                 logger.info(f"[_notify] 编辑结果: {result}")
             else:
                 # 发送新消息
                 logger.info(f"[_notify] 发送新消息: chat_id={chat_id}, message_id={message_id}, platform={platform}")
-                bot.send_message(chat_id, text, reply_markup=reply_markup, platform=platform)
+                notification_service.send_message(chat_id, text, reply_markup=reply_markup, platform=platform)
         except Exception as e:
             logger.error(f"[_notify] 异常: {e}")
 
@@ -1320,8 +1326,8 @@ class HDHivePlugin(PluginBase):
                                 
                                 msg = "\n".join(msg_lines)
                                 try:
-                                    from app.domains.notifications.bot_service import bot
-                                    bot.send_message("sys_notify", msg, platform="all")
+                                    from app.domains.notifications import public_service as notification_service
+                                    notification_service.send_message("sys_notify", msg, platform="all")
                                 except Exception as e:
                                     logger.error(f"[影巢] 发送签到通知失败: {e}")
                         else:
@@ -1745,8 +1751,8 @@ def handle_request_hdhive_search(data, chat_id, cq_id, platform):
     if not plugin or not plugin.enabled:
         # 编辑原消息提示插件未启用
         try:
-            from app.domains.notifications.bot_service import bot
-            bot.send_message(chat_id, "⚠️ 影巢插件未启用，请先在后台配置影巢 API Key", platform=platform)
+            from app.domains.notifications import public_service as notification_service
+            notification_service.send_message(chat_id, "⚠️ 影巢插件未启用，请先在后台配置影巢 API Key", platform=platform)
         except:
             pass
         return True

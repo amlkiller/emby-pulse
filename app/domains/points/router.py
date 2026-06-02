@@ -12,7 +12,7 @@ from app.infra.db.notification_dao import add_sys_notification
 from app.domains.system import invitation_dao
 from app.domains.points import point_dao
 from app.infra.clients.media_server_client import media_api
-from app.domains.notifications.bot_service import bot
+from app.domains.notifications import public_service as notification_service
 
 from app.domains.users.auth import check_permission
 
@@ -220,7 +220,7 @@ def user_redeem(data: RedeemModel, request: Request):
             else:
                 msg += f"⚠️ <b>结果</b>: 此商品需人工发货，请尽快联系用户！"
             
-            bot.send_message("sys_notify", msg, platform="all")
+            notification_service.send_message("sys_notify", msg, platform="all")
             add_sys_notification("points", f"商城订单: {item_name}", f"用户 {user['Name']} 兑换了该商品", "/points")
         except Exception: pass
 
@@ -416,9 +416,9 @@ def grab_red_packet(data: GrabRedPacketModel, request: Request):
             try:
                 chat_id = result.get("chat_id")
                 if chat_id:
-                    bot.send_message(chat_id, msg, platform="telegram")
+                    notification_service.send_message(chat_id, msg, platform="telegram")
                 else:
-                    bot.send_message("sys_notify", msg, platform="all")
+                    notification_service.send_message("sys_notify", msg, platform="all")
             except Exception as e:
                 print(f"[红包] 发送抢完通知失败: {e}")
 

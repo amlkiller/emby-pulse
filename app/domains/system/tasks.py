@@ -13,7 +13,7 @@ from app.domains.system.task_dao import (
     set_task_notify_enabled,
 )
 from app.infra.clients.media_server_client import media_api
-from app.domains.notifications.bot_service import bot
+from app.domains.notifications import public_service as notification_service
 from app.core.security_utils import safe_error_message
 
 router = APIRouter()
@@ -176,12 +176,12 @@ async def poll_emby_tasks():
                                     if status == "Completed":
                                         try: add_system_notification("system", f"任务完成: {display_name}", f"Emby 后台作业正常执行完毕", "/tasks")
                                         except Exception: pass
-                                        try: bot.send_message("sys_notify", f"✅ <b>任务执行完成</b>\n\n📌 <b>任务</b>: {display_name}\n⏱️ <b>时间</b>: {now_str}\n📊 <b>状态</b>: 成功", platform="all")
+                                        try: notification_service.send_message("sys_notify", f"✅ <b>任务执行完成</b>\n\n📌 <b>任务</b>: {display_name}\n⏱️ <b>时间</b>: {now_str}\n📊 <b>状态</b>: 成功", platform="all")
                                         except Exception: pass
                                     elif status == "Failed":
                                         try: add_system_notification("system", f"任务失败: {display_name}", f"Emby 后台作业执行异常，请检查", "/tasks")
                                         except Exception: pass
-                                        try: bot.send_message("sys_notify", f"❌ <b>任务执行失败</b>\n\n📌 <b>任务</b>: {display_name}\n⏱️ <b>时间</b>: {now_str}\n⚠️ <b>警告</b>: 运行异常，请前往后台检查 Emby 日志", platform="all")
+                                        try: notification_service.send_message("sys_notify", f"❌ <b>任务执行失败</b>\n\n📌 <b>任务</b>: {display_name}\n⏱️ <b>时间</b>: {now_str}\n⚠️ <b>警告</b>: 运行异常，请前往后台检查 Emby 日志", platform="all")
                                         except Exception: pass
                         
                         if end_time:

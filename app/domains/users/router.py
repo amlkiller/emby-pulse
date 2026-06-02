@@ -731,12 +731,7 @@ def api_get_user_libraries(request: Request):
 
         return {"status": "success", "data": result}
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 
 class HiddenLibrariesModel(BaseModel):
@@ -794,16 +789,11 @@ def api_update_hidden_libraries(data: HiddenLibrariesModel, request: Request):
         try:
             user_dao.save_user_hidden_libraries(user_id, ','.join(hidden_guids))
         except Exception as e:
-            logger.warning(f"保存隐藏媒体库到本地失败: {e}")
+            logging.warning(f"保存隐藏媒体库到本地失败: {e}")
 
         return {"status": "success", "message": "设置已保存"}
     except Exception as e:
-        try: conn.rollback()
-        except: pass
         return {"status": "error", "message": safe_error_message(e)}
-    finally:
-        try: conn.close()
-        except: pass
 
 
 @router.post("/api/manage/invite/gen")
@@ -1334,7 +1324,7 @@ def api_manage_user_delete(user_id: str, request: Request):
             try:
                 from app.domains.notifications.notify_admin import get_notify_rule
                 from app.infra.db.notification_dao import add_sys_notification
-                from app.domains.notifications.bot_service import bot
+                from app.domains.notifications import public_service as notification_service
 
                 rule = get_notify_rule('user_delete')
                 if rule and rule.get('enabled'):
@@ -1344,7 +1334,7 @@ def api_manage_user_delete(user_id: str, request: Request):
                     # TG机器人/企业微信
                     if 'tg_bot' in channels or 'wecom' in channels:
                         platform = "all" if ('tg_bot' in channels and 'wecom' in channels) else ("tg" if 'tg_bot' in channels else "wecom")
-                        bot.send_message("sys_notify", msg, platform=platform)
+                        notification_service.send_message("sys_notify", msg, platform=platform)
 
                     # Web通知中心
                     if 'web' in channels:

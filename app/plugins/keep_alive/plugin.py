@@ -525,9 +525,9 @@ class KeepAlivePlugin(PluginBase):
             if not tg_token and not wecom_corpid:
                 self._log(f"⚠️ 未配置任何通知渠道 (tg_bot_token 或企业微信)", level="warning")
             else:
-                # 使用 bot.send_message 统一发送，让 bot_service 处理 TG 和企业微信
-                from app.domains.notifications.bot_service import bot
-                bot.send_message("sys_notify", report_msg, platform="all")
+                # 使用通知服务统一发送，让 bot_service 处理 TG 和企业微信
+                from app.domains.notifications import public_service as notification_service
+                notification_service.send_message("sys_notify", report_msg, platform="all")
                 self._log(f"✅ 管理员通知已发送")
         except Exception as e:
             logger.error(f"[保号规则] 通知管理员失败: {e}")

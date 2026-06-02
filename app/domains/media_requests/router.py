@@ -49,7 +49,7 @@ from app.domains.media_requests.media_request_dao import (
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
 # 🔥 补回丢失的这一行：引入基础数据模型
 from app.schemas.models import MediaRequestSubmitModel as BaseSubmitModel
-from app.domains.notifications.bot_service import bot
+from app.domains.notifications import public_service as notification_service
 # 🔥 引入媒体适配器用于创建用户
 from app.infra.clients.media_server_client import media_api
 from app.infra.config.media_server_settings import (
@@ -685,7 +685,7 @@ async def submit_media_request(request: Request):
                     platform = "wecom"
                 
                 if platform != "none":
-                    bot.send_photo("sys_notify", f"https://image.tmdb.org/t/p/w500{poster_path}" if poster_path else REPORT_COVER_URL, msg, reply_markup=keyboard, platform=platform)
+                    notification_service.send_photo("sys_notify", f"https://image.tmdb.org/t/p/w500{poster_path}" if poster_path else REPORT_COVER_URL, msg, reply_markup=keyboard, platform=platform)
                 
                 # Web 通知中心 - 只有勾选 web 才发送
                 if 'web' in channels:
@@ -1026,7 +1026,7 @@ def submit_feedback(data: FeedbackSubmitModel, request: Request):
                 platform = "wecom"
             
             if platform != "none":
-                bot.send_photo("sys_notify", img_url, msg, reply_markup=keyboard, platform=platform)
+                notification_service.send_photo("sys_notify", img_url, msg, reply_markup=keyboard, platform=platform)
             
             # Web 通知中心
             if 'web' in channels:
@@ -1736,7 +1736,7 @@ async def submit_update_request(request: Request):
                 # 完整 URL
                 poster_url = poster_path
             
-            bot.send_photo("sys_notify", poster_url, msg, reply_markup=keyboard, platform="all")
+            notification_service.send_photo("sys_notify", poster_url, msg, reply_markup=keyboard, platform="all")
         except Exception as e:
             print(f"[追新] 发送通知失败: {e}")
         
@@ -1817,7 +1817,7 @@ async def submit_update_request_batch(request: Request):
                 [{"text": "✋ 手动接单", "callback_data": f"req_manual_{tmdb_id}_0"}, {"text": "💻 网页审批", "url": f"{admin_url.rstrip('/')}/requests_admin"}]
             ]}
             
-            bot.send_photo("sys_notify", poster_url, msg, reply_markup=keyboard, platform="all")
+            notification_service.send_photo("sys_notify", poster_url, msg, reply_markup=keyboard, platform="all")
         except Exception as e:
             print(f"[追新批量] 发送通知失败: {e}")
         
@@ -2059,7 +2059,7 @@ async def user_community_register(data: UserRegisterModel, request: Request):
             # 8. 发送通知
             try:
                 from app.infra.db.notification_dao import add_sys_notification
-                from app.domains.notifications.bot_service import bot
+                from app.domains.notifications import public_service as notification_service
                 from app.domains.notifications.notify_admin import get_notify_rule
                 
                 rule = get_notify_rule('user_register')
@@ -2072,14 +2072,14 @@ async def user_community_register(data: UserRegisterModel, request: Request):
                     # TG机器人/企业微信
                     if 'tg_bot' in channels or 'wecom' in channels:
                         platform = "all" if ('tg_bot' in channels and 'wecom' in channels) else ("tg" if 'tg_bot' in channels else "wecom")
-                        bot.send_message("sys_notify", msg, platform=platform)
+                        notification_service.send_message("sys_notify", msg, platform=platform)
                     
                     # Web通知中心
                     if 'web' in channels:
                         add_sys_notification("user", f"新用户注册: {safe_name}", f"用户社区注册，有效期 {days_display}", "/users_manage")
                 else:
                     # 兜底：使用旧方式发送通知
-                    bot.send_message("sys_notify", msg, platform="all")
+                    notification_service.send_message("sys_notify", msg, platform="all")
                     add_sys_notification("user", f"新用户注册: {safe_name}", f"用户社区注册，有效期 {days_display}", "/users_manage")
             except Exception as e:
                 logger.error(f"[用户社区注册] 发送通知失败: {e}")

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Request, Response
 from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
 from app.schemas.models import PushRequestModel
 from app.domains.reports.report_service import report_gen, HAS_PIL
-from app.domains.notifications.bot_service import bot
+from app.domains.notifications import public_service as notification_service
 import io
 
 router = APIRouter()
@@ -23,7 +23,7 @@ async def api_push_report(data: PushRequestModel, request: Request):
     if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     
     # 调用 bot 发送 (支持文字+图片)
-    success = bot.push_now(data.user_id, data.period, data.theme)
+    success = notification_service.push_report_now(data.user_id, data.period, data.theme)
     if success:
         return {"status": "success"}
     return {"status": "error", "message": "Bot not configured"}

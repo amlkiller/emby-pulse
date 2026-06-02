@@ -245,8 +245,8 @@ class AutoExpirePlugin(PluginBase):
             for u in expiring_users:
                 lines.append(f"👤 {u['name']} — {u['days_left']}天后到期({u['expire']})")
             try:
-                from app.domains.notifications.bot_service import bot
-                bot.send_message("sys_notify", "\n".join(lines), platform="all")
+                from app.domains.notifications import public_service as notification_service
+                notification_service.send_message("sys_notify", "\n".join(lines), platform="all")
             except Exception: pass
 
         if expiring_users:

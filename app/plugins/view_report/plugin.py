@@ -785,8 +785,8 @@ class ViewReportPlugin(PluginBase):
         
         # 发送
         try:
-            from app.domains.notifications.bot_service import bot
-            self.log(f"bot 实例: {bot}, 类型: {type(bot)}", notify=False)
+            from app.domains.notifications import public_service as notification_service
+            self.log("通知服务 facade 已载入", notify=False)
             
             # 判断是否需要发送到企微和TG
             send_to_tg = 'telegram' in channels
@@ -795,39 +795,39 @@ class ViewReportPlugin(PluginBase):
             if poster:
                 if send_to_tg and send_to_wecom:
                     # 同时发送两个渠道
-                    bot.send_photo("sys_notify", poster, text, platform="all")
+                    notification_service.send_photo("sys_notify", poster, text, platform="all")
                     self.log("发送到 telegram 和企业微信 成功", notify=False)
                 elif send_to_tg:
                     # 只发送TG
-                    bot.send_photo("sys_notify", poster, text, platform="tg")
+                    notification_service.send_photo("sys_notify", poster, text, platform="tg")
                     self.log("发送到 telegram 成功", notify=False)
                 elif send_to_wecom:
                     # 只发送企微
-                    bot.send_photo("sys_notify", poster, text, platform="wecom")
+                    notification_service.send_photo("sys_notify", poster, text, platform="wecom")
                     self.log("发送到企业微信 成功", notify=False)
                 
                 # 推送到频道
                 if push_to_channels:
                     try:
-                        bot.send_to_channels(poster, text)
+                        notification_service.send_to_channels(poster, text)
                         self.log("发送到频道 成功", notify=False)
                     except Exception as e:
                         logger.error(f"[{self.name}] 推送到频道失败: {e}")
             else:
                 if send_to_tg and send_to_wecom:
-                    bot.send_message("sys_notify", text, platform="all")
+                    notification_service.send_message("sys_notify", text, platform="all")
                     self.log("发送到 telegram 和企业微信 成功", notify=False)
                 elif send_to_tg:
-                    bot.send_message("sys_notify", text, platform="tg")
+                    notification_service.send_message("sys_notify", text, platform="tg")
                     self.log("发送到 telegram 成功", notify=False)
                 elif send_to_wecom:
-                    bot.send_message("sys_notify", text, platform="wecom")
+                    notification_service.send_message("sys_notify", text, platform="wecom")
                     self.log("发送到企业微信 成功", notify=False)
                 
                 # 推送到频道（纯文本）
                 if push_to_channels:
                     try:
-                        bot.send_to_channels(None, text)
+                        notification_service.send_to_channels(None, text)
                         self.log("发送到频道 成功", notify=False)
                     except Exception as e:
                         logger.error(f"[{self.name}] 推送到频道失败: {e}")
