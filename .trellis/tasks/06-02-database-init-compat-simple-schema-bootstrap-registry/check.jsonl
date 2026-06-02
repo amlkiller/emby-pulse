@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend guideline index for review context."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Schema registry source-of-truth checks and regression expectations."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Required uv-based verification commands."}

@@ -79,6 +79,11 @@ def test_init_db_creates_compat_point_core_tables_from_schema_registry(monkeypat
             assert table_name in TABLE_SCHEMAS
             assert table_name in existing_tables
 
+        for table_name in database._REGISTRY_COMPAT_SIMPLE_INIT_TABLES:
+            assert table_name in SYSTEM_TABLES
+            assert table_name in TABLE_SCHEMAS
+            assert table_name in existing_tables
+
         assert {
             "id",
             "user_id",
@@ -89,6 +94,18 @@ def test_init_db_creates_compat_point_core_tables_from_schema_registry(monkeypat
             "created_at",
         }.issubset(_columns(conn, "point_logs"))
         assert {"key", "value"}.issubset(_columns(conn, "point_config"))
+        assert {
+            "id",
+            "tmdb_id",
+            "chat_id",
+            "message_id",
+            "is_caption",
+            "original_text",
+            "created_at",
+            "updated_at",
+        }.issubset(_columns(conn, "request_admin_messages"))
+        assert {"plugin_id", "enabled", "config"}.issubset(_columns(conn, "plugin_state"))
+        assert {"id", "layout_json"}.issubset(_columns(conn, "sys_dashboard"))
 
     with sqlite3.connect(system_db_path) as conn:
         existing_tables = {
@@ -152,7 +169,24 @@ def test_database_compat_init_uses_registry_for_point_core_tables():
         assert f"CREATE TABLE IF NOT EXISTS {table_name}" not in source
 
     assert "CREATE TABLE IF NOT EXISTS media_requests" in source
-    assert "CREATE TABLE IF NOT EXISTS request_users" in source
+
+
+def test_database_compat_init_uses_registry_for_simple_tables():
+    from app.infra.db import database
+
+    source = inspect.getsource(database.init_db)
+
+    assert "for table_name in _REGISTRY_COMPAT_SIMPLE_INIT_TABLES:" in source
+    assert "ensure_registered_table(c, table_name)" in source
+
+    for table_name in database._REGISTRY_COMPAT_SIMPLE_INIT_TABLES:
+        assert f"CREATE TABLE IF NOT EXISTS {table_name}" not in source
+
+    assert "CREATE TABLE IF NOT EXISTS invitations" in source
+    assert "CREATE TABLE IF NOT EXISTS sys_license" in source
+    assert "CREATE TABLE IF NOT EXISTS media_requests" in source
+    assert "CREATE TABLE IF NOT EXISTS sys_notifications" in source
+    assert "CREATE TABLE IF NOT EXISTS tg_user_bindings" in source
 
 
 def test_database_message_init_uses_registry_for_message_tables():
@@ -167,4 +201,3 @@ def test_database_message_init_uses_registry_for_message_tables():
         assert f"CREATE TABLE IF NOT EXISTS {table_name}" not in source
 
     assert "CREATE TABLE IF NOT EXISTS media_requests" in source
-    assert "CREATE TABLE IF NOT EXISTS request_users" in source
