@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Request, Depends
-from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
 from app.core.security import require_login  # 🔒 统一登录依赖
 from fastapi.responses import StreamingResponse
 import io
