@@ -258,6 +258,7 @@ def test_point_core_bootstrap_uses_schema_registry_for_owned_tables_only():
     sources = {
         "point_dao.py": (_REPO_ROOT / "app/domains/points/point_dao.py").read_text(encoding="utf-8"),
         "lottery_dao.py": (_REPO_ROOT / "app/domains/points/lottery_dao.py").read_text(encoding="utf-8"),
+        "red_packet_dao.py": (_REPO_ROOT / "app/domains/points/red_packet_dao.py").read_text(encoding="utf-8"),
     }
     combined_source = "\n".join(sources.values())
 
