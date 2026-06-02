@@ -1839,3 +1839,36 @@ Moved playback insight admin checks off private users auth imports, routed them 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 56: Playback search auth import boundary
+
+**Date**: 2026-06-02
+**Task**: Playback search auth import boundary
+**Branch**: `main`
+
+### Summary
+
+Removed the unused private users auth import from playback search and added an import-boundary guard plus unauthenticated search response regression test.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ef4bdd3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
