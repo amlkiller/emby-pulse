@@ -10,6 +10,46 @@ from app.infra.db.query_perf import get_query_perf_stats
 from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.schema_registry import PLAYBACK_TABLES, SYSTEM_TABLES
 
+_REGISTRY_SYSTEM_INIT_TABLES = (
+    "invitations",
+    "sys_license",
+    "tv_calendar_cache",
+    "request_users",
+    "request_admin_messages",
+    "insight_ignores",
+    "gap_records",
+    "risk_logs",
+    "sys_notifications",
+    "tg_user_bindings",
+    "tg_user_blacklist",
+    "plugin_state",
+    "sys_dashboard",
+    "point_logs",
+    "point_config",
+    "msg_conversations",
+    "msg_items",
+    "msg_notify_block",
+    "tg_reg_logs",
+    "task_translations",
+    "task_config",
+    "media_feedback",
+    "client_blacklist",
+    "notify_mutes",
+    "notify_rules",
+    "UserList",
+    "gap_config",
+    "gap_perfect_series",
+    "gap_scan_cache",
+    "dedupe_results",
+    "dedupe_whitelist",
+    "dedupe_config",
+    "plugin_logs",
+    "user_mutes",
+    "keep_alive_violations",
+    "local_users",
+    "bot_notify_mutes",
+)
+
 # 🔥 导出 SYSTEM_DB_PATH 供其他模块使用
 __all__ = ['init_db', 'get_base_filter', 'add_sys_notification',
            'DB_PATH', 'SYSTEM_DB_PATH', 'auto_migrate_system_db', 'get_db_connection',
@@ -338,54 +378,14 @@ def _create_system_tables(c):
     try: c.execute("CREATE INDEX IF NOT EXISTS idx_api_tokens_token ON api_tokens(token)")
     except Exception: pass
 
-    c.execute('''CREATE TABLE IF NOT EXISTS invitations (code TEXT PRIMARY KEY, days INTEGER, used_count INTEGER DEFAULT 0, max_uses INTEGER DEFAULT 1, created_at TEXT, used_at DATETIME, used_by TEXT, status INTEGER DEFAULT 0, template_user_id TEXT, type TEXT DEFAULT 'register', routes TEXT)''')
-    try: c.execute("ALTER TABLE invitations ADD COLUMN template_user_id TEXT")
-    except Exception: pass
-    try: c.execute("ALTER TABLE invitations ADD COLUMN type TEXT DEFAULT 'register'")
-    except Exception: pass
-    try: c.execute("ALTER TABLE invitations ADD COLUMN routes TEXT")
-    except Exception: pass
-    try: c.execute("ALTER TABLE invitations ADD COLUMN route_mode TEXT DEFAULT 'block'")
-    except Exception: pass
-
-    c.execute('''CREATE TABLE IF NOT EXISTS sys_license (license_key TEXT, machine_id TEXT, pro_token TEXT, status TEXT DEFAULT 'pro', expire_date DATETIME, last_checked DATETIME DEFAULT CURRENT_TIMESTAMP)''')
-
     # 🔥 用户标签配置表
     c.execute('''CREATE TABLE IF NOT EXISTS user_tags (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, color TEXT DEFAULT 'blue', created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
 
-    c.execute('''CREATE TABLE IF NOT EXISTS tv_calendar_cache (id TEXT PRIMARY KEY, series_id TEXT, season INTEGER, episode INTEGER, air_date TEXT, status TEXT, data_json TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS tv_series_status (tmdb_id TEXT PRIMARY KEY, series_name TEXT, status TEXT DEFAULT 'continuing', last_checked TEXT, updated_at TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS media_requests (tmdb_id INTEGER, media_type TEXT, title TEXT, year TEXT, poster_path TEXT, status INTEGER DEFAULT 0, season INTEGER DEFAULT 0, reject_reason TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (tmdb_id, season))''')
-    c.execute('''CREATE TABLE IF NOT EXISTS request_users (id INTEGER PRIMARY KEY AUTOINCREMENT, tmdb_id INTEGER, user_id TEXT, username TEXT, season INTEGER DEFAULT 0, requested_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(tmdb_id, user_id, season))''')
-    c.execute('''CREATE TABLE IF NOT EXISTS request_admin_messages (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        tmdb_id INTEGER NOT NULL,
-        chat_id TEXT NOT NULL,
-        message_id INTEGER NOT NULL,
-        is_caption INTEGER DEFAULT 1,
-        original_text TEXT DEFAULT '',
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(tmdb_id, chat_id, message_id)
-    )''')
-    c.execute('''CREATE TABLE IF NOT EXISTS insight_ignores (item_id TEXT PRIMARY KEY, item_name TEXT, ignored_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS gap_records (id INTEGER PRIMARY KEY AUTOINCREMENT, series_id TEXT, series_name TEXT, season_number INTEGER, episode_number INTEGER, status INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(series_id, season_number, episode_number))''')
-    c.execute('''CREATE TABLE IF NOT EXISTS risk_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, username TEXT, action TEXT, reason TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS sys_notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT, title TEXT, message TEXT, is_read INTEGER DEFAULT 0, action_url TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
-    try: c.execute("ALTER TABLE sys_notifications ADD COLUMN is_cleared INTEGER DEFAULT 0")
-    except Exception: pass
-    c.execute('''CREATE TABLE IF NOT EXISTS tg_user_bindings (tg_user_id TEXT PRIMARY KEY, tg_username TEXT DEFAULT '', emby_user_id TEXT, emby_username TEXT, init_password TEXT DEFAULT '', bound_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS tg_user_blacklist (tg_user_id TEXT PRIMARY KEY, reason TEXT DEFAULT '', created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
-    # 🔥 迁移：添加 tg_username 字段
-    try: c.execute("ALTER TABLE tg_user_bindings ADD COLUMN tg_username TEXT DEFAULT ''")
-    except Exception: pass
-    # 🔥 迁移：添加 tg_display_name 字段（TG显示名称/中文名）
-    try: c.execute("ALTER TABLE tg_user_bindings ADD COLUMN tg_display_name TEXT DEFAULT ''")
-    except Exception: pass
-    c.execute('''CREATE TABLE IF NOT EXISTS plugin_state (plugin_id TEXT PRIMARY KEY, enabled INTEGER DEFAULT 0, config TEXT DEFAULT '{}')''')
-    c.execute('''CREATE TABLE IF NOT EXISTS sys_dashboard (id INTEGER PRIMARY KEY DEFAULT 1, layout_json TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS point_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, username TEXT, action TEXT, amount INTEGER, balance INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS point_config (key TEXT PRIMARY KEY, value TEXT)''')
+
+    for table_name in _REGISTRY_SYSTEM_INIT_TABLES:
+        ensure_registered_table(c, table_name)
     
     # 🔥 彩票系统表
     c.execute('''CREATE TABLE IF NOT EXISTS lottery_tickets (
@@ -441,144 +441,6 @@ def _create_system_tables(c):
         username TEXT,
         scratched_at DATETIME,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )''')
-
-    # 消息中心表
-    c.execute('''CREATE TABLE IF NOT EXISTS msg_conversations (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id TEXT NOT NULL,
-        username TEXT,
-        user_avatar TEXT,
-        last_message TEXT,
-        last_time DATETIME DEFAULT CURRENT_TIMESTAMP,
-        unread_admin INTEGER DEFAULT 0,
-        unread_user INTEGER DEFAULT 0,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )''')
-    c.execute('''CREATE TABLE IF NOT EXISTS msg_items (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        conversation_id INTEGER,
-        sender_type TEXT DEFAULT 'admin',
-        sender_id TEXT,
-        sender_name TEXT,
-        content TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )''')
-    c.execute('''CREATE TABLE IF NOT EXISTS msg_notify_block (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )''')
-
-    # 🤖 开放注册日志表
-    c.execute('''CREATE TABLE IF NOT EXISTS tg_reg_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, tg_user_id TEXT, emby_username TEXT, emby_user_id TEXT, reg_type TEXT DEFAULT 'open', created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
-
-    # 任务翻译表
-    c.execute('''CREATE TABLE IF NOT EXISTS task_translations (original_name TEXT PRIMARY KEY, translated_name TEXT)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS task_config (key TEXT PRIMARY KEY, value TEXT)''')
-
-    # 媒体反馈表
-    c.execute('''CREATE TABLE IF NOT EXISTS media_feedback (id INTEGER PRIMARY KEY AUTOINCREMENT, item_name TEXT, user_id TEXT, username TEXT, issue_type TEXT, description TEXT, status INTEGER DEFAULT 0, poster_path TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-
-    # 客户端黑名单
-    c.execute('''CREATE TABLE IF NOT EXISTS client_blacklist (app_name TEXT PRIMARY KEY, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
-
-    # 通知静音
-    c.execute('''CREATE TABLE IF NOT EXISTS notify_mutes (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, mute_type TEXT, mute_target TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(user_id, mute_type, mute_target))''')
-
-    # 通知规则配置
-    c.execute('''CREATE TABLE IF NOT EXISTS notify_rules (id INTEGER PRIMARY KEY AUTOINCREMENT, notify_type TEXT UNIQUE NOT NULL, notify_name TEXT NOT NULL, channels TEXT DEFAULT '[]', enabled INTEGER DEFAULT 1, config TEXT DEFAULT '{}', created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
-
-    # 用户列表
-    c.execute('''CREATE TABLE IF NOT EXISTS UserList (id INTEGER PRIMARY KEY AUTOINCREMENT, list_name TEXT, list_type TEXT, user_ids TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
-
-    # 缺集配置
-    c.execute('''CREATE TABLE IF NOT EXISTS gap_config (key TEXT PRIMARY KEY, value TEXT, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
-    c.execute('''CREATE TABLE IF NOT EXISTS gap_perfect_series (id INTEGER PRIMARY KEY AUTOINCREMENT, series_id TEXT, tmdb_id TEXT, series_name TEXT, total_seasons INTEGER, total_episodes INTEGER, marked_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(series_id))''')
-    c.execute('''CREATE TABLE IF NOT EXISTS gap_scan_cache (id INTEGER PRIMARY KEY, result_json TEXT, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
-
-    # 去重系统（完整字段版本，与 dedupe.py 保持一致）
-    c.execute('''CREATE TABLE IF NOT EXISTS dedupe_results (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        group_key TEXT,
-        tmdb_id TEXT,
-        media_type TEXT,
-        title TEXT,
-        season_num INTEGER,
-        episode_num INTEGER,
-        item_id TEXT,
-        file_name TEXT,
-        file_path TEXT,
-        resolution TEXT,
-        bitrate INTEGER,
-        size_bytes REAL,
-        video_codec TEXT,
-        audio_codec TEXT,
-        has_hdr INTEGER,
-        has_dovi INTEGER,
-        has_chi_sub INTEGER,
-        has_ass_sub INTEGER,
-        score INTEGER,
-        is_recommended_del INTEGER DEFAULT 0,
-        is_exempt INTEGER DEFAULT 0,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )''')
-    c.execute('''CREATE TABLE IF NOT EXISTS dedupe_whitelist (
-        group_key TEXT PRIMARY KEY,
-        title TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )''')
-    c.execute('''CREATE TABLE IF NOT EXISTS dedupe_config (key TEXT PRIMARY KEY, value TEXT, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
-
-    # 插件日志
-    c.execute('''CREATE TABLE IF NOT EXISTS plugin_logs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        plugin_id TEXT NOT NULL,
-        level TEXT DEFAULT 'info',
-        message TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )''')
-
-    # 用户禁言表
-    c.execute('''CREATE TABLE IF NOT EXISTS user_mutes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id TEXT NOT NULL,
-        username TEXT,
-        is_muted INTEGER DEFAULT 1,
-        muted_until TEXT,
-        muted_reason TEXT,
-        muted_by TEXT,
-        muted_by_name TEXT,
-        muted_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id)
-    )''')
-
-    # 保活违规记录
-    c.execute('''CREATE TABLE IF NOT EXISTS keep_alive_violations (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id TEXT NOT NULL,
-        user_name TEXT NOT NULL,
-        year_month TEXT NOT NULL,
-        hours REAL DEFAULT 0,
-        days INTEGER DEFAULT 0,
-        min_hours REAL DEFAULT 0,
-        min_days INTEGER DEFAULT 0,
-        action TEXT DEFAULT 'warn',
-        disabled INTEGER DEFAULT 0,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id, year_month)
-    )''')
-
-    # 本地用户认证
-    c.execute('''CREATE TABLE IF NOT EXISTS local_users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, role TEXT DEFAULT 'admin', remark TEXT DEFAULT '', avatar TEXT DEFAULT '', is_enabled INTEGER DEFAULT 1, permissions TEXT DEFAULT '[]', created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, last_login_at DATETIME, last_login_ip TEXT)''')
-
-    # 机器人通知屏蔽（与消息中心的 notify_mutes 不同）
-    c.execute('''CREATE TABLE IF NOT EXISTS bot_notify_mutes (
-        user_id TEXT,
-        event_type TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (user_id, event_type)
     )''')
 
     # 🔥 性能优化：创建索引（大幅提升查询速度）

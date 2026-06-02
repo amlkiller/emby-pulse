@@ -1,0 +1,4 @@
+{"file":"docs/架构审计.md","reason":"Identifies schema fact-source split as the active P2 architecture refactor area."}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"Defines schema registry ownership, bootstrap helper usage, and required focused tests."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Defines required uv command form for Python verification."}
+{"file":".trellis/spec/guides/index.md","reason":"Shared code reuse trigger for reducing duplicate schema definitions."}

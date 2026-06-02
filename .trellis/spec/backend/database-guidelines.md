@@ -433,6 +433,7 @@ tokens = list_api_tokens(user_id)
 - New direct `from app.core.db_schemas import ...` outside `app/core/db_schemas.py` itself -> fail the schema boundary regression test.
 - New local `SYSTEM_TABLES = [...]` / `PLAYBACK_TABLES = [...]` in `app/infra/db/database.py` -> fail the schema boundary regression test.
 - New multiline `CREATE TABLE` copy for a registry-owned repair table in `app.domains.system.system_tool_dao.repair_core_system_tables()` -> fail focused repair/schema registry tests.
+- New local DDL in `app.infra.db.database._create_system_tables()` for tables listed in `_REGISTRY_SYSTEM_INIT_TABLES` -> fail focused database-init/schema registry tests.
 - New local `CREATE TABLE IF NOT EXISTS sys_notifications` or `CREATE TABLE IF NOT EXISTS sys_dashboard` in small bootstrap helpers -> fail focused bootstrap/schema registry tests.
 - New local gap table DDL in `app.domains.media_requests.gap_dao.ensure_gap_tables()` for registry-owned `gap_*` tables -> fail focused gap bootstrap/schema registry tests.
 - New local dedupe table DDL or dedupe ALTER map in `app.domains.playback.dedupe_dao.init_dedupe_tables()` for registry-owned `dedupe_*` tables -> fail focused dedupe bootstrap/schema registry tests.
@@ -451,6 +452,7 @@ tokens = list_api_tokens(user_id)
 - Good: `app.infra.db.database` imports `SYSTEM_TABLES` from `app.infra.db.schema_registry`.
 - Good: `app.domains.system.system_tool_dao` imports `SYSTEM_TABLES` from `app.infra.db.schema_registry`.
 - Good: `app.domains.system.system_tool_dao.repair_core_system_tables()` creates repaired registry-owned tables from `TABLE_SCHEMAS` / `PLAYBACK_SCHEMA` and applies `TABLE_ALTERS`.
+- Good: `app.infra.db.database._create_system_tables()` routes simple registry-owned startup tables through `_REGISTRY_SYSTEM_INIT_TABLES` plus `schema_bootstrap.ensure_registered_table(...)`, while keeping unregistered or high-risk migration tables local until their own slice.
 - Good: `app.infra.db.notification_dao.ensure_notifications_table()` uses `TABLE_SCHEMAS["sys_notifications"]` and `TABLE_ALTERS["sys_notifications"]`.
 - Good: `app.domains.system.system_tool_dao` dashboard helpers use `TABLE_SCHEMAS["sys_dashboard"]`.
 - Good: `app.domains.media_requests.gap_dao.ensure_gap_tables()` loops its registry-owned `gap_*` table subset through `TABLE_SCHEMAS`, applies `TABLE_ALTERS["gap_perfect_series"]`, and recreates legacy `gap_scan_cache` from `TABLE_SCHEMAS["gap_scan_cache"]`.
@@ -476,6 +478,7 @@ tokens = list_api_tokens(user_id)
 - Focused ownership test: assert `app.infra.db.schema_registry` contains the schema metadata definitions and does not import `app.core.db_schemas`.
 - Focused identity test: assert `app.infra.db.database.SYSTEM_TABLES is app.infra.db.schema_registry.SYSTEM_TABLES`.
 - Focused repair test: run `repair_core_system_tables()` against a temporary database and assert registry-backed table creation plus registered ALTER application.
+- Focused database-init test: run `init_system_db()` against a temporary database and assert `_REGISTRY_SYSTEM_INIT_TABLES` tables are created from registry metadata, registered ALTER columns exist, indexes are preserved, and local DDL remains only for unregistered/high-risk tables.
 - Focused bootstrap test: run small registry-owned bootstrap helpers against a temporary database and assert registry-backed table creation plus registered ALTER application.
 - Focused gap bootstrap test: run `ensure_gap_tables()` against a temporary database and assert registry-backed table creation, `gap_perfect_series.tmdb_id` ALTER application, default `gap_config.cache_interval_hours = 6`, legacy `gap_scan_cache` migration, and no local duplicate gap table DDL in the DAO source.
 - Focused dedupe bootstrap test: run `init_dedupe_tables()` against a temporary database and assert registry-backed table creation, registered `dedupe_results` / `dedupe_whitelist` ALTER application, legacy `dedupe_whitelist` migration, and no local duplicate dedupe table DDL or ALTER map in the DAO source.
