@@ -1727,3 +1727,36 @@ Hardened the image proxy max-bytes setting with shared positive integer coercion
 ### Next Steps
 
 - None - task complete
+
+
+## Session 112: Extract playback dashboard cache service
+
+**Date**: 2026-06-03
+**Task**: Extract playback dashboard cache service
+**Branch**: `main`
+
+### Summary
+
+Extracted playback dashboard cache and refresh lifecycle implementation from the large stats domain router into a domain-local service while preserving stats.py compatibility exports and route behavior. Verified with compile checks, focused dashboard cache tests, import check, and full pytest suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `77b408d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
