@@ -408,6 +408,7 @@ def get_media_quality_info(item_id: str) -> dict:
             video_range = video_stream.get("VideoRange", "")
             extended_sub = video_stream.get("ExtendedVideoSubType", "")
             hdr_format = video_stream.get("HdrFormat", "")
+            color_transfer = video_stream.get("ColorTransfer", "")
             
             # 方式1: VideoRange 字段
             if video_range:
@@ -527,10 +528,11 @@ class SystemDaemon:
         self.library_thread = None
         self.last_check_min = -1
         self.last_sync_min = -1
-        bus.subscribe("webhook.received", self.on_webhook_event)
+        self._subscribed = False
         
     def start(self):
         if self.running: return
+        self._subscribe_events()
         self.running = True
         self.schedule_thread = threading.Thread(target=self._scheduler_loop, daemon=True)
         self.schedule_thread.start()
@@ -538,7 +540,21 @@ class SystemDaemon:
         self.library_thread.start()
         print("🧠 System Daemon Started (Event Subsystem Online)")
 
-    def stop(self): self.running = False
+    def stop(self):
+        self.running = False
+        self._unsubscribe_events()
+
+    def _subscribe_events(self):
+        if self._subscribed:
+            return
+        bus.subscribe("webhook.received", self.on_webhook_event)
+        self._subscribed = True
+
+    def _unsubscribe_events(self):
+        if not self._subscribed:
+            return
+        bus.unsubscribe("webhook.received", self.on_webhook_event)
+        self._subscribed = False
 
     def on_webhook_event(self, event: str, data: dict):
         # 只对重要事件输出日志，减少刷屏
@@ -904,16 +920,7 @@ class NotificationBot:
         self.wecom_token_expires = 0
         self.delete_cache = {}
         self._msg_reply_mode = {}  # chat_id -> user_id 存储回复模式
-        
-        bus.subscribe("notify.library.new_episode", self.on_library_new_episode)
-        bus.subscribe("notify.library.new_item", self.on_library_new_item)
-        bus.subscribe("notify.gap_cleared", self.on_gap_cleared)
-        bus.subscribe("notify.playback.start", lambda data: self.on_playback_event(data, "start"))
-        bus.subscribe("notify.playback.stop", lambda data: self.on_playback_event(data, "stop"))
-        bus.subscribe("notify.user.login", self.on_user_login)
-        bus.subscribe("notify.item.deleted", self.on_item_deleted)
-        bus.subscribe("notify.daily_report", self.on_daily_report)
-        bus.subscribe("notify.risk.alert", self.on_risk_alert)
+        self._subscribed = False
 
     def _is_muted(self, user_id, event_type):
         if not user_id: return False
@@ -925,6 +932,7 @@ class NotificationBot:
     def start(self):
         if self.running: return
         if not get_bot_tg_token() and not get_wecom_corpid(): return
+        self._subscribe_events()
         self.running = True
         self._set_commands()
         self._set_wecom_menu() 
@@ -933,7 +941,43 @@ class NotificationBot:
             self.poll_thread.start()
         logger.info("🤖 Notification Bot Started")
 
-    def stop(self): self.running = False
+    def stop(self):
+        self.running = False
+        self._unsubscribe_events()
+
+    def _subscribe_events(self):
+        if self._subscribed:
+            return
+        bus.subscribe("notify.library.new_episode", self.on_library_new_episode)
+        bus.subscribe("notify.library.new_item", self.on_library_new_item)
+        bus.subscribe("notify.gap_cleared", self.on_gap_cleared)
+        bus.subscribe("notify.playback.start", self._on_playback_start_event)
+        bus.subscribe("notify.playback.stop", self._on_playback_stop_event)
+        bus.subscribe("notify.user.login", self.on_user_login)
+        bus.subscribe("notify.item.deleted", self.on_item_deleted)
+        bus.subscribe("notify.daily_report", self.on_daily_report)
+        bus.subscribe("notify.risk.alert", self.on_risk_alert)
+        self._subscribed = True
+
+    def _unsubscribe_events(self):
+        if not self._subscribed:
+            return
+        bus.unsubscribe("notify.library.new_episode", self.on_library_new_episode)
+        bus.unsubscribe("notify.library.new_item", self.on_library_new_item)
+        bus.unsubscribe("notify.gap_cleared", self.on_gap_cleared)
+        bus.unsubscribe("notify.playback.start", self._on_playback_start_event)
+        bus.unsubscribe("notify.playback.stop", self._on_playback_stop_event)
+        bus.unsubscribe("notify.user.login", self.on_user_login)
+        bus.unsubscribe("notify.item.deleted", self.on_item_deleted)
+        bus.unsubscribe("notify.daily_report", self.on_daily_report)
+        bus.unsubscribe("notify.risk.alert", self.on_risk_alert)
+        self._subscribed = False
+
+    def _on_playback_start_event(self, data):
+        self.on_playback_event(data, "start")
+
+    def _on_playback_stop_event(self, data):
+        self.on_playback_event(data, "stop")
 
     def on_risk_alert(self, data):
         uid = data.get("user_id", "")
