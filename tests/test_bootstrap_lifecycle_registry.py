@@ -90,8 +90,8 @@ def test_bootstrap_services_use_registry_and_skip_duplicate_starts(monkeypatch):
     monkeypatch.setattr(services, "disable_enabled_plugins", record("stop:plugin-lifecycle"))
     monkeypatch.setattr(services, "print_startup_panel", lambda port: calls.append(f"startup-panel:{port}"))
 
-    services.start_bootstrap_services(object(), 10308)
-    services.start_bootstrap_services(object(), 10309)
+    services.get_bootstrap_registry(object(), 10308).start_all()
+    services.get_bootstrap_registry(object(), 10309).start_all()
 
     assert calls == [
         "webhook-token",

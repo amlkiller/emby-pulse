@@ -99,10 +99,6 @@ def reset_bootstrap_registry() -> None:
     _bootstrap_registry = None
 
 
-def start_bootstrap_services(app, request_port: int) -> None:
-    get_bootstrap_registry(app, request_port).start_all()
-
-
 def stop_bootstrap_services() -> None:
     print("\n" + "=" * 55)
     print("🛑 [系统关闭] 正在停止 EmbyPulse 服务...")
