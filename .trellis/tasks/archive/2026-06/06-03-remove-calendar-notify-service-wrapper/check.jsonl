@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend spec index for quality verification."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Verify wrapper deletion and import boundary compliance."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verification and uv command conventions."}

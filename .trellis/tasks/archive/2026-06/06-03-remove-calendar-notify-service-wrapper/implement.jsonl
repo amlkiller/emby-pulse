@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend spec index for this refactor slice."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Domain boundary and wrapper removal guidance."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verification and uv command conventions."}
