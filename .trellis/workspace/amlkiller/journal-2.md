@@ -1001,3 +1001,36 @@ Moved weather cache preload into bootstrap lifecycle registry, added stop hooks 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 90: Notification daemon lifecycle convergence
+
+**Date**: 2026-06-03
+**Task**: Notification daemon lifecycle convergence
+**Branch**: `main`
+
+### Summary
+
+Made notification SystemDaemon scheduler and library notification threads stoppable, joinable, and restartable; replaced fixed sleeps with stop-event waits and verified focused plus full tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2c511b4` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
