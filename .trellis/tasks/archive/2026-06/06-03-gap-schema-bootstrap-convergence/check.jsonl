@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend guideline index for final review."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Schema registry quality gate for local DDL/ALTER regressions."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verification command requirements."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared thinking-guide index for final consistency checks."}
