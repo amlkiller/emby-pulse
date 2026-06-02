@@ -869,3 +869,36 @@ Removed the unused calendar notification lifecycle wrapper module, kept bootstra
 ### Next Steps
 
 - None - task complete
+
+
+## Session 86: Move template context to shared owner
+
+**Date**: 2026-06-03
+**Task**: Move template context to shared owner
+**Branch**: `main`
+
+### Summary
+
+Moved get_common_vars out of system.views into app.shared.view_context as the real implementation owner, pointed system/points/plugins/playback callers directly at it without adding wrappers, and verified boundary scans plus focused/full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `96566b8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
