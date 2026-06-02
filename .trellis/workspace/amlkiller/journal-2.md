@@ -1100,3 +1100,36 @@ Made UserBot polling and scheduler threads stoppable, joinable, and restart-safe
 ### Next Steps
 
 - None - task complete
+
+
+## Session 93: Calendar notify lifecycle convergence
+
+**Date**: 2026-06-03
+**Task**: Calendar notify lifecycle convergence
+**Branch**: `main`
+
+### Summary
+
+Made CalendarNotifyService scheduler thread named, cleanup-aware, restart-safe, and guarded against duplicate workers after join timeout; added lifecycle regression coverage and verified focused plus full tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `17995df` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
