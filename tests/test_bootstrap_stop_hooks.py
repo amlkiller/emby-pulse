@@ -139,13 +139,27 @@ def test_notification_bot_event_subscriptions_are_reversible(monkeypatch):
     monkeypatch.setattr(bot_service.NotificationBot, "_set_wecom_menu", lambda self: None)
 
     class FakeThread:
-        def __init__(self, target=None, daemon=False):
+        instances = []
+
+        def __init__(self, target=None, daemon=False, name=None):
             self.target = target
             self.daemon = daemon
+            self.name = name
             self.started = False
+            self.alive = False
+            self.join_timeout = None
+            FakeThread.instances.append(self)
 
         def start(self):
             self.started = True
+            self.alive = True
+
+        def is_alive(self):
+            return self.alive
+
+        def join(self, timeout=None):
+            self.join_timeout = timeout
+            self.alive = False
 
     monkeypatch.setattr(bot_service.threading, "Thread", FakeThread)
 
@@ -160,6 +174,10 @@ def test_notification_bot_event_subscriptions_are_reversible(monkeypatch):
     daemon.start()
     notifier.start()
     notifier.start()
+
+    assert len(FakeThread.instances) == 3
+    assert daemon.schedule_thread.name == "notification-daemon-scheduler"
+    assert daemon.library_thread.name == "notification-daemon-library"
 
     expected = [
         ("webhook.received", daemon.on_webhook_event),
@@ -192,11 +210,17 @@ def test_notification_bot_event_subscriptions_are_reversible(monkeypatch):
     assert subscriptions == []
     assert daemon._subscribed is False
     assert notifier._subscribed is False
+    assert FakeThread.instances[0].join_timeout == 1
+    assert FakeThread.instances[1].join_timeout == 1
+    assert daemon.schedule_thread is None
+    assert daemon.library_thread is None
 
     daemon.start()
     notifier.start()
 
     assert subscriptions == expected
+    assert daemon.schedule_thread is FakeThread.instances[3]
+    assert daemon.library_thread is FakeThread.instances[4]
 
 
 def test_notification_media_quality_uses_color_transfer_hdr_fallback(monkeypatch):

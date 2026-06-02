@@ -526,20 +526,41 @@ class SystemDaemon:
         self.last_check_min = -1
         self.last_sync_min = -1
         self._subscribed = False
+        self._stop_event = threading.Event()
         
     def start(self):
         if self.running: return
         self._subscribe_events()
+        self._stop_event.clear()
         self.running = True
-        self.schedule_thread = threading.Thread(target=self._scheduler_loop, daemon=True)
+        self.schedule_thread = threading.Thread(
+            target=self._scheduler_loop,
+            daemon=True,
+            name="notification-daemon-scheduler",
+        )
         self.schedule_thread.start()
-        self.library_thread = threading.Thread(target=self._library_notify_loop, daemon=True)
+        self.library_thread = threading.Thread(
+            target=self._library_notify_loop,
+            daemon=True,
+            name="notification-daemon-library",
+        )
         self.library_thread.start()
         print("🧠 System Daemon Started (Event Subsystem Online)")
 
     def stop(self):
         self.running = False
+        self._stop_event.set()
         self._unsubscribe_events()
+        schedule_thread = self.schedule_thread
+        library_thread = self.library_thread
+        if schedule_thread and schedule_thread.is_alive():
+            schedule_thread.join(timeout=1)
+        if library_thread and library_thread.is_alive():
+            library_thread.join(timeout=1)
+        if not schedule_thread or not schedule_thread.is_alive():
+            self.schedule_thread = None
+        if not library_thread or not library_thread.is_alive():
+            self.library_thread = None
 
     def _subscribe_events(self):
         if self._subscribed:
@@ -692,14 +713,16 @@ class SystemDaemon:
                 self.library_queue.append(item)
 
     def _library_notify_loop(self):
-        while self.running:
+        while self.running and not self._stop_event.is_set():
             try:
                 with self.library_lock: has_data = len(self.library_queue) > 0
-                if not has_data: time.sleep(2); continue
+                if not has_data:
+                    if self._stop_event.wait(2): return
+                    continue
 
                 idle_time = 0; last_len = 0; max_wait = 0
                 while idle_time < 15 and max_wait < 120:
-                    time.sleep(3)
+                    if self._stop_event.wait(3): return
                     idle_time += 3; max_wait += 3
                     with self.library_lock:
                         curr_len = len(self.library_queue)
@@ -711,7 +734,8 @@ class SystemDaemon:
                     self.library_queue = [] 
                 
                 if items_to_process: self._process_library_group(items_to_process)
-            except Exception as e: time.sleep(5)
+            except Exception as e:
+                if self._stop_event.wait(5): return
 
     def _process_library_group(self, items):
         groups = defaultdict(list)
@@ -824,8 +848,9 @@ class SystemDaemon:
                 if now.minute % 10 == 0 and now.minute != self.last_sync_min:
                     self.last_sync_min = now.minute
                     self._sync_pending_requests()
-                time.sleep(5)
-            except: time.sleep(60)
+                if self._stop_event.wait(5): return
+            except:
+                if self._stop_event.wait(60): return
 
     def _sync_pending_requests(self):
         try:
