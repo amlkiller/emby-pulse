@@ -9,9 +9,8 @@ import datetime
 from fastapi import Request
 from app.plugins.base import PluginBase
 from app.domains.users.auth import is_admin_user  # 🔒 管理员鉴权
+from app.domains.users import public_service as user_service
 from app.infra.clients.media_server_client import media_api
-from app.domains.users.user_dao import delete_user_meta_many, get_user_display_name, list_user_ids_with_expire_date, list_users_with_expire_date
-from app.domains.users.user_bot_dao import get_tg_user_id_by_emby_id
 
 logger = logging.getLogger("uvicorn")
 
@@ -113,7 +112,7 @@ class AutoExpirePlugin(PluginBase):
                 emby_user_ids = set(emby_users.keys())
 
                 # 获取 users_meta 中有过期日期的用户
-                users = list_user_ids_with_expire_date()
+                users = user_service.list_user_ids_with_expire_date()
                 if not users:
                     return {"status": "success", "data": {"cleaned": 0}}
 
@@ -122,7 +121,7 @@ class AutoExpirePlugin(PluginBase):
                 if not deleted_user_ids:
                     return {"status": "success", "data": {"cleaned": 0}}
 
-                cleaned = delete_user_meta_many(deleted_user_ids)
+                cleaned = user_service.delete_user_meta_many(deleted_user_ids)
 
                 logger.info(f"[到期提醒] 清理了 {cleaned} 个已删除用户的到期记录")
                 return {"status": "success", "data": {"cleaned": cleaned}}
@@ -203,7 +202,7 @@ class AutoExpirePlugin(PluginBase):
                 return {"error": "Emby API 未配置"}
             return
 
-        users = list_users_with_expire_date()
+        users = user_service.list_users_with_expire_date()
         if not users:
             if manual:
                 return {"count": 0, "users": [], "message": "没有设置到期日期的用户"}
@@ -258,7 +257,7 @@ class AutoExpirePlugin(PluginBase):
             auto_clean = config.get("auto_clean_deleted") in [True, "true", "1", 1]
             if auto_clean:
                 try:
-                    cleaned = delete_user_meta_many(deleted_users)
+                    cleaned = user_service.delete_user_meta_many(deleted_users)
                     logger.info(f"[到期提醒] 自动清理了 {cleaned} 个已删除用户的过期记录")
                 except Exception as e:
                     logger.error(f"[到期提醒] 自动清理失败: {e}")
@@ -268,7 +267,7 @@ class AutoExpirePlugin(PluginBase):
 
     def _get_expiring_users(self, days: int = 7):
         """获取即将到期的用户列表（用于面板展示）"""
-        users = list_users_with_expire_date()
+        users = user_service.list_users_with_expire_date()
         if not users:
             return []
 
@@ -309,12 +308,10 @@ class AutoExpirePlugin(PluginBase):
         """从缓存或本地数据库获取用户名"""
         # 1. 先尝试从本地数据库获取
         try:
-            from app.domains.users.user_bot_dao import get_binding_by_emby_id
-
-            binding = get_binding_by_emby_id(uid)
+            binding = user_service.get_binding_by_emby_id(uid)
             if binding and binding.get("emby_username"):
                 return binding["emby_username"]
-            display_name = get_user_display_name(uid)
+            display_name = user_service.get_user_display_name(uid)
             if display_name:
                 return display_name
         except Exception as e:
@@ -332,7 +329,7 @@ class AutoExpirePlugin(PluginBase):
             from app.domains.notifications.user_bot_service import user_bot, _send as user_bot_send
             if not user_bot.running: return
             # tg_user_bindings 表：tg_user_id 对应 emby_user_id
-            chat_id = get_tg_user_id_by_emby_id(user_id)
+            chat_id = user_service.get_tg_user_id_by_emby_id(user_id)
             if not chat_id:
                 return False
             msg = (f"⏰ <b>账号到期提醒</b>\n\n"

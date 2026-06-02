@@ -13,6 +13,7 @@ from app.infra.clients.media_server_client import media_api
 from app.infra.clients.telegram_client import telegram_client
 from app.infra.config.notification_settings import get_notify_bot_runtime_config
 from app.infra.config.user_bot_settings import get_user_bot_token_or_empty
+from app.domains.users import public_service as user_service
 from app.plugins.keep_alive.keep_alive_dao import (
     count_keep_alive_disabled,
     count_keep_alive_unique_users,
@@ -23,8 +24,6 @@ from app.plugins.keep_alive.keep_alive_dao import (
     save_keep_alive_violation,
     update_keep_alive_violation_disabled,
 )
-from app.domains.users.user_bot_dao import get_binding_by_emby_id
-from app.domains.users.user_dao import list_permanent_user_expire_records
 from app.domains.playback.stats_queries import get_user_play_summary
 
 logger = logging.getLogger("uvicorn")
@@ -319,7 +318,7 @@ class KeepAlivePlugin(PluginBase):
         permanent_users = set()
         if auto_whitelist_enabled:
             try:
-                rows = list_permanent_user_expire_records()
+                rows = user_service.list_permanent_user_expire_records()
                 self._log(f"🔍 查询到 {len(rows)} 条永久用户记录")
                 for row in rows:
                     if row["user_id"]:
@@ -690,7 +689,7 @@ class KeepAlivePlugin(PluginBase):
                 self._log(f"⚠️ 未配置用户机器人 (tg_user_bot_token)，跳过用户通知", level="warning")
                 return False
 
-            binding = get_binding_by_emby_id(user_id)
+            binding = user_service.get_binding_by_emby_id(user_id)
 
             if not binding:
                 self._log(f"📢 用户 {user_id} 未绑定 Telegram（非TG注册用户），跳过通知")

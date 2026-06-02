@@ -576,8 +576,8 @@ async def api_register(data: RegisterModel, request: Request):
             
             # 清除用户列表缓存
             try:
-                from app.domains.users.router import invalidate_emby_users_cache
-                invalidate_emby_users_cache()
+                from app.domains.users import public_service as user_service
+                user_service.invalidate_emby_users_cache()
             except:
                 pass
             

@@ -30,6 +30,8 @@ from app.infra.config.user_bot_settings import (
     get_user_bot_notify_group_enabled,
     get_user_bot_notify_user_enabled,
     get_user_bot_open_reg_enabled,
+    get_user_bot_required_channels,
+    get_user_bot_required_groups,
     set_user_bot_open_reg_enabled,
     set_user_bot_token,
     set_user_bot_allowed_groups,
@@ -57,6 +59,7 @@ from app.infra.config.user_bot_settings import (
     get_user_bot_group_commands,
     get_user_bot_group_enabled,
     get_user_bot_welcome_msg,
+    is_user_bot_restriction_enabled,
 )
 from app.infra.config.media_server_settings import (
     get_media_server_main_public_url,
@@ -333,7 +336,7 @@ def _check_user_restrictions(tg_user_id: str) -> dict:
     result = {"passed": True, "missing_channels": [], "missing_groups": []}
     
     # 检查是否启用限制
-    enabled = user_bot_settings.is_user_bot_restriction_enabled()
+    enabled = is_user_bot_restriction_enabled()
     if not enabled:
         return result
     
@@ -346,7 +349,7 @@ def _check_user_restrictions(tg_user_id: str) -> dict:
             return {"passed": True, "missing_channels": [], "missing_groups": []}
     
     # 获取必须关注的频道
-    required_channels = user_bot_settings.get_user_bot_required_channels()
+    required_channels = get_user_bot_required_channels()
     if required_channels:
         channels = [c.strip() for c in required_channels.split("\n") if c.strip()]
         for channel in channels:
@@ -355,7 +358,7 @@ def _check_user_restrictions(tg_user_id: str) -> dict:
                 result["missing_channels"].append(channel)
     
     # 获取必须加入的群聊
-    required_groups = user_bot_settings.get_user_bot_required_groups()
+    required_groups = get_user_bot_required_groups()
     logger.info(f"[使用限制] required_groups={repr(required_groups)}")
     if required_groups:
         try:
@@ -1353,8 +1356,8 @@ def _do_code_register(chat_id, tg_user_id, custom_name, code, days, tpl_id, rout
 
                 # 清除用户列表缓存
                 try:
-                    from app.domains.users.router import invalidate_emby_users_cache
-                    invalidate_emby_users_cache()
+                    from app.domains.users import public_service as user_service
+                    user_service.invalidate_emby_users_cache()
                 except:
                     pass
 

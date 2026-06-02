@@ -14,6 +14,7 @@ from app.infra.config.user_bot_settings import (
     set_default_user_template_id,
 )
 from app.infra.config.user_visibility_settings import get_hidden_users
+from app.domains.users import public_service as user_service
 
 from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
 from app.core.security import validate_password_strength  # 🔒 统一密码强度校验
@@ -22,7 +23,6 @@ import datetime
 import secrets
 import base64
 import logging
-import time
 from app.core.security_utils import safe_error_message
 from app.core.rate_limiter import get_client_ip
 
@@ -407,29 +407,13 @@ def api_get_libraries(request: Request):
     except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
 # ==================== 🔥 用户列表缓存 ====================
-_emby_users_cache = {"data": None, "expires": 0}
-EMBY_USERS_CACHE_TTL = 30  # 30 秒缓存,更接近实时
-
 def get_emby_users_cached():
     """获取 Emby 用户列表(带缓存)"""
-    if _emby_users_cache["data"] and time.time() < _emby_users_cache["expires"]:
-        return _emby_users_cache["data"]
-
-    try:
-        res = media_api.get("/Users", timeout=5)
-        if res.status_code == 200:
-            users = res.json()
-            _emby_users_cache["data"] = users
-            _emby_users_cache["expires"] = time.time() + EMBY_USERS_CACHE_TTL
-            return users
-    except:
-        pass
-    return None
+    return user_service.get_emby_users_cached()
 
 def invalidate_emby_users_cache():
     """清除用户列表缓存(用户变更时调用)"""
-    _emby_users_cache["data"] = None
-    _emby_users_cache["expires"] = 0
+    user_service.invalidate_emby_users_cache()
 
 @router.get("/api/manage/users")
 def api_manage_users(request: Request, refresh: bool = False):
