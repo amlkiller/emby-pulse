@@ -90,6 +90,39 @@ def test_init_db_creates_compat_point_core_tables_from_schema_registry(monkeypat
         }.issubset(_columns(conn, "point_logs"))
         assert {"key", "value"}.issubset(_columns(conn, "point_config"))
 
+    with sqlite3.connect(system_db_path) as conn:
+        existing_tables = {
+            row[0]
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        }
+
+        for table_name in database._REGISTRY_MESSAGE_INIT_TABLES:
+            assert table_name in SYSTEM_TABLES
+            assert table_name in TABLE_SCHEMAS
+            assert table_name in existing_tables
+
+        assert {
+            "id",
+            "user_id",
+            "username",
+            "user_avatar",
+            "last_message",
+            "last_time",
+            "unread_admin",
+            "unread_user",
+            "created_at",
+        }.issubset(_columns(conn, "msg_conversations"))
+        assert {
+            "id",
+            "conversation_id",
+            "sender_type",
+            "sender_id",
+            "sender_name",
+            "content",
+            "created_at",
+        }.issubset(_columns(conn, "msg_items"))
+        assert {"id", "user_id", "created_at"}.issubset(_columns(conn, "msg_notify_block"))
+
 
 def test_database_system_init_uses_registry_for_selected_simple_tables():
     from app.infra.db import database
@@ -116,6 +149,21 @@ def test_database_compat_init_uses_registry_for_point_core_tables():
     assert "ensure_registered_table(c, table_name)" in source
 
     for table_name in database._REGISTRY_COMPAT_INIT_TABLES:
+        assert f"CREATE TABLE IF NOT EXISTS {table_name}" not in source
+
+    assert "CREATE TABLE IF NOT EXISTS media_requests" in source
+    assert "CREATE TABLE IF NOT EXISTS request_users" in source
+
+
+def test_database_message_init_uses_registry_for_message_tables():
+    from app.infra.db import database
+
+    source = inspect.getsource(database.init_db)
+
+    assert "for table_name in _REGISTRY_MESSAGE_INIT_TABLES:" in source
+    assert "ensure_registered_table(c, table_name)" in source
+
+    for table_name in database._REGISTRY_MESSAGE_INIT_TABLES:
         assert f"CREATE TABLE IF NOT EXISTS {table_name}" not in source
 
     assert "CREATE TABLE IF NOT EXISTS media_requests" in source

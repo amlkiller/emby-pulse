@@ -57,6 +57,12 @@ _REGISTRY_COMPAT_INIT_TABLES = (
     "point_config",
 )
 
+_REGISTRY_MESSAGE_INIT_TABLES = (
+    "msg_conversations",
+    "msg_items",
+    "msg_notify_block",
+)
+
 # 🔥 导出 SYSTEM_DB_PATH 供其他模块使用
 __all__ = ['init_db', 'get_base_filter', 'add_sys_notification',
            'DB_PATH', 'SYSTEM_DB_PATH', 'auto_migrate_system_db', 'get_db_connection',
@@ -593,32 +599,8 @@ def init_db(skip_migration=False):
     try:
         conn = sqlite3.connect(SYSTEM_DB_PATH)
         c = conn.cursor()
-        c.execute('''CREATE TABLE IF NOT EXISTS msg_conversations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT NOT NULL,
-            username TEXT,
-            user_avatar TEXT,
-            last_message TEXT,
-            last_time DATETIME DEFAULT CURRENT_TIMESTAMP,
-            unread_admin INTEGER DEFAULT 0,
-            unread_user INTEGER DEFAULT 0,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )''')
-        c.execute('''CREATE TABLE IF NOT EXISTS msg_items (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            conversation_id INTEGER,
-            sender_type TEXT DEFAULT 'admin',
-            sender_id TEXT,
-            sender_name TEXT,
-            content TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )''')
-        # 消息通知屏蔽表
-        c.execute('''CREATE TABLE IF NOT EXISTS msg_notify_block (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT NOT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )''')
+        for table_name in _REGISTRY_MESSAGE_INIT_TABLES:
+            ensure_registered_table(c, table_name)
         conn.commit()
         conn.close()
     except Exception as e:
