@@ -1245,3 +1245,36 @@ Made the bootstrap-started risk monitor track and remove EventBus subscriptions 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 38: Notification bot event subscription stop
+
+**Date**: 2026-06-02
+**Task**: Notification bot event subscription stop
+**Branch**: `main`
+
+### Summary
+
+Moved notification bot service EventBus subscriptions into reversible start/stop lifecycle hooks, replaced anonymous playback lambdas with stable handlers, preserved notification behavior, fixed the ColorTransfer HDR fallback surfaced by lint, added focused lifecycle/HDR tests, and verified focused checks plus full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `17bead7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
