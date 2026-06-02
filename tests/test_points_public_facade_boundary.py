@@ -12,39 +12,43 @@ if str(_REPO_ROOT) not in sys.path:
 
 
 def test_points_router_does_not_import_private_users_auth_or_system_public_service():
-    path = _REPO_ROOT / "app/domains/points/router.py"
-    rel_path = path.relative_to(_REPO_ROOT).as_posix()
-    tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(rel_path))
+    paths = [
+        _REPO_ROOT / "app/domains/points/router.py",
+        _REPO_ROOT / "app/domains/points/game_router.py",
+    ]
     violations = []
     imports_shared_view_context = False
 
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name) and target.id == "get_point_config":
+    for path in paths:
+        rel_path = path.relative_to(_REPO_ROOT).as_posix()
+        tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(rel_path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and target.id == "get_point_config":
+                        violations.append(f"{rel_path}:{node.lineno}")
+            if isinstance(node, ast.ImportFrom):
+                imported_names = {alias.name for alias in node.names}
+                if node.module == "app.domains.users.auth":
                     violations.append(f"{rel_path}:{node.lineno}")
-        if isinstance(node, ast.ImportFrom):
-            imported_names = {alias.name for alias in node.names}
-            if node.module == "app.domains.users.auth":
-                violations.append(f"{rel_path}:{node.lineno}")
-            if node.module == "app.domains.users" and ("auth" in imported_names or "*" in imported_names):
-                violations.append(f"{rel_path}:{node.lineno}")
-            if node.module == "app.domains.system" and ("public_service" in imported_names or "*" in imported_names):
-                violations.append(f"{rel_path}:{node.lineno}")
-            if node.module == "app.domains.system.views" and (
-                "get_common_vars" in imported_names or "*" in imported_names
-            ):
-                violations.append(f"{rel_path}:{node.lineno}")
-            if node.module == "app.shared.view_context" and "get_common_vars" in imported_names:
-                imports_shared_view_context = True
-        elif isinstance(node, ast.Import):
-            imported_modules = {alias.name for alias in node.names}
-            if "app.domains.users.auth" in imported_modules:
-                violations.append(f"{rel_path}:{node.lineno}")
-            if "app.domains.system.public_service" in imported_modules:
-                violations.append(f"{rel_path}:{node.lineno}")
-            if "app.domains.system.views" in imported_modules:
-                violations.append(f"{rel_path}:{node.lineno}")
+                if node.module == "app.domains.users" and ("auth" in imported_names or "*" in imported_names):
+                    violations.append(f"{rel_path}:{node.lineno}")
+                if node.module == "app.domains.system" and ("public_service" in imported_names or "*" in imported_names):
+                    violations.append(f"{rel_path}:{node.lineno}")
+                if node.module == "app.domains.system.views" and (
+                    "get_common_vars" in imported_names or "*" in imported_names
+                ):
+                    violations.append(f"{rel_path}:{node.lineno}")
+                if node.module == "app.shared.view_context" and "get_common_vars" in imported_names:
+                    imports_shared_view_context = True
+            elif isinstance(node, ast.Import):
+                imported_modules = {alias.name for alias in node.names}
+                if "app.domains.users.auth" in imported_modules:
+                    violations.append(f"{rel_path}:{node.lineno}")
+                if "app.domains.system.public_service" in imported_modules:
+                    violations.append(f"{rel_path}:{node.lineno}")
+                if "app.domains.system.views" in imported_modules:
+                    violations.append(f"{rel_path}:{node.lineno}")
 
     assert violations == []
     assert imports_shared_view_context is True
@@ -104,3 +108,19 @@ def test_points_page_uses_permission_facade_and_direct_template_context(monkeypa
             },
         ),
     ]
+
+
+def test_points_router_includes_game_routes(monkeypatch):
+    from app.domains.points import point_dao
+
+    monkeypatch.setattr(point_dao, "ensure_lottery_table", lambda: None)
+    monkeypatch.setattr(point_dao, "ensure_points_schema", lambda: None)
+    points_router = importlib.import_module("app.domains.points.router")
+
+    paths = {route.path for route in points_router.router.routes}
+
+    assert "/api/slot/spin" in paths
+    assert "/api/scratch/buy" in paths
+    assert "/api/wheel/spin" in paths
+    assert "/api/guess/start" in paths
+    assert "/api/lottery/buy" in paths
