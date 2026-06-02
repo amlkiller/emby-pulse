@@ -735,3 +735,37 @@ Routed media request status user-bot notifications through notifications.public_
 ### Next Steps
 
 - None - task complete
+
+
+## Session 82: Notification bot reports facade
+
+**Date**: 2026-06-03
+**Task**: Notification bot reports facade
+**Branch**: `main`
+
+### Summary
+
+Routed notification bot stats poster generation through reports.public_service, preserved the default report poster theme, added AST facade boundary tests, and verified compile/import/private-import scan plus full pytest suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3959390` | (see git log) |
+| `8c702e5` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
