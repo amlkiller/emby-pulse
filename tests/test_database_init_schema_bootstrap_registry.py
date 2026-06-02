@@ -56,6 +56,41 @@ def test_init_system_db_creates_simple_tables_from_schema_registry(monkeypatch, 
         assert "idx_msg_conversations_user" in indexes
 
 
+def test_init_db_creates_compat_point_core_tables_from_schema_registry(monkeypatch, tmp_path):
+    from app.infra.db import database
+    from app.infra.db.schema_registry import SYSTEM_TABLES, TABLE_SCHEMAS
+
+    system_db_path = tmp_path / "system_store.db"
+    compat_db_path = tmp_path / "playback_reporting.db"
+    monkeypatch.setattr(database, "SYSTEM_DB_PATH", str(system_db_path))
+    monkeypatch.setattr(database, "DB_PATH", str(compat_db_path))
+
+    database.init_db(skip_migration=True)
+    database.init_db(skip_migration=True)
+
+    with sqlite3.connect(compat_db_path) as conn:
+        existing_tables = {
+            row[0]
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        }
+
+        for table_name in database._REGISTRY_COMPAT_INIT_TABLES:
+            assert table_name in SYSTEM_TABLES
+            assert table_name in TABLE_SCHEMAS
+            assert table_name in existing_tables
+
+        assert {
+            "id",
+            "user_id",
+            "username",
+            "action",
+            "amount",
+            "balance",
+            "created_at",
+        }.issubset(_columns(conn, "point_logs"))
+        assert {"key", "value"}.issubset(_columns(conn, "point_config"))
+
+
 def test_database_system_init_uses_registry_for_selected_simple_tables():
     from app.infra.db import database
 
@@ -70,3 +105,18 @@ def test_database_system_init_uses_registry_for_selected_simple_tables():
     assert "CREATE TABLE IF NOT EXISTS media_requests" in source
     assert "CREATE TABLE IF NOT EXISTS login_failures" in source
     assert "CREATE TABLE IF NOT EXISTS api_tokens" in source
+
+
+def test_database_compat_init_uses_registry_for_point_core_tables():
+    from app.infra.db import database
+
+    source = inspect.getsource(database.init_db)
+
+    assert "for table_name in _REGISTRY_COMPAT_INIT_TABLES:" in source
+    assert "ensure_registered_table(c, table_name)" in source
+
+    for table_name in database._REGISTRY_COMPAT_INIT_TABLES:
+        assert f"CREATE TABLE IF NOT EXISTS {table_name}" not in source
+
+    assert "CREATE TABLE IF NOT EXISTS media_requests" in source
+    assert "CREATE TABLE IF NOT EXISTS request_users" in source

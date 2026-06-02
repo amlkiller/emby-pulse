@@ -50,6 +50,11 @@ _REGISTRY_SYSTEM_INIT_TABLES = (
     "bot_notify_mutes",
 )
 
+_REGISTRY_COMPAT_INIT_TABLES = (
+    "point_logs",
+    "point_config",
+)
+
 # 🔥 导出 SYSTEM_DB_PATH 供其他模块使用
 __all__ = ['init_db', 'get_base_filter', 'add_sys_notification',
            'DB_PATH', 'SYSTEM_DB_PATH', 'auto_migrate_system_db', 'get_db_connection',
@@ -551,8 +556,8 @@ def init_db(skip_migration=False):
         c.execute('''CREATE TABLE IF NOT EXISTS sys_dashboard (id INTEGER PRIMARY KEY DEFAULT 1, layout_json TEXT)''')
 
         # 💰 积分系统（确保表存在）
-        c.execute('''CREATE TABLE IF NOT EXISTS point_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, username TEXT, action TEXT, amount INTEGER, balance INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
-        c.execute('''CREATE TABLE IF NOT EXISTS point_config (key TEXT PRIMARY KEY, value TEXT)''')
+        for table_name in _REGISTRY_COMPAT_INIT_TABLES:
+            ensure_registered_table(c, table_name)
         # 🤖 开放注册日志表
         c.execute('''CREATE TABLE IF NOT EXISTS tg_reg_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, tg_user_id TEXT, emby_username TEXT, emby_user_id TEXT, reg_type TEXT DEFAULT 'open', created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
 
