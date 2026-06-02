@@ -830,3 +830,36 @@ Deleted the local log_msg helper that only forwarded to print(..., flush=True), 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 26: Remove notification episode zfill redirect
+
+**Date**: 2026-06-03
+**Task**: Remove notification episode zfill redirect
+**Branch**: `Compiled`
+
+### Summary
+
+Removed the local zf helper in notification episode formatting and inlined str(...).zfill(2) at the call sites. Verified compile, import, focused notification tests, and the full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `73a043b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
