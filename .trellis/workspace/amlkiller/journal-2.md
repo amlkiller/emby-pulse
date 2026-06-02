@@ -1166,3 +1166,36 @@ Routed dedupe registry-owned table creation and compatible alters through schema
 ### Next Steps
 
 - None - task complete
+
+
+## Session 95: Pro license schema bootstrap convergence
+
+**Date**: 2026-06-03
+**Task**: Pro license schema bootstrap convergence
+**Branch**: `main`
+
+### Summary
+
+Routed sys_license creation and compatible registered alters through schema_bootstrap.ensure_registered_table while preserving Pro license read/write and status payload behavior; updated focused tests and backend database spec.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `be956b5` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
