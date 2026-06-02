@@ -1562,3 +1562,36 @@ Hardened calendar cache TTL settings so reads and writes normalize to positive i
 ### Next Steps
 
 - None - task complete
+
+
+## Session 107: Report and stats numeric settings contract convergence
+
+**Date**: 2026-06-03
+**Task**: Report and stats numeric settings contract convergence
+**Branch**: `main`
+
+### Summary
+
+Hardened report top-query and dashboard cache numeric settings to use the shared infra config positive-int coercion helper, added focused regression tests, and verified focused plus full test suites.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `46a060b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
