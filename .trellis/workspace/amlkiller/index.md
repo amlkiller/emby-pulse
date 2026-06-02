@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 46
+- **Total Sessions**: 47
 - **Last Active**: 2026-06-02
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1544 | Active |
+| `journal-1.md` | ~1577 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 47 | 2026-06-02 | Points page public facade boundary | `9e05234` | `main` |
 | 46 | 2026-06-02 | Plugin admin auth public service boundary | `0b4c173` | `main` |
 | 45 | 2026-06-02 | Playback public service facade for keep alive | `57e7b80` | `main` |
 | 44 | 2026-06-02 | System invitation public service facade | `ad827d1` | `main` |

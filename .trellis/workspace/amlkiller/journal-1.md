@@ -1542,3 +1542,36 @@ Exposed admin checks through the users public facade, moved built-in plugin admi
 ### Next Steps
 
 - None - task complete
+
+
+## Session 47: Points page public facade boundary
+
+**Date**: 2026-06-02
+**Task**: Points page public facade boundary
+**Branch**: `main`
+
+### Summary
+
+Added users and system public facade functions for permission and common template context, moved the points page/router off private users.auth and system.views imports, and added delegation plus AST boundary tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9e05234` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
