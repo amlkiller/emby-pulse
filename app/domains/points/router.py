@@ -8,7 +8,8 @@ from pydantic import BaseModel
 from typing import List, Optional
 from app.core.config import templates
 from app.infra.db.notification_dao import add_sys_notification
-from app.domains.system import public_service as system_service
+from app.domains.system import invitation_dao
+from app.domains.system.views import get_common_vars
 from app.domains.users import public_service as user_service
 from app.domains.points import point_dao
 from app.infra.clients.media_server_client import media_api
@@ -41,7 +42,7 @@ async def points_page(request: Request):
     if not user_service.check_permission(request, "points"):
         return RedirectResponse("/?no_permission=1", status_code=303)
 
-    return templates.TemplateResponse("points.html", system_service.get_common_vars(request, "points", {
+    return templates.TemplateResponse("points.html", get_common_vars(request, "points", {
         "user": request.session.get("user"),
         "is_pro": True
     }))
@@ -281,7 +282,7 @@ def user_use_renew_code(data: RenewCodeModel, request: Request):
     code = data.code.strip()
     if not code: return {"status": "error", "message": "请输入续费码"}
     try:
-        renew_result, renew_error = system_service.renew_user_with_invitation_code(code, uname, uid)
+        renew_result, renew_error = invitation_dao.renew_user_with_invitation_code(code, uname, uid)
         if renew_error == "invalid":
             return {"status": "error", "message": "续费码无效、已被使用、不是续费码或已达使用上限"}
         if renew_error == "permanent":

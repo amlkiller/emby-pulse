@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 from app.core.config import templates
-from app.domains.system import public_service as system_service
+from app.domains.system.views import get_common_vars
 from app.domains.users import public_service as user_service
 from app.plugins import get_all_plugins, set_plugin_enabled, get_plugin_config, save_plugin_config, update_plugin_config, get_plugin, get_plugin_logs, clear_plugin_logs, _registry
 
@@ -30,7 +30,7 @@ async def plugins_page(request: Request):
     if not user_service.check_permission(request, "plugins"):
         return RedirectResponse("/?no_permission=1", status_code=303)
     
-    return templates.TemplateResponse("plugins.html", system_service.get_common_vars(request, "plugins"))
+    return templates.TemplateResponse("plugins.html", get_common_vars(request, "plugins"))
 
 
 @router.get("/api/plugins")

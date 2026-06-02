@@ -1,9 +1,9 @@
-from app.domains.users import public_service as user_service
+from app.domains.users import user_dao
 from app.infra.db.system_store import system_store
 
 
 def list_users_meta_for_backup():
-    return user_service.list_all_user_meta()
+    return user_dao.list_all_user_meta()
 
 
 def list_point_logs_for_backup(limit: int = 1000):
@@ -29,11 +29,11 @@ def list_tg_bindings_detail_for_backup():
 
 
 def get_user_meta_for_backup(user_id: str):
-    return user_service.get_user_meta(user_id)
+    return user_dao.get_user_meta(user_id)
 
 
 def upsert_user_meta_for_backup(user_id: str, fields: dict, created_at: str) -> None:
-    user_service.upsert_user_meta_fields(user_id, fields, created_at)
+    user_dao.upsert_user_meta_fields(user_id, fields, created_at)
 
 
 def replace_point_logs_for_backup(point_logs: list[dict]) -> None:

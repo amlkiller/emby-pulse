@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/directory-structure.md","reason":"Keep only semantic public service boundaries; pure forwarding wrappers should be removed."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Use locked uv commands for compile and pytest verification."}
+{"file":"docs/架构审计.md","reason":"Project architecture audit documents current facade boundary guidance."}
+{"file":"架构.md","reason":"Project architecture roadmap documents cross-domain dependency direction."}

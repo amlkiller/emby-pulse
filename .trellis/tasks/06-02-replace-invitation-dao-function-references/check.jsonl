@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/directory-structure.md","reason":"Check pure forwarding wrappers are not kept as public service boundaries."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Check verification commands use uv."}
+{"file":"docs/架构审计.md","reason":"Check project-level architecture guidance matches the semantic facade rule."}
+{"file":"架构.md","reason":"Check roadmap guidance matches the semantic facade rule."}

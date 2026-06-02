@@ -11,7 +11,8 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from app.core.config import REPORT_COVER_URL, FALLBACK_IMAGE_URL
 from app.infra.db.notification_dao import add_sys_notification
-from app.domains.media_requests import public_service as media_request_service
+from app.domains.media_requests import gap_dao, media_request_dao
+from app.domains.media_requests.public_service import remove_gap_from_scan_state
 from app.domains.users import user_bot_dao
 from app.domains.notifications import bot_service_dao, message_dao
 from app.domains.notifications import notify_admin_dao, notify_rule_dao
@@ -25,7 +26,7 @@ from app.infra.clients.telegram_client import telegram_client
 from app.infra.clients.wecom_client import wecom_client
 from app.infra.clients.tmdb_client import tmdb_client
 from app.domains.playback import stats_queries
-from app.domains.reports import public_service as report_service
+from app.domains.reports.report_service import report_gen, HAS_PIL
 from app.utils.proxy_helper import get_safe_proxies, get_safe_wecom_base  # 🔒 SSRF 安全代理读取
 from app.core.event_bus import bus
 from app.infra.config.bot_settings import (
@@ -588,7 +589,7 @@ class SystemDaemon:
         if not tmdb_id: return
         try:
             tid = int(tmdb_id)
-            requests_to_notify, users_to_notify = media_request_service.finish_media_requests_for_item(tid, season)
+            requests_to_notify, users_to_notify = media_request_dao.finish_media_requests_for_item(tid, season)
             
             # 🔥 通知用户（入库完成）
             if requests_to_notify and users_to_notify:
@@ -617,7 +618,7 @@ class SystemDaemon:
             
             # 批量查询 TG 绑定
             user_ids = [u['user_id'] for u in users_info]
-            tg_bindings = media_request_service.list_tg_bindings(user_ids)
+            tg_bindings = media_request_dao.list_tg_bindings(user_ids)
             
             from app.domains.notifications.user_bot_service import _send, _tg_api
             
@@ -677,9 +678,9 @@ class SystemDaemon:
             episode = int(item.get("IndexNumber", -1))
             if season == -1 or episode == -1: return
 
-            media_request_service.delete_gap_record_by_series_episode(series_id, season, episode)
+            gap_dao.delete_gap_record_by_series_episode(series_id, season, episode)
             try:
-                media_request_service.remove_gap_from_scan_state(series_id, season, episode)
+                remove_gap_from_scan_state(series_id, season, episode)
             except Exception: pass
         except Exception as e: pass
 
@@ -788,7 +789,7 @@ class SystemDaemon:
             for ep in episodes:
                 s_idx = ep.get('ParentIndexNumber'); e_idx = ep.get('IndexNumber')
                 if s_idx is None or e_idx is None: continue
-                if media_request_service.delete_cleared_gap_record(series_id, s_idx, e_idx):
+                if gap_dao.delete_cleared_gap_record(series_id, s_idx, e_idx):
                     bus.publish("notify.gap_cleared", {"s_idx": s_idx, "e_idx": e_idx, "series_name": series_name})
         except Exception as e: pass
 
@@ -832,7 +833,7 @@ class SystemDaemon:
     def _sync_pending_requests(self):
         try:
             # 🔥 修复：检查所有未完成状态（待审批、下载中、手动接单、待入库）
-            rows = media_request_service.list_pending_sync_requests()
+            rows = media_request_dao.list_pending_sync_requests()
             if not rows: return
             admin_id = get_admin_id()
             if not admin_id: return
@@ -846,7 +847,7 @@ class SystemDaemon:
                 res = media_api.get(f"/Users/{admin_id}/Items", params=params, timeout=5).json()
                 if res.get("Items"):
                     if mtype == "movie":
-                        media_request_service.mark_sync_request_finished(tid)
+                        media_request_dao.mark_sync_request_finished(tid)
                         logger.info(f"[入库同步] 电影已入库: tmdb_id={tid}")
                     else:
                         # 🔥 追新请求：检查请求的集数是否都已入库
@@ -866,14 +867,14 @@ class SystemDaemon:
                             
                             # 如果请求的集数都已入库，更新状态
                             if requested_eps and all(e in local_eps for e in requested_eps):
-                                media_request_service.mark_sync_request_finished(tid, sn)
+                                media_request_dao.mark_sync_request_finished(tid, sn)
                                 logger.info(f"[入库同步] 追新已入库: tmdb_id={tid}, season={sn}, episodes={episodes_str}")
                         else:
                             # 求片请求：检查季是否存在
                             s_res = media_api.get(f"/Shows/{sid}/Seasons", params={"UserId": admin_id}, timeout=5).json()
                             local_seasons = [s.get("IndexNumber") for s in s_res.get("Items", [])]
                             if sn in local_seasons:
-                                media_request_service.mark_sync_request_finished(tid, sn)
+                                media_request_dao.mark_sync_request_finished(tid, sn)
                                 logger.info(f"[入库同步] 求片已入库: tmdb_id={tid}, season={sn}")
                 time.sleep(0.5) 
         except Exception as e: 
@@ -2375,7 +2376,7 @@ class NotificationBot:
             status_text = {"fix": "🛠️ 已标记：修复中", "done": "✅ 已标记：修复完成", "reject": "❌ 已标记：暂不处理(忽略)"}
             
             if action in status_map:
-                media_request_service.update_feedback_status(feed_id, status_map[action])
+                media_request_dao.update_feedback_status(feed_id, status_map[action])
                 msg_obj = cq["message"]
                 operator = cq.get('from', {}).get('first_name', 'Admin')
                 if "caption" in msg_obj:
@@ -2435,7 +2436,7 @@ class NotificationBot:
                 except:
                     pass
                 # 尝试从数据库获取求片信息以构建影巢搜索按钮
-                r = media_request_service.get_request_summary_by_tmdb(tid)
+                r = media_request_dao.get_request_summary_by_tmdb(tid)
                 if hdhive_enabled and r:
                     title_safe = r["title"].replace("_", "-").replace(" ", "-")
                     keyboard = {"inline_keyboard": [
@@ -2460,7 +2461,7 @@ class NotificationBot:
             else:
                 action_db = action
 
-            rows = media_request_service.list_pending_requests_by_tmdb(tid)
+            rows = media_request_dao.list_pending_requests_by_tmdb(tid)
             if not rows:
                 try: telegram_client.post_api(token, "editMessageReplyMarkup", json={"chat_id": cid, "message_id": mid, "reply_markup": {"inline_keyboard": []}}, proxies=proxies, timeout=5)
                 except Exception: pass
@@ -2474,13 +2475,13 @@ class NotificationBot:
                         if r["media_type"] == "tv": payload["season"] = r['season']
                         try: moviepilot_client.subscribe(mp_url, mp_token, payload, timeout=10)
                         except Exception: pass
-                    media_request_service.update_media_request_status(tid, r['season'], 1)
+                    media_request_dao.update_media_request_status(tid, r['season'], 1)
                 action_text = "✅ 已审批：推送 MP 自动下载"
             elif action_db == "manual":
-                for r in rows: media_request_service.update_media_request_status(tid, r['season'], 4)
+                for r in rows: media_request_dao.update_media_request_status(tid, r['season'], 4)
                 action_text = "✅ 已审批：管理员手动接单"
             elif action_db == "reject":
-                for r in rows: media_request_service.update_media_request_status(tid, r['season'], 3, reject_reason)
+                for r in rows: media_request_dao.update_media_request_status(tid, r['season'], 3, reject_reason)
                 action_text = f"❌ 已拒绝 ({reject_reason})"
                 
             msg_obj = cq["message"]
@@ -2860,7 +2861,7 @@ class NotificationBot:
                     title_display += f" {weekday}"
 
             # 🔥 图文模式：所有周期都走海报+详细文字
-            if report_service.has_pillow_support():
+            if HAS_PIL:
                 # 日期行
                 date_line = f"📅 {date_str}" if date_str else ""
                 weekday_line = f" {weekday}" if weekday else ""
@@ -2900,7 +2901,7 @@ class NotificationBot:
                     ])
                 
                 caption = "\n".join(caption_parts)
-                poster = report_service.generate_daily_poster(period, tv_list, movie_list)
+                poster = report_gen.generate_daily_poster(period, tv_list, movie_list)
                 if poster:
                     self.send_photo(chat_id, poster, caption.strip(), platform=platform)
                     return

@@ -11,7 +11,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 
-def test_points_router_does_not_import_private_users_or_system_modules():
+def test_points_router_does_not_import_private_users_auth_or_system_public_service():
     path = _REPO_ROOT / "app/domains/points/router.py"
     rel_path = path.relative_to(_REPO_ROOT).as_posix()
     tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(rel_path))
@@ -20,26 +20,23 @@ def test_points_router_does_not_import_private_users_or_system_modules():
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
             imported_names = {alias.name for alias in node.names}
-            if node.module in {
-                "app.domains.users.auth",
-                "app.domains.system.views",
-            }:
+            if node.module == "app.domains.users.auth":
                 violations.append(f"{rel_path}:{node.lineno}")
             if node.module == "app.domains.users" and ("auth" in imported_names or "*" in imported_names):
                 violations.append(f"{rel_path}:{node.lineno}")
-            if node.module == "app.domains.system" and ("views" in imported_names or "*" in imported_names):
+            if node.module == "app.domains.system" and ("public_service" in imported_names or "*" in imported_names):
                 violations.append(f"{rel_path}:{node.lineno}")
         elif isinstance(node, ast.Import):
             imported_modules = {alias.name for alias in node.names}
             if "app.domains.users.auth" in imported_modules:
                 violations.append(f"{rel_path}:{node.lineno}")
-            if "app.domains.system.views" in imported_modules:
+            if "app.domains.system.public_service" in imported_modules:
                 violations.append(f"{rel_path}:{node.lineno}")
 
     assert violations == []
 
 
-def test_points_page_uses_public_facades_for_permission_and_template(monkeypatch):
+def test_points_page_uses_permission_facade_and_direct_template_context(monkeypatch):
     from app.domains.points import point_dao
 
     monkeypatch.setattr(point_dao, "ensure_lottery_table", lambda: None)
@@ -62,7 +59,7 @@ def test_points_page_uses_public_facades_for_permission_and_template(monkeypatch
         return {"template": template_name, "context": context}
 
     monkeypatch.setattr(points_router.user_service, "check_permission", fake_check_permission)
-    monkeypatch.setattr(points_router.system_service, "get_common_vars", fake_get_common_vars)
+    monkeypatch.setattr(points_router, "get_common_vars", fake_get_common_vars)
     monkeypatch.setattr(points_router.templates, "TemplateResponse", fake_template_response)
 
     response = asyncio.run(points_router.points_page(request))
