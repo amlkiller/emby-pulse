@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 61
+- **Total Sessions**: 62
 - **Last Active**: 2026-06-02
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~73 | Active |
+| `journal-2.md` | ~106 | Active |
 | `journal-1.md` | ~1973 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 62 | 2026-06-02 | System clients public auth facade boundary | `8ed3f4e` | `main` |
 | 61 | 2026-06-02 | System audit public auth facade boundary | `596df30` | `main` |
 | 60 | 2026-06-02 | System tasks public auth facade boundary | `4d65354` | `main` |
 | 59 | 2026-06-02 | System API token public auth facade boundary | `41bf54d` | `main` |
