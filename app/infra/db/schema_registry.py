@@ -565,6 +565,9 @@ TABLE_ALTERS = {
         "ALTER TABLE media_requests ADD COLUMN request_type TEXT DEFAULT 'new'",
         "ALTER TABLE media_requests ADD COLUMN series_id TEXT DEFAULT ''"
     ],
+    "media_feedback": [
+        "ALTER TABLE media_feedback ADD COLUMN poster_path TEXT"
+    ],
     "PlaybackActivity": [
         "ALTER TABLE PlaybackActivity ADD COLUMN RemoteEndPoint TEXT",
         "ALTER TABLE PlaybackActivity ADD COLUMN Location TEXT",

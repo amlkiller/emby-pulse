@@ -66,28 +66,7 @@ def ensure_media_request_schema() -> None:
                 )
                 cursor.execute("DROP TABLE request_users_old")
 
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS media_feedback (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                item_name TEXT,
-                user_id TEXT,
-                username TEXT,
-                issue_type TEXT,
-                description TEXT,
-                status INTEGER DEFAULT 0,
-                poster_path TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-        cursor.execute("PRAGMA table_info(media_feedback)")
-        feedback_columns = [column[1] for column in cursor.fetchall()]
-        if "poster_path" not in feedback_columns:
-            try:
-                cursor.execute("ALTER TABLE media_feedback ADD COLUMN poster_path TEXT")
-            except Exception:
-                pass
+        ensure_registered_table(cursor, "media_feedback")
         conn.commit()
 
 
