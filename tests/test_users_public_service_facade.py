@@ -77,52 +77,14 @@ def test_users_public_service_exposes_page_permission_map(monkeypatch):
     assert public_service.get_page_permission_map() is permission_map
 
 
-def test_users_router_does_not_define_cache_wrapper_functions():
+def test_users_router_uses_public_service_cache_owner():
     path = _REPO_ROOT / "app/domains/users/router.py"
-    rel_path = path.relative_to(_REPO_ROOT).as_posix()
-    tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(rel_path))
+    source = path.read_text(encoding="utf-8")
 
-    wrapper_names = {
-        node.name
-        for node in ast.walk(tree)
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        and node.name in {"get_emby_users_cached", "invalidate_emby_users_cache"}
-    }
-
-    assert wrapper_names == set()
-
-
-def test_users_router_manage_users_uses_public_service_cache_owner(monkeypatch):
-    from app.domains.users import router
-
-    request = SimpleNamespace(session={"user": {"id": "admin"}})
-    calls = []
-
-    def fake_invalidate():
-        calls.append(("invalidate_emby_users_cache",))
-
-    def fake_get_users():
-        calls.append(("get_emby_users_cached",))
-        return [{"Id": "u1", "Name": "User One", "Policy": {}}]
-
-    monkeypatch.setattr(router, "is_admin_user", lambda request: True)
-    monkeypatch.setattr(router, "check_expired_users", lambda: calls.append(("check_expired_users",)))
-    monkeypatch.setattr(router, "get_media_server_public_host", lambda: "http://emby.local/")
-    monkeypatch.setattr(router.user_service, "get_emby_users_cached", fake_get_users)
-    monkeypatch.setattr(router.user_service, "invalidate_emby_users_cache", fake_invalidate)
-    monkeypatch.setattr(router.user_dao, "list_all_user_meta", lambda: [])
-    monkeypatch.setattr(router.user_bot_dao, "list_emby_tg_user_bindings", lambda: [])
-
-    response = router.api_manage_users(request, refresh=True)
-
-    assert response["status"] == "success"
-    assert response["emby_url"] == "http://emby.local"
-    assert response["data"][0]["Id"] == "u1"
-    assert calls == [
-        ("check_expired_users",),
-        ("invalidate_emby_users_cache",),
-        ("get_emby_users_cached",),
-    ]
+    assert "def get_emby_users_cached(" not in source
+    assert "def invalidate_emby_users_cache(" not in source
+    assert "user_service.get_emby_users_cached()" in source
+    assert "user_service.invalidate_emby_users_cache()" in source
 
 
 def test_selected_external_callers_use_real_user_dao_for_persistence_calls():

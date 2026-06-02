@@ -36,9 +36,6 @@ IMAGE_CACHE_DIR = "/workspace/data/image_cache"
 IMAGE_CACHE_MAX_AGE = 86400 * 7  # 7天过期
 IMAGE_CACHE_MAX_SIZE = 500 * 1024 * 1024  # 最大 500MB
 
-def _image_max_bytes() -> int:
-    return get_image_proxy_max_bytes()
-
 def ensure_cache_dir():
     """确保缓存目录存在"""
     if not os.path.exists(IMAGE_CACHE_DIR):
@@ -83,7 +80,7 @@ def save_response_to_cache(cache_path: str, resp, content_type: str) -> bool:
     """流式保存响应到缓存，避免整图进入内存"""
     try:
         ensure_cache_dir()
-        max_bytes = _image_max_bytes()
+        max_bytes = get_image_proxy_max_bytes()
         content_length = resp.headers.get("Content-Length")
         if content_length and int(content_length) > max_bytes:
             logger.warning(f"[图片代理] 图片过大，拒绝缓存: {content_length} bytes")

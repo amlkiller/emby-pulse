@@ -1,5 +1,4 @@
 from app.infra.db.local_playback_store import fetch_playback_ip_rows
-from app.infra.db.playback_filters import get_base_filter
 from app.infra.db.playback_store import playback_store
 
 

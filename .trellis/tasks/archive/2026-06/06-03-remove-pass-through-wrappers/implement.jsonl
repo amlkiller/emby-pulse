@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend guideline entrypoint for this refactor."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Defines domain public_service boundary semantics and when pass-through wrappers should be removed."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Defines uv-based verification requirements."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Defines DAO/query boundary expectations while updating callers."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Guidance for avoiding duplicate wrapper abstractions."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Guidance for preserving layer contracts while removing wrappers."}

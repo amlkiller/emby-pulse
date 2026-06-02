@@ -11,7 +11,7 @@ from collections import deque
 from fastapi import APIRouter, Request
 from app.domains.users import public_service as user_service
 from app.domains.system.system_tool_dao import check_system_db_readwrite, check_system_table_integrity
-from app.infra.db.perf_stats import get_query_perf_stats
+from app.infra.db.query_perf import get_query_perf_stats
 from app.infra.clients.network_client import network_client
 from app.infra.clients.tmdb_client import tmdb_client
 from app.infra.clients.weather_client import weather_client
@@ -50,7 +50,7 @@ def api_perf_status(request: Request):
                     image_cache["files"] += 1
                     image_cache["bytes"] += os.path.getsize(path)
         image_cache["smart_image_cache"] = len(proxy.smart_image_cache)
-        image_cache["max_bytes_per_image"] = proxy._image_max_bytes()
+        image_cache["max_bytes_per_image"] = proxy.get_image_proxy_max_bytes()
     except Exception:
         pass
 

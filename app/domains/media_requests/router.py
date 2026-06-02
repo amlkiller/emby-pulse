@@ -161,9 +161,6 @@ def get_tmdb_season_info(tmdb_id: int, season: int) -> tuple:
     except:
         return 0, []
 
-def ensure_db_schema():
-    ensure_media_request_schema()
-
 def get_emby_admin():
     try:
         users = media_api.get("/Users", timeout=5).json()
@@ -1358,7 +1355,7 @@ def stop_community_cache_refresh_loop() -> None:
 
 
 def start_media_request_services() -> None:
-    ensure_db_schema()
+    ensure_media_request_schema()
     start_community_cache_refresh_loop()
 
 
