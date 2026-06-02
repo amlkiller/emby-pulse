@@ -1694,3 +1694,36 @@ Hardened the weather provider setting with canonical source normalization, added
 ### Next Steps
 
 - None - task complete
+
+
+## Session 111: Image proxy size settings contract convergence
+
+**Date**: 2026-06-03
+**Task**: Image proxy size settings contract convergence
+**Branch**: `main`
+
+### Summary
+
+Hardened the image proxy max-bytes setting with shared positive integer coercion, added regression tests for invalid, boolean, zero, negative, and valid values, and verified focused plus full test suites.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1e40549` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
