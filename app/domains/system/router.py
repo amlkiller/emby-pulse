@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request
 from app.schemas.models import SettingsModel
 from app.core.config import save_config
-from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.domains.users import public_service as user_service
 from app.domains.system.system_tool_dao import (
     get_dashboard_layout,
     repair_core_system_tables,
@@ -85,7 +85,7 @@ router = APIRouter()
 def api_diag_config(request: Request):
     """配置诊断 - 检查配置值是否正确"""
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     
     result = {
         "config_values": {},
@@ -125,7 +125,7 @@ def api_diag_config(request: Request):
 def api_diag_env(request: Request):
     """环境变量诊断 - 帮助排查环境变量问题（安全版本）"""
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     
     # 检查敏感字段的环境变量
     sensitive_fields = get_sensitive_env_fields()
@@ -168,7 +168,7 @@ def api_diag_env(request: Request):
 def api_diag_db(request: Request):
     """数据库诊断 - 帮助排查数据库问题"""
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
 
     return diagnose_playback_database()
 
@@ -176,7 +176,7 @@ def api_diag_db(request: Request):
 def api_get_routes(request: Request):
     """获取所有线路列表"""
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     routes = get_media_server_routes()
     # 返回线路名称和URL用于展示
     return {"status": "success", "data": routes}
@@ -184,7 +184,7 @@ def api_get_routes(request: Request):
 @router.get("/api/settings")
 def api_get_settings(request: Request):
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     
     # 🔒 安全：脱敏敏感字段
     def mask_sensitive(value, show_len=4):
@@ -265,7 +265,7 @@ def api_get_settings(request: Request):
 @router.post("/api/settings")
 def api_update_settings(data: SettingsModel, request: Request):
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     
     # 🔒 安全：URL 验证
     from app.utils.url_validator import validate_url, validate_emby_host
@@ -432,7 +432,7 @@ def api_update_settings(data: SettingsModel, request: Request):
 async def api_update_weather_greeting(request: Request):
     """单独更新天气问候语（无需验证 Emby 连接）"""
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     
     data = await request.json()
     greeting = data.get("weather_greeting", "") if isinstance(data, dict) else ""
@@ -446,7 +446,7 @@ async def api_update_weather_greeting(request: Request):
 @router.post("/api/settings/test_mp")
 async def test_moviepilot(request: Request):
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     data = await request.json()
     mp_url = moviepilot_client.normalize_url(data.get("mp_url", ""))
     mp_token = moviepilot_client.normalize_token(data.get("mp_token", ""))
@@ -474,7 +474,7 @@ async def test_moviepilot(request: Request):
 async def test_tmdb(request: Request):
     """测试 TMDB API 连通性"""
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     data = await request.json()
     api_key = data.get("api_key", "").strip()
     
@@ -514,7 +514,7 @@ async def test_tmdb(request: Request):
 async def test_proxy(request: Request):
     """测试代理连通性"""
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     data = await request.json()
     proxy_url = data.get("proxy_url", "").strip()
     if not proxy_url: return {"status": "error", "message": "请填写代理地址"}
@@ -548,7 +548,7 @@ async def test_proxy(request: Request):
 @router.post("/api/settings/fix_db")
 def api_fix_db(request: Request):
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     if not system_database_exists(): return {"status": "error", "message": "数据库不存在"}
     try:
         results = repair_core_system_tables()
@@ -562,7 +562,7 @@ def api_fix_db(request: Request):
 @router.get("/api/dashboard/layout")
 def api_get_dashboard_layout(request: Request):
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
         layout = get_dashboard_layout()
         if layout is not None: return {"status": "success", "data": layout}
@@ -572,7 +572,7 @@ def api_get_dashboard_layout(request: Request):
 @router.post("/api/dashboard/layout")
 async def api_save_dashboard_layout(request: Request):
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
         data = await request.json()
         save_dashboard_layout(data)
