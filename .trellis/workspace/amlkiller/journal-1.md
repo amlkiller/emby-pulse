@@ -1146,3 +1146,36 @@ Added a stoppable and restartable lifecycle hook for bootstrap-started dashboard
 ### Next Steps
 
 - None - task complete
+
+
+## Session 35: Season poster plugin lifecycle stop
+
+**Date**: 2026-06-02
+**Task**: Season poster plugin lifecycle stop
+**Branch**: `main`
+
+### Summary
+
+Added reversible event-bus subscriptions for the season poster updater plugin, introduced EventBus.unsubscribe, guarded queued webhook handling when the plugin is disabled, documented event-driven plugin lifecycle expectations, added focused regression tests, and verified focused checks plus full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `898cd55` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
