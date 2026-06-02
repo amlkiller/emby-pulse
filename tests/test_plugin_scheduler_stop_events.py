@@ -188,6 +188,98 @@ def test_plugin_scheduler_loops_use_interruptible_waits(
     assert "time.sleep" not in source
 
 
+def test_hdhivesign_checkin_retry_wait_continues_when_plugin_is_running(monkeypatch):
+    _, plugin = _build_plugin(
+        monkeypatch,
+        "app.plugins.hdhivesign.plugin",
+        "HDHiveSignPlugin",
+    )
+    signin_calls = []
+    wait_calls = []
+    saved_history = []
+
+    monkeypatch.setattr(
+        plugin,
+        "_get_config",
+        lambda: {
+            "cookie": "token=test-token",
+            "base_url": "https://hdhive.test",
+            "max_retries": 1,
+            "retry_interval": 7,
+        },
+    )
+    monkeypatch.setattr(plugin, "_fetch_user_info", lambda cookies, token, base_url: {})
+    monkeypatch.setattr(plugin, "_save_sign_history", lambda sign_data: saved_history.append(sign_data))
+    monkeypatch.setattr(plugin, "_send_notification", lambda sign_data: None)
+    monkeypatch.setattr(plugin._stop_event, "wait", lambda timeout: wait_calls.append(timeout) and False)
+
+    def fake_signin(cookies, token, base_url, is_gambler):
+        signin_calls.append((cookies, token, base_url, is_gambler))
+        if len(signin_calls) == 1:
+            return False, "temporary failure", 0
+        return True, "签到成功", 5
+
+    monkeypatch.setattr(plugin, "_signin_base", fake_signin)
+
+    result = plugin.checkin()
+
+    assert result["status"] == "success"
+    assert result["message"] == "签到成功"
+    assert wait_calls == [7]
+    assert len(signin_calls) == 2
+    assert saved_history[0]["status"] == "签到成功"
+
+
+def test_hdhivesign_checkin_retry_wait_stops_when_plugin_is_disabled(monkeypatch):
+    _, plugin = _build_plugin(
+        monkeypatch,
+        "app.plugins.hdhivesign.plugin",
+        "HDHiveSignPlugin",
+    )
+    signin_calls = []
+    wait_calls = []
+    saved_history = []
+
+    monkeypatch.setattr(
+        plugin,
+        "_get_config",
+        lambda: {
+            "cookie": "token=test-token",
+            "base_url": "https://hdhive.test",
+            "max_retries": 3,
+            "retry_interval": 11,
+        },
+    )
+    monkeypatch.setattr(plugin, "_save_sign_history", lambda sign_data: saved_history.append(sign_data))
+    monkeypatch.setattr(plugin._stop_event, "wait", lambda timeout: wait_calls.append(timeout) or True)
+
+    def fake_signin(cookies, token, base_url, is_gambler):
+        signin_calls.append((cookies, token, base_url, is_gambler))
+        return False, "temporary failure", 0
+
+    monkeypatch.setattr(plugin, "_signin_base", fake_signin)
+
+    result = plugin.checkin()
+
+    assert result == {"status": "error", "message": "temporary failure"}
+    assert wait_calls == [11]
+    assert len(signin_calls) == 1
+    assert saved_history == []
+
+
+def test_hdhivesign_checkin_retry_delay_uses_interruptible_wait(monkeypatch):
+    _, plugin = _build_plugin(
+        monkeypatch,
+        "app.plugins.hdhivesign.plugin",
+        "HDHiveSignPlugin",
+    )
+
+    source = inspect.getsource(plugin.checkin)
+
+    assert "_stop_event.wait(retry_interval)" in source
+    assert "time.sleep" not in source
+
+
 def test_event_bus_unsubscribe_is_idempotent():
     from app.core.event_bus import EventBus
 

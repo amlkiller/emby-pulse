@@ -9,7 +9,6 @@
 - 支持签到通知推送到管理机器人
 - 支持动态获取 next-action 值
 """
-import time
 import re
 import json
 import base64
@@ -409,7 +408,8 @@ class HDHiveSignPlugin(PluginBase):
         # 重试
         if retry_count < max_retries:
             logger.info(f"[影巢签到] 签到失败，{retry_interval}秒后重试")
-            time.sleep(retry_interval)
+            if self._stop_event.wait(retry_interval):
+                return {"status": "error", "message": message}
             return self.checkin(is_gambler, retry_count + 1)
         
         # 最终失败
