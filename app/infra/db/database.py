@@ -85,6 +85,12 @@ _REGISTRY_COMPAT_SIMPLE_INIT_TABLES = (
     "tg_reg_logs",
 )
 
+_REGISTRY_COMPAT_SENSITIVE_INIT_TABLES = (
+    "invitations",
+    "sys_license",
+    "tg_user_bindings",
+)
+
 _REGISTRY_COMPAT_NOTIFICATION_INIT_TABLES = (
     "sys_notifications",
 )
@@ -453,25 +459,8 @@ def init_db(skip_migration=False):
         c.execute('''CREATE TABLE IF NOT EXISTS PlaybackActivity (Id INTEGER PRIMARY KEY AUTOINCREMENT, UserId TEXT, UserName TEXT, ItemId TEXT, ItemName TEXT, PlayDuration INTEGER, DateCreated DATETIME DEFAULT CURRENT_TIMESTAMP, Client TEXT, DeviceName TEXT, RemoteEndPoint TEXT, Location TEXT, ISP TEXT)''')
         ensure_registered_table(c, "users_meta")
 
-        c.execute('''CREATE TABLE IF NOT EXISTS invitations (code TEXT PRIMARY KEY, days INTEGER, used_count INTEGER DEFAULT 0, max_uses INTEGER DEFAULT 1, created_at TEXT, used_at DATETIME, used_by TEXT, status INTEGER DEFAULT 0, template_user_id TEXT, type TEXT DEFAULT 'register', routes TEXT)''')
-        try: c.execute("ALTER TABLE invitations ADD COLUMN template_user_id TEXT")
-        except Exception: pass
-        try: c.execute("ALTER TABLE invitations ADD COLUMN type TEXT DEFAULT 'register'")
-        except Exception: pass
-        try: c.execute("ALTER TABLE invitations ADD COLUMN routes TEXT")
-        except Exception: pass
-        try: c.execute("ALTER TABLE invitations ADD COLUMN route_mode TEXT DEFAULT 'block'")
-        except Exception: pass
-
-# 👇 商业化模块：新建本地凭证库，存储 Pro 激活码和状态
-        c.execute('''CREATE TABLE IF NOT EXISTS sys_license (
-            license_key TEXT,
-            machine_id TEXT,
-            pro_token TEXT,
-            status TEXT DEFAULT 'pro',
-            expire_date DATETIME,
-            last_checked DATETIME DEFAULT CURRENT_TIMESTAMP
-        )''')
+        for table_name in _REGISTRY_COMPAT_SENSITIVE_INIT_TABLES:
+            ensure_registered_table(c, table_name)
 
         for table_name in _REGISTRY_COMPAT_SIMPLE_INIT_TABLES:
             ensure_registered_table(c, table_name)
@@ -480,12 +469,6 @@ def init_db(skip_migration=False):
 
         for table_name in _REGISTRY_COMPAT_NOTIFICATION_INIT_TABLES:
             ensure_registered_table(c, table_name)
-
-        # 🤖 用户机器人相关表
-        c.execute('''CREATE TABLE IF NOT EXISTS tg_user_bindings (tg_user_id TEXT PRIMARY KEY, tg_username TEXT DEFAULT '', emby_user_id TEXT, emby_username TEXT, init_password TEXT DEFAULT '', bound_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
-        # 🔥 迁移：添加 tg_username 字段
-        try: c.execute("ALTER TABLE tg_user_bindings ADD COLUMN tg_username TEXT DEFAULT ''")
-        except Exception: pass
 
         # 💰 积分系统（确保表存在）
         for table_name in _REGISTRY_COMPAT_INIT_TABLES:

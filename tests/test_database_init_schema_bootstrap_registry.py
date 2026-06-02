@@ -217,11 +217,25 @@ def test_init_db_creates_compat_point_core_tables_from_schema_registry(monkeypat
             assert table_name in TABLE_SCHEMAS
             assert table_name in existing_tables
 
+        for table_name in database._REGISTRY_COMPAT_SENSITIVE_INIT_TABLES:
+            assert table_name in SYSTEM_TABLES
+            assert table_name in TABLE_SCHEMAS
+            assert table_name in existing_tables
+
         for table_name in database._REGISTRY_COMPAT_NOTIFICATION_INIT_TABLES:
             assert table_name in SYSTEM_TABLES
             assert table_name in TABLE_SCHEMAS
             assert table_name in existing_tables
 
+        assert {"template_user_id", "route_mode", "req_free", "req_free_count"}.issubset(
+            _columns(conn, "invitations")
+        )
+        assert {"pro_token", "expire_date", "max_devices", "current_devices"}.issubset(
+            _columns(conn, "sys_license")
+        )
+        assert {"init_password", "tg_username", "tg_display_name"}.issubset(
+            _columns(conn, "tg_user_bindings")
+        )
         assert {
             "id",
             "user_id",
@@ -326,10 +340,24 @@ def test_database_compat_init_uses_registry_for_simple_tables():
     for table_name in database._REGISTRY_COMPAT_SIMPLE_INIT_TABLES:
         assert f"CREATE TABLE IF NOT EXISTS {table_name}" not in source
 
-    assert "CREATE TABLE IF NOT EXISTS invitations" in source
-    assert "CREATE TABLE IF NOT EXISTS sys_license" in source
     assert "CREATE TABLE IF NOT EXISTS media_requests" in source
-    assert "CREATE TABLE IF NOT EXISTS tg_user_bindings" in source
+
+
+def test_database_compat_init_uses_registry_for_sensitive_tables():
+    from app.infra.db import database
+
+    source = inspect.getsource(database.init_db)
+
+    assert "for table_name in _REGISTRY_COMPAT_SENSITIVE_INIT_TABLES:" in source
+    assert "ensure_registered_table(c, table_name)" in source
+
+    for table_name in database._REGISTRY_COMPAT_SENSITIVE_INIT_TABLES:
+        assert f"CREATE TABLE IF NOT EXISTS {table_name}" not in source
+
+    assert "ALTER TABLE invitations ADD COLUMN" not in source
+    assert "ALTER TABLE tg_user_bindings ADD COLUMN" not in source
+    assert "ALTER TABLE sys_license ADD COLUMN" not in source
+    assert "CREATE TABLE IF NOT EXISTS media_requests" in source
 
 
 def test_database_compat_init_uses_registry_for_notification_tables():
@@ -343,10 +371,7 @@ def test_database_compat_init_uses_registry_for_notification_tables():
     for table_name in database._REGISTRY_COMPAT_NOTIFICATION_INIT_TABLES:
         assert f"CREATE TABLE IF NOT EXISTS {table_name}" not in source
 
-    assert "CREATE TABLE IF NOT EXISTS invitations" in source
-    assert "CREATE TABLE IF NOT EXISTS sys_license" in source
     assert "CREATE TABLE IF NOT EXISTS media_requests" in source
-    assert "CREATE TABLE IF NOT EXISTS tg_user_bindings" in source
 
 
 def test_database_message_init_uses_registry_for_message_tables():
