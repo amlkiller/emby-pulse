@@ -863,3 +863,36 @@ Removed the local zf helper in notification episode formatting and inlined str(.
 ### Next Steps
 
 - None - task complete
+
+
+## Session 27: Remove config save redirect
+
+**Date**: 2026-06-03
+**Task**: Remove config save redirect
+**Branch**: `Compiled`
+
+### Summary
+
+Removed the module-level save_config redirect, updated system settings routes and boundary test to call cfg.save directly, and verified compile, imports, focused system router tests, and the full suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `db538e8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

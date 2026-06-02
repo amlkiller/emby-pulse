@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 26
+- **Total Sessions**: 27
 - **Last Active**: 2026-06-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~865 | Active |
+| `journal-1.md` | ~898 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 27 | 2026-06-03 | Remove config save redirect | `db538e8` | `Compiled` |
 | 26 | 2026-06-03 | Remove notification episode zfill redirect | `73a043b` | `Compiled` |
 | 25 | 2026-06-03 | Remove notification message log redirect | `29012c5` | `Compiled` |
 | 24 | 2026-06-03 | Remove plugin directory ensure redirects | `f5b11d7` | `Compiled` |
