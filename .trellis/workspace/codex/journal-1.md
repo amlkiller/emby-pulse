@@ -566,3 +566,36 @@ Removed the pure start_user_domain_services redirect and registered migrate_admi
 ### Next Steps
 
 - None - task complete
+
+
+## Session 18: Remove notifications router startup redirect
+
+**Date**: 2026-06-03
+**Task**: Remove notifications router startup redirect
+**Branch**: `Compiled`
+
+### Summary
+
+Moved the notification table startup implementation into start_notifications_router_services and removed the private _ensure_table redirect. Verified compileall, focused notification/bootstrap tests, import check, and full pytest suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6d972e9` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
