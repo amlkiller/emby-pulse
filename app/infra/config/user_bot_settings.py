@@ -1,4 +1,19 @@
 from app.core.config import cfg
+from app.infra.config.coercion import coerce_positive_int
+
+
+_REG_QUOTA_MODE_DEFAULT = "total"
+_REG_QUOTA_MODES = {"total", "batch"}
+_ROUTE_MODE_DEFAULT = "block"
+_ROUTE_MODES = {"block", "allow"}
+_REG_DAYS_DEFAULT = 30
+
+
+def _coerce_enum(value, *, supported: set, default: str) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in supported:
+        return normalized
+    return default
 
 
 def get_user_bot_worker_count() -> int:
@@ -41,14 +56,11 @@ def get_user_bot_required_groups() -> str:
 
 
 def get_user_bot_registration_batch_used() -> int:
-    try:
-        return int(cfg.get("user_bot_reg_batch_used", 0) or 0)
-    except Exception:
-        return 0
+    return coerce_positive_int(cfg.get("user_bot_reg_batch_used", 0), 0, minimum=0)
 
 
 def set_user_bot_registration_batch_used(value: int) -> None:
-    cfg.set("user_bot_reg_batch_used", value)
+    cfg.set("user_bot_reg_batch_used", coerce_positive_int(value, 0, minimum=0))
 
 
 def is_user_bot_open_reg_enabled() -> bool:
@@ -88,18 +100,22 @@ def set_user_bot_allowed_groups(value: str) -> None:
 
 
 def get_user_bot_reg_quota_mode() -> str:
-    return cfg.get("user_bot_reg_quota_mode", "total")
+    return _coerce_enum(
+        cfg.get("user_bot_reg_quota_mode", _REG_QUOTA_MODE_DEFAULT),
+        supported=_REG_QUOTA_MODES,
+        default=_REG_QUOTA_MODE_DEFAULT,
+    )
 
 
 def set_user_bot_reg_quota_mode(value: str) -> None:
-    cfg.set("user_bot_reg_quota_mode", value)
+    cfg.set(
+        "user_bot_reg_quota_mode",
+        _coerce_enum(value, supported=_REG_QUOTA_MODES, default=_REG_QUOTA_MODE_DEFAULT),
+    )
 
 
 def get_user_bot_reg_quota() -> int:
-    try:
-        return int(cfg.get("user_bot_reg_quota", 0) or 0)
-    except Exception:
-        return 0
+    return coerce_positive_int(cfg.get("user_bot_reg_quota", 0), 0, minimum=0)
 
 
 def get_user_bot_group_enabled() -> bool:
@@ -135,11 +151,18 @@ def set_user_bot_portal_url(value: str) -> None:
 
 
 def get_user_bot_route_mode() -> str:
-    return cfg.get("user_bot_route_mode", "block")
+    return _coerce_enum(
+        cfg.get("user_bot_route_mode", _ROUTE_MODE_DEFAULT),
+        supported=_ROUTE_MODES,
+        default=_ROUTE_MODE_DEFAULT,
+    )
 
 
 def set_user_bot_route_mode(value: str) -> None:
-    cfg.set("user_bot_route_mode", value)
+    cfg.set(
+        "user_bot_route_mode",
+        _coerce_enum(value, supported=_ROUTE_MODES, default=_ROUTE_MODE_DEFAULT),
+    )
 
 
 def get_user_bot_allow_routes() -> str:
@@ -159,17 +182,11 @@ def set_user_bot_block_routes(value: str) -> None:
 
 
 def get_user_bot_max_reg() -> int:
-    try:
-        return int(cfg.get("user_bot_max_reg", 0))
-    except Exception:
-        return 0
+    return coerce_positive_int(cfg.get("user_bot_max_reg", 0), 0, minimum=0)
 
 
 def get_user_bot_reg_days() -> int:
-    try:
-        return int(cfg.get("user_bot_reg_days", 30))
-    except Exception:
-        return 30
+    return coerce_positive_int(cfg.get("user_bot_reg_days", _REG_DAYS_DEFAULT), _REG_DAYS_DEFAULT)
 
 
 def get_user_bot_template_user() -> str:
