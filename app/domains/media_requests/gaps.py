@@ -44,6 +44,10 @@ logger = logging.getLogger("uvicorn")
 
 router = APIRouter(prefix="/api/gaps", tags=["gaps"])
 _gap_services_started = False
+_gap_services_start_lock = threading.Lock()
+_gap_services_stop_event = threading.Event()
+_gap_delayed_start_thread = None
+_gap_background_sync_thread = None
 
 # 模块加载时确保表存在
 def _ensure_gap_tables():
@@ -123,10 +127,17 @@ def _start_background_gap_sync():
     后台独立线程：定时自动刷新缺集扫描缓存。
     间隔时间从 gap_config 表读取 cache_interval_hours 配置（默认6小时）。
     """
+    global _gap_background_sync_thread
+
+    if _gap_services_stop_event.is_set():
+        return
+
     def sync_task():
         # 延迟 120 秒启动，确保系统核心组件已就绪
-        time.sleep(120)
-        while True:
+        if _gap_services_stop_event.wait(120):
+            return
+        while not _gap_services_stop_event.is_set():
+            interval_hours = 6
             try:
                 # 从数据库读取缓存间隔配置
                 interval_hours = get_gap_cache_interval_hours()
@@ -141,31 +152,54 @@ def _start_background_gap_sync():
                 logger.error(f"❌ [定时任务] 后台同步缺集缓存失败: {e}")
             
             # 休眠指定小时数
-            time.sleep(interval_hours * 3600)
+            if _gap_services_stop_event.wait(interval_hours * 3600):
+                return
     
     # daemon=True 确保主进程退出时线程能正常销毁
-    t = threading.Thread(target=sync_task, daemon=True)
-    t.start()
+    _gap_background_sync_thread = threading.Thread(target=sync_task, daemon=True, name="gap-background-sync")
+    _gap_background_sync_thread.start()
 
 # 🔥 启动后台定时任务（延迟启动，等待 run_scan_task 定义完成）
 import atexit
 from app.core.security_utils import safe_error_message
 def _delayed_start_background_sync():
+    global _gap_delayed_start_thread
+
     # 使用定时器延迟启动，确保所有函数已定义
     def start_after_delay():
-        time.sleep(5)
+        if _gap_services_stop_event.wait(5):
+            return
         _start_background_gap_sync()
-    t = threading.Thread(target=start_after_delay, daemon=True)
-    t.start()
+    _gap_delayed_start_thread = threading.Thread(target=start_after_delay, daemon=True, name="gap-background-sync-delay")
+    _gap_delayed_start_thread.start()
 
 
 def start_gap_services():
     global _gap_services_started
-    if _gap_services_started:
-        return
-    _gap_services_started = True
+    with _gap_services_start_lock:
+        if _gap_services_started:
+            return
+        _gap_services_stop_event.clear()
+        _gap_services_started = True
     _ensure_gap_tables()
     _delayed_start_background_sync()
+
+
+def stop_gap_services():
+    global _gap_services_started, _gap_delayed_start_thread, _gap_background_sync_thread
+    with _gap_services_start_lock:
+        if not _gap_services_started:
+            return
+        _gap_services_stop_event.set()
+        delayed_thread = _gap_delayed_start_thread
+        background_thread = _gap_background_sync_thread
+        _gap_services_started = False
+        _gap_delayed_start_thread = None
+        _gap_background_sync_thread = None
+    current_thread = threading.current_thread()
+    for thread in (delayed_thread, background_thread):
+        if thread and thread is not current_thread and thread.is_alive():
+            thread.join(timeout=1)
 
 def run_scan_task():
     try:

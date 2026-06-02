@@ -72,6 +72,7 @@ def test_bootstrap_services_use_registry_and_skip_duplicate_starts(monkeypatch):
     monkeypatch.setattr(services, "stop_calendar_notify_services", record("stop:calendar-notify"))
     monkeypatch.setattr(services, "start_dedupe_services", record("dedupe"))
     monkeypatch.setattr(services, "start_gap_services", record("gaps"))
+    monkeypatch.setattr(services, "stop_gap_services", record("stop:gaps"))
     monkeypatch.setattr(services, "start_auth_domain_services", record("auth-domain"))
     monkeypatch.setattr(services, "stop_auth_domain_services", record("stop:auth-domain"))
     monkeypatch.setattr(services, "start_user_domain_services", record("user-domain"))
@@ -110,10 +111,11 @@ def test_bootstrap_services_use_registry_and_skip_duplicate_starts(monkeypatch):
 
     services.stop_bootstrap_services()
 
-    assert calls[-9:] == [
+    assert calls[-10:] == [
         "stop:session",
         "stop:system-tasks",
         "stop:auth-domain",
+        "stop:gaps",
         "stop:calendar-notify",
         "stop:calendar",
         "stop:media-requests",

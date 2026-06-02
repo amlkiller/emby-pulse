@@ -77,3 +77,48 @@ def test_calendar_service_stop_resets_state_and_allows_restart(monkeypatch):
     service.stop()
 
     assert service._background_sync_started is False
+
+
+def test_gap_service_stop_resets_delayed_start_and_allows_restart(monkeypatch):
+    from app.domains.media_requests import gaps
+
+    gaps.stop_gap_services()
+    calls = []
+    monkeypatch.setattr(gaps, "_ensure_gap_tables", lambda: calls.append("ensure"))
+
+    gaps.start_gap_services()
+
+    assert gaps._gap_services_started is True
+    assert gaps._gap_delayed_start_thread is not None
+
+    gaps.stop_gap_services()
+
+    assert gaps._gap_services_started is False
+    assert gaps._gap_delayed_start_thread is None
+    assert gaps._gap_background_sync_thread is None
+
+    gaps.start_gap_services()
+    gaps.stop_gap_services()
+
+    assert gaps._gap_services_started is False
+    assert calls == ["ensure", "ensure"]
+
+
+def test_gap_service_stop_resets_active_background_sync(monkeypatch):
+    from app.domains.media_requests import gaps
+
+    gaps.stop_gap_services()
+    monkeypatch.setattr(gaps, "_ensure_gap_tables", lambda: None)
+    monkeypatch.setattr(gaps, "_delayed_start_background_sync", lambda: None)
+
+    gaps.start_gap_services()
+    gaps._start_background_gap_sync()
+
+    assert gaps._gap_services_started is True
+    assert gaps._gap_background_sync_thread is not None
+
+    gaps.stop_gap_services()
+
+    assert gaps._gap_services_started is False
+    assert gaps._gap_delayed_start_thread is None
+    assert gaps._gap_background_sync_thread is None
