@@ -750,3 +750,36 @@ Registered login_failures and api_tokens in schema_registry, routed database sys
 ### Next Steps
 
 - None - task complete
+
+
+## Session 23: Point game schema registry bootstrap
+
+**Date**: 2026-06-02
+**Task**: Point game schema registry bootstrap
+**Branch**: `main`
+
+### Summary
+
+Registered point game tables in schema_registry, routed database startup and point DAO bootstraps through schema_bootstrap, moved compatible point game ALTERs into TABLE_ALTERS, added focused registry/legacy-upgrade/game-DAO smoke coverage, updated backend database guidance, and verified focused checks plus full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5236379` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
