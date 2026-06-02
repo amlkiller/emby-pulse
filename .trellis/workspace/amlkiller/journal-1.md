@@ -486,3 +486,36 @@ Routed point_logs and point_config bootstraps through schema_bootstrap, preserve
 ### Next Steps
 
 - None - task complete
+
+
+## Session 15: Database init point core schema registry bootstrap
+
+**Date**: 2026-06-02
+**Task**: Database init point core schema registry bootstrap
+**Branch**: `main`
+
+### Summary
+
+Routed init_db compatibility creation of point_logs and point_config through schema_bootstrap, added focused database-init compatibility coverage, and updated backend schema-boundary guidance while leaving high-risk legacy DDL local.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3b851d6` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
