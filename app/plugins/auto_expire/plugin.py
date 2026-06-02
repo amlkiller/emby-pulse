@@ -165,10 +165,6 @@ class AutoExpirePlugin(PluginBase):
     def _is_pro(self):
         return True
 
-    def _log(self, msg, level="info"):
-        """记录日志（兼容旧代码）"""
-        self.log(msg, level=level)
-
     def _check_loop(self):
         if self._stop_event.wait(60):
             return

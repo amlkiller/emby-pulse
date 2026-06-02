@@ -572,7 +572,7 @@ async def wecom_webhook_post(request: Request, msg_signature: str = "", timestam
         
         if command_text:
             logger.info(f"[企微回调] 处理命令: {command_text} (来自: {from_user})")
-            threading.Thread(target=bot._handle_message, args=(command_text, from_user, "wecom")).start()
+            threading.Thread(target=bot.notifier._handle_message, args=(command_text, from_user, "wecom")).start()
             
         return Response(content="success", media_type="text/plain")
     except Exception as e:

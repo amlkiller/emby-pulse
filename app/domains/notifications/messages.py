@@ -1077,7 +1077,7 @@ def _send_bot_notify_for_user_message(user_id: str, username: str, content: str,
             })
         
         # 发送通知
-        bot.send_message("sys_notify", text, reply_markup=reply_markup, platform="all")
+        bot.notifier.send_message("sys_notify", text, reply_markup=reply_markup, platform="all")
         log_msg(f"[消息中心] 已发送机器人通知: 用户 {username} 的消息")
         
     except Exception as e:
