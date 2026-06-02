@@ -18,6 +18,77 @@ def test_calendar_notify_stop_services_stops_global_service(monkeypatch):
     assert calls == ["stop"]
 
 
+def test_calendar_notify_service_thread_lifecycle(monkeypatch):
+    import inspect
+
+    from app.domains.notifications import calendar_notify
+
+    class FakeThread:
+        instances = []
+
+        def __init__(self, target=None, daemon=False, name=None):
+            self.target = target
+            self.daemon = daemon
+            self.name = name
+            self.started = False
+            self.alive = False
+            self.join_timeout = None
+            FakeThread.instances.append(self)
+
+        def start(self):
+            self.started = True
+            self.alive = True
+
+        def is_alive(self):
+            return self.alive
+
+        def join(self, timeout=None):
+            self.join_timeout = timeout
+            self.alive = False
+
+    monkeypatch.setattr(calendar_notify.threading, "Thread", FakeThread)
+
+    service = calendar_notify.CalendarNotifyService()
+    service.start()
+    service.start()
+
+    assert len(FakeThread.instances) == 1
+    assert service.thread.name == "calendar-notify-scheduler"
+    assert service.thread.daemon is True
+    assert service._stop_event.is_set() is False
+
+    service.stop()
+
+    assert service._stop_event.is_set() is True
+    assert FakeThread.instances[0].join_timeout == 1
+    assert service.thread is None
+
+    service.restart()
+
+    assert len(FakeThread.instances) == 2
+    assert service.thread is FakeThread.instances[1]
+    assert service._stop_event.is_set() is False
+
+    sticky_service = calendar_notify.CalendarNotifyService()
+    sticky_service.start()
+    sticky_service.thread.join = lambda timeout=None: setattr(sticky_service.thread, "join_timeout", timeout)
+    sticky_service.stop()
+
+    assert sticky_service.thread is FakeThread.instances[2]
+    assert sticky_service.thread.join_timeout == 1
+
+    sticky_service.start()
+    sticky_service.restart()
+
+    assert len(FakeThread.instances) == 3
+    assert sticky_service.thread is FakeThread.instances[2]
+
+    loop_source = inspect.getsource(calendar_notify.CalendarNotifyService._loop)
+    restart_source = inspect.getsource(calendar_notify.CalendarNotifyService.restart)
+    assert "_stop_event.wait(60)" in loop_source
+    assert "time.sleep" not in restart_source
+
+
 def test_system_task_stop_cancels_poller_and_allows_restart():
     from app.domains.system import tasks
 

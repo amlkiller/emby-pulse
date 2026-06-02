@@ -6,7 +6,6 @@ import logging
 import json
 import datetime
 import threading
-import time
 from fastapi import APIRouter, Request
 from app.domains.users import public_service as user_service
 from pydantic import BaseModel
@@ -309,9 +308,17 @@ class CalendarNotifyService:
         """启动定时服务"""
         if self.running:
             return
+        if self.thread and self.thread.is_alive():
+            return
+        if self.thread:
+            self.thread = None
         self._stop_event.clear()
         self.running = True
-        self.thread = threading.Thread(target=self._loop, daemon=True)
+        self.thread = threading.Thread(
+            target=self._loop,
+            daemon=True,
+            name="calendar-notify-scheduler",
+        )
         self.thread.start()
         logger.info("[日历通知] 定时服务已启动")
     
@@ -319,19 +326,23 @@ class CalendarNotifyService:
         """停止定时服务"""
         self.running = False
         self._stop_event.set()
-        if self.thread and self.thread.is_alive():
-            self.thread.join(timeout=1)
+        thread = self.thread
+        if thread and thread.is_alive():
+            thread.join(timeout=1)
+        if not thread or not thread.is_alive():
+            self.thread = None
         logger.info("[日历通知] 定时服务已停止")
     
     def restart(self):
         """重启定时服务"""
         self.stop()
-        time.sleep(1)
+        if self.thread and self.thread.is_alive():
+            return
         self.start()
     
     def _loop(self):
         """定时检查循环"""
-        while self.running:
+        while self.running and not self._stop_event.is_set():
             try:
                 # 检查是否启用
                 row = get_calendar_notify_config()
@@ -356,7 +367,8 @@ class CalendarNotifyService:
                 logger.error(f"[日历通知] 定时检查异常: {e}")
             
             # 每分钟检查一次
-            self._stop_event.wait(60)
+            if self._stop_event.wait(60):
+                return
 
 # 全局实例
 calendar_notify_service = CalendarNotifyService()
