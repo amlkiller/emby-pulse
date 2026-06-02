@@ -701,3 +701,37 @@ Moved media requests top/latest playback stats calls through playback public_ser
 ### Next Steps
 
 - None - task complete
+
+
+## Session 81: Media requests user bot notification facade
+
+**Date**: 2026-06-03
+**Task**: Media requests user bot notification facade
+**Branch**: `main`
+
+### Summary
+
+Routed media request status user-bot notifications through notifications.public_service, added send_user_bot_photo facade coverage, and verified compile/import/private-import scan plus full pytest suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `61fa108` | (see git log) |
+| `554752c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
