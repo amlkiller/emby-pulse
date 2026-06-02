@@ -15,6 +15,7 @@ def test_notification_bot_does_not_import_private_users_auth():
     rel_path = path.relative_to(_REPO_ROOT).as_posix()
     tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(rel_path))
     violations = []
+    imports_points_dao = False
 
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
@@ -23,12 +24,21 @@ def test_notification_bot_does_not_import_private_users_auth():
                 violations.append(f"{rel_path}:{node.lineno}")
             if node.module == "app.domains.users" and ("auth" in imported_names or "*" in imported_names):
                 violations.append(f"{rel_path}:{node.lineno}")
+            if node.module == "app.domains.points.router" and (
+                "get_point_config" in imported_names or "*" in imported_names
+            ):
+                violations.append(f"{rel_path}:{node.lineno}")
+            if node.module == "app.domains.points" and "point_dao" in imported_names:
+                imports_points_dao = True
         elif isinstance(node, ast.Import):
             imported_modules = {alias.name for alias in node.names}
             if "app.domains.users.auth" in imported_modules:
                 violations.append(f"{rel_path}:{node.lineno}")
+            if "app.domains.points.router" in imported_modules:
+                violations.append(f"{rel_path}:{node.lineno}")
 
     assert violations == []
+    assert imports_points_dao is True
 
 
 def test_get_bot_settings_denies_non_admin_before_config_read(monkeypatch):
@@ -144,3 +154,44 @@ def test_test_bot_allows_admin_through_public_facade(monkeypatch):
         ("get_tg_chat_id",),
         ("send_message", "token", {"chat_id": "chat", "text": "🎉 测试消息"}, None, 10),
     ]
+
+
+def test_lottery_pool_uses_point_dao_config_owner(monkeypatch):
+    from app.domains.notifications import bot as notification_bot
+
+    request = SimpleNamespace(session={"user": {"Id": "admin"}})
+    calls = []
+
+    def fake_is_admin_user(seen_request):
+        calls.append(("is_admin_user", seen_request))
+        return True
+
+    def fake_get_point_config():
+        calls.append(("get_point_config",))
+        return {"lottery_draw_hour": "21", "lottery_max_per_day": "7"}
+
+    def fake_get_lottery_pool_info(today, tomorrow):
+        calls.append(("get_lottery_pool_info", today, tomorrow))
+        return {
+            "target_pool": 1200,
+            "target_tickets": 12,
+            "total_accumulated": 2400,
+            "target_date": today,
+            "is_drawn": False,
+        }
+
+    monkeypatch.setattr(notification_bot.user_service, "is_admin_user", fake_is_admin_user)
+    monkeypatch.setattr(notification_bot.point_dao, "get_point_config", fake_get_point_config)
+    monkeypatch.setattr(notification_bot, "get_lottery_pool_info", fake_get_lottery_pool_info)
+
+    response = notification_bot.api_lottery_pool(request)
+
+    assert response["status"] == "success"
+    assert response["data"]["draw_hour"] == 21
+    assert response["data"]["max_per_day"] == 7
+    assert response["data"]["today_pool"] == 1200
+    assert calls[0:2] == [
+        ("is_admin_user", request),
+        ("get_point_config",),
+    ]
+    assert calls[2][0] == "get_lottery_pool_info"

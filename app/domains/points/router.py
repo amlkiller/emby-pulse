@@ -18,8 +18,6 @@ from app.shared.view_context import get_common_vars
 router = APIRouter()
 from app.core.security_utils import safe_error_message
 
-get_point_config = point_dao.get_point_config
-
 try:
     point_dao.ensure_lottery_table()
 except Exception:
@@ -652,7 +650,7 @@ def slot_spin(request: Request):
     
     try:
         # 获取配置
-        config = get_point_config()
+        config = point_dao.get_point_config()
 
         # 检查是否启用
         if config.get('enable_slot') != '1':
@@ -860,7 +858,7 @@ def buy_scratch_card(request: Request):
         return {"status": "error", "message": "未登录"}
     
     try:
-        config = get_point_config()
+        config = point_dao.get_point_config()
         
         # 检查是否启用
         if config.get('enable_web_scratch') != '1':
@@ -1012,7 +1010,7 @@ async def get_wheel_usage(request: Request):
         return {"status": "error", "message": "未登录"}
     
     # 获取配置
-    config = get_point_config()
+    config = point_dao.get_point_config()
     max_per_day = int(config.get('wheel_max_per_day', 20))
     
     count = point_dao.count_today_point_logs(user['Id'], action='幸运转盘')
@@ -1032,7 +1030,7 @@ async def spin_wheel(request: Request):
     
     try:
         # 获取配置
-        config = get_point_config()
+        config = point_dao.get_point_config()
         enabled = config.get('enable_wheel', '0') == '1'
         if not enabled:
             return {"status": "error", "message": "转盘功能未启用"}
@@ -1130,7 +1128,7 @@ async def start_guess_game(request: Request):
     
     try:
         # 获取配置
-        config = get_point_config()
+        config = point_dao.get_point_config()
         enabled = config.get('enable_guess', '0') == '1'
         if not enabled:
             return {"status": "error", "message": "猜数字功能未启用"}
@@ -1195,7 +1193,7 @@ async def submit_guess(request: Request):
             return {"status": "error", "message": "请先开始游戏"}
         
         # 获取配置
-        config = get_point_config()
+        config = point_dao.get_point_config()
         base_reward = int(config.get('guess_base_reward', 50))
         multipliers = [
             float(config.get('guess_multiplier_1', 5)),
@@ -1293,7 +1291,7 @@ async def buy_lottery(request: Request):
         custom_number = data.get('custom_number')  # 自选号码
         
         # 获取配置
-        config = get_point_config()
+        config = point_dao.get_point_config()
         enabled = config.get('enable_lottery', '0') == '1'
         if not enabled:
             return {"status": "error", "message": "彩票功能未启用"}
@@ -1340,7 +1338,7 @@ async def api_user_lottery_pool(request: Request):
         today = datetime.datetime.now().strftime('%Y-%m-%d')
         
         # 获取配置
-        config = get_point_config()
+        config = point_dao.get_point_config()
         draw_hour = int(config.get('lottery_draw_hour', 20))
         max_per_day = int(config.get('lottery_max_per_day', 10))
         

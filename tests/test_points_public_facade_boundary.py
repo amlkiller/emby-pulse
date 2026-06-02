@@ -19,6 +19,10 @@ def test_points_router_does_not_import_private_users_auth_or_system_public_servi
     imports_shared_view_context = False
 
     for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "get_point_config":
+                    violations.append(f"{rel_path}:{node.lineno}")
         if isinstance(node, ast.ImportFrom):
             imported_names = {alias.name for alias in node.names}
             if node.module == "app.domains.users.auth":

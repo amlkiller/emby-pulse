@@ -45,6 +45,7 @@ from app.domains.notifications.bot_admin_dao import (
     update_tg_binding_names,
 )
 from app.domains.notifications.bot_service import bot
+from app.domains.points import point_dao
 from app.domains.users import public_service as user_service
 import threading
 import base64
@@ -905,13 +906,11 @@ def api_lottery_pool(request: Request):
     if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
 
     try:
-        from app.domains.points.router import get_point_config
-
         today = datetime.datetime.now().strftime('%Y-%m-%d')
         tomorrow = (datetime.datetime.now() + datetime.timedelta(days=1)).strftime('%Y-%m-%d')
 
         # 获取配置
-        config = get_point_config()
+        config = point_dao.get_point_config()
         draw_hour = int(config.get('lottery_draw_hour', 20))
         max_per_day = int(config.get('lottery_max_per_day', 10))
 
