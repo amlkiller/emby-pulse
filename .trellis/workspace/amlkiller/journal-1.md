@@ -585,3 +585,36 @@ Routed init_db late message-table compatibility creation for msg_conversations, 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 18: Database init compatibility simple schema registry bootstrap
+
+**Date**: 2026-06-02
+**Task**: Database init compatibility simple schema registry bootstrap
+**Branch**: `main`
+
+### Summary
+
+Routed low-risk init_db compatibility simple tables through schema_bootstrap, preserved ALTER-sensitive local DDL for later slices, expanded database-init regression coverage, and updated backend schema-boundary guidance.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6adfc43` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
