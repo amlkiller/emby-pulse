@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 95
+- **Total Sessions**: 96
 - **Last Active**: 2026-06-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~1201 | Active |
+| `journal-2.md` | ~1234 | Active |
 | `journal-1.md` | ~1973 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 96 | 2026-06-03 | Auth local users schema bootstrap convergence | `d8c6bf7` | `main` |
 | 95 | 2026-06-03 | Pro license schema bootstrap convergence | `be956b5` | `main` |
 | 94 | 2026-06-03 | Dedupe schema bootstrap convergence | `e9738c1` | `main` |
 | 93 | 2026-06-03 | Calendar notify lifecycle convergence | `17995df` | `main` |

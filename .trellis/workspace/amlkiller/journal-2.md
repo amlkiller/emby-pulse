@@ -1199,3 +1199,36 @@ Routed sys_license creation and compatible registered alters through schema_boot
 ### Next Steps
 
 - None - task complete
+
+
+## Session 96: Auth local users schema bootstrap convergence
+
+**Date**: 2026-06-03
+**Task**: Auth local users schema bootstrap convergence
+**Branch**: `main`
+
+### Summary
+
+Routed local_users table creation and safe registered optional alters through schema_bootstrap.ensure_registered_table while preserving login and TOTP DAO behavior; updated focused tests and backend database spec.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d8c6bf7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
