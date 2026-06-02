@@ -1958,3 +1958,36 @@ Extracted PK invitation listing, status updates, rejection/cleanup, message-id p
 ### Next Steps
 
 - None - task complete
+
+
+## Session 119: Refactor points game router
+
+**Date**: 2026-06-03
+**Task**: Refactor points game router
+**Branch**: `main`
+
+### Summary
+
+Extracted slot, scratch-card, wheel, guess-number, and lottery HTTP endpoints into app/domains/points/game_router.py and included that router from app/domains/points/router.py so existing paths remain registered. Updated points boundary tests to cover the extracted router and route registration. Verified compile/import checks, focused points tests, and the full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `57c4381` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
