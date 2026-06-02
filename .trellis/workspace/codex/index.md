@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 20
+- **Total Sessions**: 21
 - **Last Active**: 2026-06-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~667 | Active |
+| `journal-1.md` | ~700 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 21 | 2026-06-03 | Remove bootstrap start redirect | `2ebbcd2` | `Compiled` |
 | 20 | 2026-06-03 | Remove auth domain stop redirect | `57b6f6a` | `Compiled` |
 | 19 | 2026-06-03 | Remove notify rules startup redirect | `49714fa` | `Compiled` |
 | 18 | 2026-06-03 | Remove notifications router startup redirect | `6d972e9` | `Compiled` |

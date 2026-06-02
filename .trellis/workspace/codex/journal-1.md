@@ -665,3 +665,36 @@ Moved login lock cleanup stop handling into stop_auth_domain_services and remove
 ### Next Steps
 
 - None - task complete
+
+
+## Session 21: Remove bootstrap start redirect
+
+**Date**: 2026-06-03
+**Task**: Remove bootstrap start redirect
+**Branch**: `Compiled`
+
+### Summary
+
+Removed the pure start_bootstrap_services redirect and pointed lifespan/tests directly at get_bootstrap_registry(...).start_all(). Verified compileall, focused bootstrap lifecycle tests, import check, and full pytest suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2ebbcd2` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
