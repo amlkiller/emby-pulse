@@ -1,13 +1,12 @@
-import os
 import logging
-from fastapi import APIRouter, Request, Depends
-from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
+from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from app.domains.playback.calendar_service import calendar_service
 from app.core.config import templates
+from app.domains.system import public_service as system_service
+from app.domains.users import public_service as user_service
 from app.infra.config.calendar_settings import get_calendar_public_url, set_calendar_cache_ttl
-from app.domains.users.auth import check_permission
 
 router = APIRouter()
 logger = logging.getLogger("uvicorn")
@@ -29,15 +28,14 @@ async def calendar_page(request: Request):
         return RedirectResponse("/login", status_code=303)
     
     # 权限检查
-    if not check_permission(request, "calendar"):
+    if not user_service.check_permission(request, "calendar"):
         return RedirectResponse("/?no_permission=1", status_code=303)
 
     # 获取公网地址，如果没有则使用内网地址作为回退
     public_url = get_calendar_public_url()
     if public_url and public_url.endswith('/'): public_url = public_url[:-1]
 
-    from app.domains.system.views import get_common_vars
-    return templates.TemplateResponse("calendar.html", get_common_vars(request, "calendar", {
+    return templates.TemplateResponse("calendar.html", system_service.get_common_vars(request, "calendar", {
         "emby_public_url": public_url,
         "is_pro": _check_pro_status()
     }))
@@ -57,7 +55,7 @@ def get_weekly_calendar(request: Request, refresh: bool = False, offset: int = 0
 @router.post("/api/calendar/config")
 async def update_calendar_config(request: Request, config: CalendarConfigReq):
     """API: 更新日历配置"""
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     set_calendar_cache_ttl(config.ttl)
     return {"status": "success"}
