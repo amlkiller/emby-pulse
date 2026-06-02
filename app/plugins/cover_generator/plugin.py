@@ -15,7 +15,7 @@ from fastapi import Request
 from PIL import Image
 
 from app.plugins.base import PluginBase
-from app.domains.users.auth import is_admin_user  # 🔒 管理员鉴权
+from app.domains.users import public_service as user_service
 from app.infra.clients.media_server_client import media_api
 
 from .styles import get_style, list_all_styles, STATIC_STYLES
@@ -67,7 +67,7 @@ class CoverGeneratorPlugin(PluginBase):
             """获取媒体库列表"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             
             libraries = get_libraries()
@@ -87,7 +87,7 @@ class CoverGeneratorPlugin(PluginBase):
             """预览媒体库封面"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             
             # 支持 GET 和 POST
@@ -219,7 +219,7 @@ class CoverGeneratorPlugin(PluginBase):
             """生成并应用封面到媒体库"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             
             try:
@@ -358,7 +358,7 @@ class CoverGeneratorPlugin(PluginBase):
             """批量生成多个媒体库封面"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             
             data = await request.json()
@@ -463,7 +463,7 @@ class CoverGeneratorPlugin(PluginBase):
             """获取生成历史"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             
             try:

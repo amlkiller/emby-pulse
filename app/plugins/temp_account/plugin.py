@@ -11,7 +11,7 @@ import string
 import json
 from fastapi import Request
 from app.plugins.base import PluginBase
-from app.domains.users.auth import is_admin_user  # 🔒 管理员鉴权
+from app.domains.users import public_service as user_service
 from app.infra.clients.media_server_client import media_api
 from app.infra.clients.telegram_client import telegram_client
 from app.infra.clients.wecom_client import wecom_client
@@ -71,7 +71,7 @@ class TempAccountPlugin(PluginBase):
             if not request.session.get("user"):
                 from fastapi.responses import RedirectResponse
                 return RedirectResponse("/login", status_code=303)
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 from fastapi.responses import RedirectResponse
                 return RedirectResponse("/login", status_code=303)
             
@@ -85,7 +85,7 @@ class TempAccountPlugin(PluginBase):
             """获取临时账号列表"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             try:
                 rows = list_temp_accounts()
@@ -136,7 +136,7 @@ class TempAccountPlugin(PluginBase):
             """创建临时账号"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             try:
                 data = await request.json()
@@ -224,7 +224,7 @@ class TempAccountPlugin(PluginBase):
             """删除临时账号"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             try:
                 row = get_temp_account(account_id)
@@ -251,7 +251,7 @@ class TempAccountPlugin(PluginBase):
             """手动刷新密码"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             try:
                 result = self._refresh_account_password(account_id, manual=True)
@@ -267,7 +267,7 @@ class TempAccountPlugin(PluginBase):
             """启用/禁用账号"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             try:
                 data = await request.json()
@@ -298,7 +298,7 @@ class TempAccountPlugin(PluginBase):
             """更新账号配置"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             try:
                 data = await request.json()
@@ -335,7 +335,7 @@ class TempAccountPlugin(PluginBase):
             """获取密码更新历史"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             try:
                 rows = list_temp_account_password_history(account_id, limit)
@@ -350,7 +350,7 @@ class TempAccountPlugin(PluginBase):
             """获取可用的模板用户列表"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             try:
                 if not media_api.host or not media_api.api_key:
@@ -377,7 +377,7 @@ class TempAccountPlugin(PluginBase):
             """获取可用线路列表"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             try:
                 # 使用系统配置的线路列表

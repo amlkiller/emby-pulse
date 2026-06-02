@@ -7,7 +7,7 @@ import threading
 import datetime
 from fastapi import Request
 from app.plugins.base import PluginBase
-from app.domains.users.auth import is_admin_user  # 🔒 管理员鉴权
+from app.domains.users import public_service as user_service
 from app.plugins.emby_restart.emby_restart_dao import create_emby_restart_history, list_emby_restart_history
 from app.infra.clients.media_server_client import media_api
 
@@ -282,7 +282,7 @@ async def get_status(request: Request):
     # 🔒 鉴权检查
     if not request.session.get("user"):
         return {"success": False, "message": "未登录"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"success": False, "message": "需要管理员权限"}
     return {"success": True, "data": plugin.get_status()}
 
@@ -293,7 +293,7 @@ async def manual_restart(request: Request):
     # 🔒 鉴权检查
     if not request.session.get("user"):
         return {"success": False, "message": "未登录"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"success": False, "message": "需要管理员权限"}
     
     try:
@@ -314,7 +314,7 @@ async def restart_single_server(request: Request):
     # 🔒 鉴权检查
     if not request.session.get("user"):
         return {"success": False, "message": "未登录"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"success": False, "message": "需要管理员权限"}
     
     try:
@@ -366,7 +366,7 @@ async def get_history(request: Request):
     # 🔒 鉴权检查
     if not request.session.get("user"):
         return {"success": False, "message": "未登录"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"success": False, "message": "需要管理员权限"}
     return {"success": True, "data": plugin.restart_history[-20:]}
 
@@ -377,7 +377,7 @@ async def get_config(request: Request):
     # 🔒 鉴权检查
     if not request.session.get("user"):
         return {"status": "error", "message": "未登录"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
     from app.plugins import get_plugin_config
@@ -396,7 +396,7 @@ async def update_config(request: Request):
     # 🔒 鉴权检查
     if not request.session.get("user"):
         return {"status": "error", "message": "未登录"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
     from app.plugins import save_plugin_config
@@ -427,7 +427,7 @@ async def explain_cron(request: Request, expr: str = ""):
     # 🔒 鉴权检查
     if not request.session.get("user"):
         return {"success": False, "message": "未登录"}
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"success": False, "message": "需要管理员权限"}
     
     if not expr:

@@ -8,7 +8,6 @@ import threading
 import datetime
 from fastapi import Request
 from app.plugins.base import PluginBase
-from app.domains.users.auth import is_admin_user  # 🔒 管理员鉴权
 from app.infra.clients.media_server_client import media_api
 from app.infra.clients.telegram_client import telegram_client
 from app.infra.config.notification_settings import get_notify_bot_runtime_config
@@ -61,7 +60,7 @@ class KeepAlivePlugin(PluginBase):
             """立即执行检测"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             try:
                 data = await request.json() if request.headers.get("content-type") == "application/json" else {}
@@ -80,7 +79,7 @@ class KeepAlivePlugin(PluginBase):
             """获取历史违规记录"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             try:
                 return self._get_violations(year_month, page, limit)
@@ -93,7 +92,7 @@ class KeepAlivePlugin(PluginBase):
             """解禁用户"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             try:
                 data = await request.json()
@@ -111,7 +110,7 @@ class KeepAlivePlugin(PluginBase):
             """获取统计信息"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             try:
                 return self._get_stats()

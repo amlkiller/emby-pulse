@@ -10,7 +10,7 @@ import datetime
 from typing import Optional, List, Dict, Any
 from fastapi import Request
 from app.plugins.base import PluginBase
-from app.domains.users.auth import is_admin_user  # 🔒 管理员鉴权
+from app.domains.users import public_service as user_service
 from app.infra.clients.media_server_client import media_api
 from app.infra.config.media_server_settings import get_media_server_host
 from app.plugins.smart_collections.smart_collection_dao import (
@@ -100,7 +100,7 @@ class SmartCollectionsPlugin(PluginBase):
             """获取所有合集"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             return self.get_all_collections()
         
@@ -109,7 +109,7 @@ class SmartCollectionsPlugin(PluginBase):
             """获取单个合集详情"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             return self.get_collection_by_id(collection_id)
         
@@ -118,7 +118,7 @@ class SmartCollectionsPlugin(PluginBase):
             """创建合集"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             data = await request.json()
             return self.create_collection_item(data)
@@ -128,7 +128,7 @@ class SmartCollectionsPlugin(PluginBase):
             """更新合集"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             data = await request.json()
             return self.update_collection_item(collection_id, data)
@@ -138,7 +138,7 @@ class SmartCollectionsPlugin(PluginBase):
             """删除合集"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             return self.delete_collection_item(collection_id)
         
@@ -147,7 +147,7 @@ class SmartCollectionsPlugin(PluginBase):
             """手动同步合集"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             return self.sync_single_collection(collection_id)
         
@@ -156,7 +156,7 @@ class SmartCollectionsPlugin(PluginBase):
             """同步所有合集"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             return self.sync_all_collections()
         
@@ -165,7 +165,7 @@ class SmartCollectionsPlugin(PluginBase):
             """获取同步日志"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             return self.get_sync_logs(limit)
         
@@ -194,7 +194,7 @@ class SmartCollectionsPlugin(PluginBase):
             """搜索 Emby 媒体库项目"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             return self.search_items(q, limit)
     

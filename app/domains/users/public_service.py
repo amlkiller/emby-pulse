@@ -10,6 +10,12 @@ _emby_users_cache = {"data": None, "expires": 0}
 EMBY_USERS_CACHE_TTL = 30
 
 
+def is_admin_user(request) -> bool:
+    from app.domains.users.auth import is_admin_user as auth_is_admin_user
+
+    return auth_is_admin_user(request)
+
+
 def get_emby_users_cached():
     """Get Emby users with the same short-lived cache used by the users router."""
     if _emby_users_cache["data"] and time.time() < _emby_users_cache["expires"]:

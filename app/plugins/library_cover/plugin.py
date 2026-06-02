@@ -14,7 +14,7 @@ from fastapi import Request, UploadFile, File, Form
 from typing import List, Optional
 from app.plugins.base import PluginBase
 from app.infra.clients.media_server_client import media_api
-from app.domains.users.auth import is_admin_user
+from app.domains.users import public_service as user_service
 
 logger = logging.getLogger("uvicorn")
 
@@ -53,7 +53,7 @@ class LibraryCoverPlugin(PluginBase):
             """获取媒体库列表及当前封面"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
 
             try:
@@ -93,7 +93,7 @@ class LibraryCoverPlugin(PluginBase):
             """代理获取 Emby 图片，避免浏览器跨域"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             try:
                 res = media_api.get(f"/Items/{item_id}/Images/Primary", timeout=10)
@@ -112,7 +112,7 @@ class LibraryCoverPlugin(PluginBase):
             """上传单张封面图片"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
 
             try:
@@ -162,7 +162,7 @@ class LibraryCoverPlugin(PluginBase):
             """批量上传封面图片"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
 
             results = []
@@ -218,7 +218,7 @@ class LibraryCoverPlugin(PluginBase):
             """获取已上传的封面列表"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
 
             try:
@@ -256,7 +256,7 @@ class LibraryCoverPlugin(PluginBase):
             """获取封面文件"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             from fastapi.responses import FileResponse
 
@@ -275,7 +275,7 @@ class LibraryCoverPlugin(PluginBase):
             """删除封面文件"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
 
             # 安全检查
@@ -293,7 +293,7 @@ class LibraryCoverPlugin(PluginBase):
             """清空所有已上传的封面"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
 
             try:
@@ -310,7 +310,7 @@ class LibraryCoverPlugin(PluginBase):
             """恢复媒体库默认封面（删除自定义封面）"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
 
             try:
@@ -348,7 +348,7 @@ class LibraryCoverPlugin(PluginBase):
             """应用封面到媒体库"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
 
             try:
@@ -457,7 +457,7 @@ class LibraryCoverPlugin(PluginBase):
             """批量应用封面到多个媒体库"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
 
             try:
@@ -572,7 +572,7 @@ class LibraryCoverPlugin(PluginBase):
             """根据文件名智能匹配封面到媒体库"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
 
             try:
@@ -680,7 +680,7 @@ class LibraryCoverPlugin(PluginBase):
             """获取已保存的映射关系"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
 
             try:
@@ -700,7 +700,7 @@ class LibraryCoverPlugin(PluginBase):
             """保存映射关系"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
 
             try:
@@ -721,7 +721,7 @@ class LibraryCoverPlugin(PluginBase):
             """清空映射关系"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
 
             try:

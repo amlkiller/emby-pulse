@@ -19,7 +19,7 @@ import datetime
 from typing import Optional, Dict, Tuple, Any, List
 from fastapi import Request
 from app.plugins.base import PluginBase
-from app.domains.users.auth import is_admin_user  # 🔒 管理员鉴权
+from app.domains.users import public_service as user_service
 from app.core.event_bus import bus
 from app.infra.clients.hdhive_site_client import hdhive_site_client
 
@@ -160,7 +160,7 @@ class HDHiveSignPlugin(PluginBase):
             """获取签到状态"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             return self.get_checkin_status()
         
@@ -169,7 +169,7 @@ class HDHiveSignPlugin(PluginBase):
             """手动签到"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             try:
                 data = await request.json()
@@ -185,7 +185,7 @@ class HDHiveSignPlugin(PluginBase):
             """获取签到历史"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             limit = int(request.query_params.get("limit", 30))
             return self.get_checkin_history(limit)
@@ -195,7 +195,7 @@ class HDHiveSignPlugin(PluginBase):
             """获取用户信息"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             return self.get_user_info()
         
@@ -204,7 +204,7 @@ class HDHiveSignPlugin(PluginBase):
             """手动登录获取 Cookie"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             try:
                 data = await request.json()

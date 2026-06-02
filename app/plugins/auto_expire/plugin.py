@@ -8,7 +8,6 @@ import threading
 import datetime
 from fastapi import Request
 from app.plugins.base import PluginBase
-from app.domains.users.auth import is_admin_user  # 🔒 管理员鉴权
 from app.domains.users import public_service as user_service
 from app.infra.clients.media_server_client import media_api
 
@@ -40,7 +39,7 @@ class AutoExpirePlugin(PluginBase):
             """获取插件配置"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             from app.plugins import get_plugin_config
             return {
@@ -56,7 +55,7 @@ class AutoExpirePlugin(PluginBase):
             """更新插件配置"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             from app.plugins import save_plugin_config
             try:
@@ -71,7 +70,7 @@ class AutoExpirePlugin(PluginBase):
             """立即执行检测"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             try:
                 result = self._do_check(manual=True)
@@ -87,7 +86,7 @@ class AutoExpirePlugin(PluginBase):
             """获取即将到期的用户列表"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             try:
                 users = self._get_expiring_users(days)
@@ -101,7 +100,7 @@ class AutoExpirePlugin(PluginBase):
             """清理已删除用户的到期记录"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             try:
                 if not media_api.host or not media_api.api_key:

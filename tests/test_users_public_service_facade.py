@@ -127,6 +127,22 @@ def test_users_public_service_emby_users_cache_and_invalidate(monkeypatch):
     assert public_service._emby_users_cache == {"data": None, "expires": 0}
 
 
+def test_users_public_service_delegates_admin_check(monkeypatch):
+    from app.domains.users import auth, public_service
+
+    calls = []
+    request = object()
+
+    def fake_is_admin_user(seen_request):
+        calls.append(seen_request)
+        return True
+
+    monkeypatch.setattr(auth, "is_admin_user", fake_is_admin_user)
+
+    assert public_service.is_admin_user(request) is True
+    assert calls == [request]
+
+
 def test_users_router_cache_helpers_use_public_service(monkeypatch):
     from app.domains.users import router
 
@@ -165,5 +181,18 @@ def test_selected_external_callers_do_not_import_private_users_boundaries():
                     imported_names = {alias.name for alias in node.names}
                     if "invalidate_emby_users_cache" in imported_names or "*" in imported_names:
                         violations.append(f"{rel_path}:{node.lineno}")
+
+    assert violations == []
+
+
+def test_plugins_do_not_import_private_users_auth_boundary():
+    violations = []
+
+    for path in (_REPO_ROOT / "app/plugins").rglob("*.py"):
+        rel_path = path.relative_to(_REPO_ROOT).as_posix()
+        tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(rel_path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module == "app.domains.users.auth":
+                violations.append(f"{rel_path}:{node.lineno}")
 
     assert violations == []

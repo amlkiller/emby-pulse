@@ -9,7 +9,7 @@ import threading
 import datetime
 from fastapi import Request
 from app.plugins.base import PluginBase
-from app.domains.users.auth import is_admin_user  # 🔒 管理员鉴权
+from app.domains.users import public_service as user_service
 from app.core.event_bus import bus
 from app.infra.clients.hdhive_client import hdhive_client
 from app.infra.clients.tmdb_client import tmdb_client
@@ -100,7 +100,7 @@ class HDHivePlugin(PluginBase):
         def get_account(request: Request):
             if not request.session.get("user"):
                 return {"status": "error"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             return self.get_account_info()
 
@@ -109,7 +109,7 @@ class HDHivePlugin(PluginBase):
             """API: 每日签到"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             try:
                 data = await request.json()
@@ -123,7 +123,7 @@ class HDHivePlugin(PluginBase):
             """API: 搜索影巢资源（仅115网盘）"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             return await self.api_search_resources_async(request)
 
@@ -132,7 +132,7 @@ class HDHivePlugin(PluginBase):
             """API: 解锁并转存资源"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             return await self.api_unlock_and_transfer_async(request)
         
@@ -141,7 +141,7 @@ class HDHivePlugin(PluginBase):
             """API: 解锁资源并转存到指定文件夹"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             return await self.api_transfer_to_folder_async(request)
 
@@ -150,7 +150,7 @@ class HDHivePlugin(PluginBase):
             """API: 获取用量统计"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             return self.get_usage_stats()
 
@@ -159,7 +159,7 @@ class HDHivePlugin(PluginBase):
             """API: 获取今日用量"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             return self.get_usage_today()
 
@@ -168,7 +168,7 @@ class HDHivePlugin(PluginBase):
             """API: 获取永V每周免费额度"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             return self.get_vip_weekly_quota()
 

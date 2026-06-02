@@ -12,7 +12,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from fastapi import Request
 from app.plugins.base import PluginBase
-from app.domains.users.auth import is_admin_user  # 🔒 管理员鉴权
+from app.domains.users import public_service as user_service
 from app.core.event_bus import bus
 from app.infra.clients.media_server_client import media_api
 from app.plugins.season_poster_updater.season_poster_dao import (
@@ -60,7 +60,7 @@ class SeasonPosterUpdaterPlugin(PluginBase):
             """获取插件状态"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             
             config = self._get_config()
@@ -80,7 +80,7 @@ class SeasonPosterUpdaterPlugin(PluginBase):
             """获取媒体库列表"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             
             try:
@@ -133,7 +133,7 @@ class SeasonPosterUpdaterPlugin(PluginBase):
             """更新插件配置"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             
             try:
@@ -152,7 +152,7 @@ class SeasonPosterUpdaterPlugin(PluginBase):
             """手动扫描所有剧集"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             
             try:
@@ -167,7 +167,7 @@ class SeasonPosterUpdaterPlugin(PluginBase):
             """强制扫描所有剧集（忽略缓存）"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             
             try:
@@ -182,7 +182,7 @@ class SeasonPosterUpdaterPlugin(PluginBase):
             """获取更新日志"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             
             try:
@@ -209,7 +209,7 @@ class SeasonPosterUpdaterPlugin(PluginBase):
             """清空日志"""
             if not request.session.get("user"):
                 return {"status": "error", "message": "未登录"}
-            if not is_admin_user(request):
+            if not user_service.is_admin_user(request):
                 return {"status": "error", "message": "需要管理员权限"}
             
             try:
