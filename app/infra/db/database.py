@@ -29,6 +29,8 @@ _REGISTRY_SYSTEM_INIT_TABLES = (
     "msg_conversations",
     "msg_items",
     "msg_notify_block",
+    "announcements",
+    "announcement_reads",
     "tg_reg_logs",
     "task_translations",
     "task_config",

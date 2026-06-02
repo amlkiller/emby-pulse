@@ -16,6 +16,7 @@ SYSTEM_TABLES = [
     "dedupe_config", "keep_alive_violations",
     "task_config", "task_translations", "tv_calendar_cache", "tg_reg_logs",
     "local_users", "msg_conversations", "msg_items", "msg_notify_block", "user_mutes",
+    "announcements", "announcement_reads",
     "bot_notify_mutes", "user_audit_logs", "notify_rules", "calendar_notify_config",
     "pwa_config", "user_pwa_icons"
 ]
@@ -428,6 +429,27 @@ TABLE_SCHEMAS = {
         muted_at TEXT DEFAULT CURRENT_TIMESTAMP,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(user_id)
+    )""",
+
+    "announcements": """CREATE TABLE IF NOT EXISTS announcements (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        is_active INTEGER DEFAULT 1,
+        priority INTEGER DEFAULT 0,
+        view_count INTEGER DEFAULT 0,
+        created_by TEXT,
+        created_by_name TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )""",
+
+    "announcement_reads": """CREATE TABLE IF NOT EXISTS announcement_reads (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        announcement_id INTEGER NOT NULL,
+        user_id TEXT NOT NULL,
+        read_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(announcement_id, user_id)
     )""",
 
     # ==================== 插件日志 ====================

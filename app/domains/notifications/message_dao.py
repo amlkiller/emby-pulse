@@ -1,8 +1,10 @@
+from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.schema_registry import TABLE_SCHEMAS
 from app.infra.db.system_store import system_store
 
 
 MESSAGE_TABLES = ("msg_conversations", "msg_items", "msg_notify_block")
+ANNOUNCEMENT_TABLES = ("announcements", "announcement_reads")
 
 
 def ensure_msg_tables() -> None:
@@ -282,29 +284,8 @@ def set_users_unmuted(user_ids) -> None:
 def ensure_announcement_tables() -> None:
     with system_store.connect() as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            """CREATE TABLE IF NOT EXISTS announcements (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT NOT NULL,
-                content TEXT NOT NULL,
-                is_active INTEGER DEFAULT 1,
-                priority INTEGER DEFAULT 0,
-                view_count INTEGER DEFAULT 0,
-                created_by TEXT,
-                created_by_name TEXT,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )"""
-        )
-        cursor.execute(
-            """CREATE TABLE IF NOT EXISTS announcement_reads (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                announcement_id INTEGER NOT NULL,
-                user_id TEXT NOT NULL,
-                read_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(announcement_id, user_id)
-            )"""
-        )
+        for table_name in ANNOUNCEMENT_TABLES:
+            ensure_registered_table(cursor, table_name)
         conn.commit()
 
 

@@ -69,6 +69,7 @@ def test_message_bootstraps_create_registry_tables(monkeypatch, tmp_path):
 
     message_dao.ensure_msg_tables()
     message_dao.ensure_mute_table()
+    message_dao.ensure_announcement_tables()
 
     with sqlite3.connect(db_path) as conn:
         assert {
@@ -104,9 +105,67 @@ def test_message_bootstraps_create_registry_tables(monkeypatch, tmp_path):
             "muted_at",
             "created_at",
         }.issubset(_columns(conn, "user_mutes"))
+        assert {
+            "id",
+            "title",
+            "content",
+            "is_active",
+            "priority",
+            "view_count",
+            "created_by",
+            "created_by_name",
+            "created_at",
+            "updated_at",
+        }.issubset(_columns(conn, "announcements"))
+        assert {
+            "id",
+            "announcement_id",
+            "user_id",
+            "read_at",
+        }.issubset(_columns(conn, "announcement_reads"))
 
-    for table_name in (*message_dao.MESSAGE_TABLES, "user_mutes"):
+    for table_name in (*message_dao.MESSAGE_TABLES, "user_mutes", *message_dao.ANNOUNCEMENT_TABLES):
         assert table_name in TABLE_SCHEMAS
+
+
+def test_announcement_dao_paths_work_after_registry_bootstrap(monkeypatch, tmp_path):
+    from app.domains.notifications import message_dao
+
+    _use_temp_system_db(monkeypatch, tmp_path)
+
+    message_dao.ensure_announcement_tables()
+    announcement_id = message_dao.create_announcement(
+        title="Maintenance",
+        content="Window tonight",
+        is_active=True,
+        priority=5,
+        admin_id="admin-1",
+        admin_name="Admin",
+    )
+
+    announcements = message_dao.list_announcements(active_only=True)
+    assert len(announcements) == 1
+    assert announcements[0]["id"] == announcement_id
+    assert announcements[0]["title"] == "Maintenance"
+
+    message_dao.update_announcement_fields(
+        announcement_id,
+        {"title": "Updated", "priority": 7},
+    )
+    message_dao.increment_announcement_view_count(announcement_id)
+    message_dao.mark_announcement_read(announcement_id, "user-1")
+
+    active = message_dao.list_active_announcements_with_reads("user-1")
+    assert active == [
+        {
+            "id": announcement_id,
+            "title": "Updated",
+            "content": "Window tonight",
+            "view_count": 1,
+            "created_at": active[0]["created_at"],
+            "is_new": False,
+        }
+    ]
 
 
 def test_selected_notification_bootstraps_use_schema_registry_instead_of_local_ddl():
@@ -130,6 +189,8 @@ def test_selected_notification_bootstraps_use_schema_registry_instead_of_local_d
     assert "TABLE_SCHEMAS[\"notify_rules\"]" in sources["notify_admin_dao"]
     assert "TABLE_SCHEMAS[table_name]" in sources["message_dao"]
     assert "TABLE_SCHEMAS[\"user_mutes\"]" in sources["message_dao"]
+    assert "ANNOUNCEMENT_TABLES" in sources["message_dao"]
+    assert "ensure_registered_table(cursor, table_name)" in sources["message_dao"]
 
     forbidden = {
         "bot_service_dao": ["CREATE TABLE IF NOT EXISTS request_admin_messages"],
@@ -140,11 +201,10 @@ def test_selected_notification_bootstraps_use_schema_registry_instead_of_local_d
             "CREATE TABLE IF NOT EXISTS msg_items",
             "CREATE TABLE IF NOT EXISTS msg_notify_block",
             "CREATE TABLE IF NOT EXISTS user_mutes",
+            "CREATE TABLE IF NOT EXISTS announcements",
+            "CREATE TABLE IF NOT EXISTS announcement_reads",
         ],
     }
     for source_name, patterns in forbidden.items():
         for pattern in patterns:
             assert pattern not in sources[source_name]
-
-    assert "CREATE TABLE IF NOT EXISTS announcements" in sources["message_dao"]
-    assert "CREATE TABLE IF NOT EXISTS announcement_reads" in sources["message_dao"]
