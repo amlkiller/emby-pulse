@@ -1925,3 +1925,36 @@ Extracted red-packet log listing, message-id persistence, packet creation, and p
 ### Next Steps
 
 - None - task complete
+
+
+## Session 118: Refactor points PK DAO
+
+**Date**: 2026-06-03
+**Task**: Refactor points PK DAO
+**Branch**: `main`
+
+### Summary
+
+Extracted PK invitation listing, status updates, rejection/cleanup, message-id persistence, invitation creation, and invitation acceptance into app/domains/points/pk_dao.py while preserving point_dao compatibility exports. Verified compile/import checks, focused point tests, and the full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `09109d7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
