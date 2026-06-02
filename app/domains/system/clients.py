@@ -17,7 +17,7 @@ from app.domains.system.client_dao import (
 )
 from app.domains.system.client_queries import count_playback_clients_by_app, count_playback_devices
 
-from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.domains.users import public_service as user_service
 from app.core.security_utils import safe_error_message
 from app.core.rate_limiter import get_client_ip
 
@@ -60,7 +60,7 @@ class WhitelistModel(BaseModel):
 @router.get("/api/clients/blacklist")
 async def get_blacklist(request: Request):
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
     rows = list_client_blacklist()
@@ -70,7 +70,7 @@ async def get_blacklist(request: Request):
 @router.post("/api/clients/blacklist")
 async def add_blacklist(data: BlacklistModel, request: Request):
     # 🔒 安全检查：写操作必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     app_name = data.app_name.strip()
     if not app_name: 
@@ -99,7 +99,7 @@ async def add_blacklist(data: BlacklistModel, request: Request):
 @router.delete("/api/clients/blacklist/{app_name}")
 async def delete_blacklist(app_name: str, request: Request):
     # 🔒 安全检查：写操作必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     delete_client_blacklist(app_name)
     
@@ -124,7 +124,7 @@ async def delete_blacklist(app_name: str, request: Request):
 @router.get("/api/clients/whitelist")
 async def get_whitelist(request: Request):
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
     rows = list_client_whitelist()
@@ -134,7 +134,7 @@ async def get_whitelist(request: Request):
 @router.post("/api/clients/whitelist")
 async def add_whitelist(data: WhitelistModel, request: Request):
     # 🔒 安全检查：写操作必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     user_id = data.user_id.strip()
     user_name = data.user_name.strip()
@@ -165,7 +165,7 @@ async def add_whitelist(data: WhitelistModel, request: Request):
 @router.delete("/api/clients/whitelist/{user_id}")
 async def delete_whitelist(user_id: str, request: Request):
     # 🔒 安全检查：写操作必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     delete_client_whitelist(user_id)
     
@@ -188,7 +188,7 @@ async def delete_whitelist(user_id: str, request: Request):
 @router.post("/api/clients/whitelist/batch")
 async def batch_add_whitelist(request: Request):
     # 🔒 安全检查：写操作必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     data = await request.json()
     users = data.get("users", [])
@@ -229,7 +229,7 @@ async def batch_add_whitelist(request: Request):
 @router.post("/api/clients/whitelist/batch-delete")
 async def batch_delete_whitelist(request: Request):
     # 🔒 安全检查：写操作必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     data = await request.json()
     user_ids = data.get("user_ids", [])
@@ -285,7 +285,7 @@ def set_clients_data_cached(data):
 @router.get("/api/clients/data")
 async def get_clients_data(request: Request):
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     
     # 🔥 每次请求都检查黑名单（防止漏网之鱼）
@@ -437,7 +437,7 @@ async def get_clients_data(request: Request):
 async def execute_block(request: Request):
     """执行一次阻断扫描"""
     # 🔒 安全检查：写操作必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     result = _do_block_devices()  # 不是异步函数，不需要 await
     
