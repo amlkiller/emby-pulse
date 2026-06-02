@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend guideline index for schema bootstrap refactor."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Database/schema registry contracts for registry-owned table bootstraps and ALTER handling."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Project verification commands and uv usage requirements."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared thinking-guide index for code reuse and cross-layer checks."}
