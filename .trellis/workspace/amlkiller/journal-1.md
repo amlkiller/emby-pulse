@@ -1179,3 +1179,36 @@ Added reversible event-bus subscriptions for the season poster updater plugin, i
 ### Next Steps
 
 - None - task complete
+
+
+## Session 36: Bot admin message plugin lifecycle stop
+
+**Date**: 2026-06-02
+**Task**: Bot admin message plugin lifecycle stop
+**Branch**: `main`
+
+### Summary
+
+Made Cloud115 and HDHive bot.admin_message subscriptions reversible on plugin disable, preserved duplicate-subscribe guards, fixed the HDHive request-search callback helper surfaced by lint by reusing the existing TMDB-select flow, added focused lifecycle/helper regression tests, and verified focused checks plus full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3b2cad6` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
