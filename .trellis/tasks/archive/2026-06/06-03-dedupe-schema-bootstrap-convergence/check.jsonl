@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend guideline index for review."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Check schema registry and DAO bootstrap alignment."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Check verification commands."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Check reuse of schema bootstrap helper instead of local logic."}
