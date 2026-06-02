@@ -16,7 +16,7 @@ from app.domains.media_requests import public_service as media_request_service
 from app.domains.points import point_dao
 from app.domains.users import user_dao
 from app.domains.users import user_bot_dao
-from app.domains.system import invitation_dao
+from app.domains.system import public_service as system_service
 from app.domains.playback import stats_queries
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
 from app.infra.clients.media_server_client import media_api
@@ -1233,7 +1233,7 @@ def cmd_code(chat_id, tg_user_id, args):
 
     try:
         # 🔥 只查询注册码（type = 'register' 或 type 为空），不能使用续期码注册
-        row = invitation_dao.get_available_registration_invitation(code)
+        row = system_service.get_available_registration_invitation(code)
         if not row:
             _send(chat_id, "❌ 注册码无效、已被使用或不是注册码")
             return
@@ -1258,7 +1258,7 @@ def cmd_code(chat_id, tg_user_id, args):
 def _restore_invitation_code(code):
     """Emby 用户创建失败时回滚邀请码消费计数"""
     try:
-        invitation_dao.restore_invitation_code_usage(code)
+        system_service.restore_invitation_code_usage(code)
     except Exception:
         pass
 
@@ -1305,7 +1305,7 @@ def _do_code_register(chat_id, tg_user_id, custom_name, code, days, tpl_id, rout
                     return
 
                 # 原子抢占注册码（防 TOCTOU 竞态）
-                if not invitation_dao.claim_invitation_usage(code, safe_name):
+                if not system_service.claim_invitation_usage(code, safe_name):
                     _send(chat_id, "❌ 注册码已失效或已达到使用上限")
                     return
 
@@ -1346,7 +1346,7 @@ def _do_code_register(chat_id, tg_user_id, custom_name, code, days, tpl_id, rout
                     else:
                         block_routes = routes
 
-                invitation_dao.save_code_registration_meta_and_finish_invitation(
+                system_service.save_code_registration_meta_and_finish_invitation(
                     code,
                     uid,
                     expire,
@@ -1395,7 +1395,7 @@ def cmd_renew(chat_id, tg_user_id, args):
         return
     code = args.strip()
     try:
-        renew_result, renew_error = invitation_dao.renew_user_with_invitation_code(
+        renew_result, renew_error = system_service.renew_user_with_invitation_code(
             code,
             binding['emby_username'],
             binding['emby_user_id'],
