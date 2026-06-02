@@ -70,7 +70,7 @@ Infrastructure adapters should live under `app/infra/` rather than `app/core/` w
 
 Current migration pattern: if a caller only needs generic external transport for file/image downloads or simple reachability probes, route it through `app/infra/clients/network_client.py` instead of leaving direct `requests.get(...)` calls in domains or plugins. Keep domain parsing, cache decisions, and user-facing error mapping at the caller.
 
-Current configuration migration pattern: infrastructure-scoped settings readers live under `app/infra/config/` and are used to centralize config access for infra modules before broader service/router config cleanup is tackled.
+Current configuration migration pattern: infrastructure-scoped settings readers live under `app/infra/config/` and are used to centralize config access for infra modules before broader service/router config cleanup is tackled. These readers should expose a typed contract rather than raw `cfg.get()` values: define defaults, empty-value behavior, allowed enum values, numeric lower/upper bounds where relevant, boolean string handling, and whether writes are normalized before persistence.
 
 Current proxy configuration pattern: `app/utils/proxy_helper.py` keeps validation, caching, and audit logging, while raw `proxy_url` / `wecom_proxy_url` reads live under `app/infra/config/proxy_settings.py`.
 
