@@ -1938,3 +1938,36 @@ Moved system pro admin checks off private users auth imports, routed them throug
 ### Next Steps
 
 - None - task complete
+
+
+## Session 59: System API token public auth facade boundary
+
+**Date**: 2026-06-02
+**Task**: System API token public auth facade boundary
+**Branch**: `main`
+
+### Summary
+
+Moved system API token management admin checks off private users auth imports, routed them through the users public facade, and added import-boundary plus token management authorization tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `41bf54d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
