@@ -13,22 +13,47 @@ def test_risk_monitor_stop_resets_state_and_allows_restart(monkeypatch):
     risk_service.stop_risk_monitor()
     calls = []
     monkeypatch.setattr(risk_service, "scan_playbacks_and_alert", lambda: calls.append("scan"))
+    subscriptions = []
 
+    class FakeBus:
+        def subscribe(self, event_type, handler):
+            if (event_type, handler) not in subscriptions:
+                subscriptions.append((event_type, handler))
+
+        def unsubscribe(self, event_type, handler):
+            if (event_type, handler) in subscriptions:
+                subscriptions.remove((event_type, handler))
+
+    monkeypatch.setattr(risk_service, "bus", FakeBus())
+
+    risk_service.start_risk_monitor()
     risk_service.start_risk_monitor()
     time.sleep(0.01)
 
     assert risk_service._risk_monitor_started is True
     assert risk_service._risk_monitor_thread is not None
+    assert risk_service._risk_monitor_subscribed is True
+    assert subscriptions == [
+        ("notify.playback.start", risk_service._on_playback_start),
+        ("notify.risk.alert", risk_service._on_risk_alert_for_web),
+    ]
 
     risk_service.stop_risk_monitor()
 
     assert risk_service._risk_monitor_started is False
     assert risk_service._risk_monitor_thread is None
+    assert risk_service._risk_monitor_subscribed is False
+    assert subscriptions == []
 
     risk_service.start_risk_monitor()
+    assert subscriptions == [
+        ("notify.playback.start", risk_service._on_playback_start),
+        ("notify.risk.alert", risk_service._on_risk_alert_for_web),
+    ]
     risk_service.stop_risk_monitor()
 
     assert risk_service._risk_monitor_started is False
+    assert subscriptions == []
 
 
 def test_media_request_refresh_loop_stop_resets_state_and_allows_restart(monkeypatch):

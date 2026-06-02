@@ -112,6 +112,7 @@ _risk_monitor_started = False
 _risk_monitor_start_lock = threading.Lock()
 _risk_monitor_stop_event = threading.Event()
 _risk_monitor_thread = None
+_risk_monitor_subscribed = False
 
 def _send_user_warning(user_id, username, current_count, limit, devices_info):
     """通过TG用户机器人给违规用户发送警告消息"""
@@ -327,15 +328,17 @@ def _on_risk_alert_for_web(data):
     )
 
 def start_risk_monitor():
-    global _risk_monitor_started, _risk_monitor_thread
+    global _risk_monitor_started, _risk_monitor_thread, _risk_monitor_subscribed
     with _risk_monitor_start_lock:
         if _risk_monitor_started:
             return
         _risk_monitor_stop_event.clear()
         _risk_monitor_started = True
 
-        bus.subscribe("notify.playback.start", _on_playback_start)
-        bus.subscribe("notify.risk.alert", _on_risk_alert_for_web)
+        if not _risk_monitor_subscribed:
+            bus.subscribe("notify.playback.start", _on_playback_start)
+            bus.subscribe("notify.risk.alert", _on_risk_alert_for_web)
+            _risk_monitor_subscribed = True
         _risk_monitor_thread = threading.Thread(target=_risk_monitor_loop, daemon=True, name="RiskMonitorThread")
         _risk_monitor_thread.start()
 
@@ -343,11 +346,15 @@ def start_risk_monitor():
 
 
 def stop_risk_monitor():
-    global _risk_monitor_started, _risk_monitor_thread
+    global _risk_monitor_started, _risk_monitor_thread, _risk_monitor_subscribed
     with _risk_monitor_start_lock:
         if not _risk_monitor_started:
             return
         _risk_monitor_stop_event.set()
+        if _risk_monitor_subscribed:
+            bus.unsubscribe("notify.playback.start", _on_playback_start)
+            bus.unsubscribe("notify.risk.alert", _on_risk_alert_for_web)
+            _risk_monitor_subscribed = False
         thread = _risk_monitor_thread
         _risk_monitor_started = False
         _risk_monitor_thread = None
