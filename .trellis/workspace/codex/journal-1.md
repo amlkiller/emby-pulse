@@ -302,3 +302,36 @@ Removed start_audit_services, a pure function redirect to init_audit_table. Boot
 ### Next Steps
 
 - None - task complete
+
+
+## Session 10: Remove session stop redirect
+
+**Date**: 2026-06-03
+**Task**: Remove session stop redirect
+**Branch**: `Compiled`
+
+### Summary
+
+Removed stop_session_services, a pure redirect to stop_session_cleanup_loop. Bootstrap now registers stop_session_cleanup_loop directly, and stop-hook/lifecycle tests call or patch the real stop function. Left start_session_services in place because it initializes the manager and starts cleanup. Verified alias search, compileall, UTF-8 import check, focused bootstrap lifecycle/stop-hook tests, and full pytest suite: 385 passed, 3 warnings.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `843946e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
