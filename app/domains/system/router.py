@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Request
 from app.schemas.models import SettingsModel
-from app.core.config import save_config
+from app.core.config import cfg
 from app.domains.users import public_service as user_service
 from app.domains.system.system_tool_dao import (
     get_dashboard_layout,
@@ -388,7 +388,7 @@ def api_update_settings(data: SettingsModel, request: Request):
     set_weather_source(getattr(data, "weather_source", "wttr"))
     set_weather_qweather_host(getattr(data, "weather_qweather_host", ""))
     
-    save_config()
+    cfg.save()
     
     # 🔒 审计日志：记录实际变更的字段
     from app.core.audit_logger import log_audit
@@ -437,7 +437,7 @@ async def api_update_weather_greeting(request: Request):
     data = await request.json()
     greeting = data.get("weather_greeting", "") if isinstance(data, dict) else ""
     set_weather_greeting(greeting)
-    save_config()
+    cfg.save()
     
     return {"status": "success", "message": "问候语已保存"}
 
