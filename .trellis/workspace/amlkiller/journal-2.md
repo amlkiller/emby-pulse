@@ -1265,3 +1265,36 @@ Routed gap registry-owned table creation and compatible alters through schema_bo
 ### Next Steps
 
 - None - task complete
+
+
+## Session 98: Dashboard layout schema bootstrap convergence
+
+**Date**: 2026-06-03
+**Task**: Dashboard layout schema bootstrap convergence
+**Branch**: `main`
+
+### Summary
+
+Routed sys_dashboard creation in dashboard layout helpers through schema_bootstrap.ensure_registered_table while preserving layout JSON behavior and the explicit repair helper registry path; updated focused tests and backend database spec.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `083ffc7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
