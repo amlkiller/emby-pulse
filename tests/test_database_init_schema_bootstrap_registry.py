@@ -79,6 +79,9 @@ def test_init_system_db_creates_simple_tables_from_schema_registry(monkeypatch, 
             _columns(conn, "scratch_card_slots")
         )
         assert {"id", "name", "color", "created_at"}.issubset(_columns(conn, "user_tags"))
+        assert {"tmdb_id", "series_name", "status", "last_checked", "updated_at"}.issubset(
+            _columns(conn, "tv_series_status")
+        )
 
         indexes = {
             row[1]
@@ -167,6 +170,23 @@ def test_user_tag_daos_work_after_registry_system_init(monkeypatch, tmp_path):
     assert user_dao.delete_user_tag_by_name("missing") is False
     assert user_dao.list_user_tags() == []
     assert user_dao.get_user_tags("user-a") == "trial"
+
+
+def test_calendar_status_daos_work_after_registry_system_init(monkeypatch, tmp_path):
+    from app.domains.playback import calendar_dao
+    from app.infra.db import database
+    from app.infra.db.system_store import system_store
+
+    db_path = tmp_path / "system_store.db"
+    monkeypatch.setattr(database, "SYSTEM_DB_PATH", str(db_path))
+    monkeypatch.setattr(system_store, "db_path", str(db_path))
+
+    database.init_system_db()
+
+    calendar_dao.save_series_status("tmdb-ended", "Ended Show", "ended", "2026-06-02")
+    calendar_dao.save_series_status("tmdb-running", "Running Show", "continuing", "2026-06-02")
+
+    assert calendar_dao.list_ended_series_tmdb_ids() == {"tmdb-ended"}
 
 
 def test_init_db_creates_compat_point_core_tables_from_schema_registry(monkeypatch, tmp_path):
@@ -277,6 +297,7 @@ def test_database_system_init_uses_registry_for_selected_simple_tables():
     assert "CREATE TABLE IF NOT EXISTS login_failures" not in source
     assert "CREATE TABLE IF NOT EXISTS api_tokens" not in source
     assert "CREATE TABLE IF NOT EXISTS user_tags" not in source
+    assert "CREATE TABLE IF NOT EXISTS tv_series_status" not in source
     assert "ALTER TABLE scratch_cards ADD COLUMN" not in source
 
 

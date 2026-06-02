@@ -18,7 +18,7 @@ SYSTEM_TABLES = [
     "temp_accounts", "temp_account_password_history",
     "season_poster_logs", "season_poster_cache", "emby_restart_history",
     "smart_collections", "smart_collection_items", "smart_collection_sync_logs",
-    "task_config", "task_translations", "tv_calendar_cache", "tg_reg_logs",
+    "task_config", "task_translations", "tv_calendar_cache", "tv_series_status", "tg_reg_logs",
     "local_users", "login_failures", "api_tokens",
     "msg_conversations", "msg_items", "msg_notify_block", "user_mutes",
     "announcements", "announcement_reads",
@@ -533,6 +533,14 @@ TABLE_SCHEMAS = {
         air_date TEXT,
         status TEXT,
         data_json TEXT
+    )""",
+
+    "tv_series_status": """CREATE TABLE IF NOT EXISTS tv_series_status (
+        tmdb_id TEXT PRIMARY KEY,
+        series_name TEXT,
+        status TEXT DEFAULT 'continuing',
+        last_checked TEXT,
+        updated_at TEXT
     )""",
 
     # ==================== 本地用户认证 ====================

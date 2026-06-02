@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend spec index for database schema registry work."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Registry-owned schema bootstrap contracts and required tests."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Project verification command requirements for Python checks."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Backend infra/domain boundary guidance."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Use existing schema bootstrap helper instead of duplicating DDL paths."}
