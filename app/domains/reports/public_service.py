@@ -28,5 +28,5 @@ def has_pillow_support() -> bool:
     return report_service.HAS_PIL
 
 
-def generate_daily_poster(period, tv_list, movie_list, theme):
+def generate_daily_poster(period, tv_list, movie_list, theme="cinema"):
     return report_service.report_gen.generate_daily_poster(period, tv_list, movie_list, theme)
