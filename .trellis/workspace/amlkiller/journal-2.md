@@ -1430,3 +1430,36 @@ Made the bootstrap-started Emby scheduled-task poller use an explicit started-st
 ### Next Steps
 
 - None - task complete
+
+
+## Session 103: User bot batch flush thread lifecycle convergence
+
+**Date**: 2026-06-03
+**Task**: User bot batch flush thread lifecycle convergence
+**Branch**: `main`
+
+### Summary
+
+Made the user bot batch-used flush daemon stop with a saved-handle lifecycle helper, join and clear stopped thread handles, and added lifecycle assertions for clean stop/restart behavior.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b761d59` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
