@@ -1377,3 +1377,36 @@ Added a narrow public users service facade, migrated selected external domains a
 ### Next Steps
 
 - None - task complete
+
+
+## Session 42: Media requests public service facade
+
+**Date**: 2026-06-02
+**Task**: Media requests public service facade
+**Branch**: `main`
+
+### Summary
+
+Added a narrow public media requests service facade, migrated selected notification bot callers away from direct media request DAO and gap internals, encapsulated gap scan-state mutation, added delegation and boundary tests, and verified focused checks plus full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e262912` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
