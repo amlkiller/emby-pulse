@@ -1232,3 +1232,36 @@ Routed local_users table creation and safe registered optional alters through sc
 ### Next Steps
 
 - None - task complete
+
+
+## Session 97: Gap schema bootstrap convergence
+
+**Date**: 2026-06-03
+**Task**: Gap schema bootstrap convergence
+**Branch**: `main`
+
+### Summary
+
+Routed gap registry-owned table creation and compatible alters through schema_bootstrap.ensure_registered_table while preserving default cache config insertion and legacy gap_scan_cache rebuild behavior; updated focused tests and backend database spec.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8954739` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
