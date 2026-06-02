@@ -1443,3 +1443,36 @@ Added plugin shutdown cleanup through the bootstrap service registry, made remai
 ### Next Steps
 
 - None - task complete
+
+
+## Session 44: System invitation public service facade
+
+**Date**: 2026-06-02
+**Task**: System invitation public service facade
+**Branch**: `main`
+
+### Summary
+
+Added a system invitation public facade, moved points and notification user-bot invitation callers off the private system DAO, and covered the new boundary with facade and import tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ad827d1` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
