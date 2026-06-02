@@ -22,14 +22,14 @@ def test_system_task_stop_cancels_poller_and_allows_restart():
     from app.domains.system import tasks
 
     async def run_check():
-        tasks.stop_system_task_services()
+        tasks.stop_task_poller()
         tasks.start_task_poller()
 
         poller_task = tasks._poller_task
         assert poller_task is not None
         assert tasks._task_poller_started is True
 
-        tasks.stop_system_task_services()
+        tasks.stop_task_poller()
         await asyncio.sleep(0)
 
         assert poller_task.cancelled()

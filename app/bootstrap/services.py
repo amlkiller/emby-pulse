@@ -12,7 +12,7 @@ from app.domains.risk.risk_service import start_risk_monitor, stop_risk_monitor
 from app.domains.media_requests.gaps import start_gap_services, stop_gap_services
 from app.domains.media_requests.router import start_media_request_services, stop_community_cache_refresh_loop
 from app.domains.system.pro import ensure_pro_schema
-from app.domains.system.tasks import start_system_task_services, stop_system_task_services
+from app.domains.system.tasks import start_system_task_services, stop_task_poller
 from app.domains.users.auth import start_auth_domain_services, stop_auth_domain_services
 from app.domains.users.router import start_user_domain_services
 from app.core.audit_logger import init_audit_table
@@ -79,7 +79,7 @@ def build_bootstrap_registry(app, request_port: int) -> BootstrapServiceRegistry
     registry.register("auth-domain", start_auth_domain_services, stop_auth_domain_services)
     registry.register("user-domain", start_user_domain_services)
     registry.register("pro-domain", ensure_pro_schema)
-    registry.register("system-tasks", start_system_task_services, stop_system_task_services)
+    registry.register("system-tasks", start_system_task_services, stop_task_poller)
     registry.register("audit", init_audit_table)
     registry.register("session", start_session_services, stop_session_cleanup_loop)
     registry.register("plugin-lifecycle", lambda: None, disable_enabled_plugins)
