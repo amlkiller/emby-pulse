@@ -170,10 +170,6 @@ class KeepAlivePlugin(PluginBase):
     def _is_pro(self):
         return True
 
-    def _log(self, msg, level="info"):
-        """记录日志（兼容旧代码）"""
-        self.log(msg, level=level)
-
     def _check_loop(self):
         """检查循环 - 支持两种调度模式"""
         if self._stop_event.wait(120):
@@ -295,7 +291,7 @@ class KeepAlivePlugin(PluginBase):
         Returns:
             手动触发时返回检测结果字典
         """
-        self._log(f"🔍 开始执行保号检测 (手动触发: {manual}, 检测范围: {check_range})")
+        self.log(f"🔍 开始执行保号检测 (手动触发: {manual}, 检测范围: {check_range})")
         config = self._get_config()
         # 手动触发的 check_range 优先，否则使用配置
         if check_range is None:
@@ -305,33 +301,33 @@ class KeepAlivePlugin(PluginBase):
         action = config.get("action") or "warn"
         whitelist_raw = config.get("whitelist") or ""
         whitelist = set(name.strip() for name in whitelist_raw.split("\n") if name.strip())
-        self._log(f"📋 检测配置: 最低{min_hours}小时/{min_days}天, 处理方式: {action}, 白名单: {len(whitelist)}人")
+        self.log(f"📋 检测配置: 最低{min_hours}小时/{min_days}天, 处理方式: {action}, 白名单: {len(whitelist)}人")
 
         # 自动添加永久有效用户到白名单
         # 永久用户定义：expire_date 为 NULL 或空字符串，或过期时间在 2099 年之后
         auto_whitelist_enabled = config.get("auto_whitelist_permanent")
-        self._log(f"🔍 自动白名单永久用户配置: {auto_whitelist_enabled} (类型: {type(auto_whitelist_enabled).__name__})")
+        self.log(f"🔍 自动白名单永久用户配置: {auto_whitelist_enabled} (类型: {type(auto_whitelist_enabled).__name__})")
         # 兼容多种配置值格式: "1", 1, True, "true", "on"
         auto_whitelist_enabled = str(auto_whitelist_enabled).lower() in ["1", "true", "on", "yes"] if auto_whitelist_enabled is not None else True
-        self._log(f"🔍 自动白名单永久用户启用: {auto_whitelist_enabled}")
+        self.log(f"🔍 自动白名单永久用户启用: {auto_whitelist_enabled}")
 
         permanent_users = set()
         if auto_whitelist_enabled:
             try:
                 rows = user_dao.list_permanent_user_expire_records()
-                self._log(f"🔍 查询到 {len(rows)} 条永久用户记录")
+                self.log(f"🔍 查询到 {len(rows)} 条永久用户记录")
                 for row in rows:
                     if row["user_id"]:
                         permanent_users.add(row["user_id"])
                         if len(permanent_users) <= 10:  # 只打印前10个，避免日志过多
                             exp_display = row["expire_date"] if row["expire_date"] else "永久"
-                            self._log(f"💎 永久用户白名单: {row['user_id']} (过期时间: {exp_display})")
+                            self.log(f"💎 永久用户白名单: {row['user_id']} (过期时间: {exp_display})")
                 if permanent_users:
-                    self._log(f"💎 自动白名单: 共检测到 {len(permanent_users)} 个永久有效用户")
+                    self.log(f"💎 自动白名单: 共检测到 {len(permanent_users)} 个永久有效用户")
                 else:
-                    self._log(f"💎 自动白名单: 未检测到永久有效用户")
+                    self.log(f"💎 自动白名单: 未检测到永久有效用户")
             except Exception as e:
-                self._log(f"❌ 查询永久用户失败: {e}", level="error")
+                self.log(f"❌ 查询永久用户失败: {e}", level="error")
                 import traceback
                 logger.error(traceback.format_exc())
 
@@ -348,9 +344,9 @@ class KeepAlivePlugin(PluginBase):
                     return {"error": f"获取用户列表失败: HTTP {res.status_code}"}
                 return
             emby_users = res.json()
-            self._log(f"🔍 获取到 {len(emby_users)} 个 Emby 用户")
+            self.log(f"🔍 获取到 {len(emby_users)} 个 Emby 用户")
         except Exception as e:
-            self._log(f"❌ 获取用户列表异常: {e}", level="error")
+            self.log(f"❌ 获取用户列表异常: {e}", level="error")
             if manual:
                 return {"error": f"获取用户列表异常: {str(e)}"}
             return
@@ -375,7 +371,7 @@ class KeepAlivePlugin(PluginBase):
             year_month = last_month_start.strftime("%Y-%m")
             range_label = "上月"
 
-        self._log(f"🔍 检测时间范围: {start_str} ~ {end_str} ({range_label})")
+        self.log(f"🔍 检测时间范围: {start_str} ~ {end_str} ({range_label})")
 
         violations = []
         disabled_users = []
@@ -406,7 +402,7 @@ class KeepAlivePlugin(PluginBase):
             try:
                 row = stats_queries.get_user_play_summary(uid, start_str, end_str)
             except Exception as e:
-                self._log(f"❌ 查询用户 {uname} 播放数据失败: {e}", level="error")
+                self.log(f"❌ 查询用户 {uname} 播放数据失败: {e}", level="error")
                 continue
 
             total_dur = (row['total_dur'] or 0) if row else 0
@@ -450,7 +446,7 @@ class KeepAlivePlugin(PluginBase):
                 self._save_violation(violation, year_month, was_disabled)
 
         # 输出检测统计
-        self._log(f"🔍 检测完成: 检查 {checked_count} 人, 白名单跳过 {skipped_whitelist} 人, 永久用户跳过 {skipped_permanent} 人, 违规 {len(violations)} 人")
+        self.log(f"🔍 检测完成: 检查 {checked_count} 人, 白名单跳过 {skipped_whitelist} 人, 永久用户跳过 {skipped_permanent} 人, 违规 {len(violations)} 人")
 
         # 生成报告并发送通知（无论手动还是自动都发送）
         self._generate_report(violations, action, year_month, start_str, end_str, range_label, skipped_permanent)
@@ -494,7 +490,7 @@ class KeepAlivePlugin(PluginBase):
 
         if not violations:
             skip_msg = f"，跳过 {skipped_permanent} 个永久用户" if skipped_permanent > 0 else ""
-            self._log(f"✅ {range_label}({start_str}~{end_str})所有用户均达标{skip_msg}")
+            self.log(f"✅ {range_label}({start_str}~{end_str})所有用户均达标{skip_msg}")
             return
 
         month_str = year_month.replace("-", "年") + "月"
@@ -519,15 +515,15 @@ class KeepAlivePlugin(PluginBase):
             tg_chat_id = notify_cfg["tg_chat_id"]
             wecom_corpid = notify_cfg["wecom_corpid"]
 
-            self._log(f"📢 准备发送通知: tg_token={'已配置' if tg_token else '未配置'}, tg_chat_id={tg_chat_id or '未配置'}, wecom={'已配置' if wecom_corpid else '未配置'}")
+            self.log(f"📢 准备发送通知: tg_token={'已配置' if tg_token else '未配置'}, tg_chat_id={tg_chat_id or '未配置'}, wecom={'已配置' if wecom_corpid else '未配置'}")
 
             if not tg_token and not wecom_corpid:
-                self._log(f"⚠️ 未配置任何通知渠道 (tg_bot_token 或企业微信)", level="warning")
+                self.log(f"⚠️ 未配置任何通知渠道 (tg_bot_token 或企业微信)", level="warning")
             else:
                 # 使用通知服务统一发送，让 bot_service 处理 TG 和企业微信
                 from app.domains.notifications import public_service as notification_service
                 notification_service.send_message("sys_notify", report_msg, platform="all")
-                self._log(f"✅ 管理员通知已发送")
+                self.log(f"✅ 管理员通知已发送")
         except Exception as e:
             logger.error(f"[保号规则] 通知管理员失败: {e}")
             import traceback
@@ -539,10 +535,10 @@ class KeepAlivePlugin(PluginBase):
             for v in violations:
                 if self._notify_user(v['uid'], v['reason'], month_str, range_label):
                     notify_count += 1
-            self._log(f"📢 已通知 {notify_count}/{len(violations)} 个用户")
+            self.log(f"📢 已通知 {notify_count}/{len(violations)} 个用户")
 
         action_text = {"warn": "仅通知", "notify_user": "通知用户", "disable": "自动禁用"}
-        self._log(f"巡检完成({range_label} {month_str}): {len(violations)}人未达标，处理方式: {action_text.get(action, action)}")
+        self.log(f"巡检完成({range_label} {month_str}): {len(violations)}人未达标，处理方式: {action_text.get(action, action)}")
 
     def _get_violations(self, year_month=None, page=1, limit=20):
         """获取历史违规记录"""
@@ -638,7 +634,7 @@ class KeepAlivePlugin(PluginBase):
             if user_res.status_code == 200:
                 user_name = user_res.json().get("Name", "未知用户")
 
-            self._log(f"✅ 用户 {user_name} 已被管理员解禁")
+            self.log(f"✅ 用户 {user_name} 已被管理员解禁")
             return {"status": "success", "message": f"用户 {user_name} 已解禁"}
 
         except Exception as e:
@@ -686,22 +682,22 @@ class KeepAlivePlugin(PluginBase):
             # 检查用户机器人是否启用
             user_bot_token = get_user_bot_token_or_empty()
             if not user_bot_token:
-                self._log(f"⚠️ 未配置用户机器人 (tg_user_bot_token)，跳过用户通知", level="warning")
+                self.log(f"⚠️ 未配置用户机器人 (tg_user_bot_token)，跳过用户通知", level="warning")
                 return False
 
             binding = user_bot_dao.get_binding_by_emby_id(user_id)
 
             if not binding:
-                self._log(f"📢 用户 {user_id} 未绑定 Telegram（非TG注册用户），跳过通知")
+                self.log(f"📢 用户 {user_id} 未绑定 Telegram（非TG注册用户），跳过通知")
                 return False
 
             if not binding.get("tg_user_id"):
-                self._log(f"📢 用户 {user_id} 的 TG 绑定信息为空，跳过通知")
+                self.log(f"📢 用户 {user_id} 的 TG 绑定信息为空，跳过通知")
                 return False
 
             chat_id = str(binding["tg_user_id"])
             emby_name = binding.get("emby_username") or user_id
-            self._log(f"📢 尝试通知用户 {emby_name} (TG chat_id: {chat_id})")
+            self.log(f"📢 尝试通知用户 {emby_name} (TG chat_id: {chat_id})")
 
             # HTML 转义原因，避免解析错误
             safe_reason = html.escape(reason)
@@ -716,7 +712,7 @@ class KeepAlivePlugin(PluginBase):
 
             res = telegram_client.send_message(user_bot_token, data, proxies=proxies, timeout=15)
             if res.status_code == 200:
-                self._log(f"✅ 已通知用户 {emby_name} (TG: {chat_id})")
+                self.log(f"✅ 已通知用户 {emby_name} (TG: {chat_id})")
                 return True
             else:
                 logger.error(f"[保号规则] 通知用户失败: HTTP {res.status_code} - {res.text[:200]}")

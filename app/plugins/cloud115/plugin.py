@@ -173,10 +173,6 @@ class Cloud115Plugin(PluginBase):
                 folders.append({"name": f"文件夹{len(folders)+1}", "cid": part})
         return folders
 
-    def _log(self, msg, level="info"):
-        """记录日志（兼容旧代码）"""
-        self.log(msg, level=level)
-
     def _on_admin_message(self, text, chat_id, platform):
         """监听管理员机器人消息，检测 115 链接、磁力链接、ed2k链接"""
         logger.info(f"[115转存] 收到消息: enabled={self._enabled}, text={text[:80]}...")
@@ -260,7 +256,7 @@ class Cloud115Plugin(PluginBase):
 
         total_count = len(magnets) + len(ed2ks)
 
-        self._log(f"开始处理离线下载，磁力:{len(magnets)}个, ed2k:{len(ed2ks)}个，目标:{folder_name}({folder_cid})")
+        self.log(f"开始处理离线下载，磁力:{len(magnets)}个, ed2k:{len(ed2ks)}个，目标:{folder_name}({folder_cid})")
         self._notify(chat_id, f"🔄 <b>[115离线]</b> 正在添加 {total_count} 个离线下载任务...", platform)
 
         # 获取uid和sign
@@ -311,7 +307,7 @@ class Cloud115Plugin(PluginBase):
 
                 if result.get("state"):
                     success_count += 1
-                    self._log(f"离线添加成功: {url[:50]}...")
+                    self.log(f"离线添加成功: {url[:50]}...")
                 else:
                     fail_count += 1
                     logger.warning(f"[115离线] 添加失败: {result.get('error_msg', '未知错误')}")
@@ -341,7 +337,7 @@ class Cloud115Plugin(PluginBase):
             self._notify(chat_id, "❌ [115转存] 未配置目标文件夹，请在插件中心配置", platform)
             return
 
-        self._log(f"检测到 {len(links)} 个链接，开始处理")
+        self.log(f"检测到 {len(links)} 个链接，开始处理")
 
         # 单文件夹直接转存，多文件夹发选择按钮
         if len(folders) == 1:
@@ -409,10 +405,10 @@ class Cloud115Plugin(PluginBase):
                 names_str = "\n".join([f"  📄 {n}" for n in file_names])
                 if len(file_list) > 3:
                     names_str += f"\n  ... 共 {len(file_list)} 个文件"
-                self._log(f"转存成功 → {folder_name}，{len(file_list)} 个文件")
+                self.log(f"转存成功 → {folder_name}，{len(file_list)} 个文件")
                 self._notify(chat_id, f"✅ <b>[115转存] 转存成功！</b>\n\n📁 目标：{folder_name}\n{names_str}", platform)
             else:
-                self._log(f"转存失败：{result.get('error', '未知错误')}")
+                self.log(f"转存失败：{result.get('error', '未知错误')}")
                 self._notify(chat_id, f"❌ [115转存] 转存失败：{result.get('error', '未知错误')}", platform)
 
         except Exception as e:
@@ -453,7 +449,7 @@ class Cloud115Plugin(PluginBase):
 
             if result.get("state"):
                 file_names = [f.get("n", "未知") for f in file_list]
-                self._log(f"转存成功 → {folder_name}，{len(file_list)} 个文件")
+                self.log(f"转存成功 → {folder_name}，{len(file_list)} 个文件")
                 return {
                     "status": "success",
                     "message": f"转存成功，{len(file_list)} 个文件",
@@ -461,7 +457,7 @@ class Cloud115Plugin(PluginBase):
                     "total": len(file_list)
                 }
             else:
-                self._log(f"转存失败：{result.get('error', '未知错误')}")
+                self.log(f"转存失败：{result.get('error', '未知错误')}")
                 return {"status": "error", "message": result.get('error', '转存失败')}
 
         except Exception as e:
