@@ -39,16 +39,8 @@ def ensure_points_schema() -> None:
     with system_store.connect() as conn:
         cursor = conn.cursor()
         ensure_registered_table(cursor, "users_meta", {"points"})
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS point_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, username TEXT, action TEXT,
-                amount INTEGER, balance INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-
-        cursor.execute("CREATE TABLE IF NOT EXISTS point_config (key TEXT PRIMARY KEY, value TEXT)")
+        ensure_registered_table(cursor, "point_logs")
+        ensure_registered_table(cursor, "point_config")
 
         cursor.execute(
             """

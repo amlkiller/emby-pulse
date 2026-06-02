@@ -1,0 +1,3 @@
+{"file":"docs/架构审计.md","reason":"Verify this slice moves P2 schema fact-source cleanup forward without broad point-game migration."}
+{"file":".trellis/spec/backend/database-guidelines.md","reason":"Check compliance with schema registry boundary and bootstrap requirements."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Check verification commands use the project uv environment."}
