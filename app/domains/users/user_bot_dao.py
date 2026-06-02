@@ -1,47 +1,21 @@
-import sqlite3
-
-from app.infra.db.schema_registry import TABLE_ALTERS, TABLE_SCHEMAS
+from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
 
 
-USER_BOT_REGISTRY_TABLES = ("tg_user_bindings", "tg_user_blacklist", "tg_reg_logs")
-
-
-def _apply_table_alters(cursor, table_name: str) -> None:
-    for alter_sql in TABLE_ALTERS.get(table_name, []):
-        try:
-            cursor.execute(alter_sql)
-        except sqlite3.OperationalError as exc:
-            if "duplicate column name" not in str(exc).lower():
-                raise
+USER_BOT_REGISTRY_TABLES = (
+    "tg_user_bindings",
+    "tg_user_blacklist",
+    "tg_reg_logs",
+    "tg_bot_users",
+    "tg_channel_bindings",
+)
 
 
 def ensure_user_bot_tables() -> None:
     with system_store.connect() as conn:
+        cursor = conn.cursor()
         for table_name in USER_BOT_REGISTRY_TABLES:
-            conn.execute(TABLE_SCHEMAS[table_name])
-            _apply_table_alters(conn, table_name)
-
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS tg_bot_users (
-                tg_user_id TEXT PRIMARY KEY,
-                tg_name TEXT DEFAULT '',
-                first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
-                last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS tg_channel_bindings (
-                channel_id TEXT PRIMARY KEY,
-                tg_user_id TEXT,
-                channel_title TEXT DEFAULT '',
-                bound_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
+            ensure_registered_table(cursor, table_name)
         conn.commit()
 
 

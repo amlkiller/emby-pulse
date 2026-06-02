@@ -8,7 +8,8 @@
 # 🔥 系统数据表清单（与 SYSTEM_TABLES 保持同步）
 SYSTEM_TABLES = [
     "users_meta", "invitations", "sys_license", "tg_user_bindings",
-    "tg_user_blacklist", "media_requests", "request_users", "media_feedback",
+    "tg_user_blacklist", "tg_bot_users", "tg_channel_bindings",
+    "media_requests", "request_users", "media_feedback",
     "request_admin_messages", "risk_logs", "sys_notifications", "point_logs", "point_config",
     "plugin_state", "plugin_logs", "sys_dashboard", "insight_ignores", "notify_mutes",
     "UserList", "client_blacklist", "client_whitelist", "gap_records", "gap_config",
@@ -99,6 +100,20 @@ TABLE_SCHEMAS = {
         tg_user_id TEXT PRIMARY KEY,
         reason TEXT DEFAULT '',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )""",
+
+    "tg_bot_users": """CREATE TABLE IF NOT EXISTS tg_bot_users (
+        tg_user_id TEXT PRIMARY KEY,
+        tg_name TEXT DEFAULT '',
+        first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+        last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
+    )""",
+
+    "tg_channel_bindings": """CREATE TABLE IF NOT EXISTS tg_channel_bindings (
+        channel_id TEXT PRIMARY KEY,
+        tg_user_id TEXT,
+        channel_title TEXT DEFAULT '',
+        bound_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )""",
 
     "tg_reg_logs": """CREATE TABLE IF NOT EXISTS tg_reg_logs (
