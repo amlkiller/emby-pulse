@@ -552,3 +552,36 @@ Registered announcements and announcement_reads in schema_registry, routed messa
 ### Next Steps
 
 - None - task complete
+
+
+## Session 17: Database init message schema registry bootstrap
+
+**Date**: 2026-06-02
+**Task**: Database init message schema registry bootstrap
+**Branch**: `main`
+
+### Summary
+
+Routed init_db late message-table compatibility creation for msg_conversations, msg_items, and msg_notify_block through schema_bootstrap, added focused database-init coverage, and updated backend schema-boundary guidance.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2319458` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

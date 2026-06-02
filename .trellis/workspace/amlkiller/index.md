@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 16
+- **Total Sessions**: 17
 - **Last Active**: 2026-06-02
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~554 | Active |
+| `journal-1.md` | ~587 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 17 | 2026-06-02 | Database init message schema registry bootstrap | `2319458` | `main` |
 | 16 | 2026-06-02 | Announcement schema registry bootstrap | `75ebe38` | `main` |
 | 15 | 2026-06-02 | Database init point core schema registry bootstrap | `3b851d6` | `main` |
 | 14 | 2026-06-02 | Point core schema registry bootstrap | `f5c9f32` | `main` |
