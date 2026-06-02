@@ -5,7 +5,7 @@ from app.domains.notifications.notify_rule_dao import (
     replace_bot_notify_mutes,
 )
 from app.infra.clients.media_server_client import media_api
-from app.domains.users.auth import is_admin_user
+from app.domains.users import public_service as user_service
 from app.core.security_utils import safe_error_message
 
 router = APIRouter(prefix="/api/notify_rules", tags=["Notification Rules"])
@@ -24,7 +24,7 @@ def start_notify_rules_services():
 @router.get("/users")
 async def get_emby_users(request: Request):
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"success": False, "data": [], "error": "需要管理员权限"}
     
     try:
@@ -37,7 +37,7 @@ async def get_emby_users(request: Request):
 @router.get("/mutes")
 async def get_mutes(request: Request):
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"success": False, "data": {}, "error": "需要管理员权限"}
     
     try:
@@ -54,7 +54,7 @@ async def get_mutes(request: Request):
 @router.post("/mutes")
 async def save_mutes(req: Request):
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(req):
+    if not user_service.is_admin_user(req):
         return {"success": False, "msg": "需要管理员权限"}
     
     data = await req.json()
