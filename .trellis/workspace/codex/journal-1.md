@@ -137,3 +137,36 @@ Removed the pure notification_dao.add_sys_notification alias and pointed callers
 ### Next Steps
 
 - None - task complete
+
+
+## Session 5: Remove plugin config refresh alias
+
+**Date**: 2026-06-03
+**Task**: Remove plugin config refresh alias
+**Branch**: `Compiled`
+
+### Summary
+
+Removed PluginBase._refresh_config_cache, updated the only caller to use _load_config_to_cache directly, and verified no _refresh_config_cache references remain. Verified compileall and full pytest suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e7773a9` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

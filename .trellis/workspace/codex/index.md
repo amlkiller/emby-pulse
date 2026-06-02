@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 4
+- **Total Sessions**: 5
 - **Last Active**: 2026-06-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~139 | Active |
+| `journal-1.md` | ~172 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 5 | 2026-06-03 | Remove plugin config refresh alias | `e7773a9` | `Compiled` |
 | 4 | 2026-06-03 | Remove notification DAO short alias | `9bf53cb` | `Compiled` |
 | 3 | 2026-06-03 | Remove plugin log alias wrappers | `81baf64` | `Compiled` |
 | 2 | 2026-06-03 | Remove notification orchestrator pass-throughs | `a519821` | `Compiled` |
