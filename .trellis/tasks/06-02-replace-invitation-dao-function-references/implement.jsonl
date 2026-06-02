@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/directory-structure.md","reason":"Preserve public facade boundary while changing internal imports."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Use locked uv commands for compile and pytest verification."}
+{"file":"app/domains/system/public_service.py","reason":"Live facade file with the remaining DAO attribute-chain reference."}
+{"file":"tests/test_system_public_service_facade.py","reason":"Focused test with the remaining public_service.invitation_dao attribute-chain assertion."}
