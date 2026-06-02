@@ -684,3 +684,36 @@ Routed plugin_state, plugin_logs, and keep_alive_violations bootstrap paths thro
 ### Next Steps
 
 - None - task complete
+
+
+## Session 21: Media feedback schema registry bootstrap
+
+**Date**: 2026-06-02
+**Task**: Media feedback schema registry bootstrap
+**Branch**: `main`
+
+### Summary
+
+Routed media_feedback bootstrap through schema_bootstrap, registered its poster_path ALTER, preserved high-risk media_requests/request_users local migrations, added focused media-feedback registry coverage, updated backend schema-boundary guidance, and verified focused checks plus full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `19f437c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
