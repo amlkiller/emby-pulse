@@ -16,6 +16,7 @@ _REGISTRY_SYSTEM_INIT_TABLES = (
     "sys_license",
     "tv_calendar_cache",
     "tv_series_status",
+    "media_requests",
     "request_users",
     "request_admin_messages",
     "insight_ignores",
@@ -74,6 +75,7 @@ _REGISTRY_MESSAGE_INIT_TABLES = (
 
 _REGISTRY_COMPAT_SIMPLE_INIT_TABLES = (
     "tv_calendar_cache",
+    "media_requests",
     "request_users",
     "request_admin_messages",
     "insight_ignores",
@@ -406,8 +408,6 @@ def _create_system_tables(c):
     try: c.execute("CREATE INDEX IF NOT EXISTS idx_api_tokens_token ON api_tokens(token)")
     except Exception: pass
 
-    c.execute('''CREATE TABLE IF NOT EXISTS media_requests (tmdb_id INTEGER, media_type TEXT, title TEXT, year TEXT, poster_path TEXT, status INTEGER DEFAULT 0, season INTEGER DEFAULT 0, reject_reason TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (tmdb_id, season))''')
-    
     # 🔥 性能优化：创建索引（大幅提升查询速度）
     # 用户元数据索引
     try: c.execute("CREATE INDEX IF NOT EXISTS idx_users_meta_expire ON users_meta(expire_date)")
@@ -464,8 +464,6 @@ def init_db(skip_migration=False):
 
         for table_name in _REGISTRY_COMPAT_SIMPLE_INIT_TABLES:
             ensure_registered_table(c, table_name)
-
-        c.execute('''CREATE TABLE IF NOT EXISTS media_requests (tmdb_id INTEGER, media_type TEXT, title TEXT, year TEXT, poster_path TEXT, status INTEGER DEFAULT 0, season INTEGER DEFAULT 0, reject_reason TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (tmdb_id, season))''')
 
         for table_name in _REGISTRY_COMPAT_NOTIFICATION_INIT_TABLES:
             ensure_registered_table(c, table_name)

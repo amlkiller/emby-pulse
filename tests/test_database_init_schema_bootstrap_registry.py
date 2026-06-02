@@ -82,6 +82,14 @@ def test_init_system_db_creates_simple_tables_from_schema_registry(monkeypatch, 
         assert {"tmdb_id", "series_name", "status", "last_checked", "updated_at"}.issubset(
             _columns(conn, "tv_series_status")
         )
+        assert {
+            "tmdb_id",
+            "media_type",
+            "season",
+            "episodes",
+            "request_type",
+            "series_id",
+        }.issubset(_columns(conn, "media_requests"))
 
         indexes = {
             row[1]
@@ -307,7 +315,7 @@ def test_database_system_init_uses_registry_for_selected_simple_tables():
     for table_name in database._REGISTRY_SYSTEM_INIT_TABLES:
         assert f"CREATE TABLE IF NOT EXISTS {table_name}" not in source
 
-    assert "CREATE TABLE IF NOT EXISTS media_requests" in source
+    assert "CREATE TABLE IF NOT EXISTS media_requests" not in source
     assert "CREATE TABLE IF NOT EXISTS login_failures" not in source
     assert "CREATE TABLE IF NOT EXISTS api_tokens" not in source
     assert "CREATE TABLE IF NOT EXISTS user_tags" not in source
@@ -326,7 +334,7 @@ def test_database_compat_init_uses_registry_for_point_core_tables():
     for table_name in database._REGISTRY_COMPAT_INIT_TABLES:
         assert f"CREATE TABLE IF NOT EXISTS {table_name}" not in source
 
-    assert "CREATE TABLE IF NOT EXISTS media_requests" in source
+    assert "CREATE TABLE IF NOT EXISTS media_requests" not in source
 
 
 def test_database_compat_init_uses_registry_for_simple_tables():
@@ -340,7 +348,7 @@ def test_database_compat_init_uses_registry_for_simple_tables():
     for table_name in database._REGISTRY_COMPAT_SIMPLE_INIT_TABLES:
         assert f"CREATE TABLE IF NOT EXISTS {table_name}" not in source
 
-    assert "CREATE TABLE IF NOT EXISTS media_requests" in source
+    assert "CREATE TABLE IF NOT EXISTS media_requests" not in source
 
 
 def test_database_compat_init_uses_registry_for_sensitive_tables():
@@ -357,7 +365,7 @@ def test_database_compat_init_uses_registry_for_sensitive_tables():
     assert "ALTER TABLE invitations ADD COLUMN" not in source
     assert "ALTER TABLE tg_user_bindings ADD COLUMN" not in source
     assert "ALTER TABLE sys_license ADD COLUMN" not in source
-    assert "CREATE TABLE IF NOT EXISTS media_requests" in source
+    assert "CREATE TABLE IF NOT EXISTS media_requests" not in source
 
 
 def test_database_compat_init_uses_registry_for_notification_tables():
@@ -371,7 +379,7 @@ def test_database_compat_init_uses_registry_for_notification_tables():
     for table_name in database._REGISTRY_COMPAT_NOTIFICATION_INIT_TABLES:
         assert f"CREATE TABLE IF NOT EXISTS {table_name}" not in source
 
-    assert "CREATE TABLE IF NOT EXISTS media_requests" in source
+    assert "CREATE TABLE IF NOT EXISTS media_requests" not in source
 
 
 def test_database_message_init_uses_registry_for_message_tables():
@@ -385,4 +393,4 @@ def test_database_message_init_uses_registry_for_message_tables():
     for table_name in database._REGISTRY_MESSAGE_INIT_TABLES:
         assert f"CREATE TABLE IF NOT EXISTS {table_name}" not in source
 
-    assert "CREATE TABLE IF NOT EXISTS media_requests" in source
+    assert "CREATE TABLE IF NOT EXISTS media_requests" not in source

@@ -8,44 +8,20 @@ from app.infra.db.system_store import system_store
 def ensure_media_request_schema() -> None:
     with system_store.connect() as conn:
         cursor = conn.cursor()
+
         cursor.execute("PRAGMA table_info(media_requests)")
         columns = cursor.fetchall()
         if columns:
             pk_columns = [column[1] for column in columns if column[5] > 0]
             if "season" not in pk_columns:
                 cursor.execute("ALTER TABLE media_requests RENAME TO media_requests_old")
-                cursor.execute(
-                    """
-                    CREATE TABLE media_requests (
-                        tmdb_id INTEGER, media_type TEXT, title TEXT, year TEXT, poster_path TEXT,
-                        status INTEGER DEFAULT 0, season INTEGER DEFAULT 0, reject_reason TEXT,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        PRIMARY KEY (tmdb_id, season)
-                    )
-                    """
-                )
+                ensure_registered_table(cursor, "media_requests")
                 cursor.execute(
                     "INSERT OR IGNORE INTO media_requests (tmdb_id, media_type, title, year, poster_path, status, season, reject_reason, created_at) SELECT tmdb_id, media_type, title, year, poster_path, status, 0, reject_reason, created_at FROM media_requests_old"
                 )
                 cursor.execute("DROP TABLE media_requests_old")
 
-        cursor.execute("PRAGMA table_info(media_requests)")
-        request_columns = [column[1] for column in cursor.fetchall()]
-        if "episodes" not in request_columns:
-            try:
-                cursor.execute("ALTER TABLE media_requests ADD COLUMN episodes TEXT DEFAULT ''")
-            except Exception:
-                pass
-        if "request_type" not in request_columns:
-            try:
-                cursor.execute("ALTER TABLE media_requests ADD COLUMN request_type TEXT DEFAULT 'new'")
-            except Exception:
-                pass
-        if "series_id" not in request_columns:
-            try:
-                cursor.execute("ALTER TABLE media_requests ADD COLUMN series_id TEXT DEFAULT ''")
-            except Exception:
-                pass
+        ensure_registered_table(cursor, "media_requests")
 
         cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='request_users'")
         user_table = cursor.fetchone()
@@ -53,19 +29,13 @@ def ensure_media_request_schema() -> None:
             sql = user_table[0].lower().replace(" ", "")
             if "unique(tmdb_id,user_id,season)" not in sql:
                 cursor.execute("ALTER TABLE request_users RENAME TO request_users_old")
-                cursor.execute(
-                    """
-                    CREATE TABLE request_users (
-                        tmdb_id INTEGER, user_id TEXT, username TEXT, season INTEGER DEFAULT 0,
-                        requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE(tmdb_id, user_id, season)
-                    )
-                    """
-                )
+                ensure_registered_table(cursor, "request_users")
                 cursor.execute(
                     "INSERT OR IGNORE INTO request_users (tmdb_id, user_id, username, season) SELECT tmdb_id, user_id, COALESCE(username, '系统用户'), COALESCE(season, 0) FROM request_users_old"
                 )
                 cursor.execute("DROP TABLE request_users_old")
 
+        ensure_registered_table(cursor, "request_users")
         ensure_registered_table(cursor, "media_feedback")
         conn.commit()
 
