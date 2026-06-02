@@ -76,6 +76,10 @@ _REGISTRY_COMPAT_SIMPLE_INIT_TABLES = (
     "tg_reg_logs",
 )
 
+_REGISTRY_COMPAT_NOTIFICATION_INIT_TABLES = (
+    "sys_notifications",
+)
+
 # 🔥 导出 SYSTEM_DB_PATH 供其他模块使用
 __all__ = ['init_db', 'get_base_filter', 'add_sys_notification',
            'DB_PATH', 'SYSTEM_DB_PATH', 'auto_migrate_system_db', 'get_db_connection',
@@ -545,8 +549,8 @@ def init_db(skip_migration=False):
 
         c.execute('''CREATE TABLE IF NOT EXISTS media_requests (tmdb_id INTEGER, media_type TEXT, title TEXT, year TEXT, poster_path TEXT, status INTEGER DEFAULT 0, season INTEGER DEFAULT 0, reject_reason TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (tmdb_id, season))''')
 
-        # 👇 新增：系统全局通知表
-        c.execute('''CREATE TABLE IF NOT EXISTS sys_notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT, title TEXT, message TEXT, is_read INTEGER DEFAULT 0, action_url TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
+        for table_name in _REGISTRY_COMPAT_NOTIFICATION_INIT_TABLES:
+            ensure_registered_table(c, table_name)
 
         # 🤖 用户机器人相关表
         c.execute('''CREATE TABLE IF NOT EXISTS tg_user_bindings (tg_user_id TEXT PRIMARY KEY, tg_username TEXT DEFAULT '', emby_user_id TEXT, emby_username TEXT, init_password TEXT DEFAULT '', bound_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
