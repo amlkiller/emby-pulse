@@ -23,25 +23,6 @@ class FakeInvitationDao:
         self.calls.append(("claim_invitation_usage", code, used_by))
         return True
 
-    def save_code_registration_meta_and_finish_invitation(
-        self,
-        code,
-        user_id,
-        expire_date,
-        allow_routes,
-        block_routes,
-    ):
-        self.calls.append(
-            (
-                "save_code_registration_meta_and_finish_invitation",
-                code,
-                user_id,
-                expire_date,
-                allow_routes,
-                block_routes,
-            )
-        )
-
     def renew_user_with_invitation_code(self, code, used_by, user_id):
         self.calls.append(("renew_user_with_invitation_code", code, used_by, user_id))
         return {"days": 7, "new_exp": "2026-06-09"}, None
@@ -101,13 +82,6 @@ def test_system_public_service_delegates_invitation_calls(monkeypatch):
     }
     assert public_service.restore_invitation_code_usage("reg-code") is None
     assert public_service.claim_invitation_usage("reg-code", "User") is True
-    assert public_service.save_code_registration_meta_and_finish_invitation(
-        "reg-code",
-        "u1",
-        "2026-07-01",
-        "/a",
-        "/b",
-    ) is None
     assert public_service.renew_user_with_invitation_code("renew-code", "User", "u1") == (
         {"days": 7, "new_exp": "2026-06-09"},
         None,
@@ -138,14 +112,6 @@ def test_system_public_service_delegates_invitation_calls(monkeypatch):
         ("get_available_registration_invitation", "reg-code"),
         ("restore_invitation_code_usage", "reg-code"),
         ("claim_invitation_usage", "reg-code", "User"),
-        (
-            "save_code_registration_meta_and_finish_invitation",
-            "reg-code",
-            "u1",
-            "2026-07-01",
-            "/a",
-            "/b",
-        ),
         ("renew_user_with_invitation_code", "renew-code", "User", "u1"),
         (
             "create_invitation_codes",
@@ -164,6 +130,15 @@ def test_system_public_service_delegates_invitation_calls(monkeypatch):
         ("list_invitation_export_rows", "renew"),
         ("delete_invitation_codes", ["code-1", "code-2"]),
     ]
+
+
+def test_system_public_service_reuses_registration_meta_dao_implementation():
+    from app.domains.system import public_service
+
+    assert (
+        public_service.save_code_registration_meta_and_finish_invitation
+        is public_service.invitation_dao.save_code_registration_meta_and_finish_invitation
+    )
 
 
 def test_system_public_service_delegates_common_vars(monkeypatch):
