@@ -1298,3 +1298,36 @@ Routed sys_dashboard creation in dashboard layout helpers through schema_bootstr
 ### Next Steps
 
 - None - task complete
+
+
+## Session 99: DB manager migration schema bootstrap convergence
+
+**Date**: 2026-06-03
+**Task**: DB manager migration schema bootstrap convergence
+**Branch**: `main`
+
+### Summary
+
+Routed db_manager.migrate_tables target table setup through schema_bootstrap.ensure_registered_table so migrations apply registered alters and indexes; added focused migration regression tests and database spec guidance.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6da751e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
