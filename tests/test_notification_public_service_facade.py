@@ -1,5 +1,6 @@
 import ast
 from pathlib import Path
+from types import SimpleNamespace
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -50,11 +51,23 @@ class FakeBot:
         return "push-result"
 
 
+class FakeUserBotService:
+    def __init__(self):
+        self.calls = []
+        self.user_bot = SimpleNamespace(running=True)
+
+    def _send(self, chat_id, text, reply_markup=None):
+        self.calls.append(("_send", chat_id, text, reply_markup))
+        return {"ok": True}
+
+
 def test_notification_public_service_delegates_and_returns(monkeypatch):
     from app.domains.notifications import public_service
 
     bot = FakeBot()
+    user_bot_service = FakeUserBotService()
     monkeypatch.setattr(public_service, "_get_bot", lambda: bot)
+    monkeypatch.setattr(public_service, "_get_user_bot_service", lambda: user_bot_service)
 
     assert public_service.send_message("chat", "text", reply_markup={"k": "v"}, platform="tg") == "message-result"
     assert public_service.send_photo(
@@ -68,6 +81,8 @@ def test_notification_public_service_delegates_and_returns(monkeypatch):
     assert public_service.edit_message("chat", 42, "edited", reply_markup={"inline": True}) == "edit-result"
     assert public_service.send_to_channels("poster", "caption", keyboard={"keyboard": True}) == "channels-result"
     assert public_service.push_report_now("user", "weekly", "dark") == "push-result"
+    assert public_service.is_user_bot_running() is True
+    assert public_service.send_user_bot_message("user-chat", "user text", {"inline": []}) == {"ok": True}
 
     assert bot.calls == [
         ("send_message", "chat", "text", "HTML", {"k": "v"}, "tg"),
@@ -76,6 +91,30 @@ def test_notification_public_service_delegates_and_returns(monkeypatch):
         ("send_to_channels", "poster", "caption", {"keyboard": True}),
         ("push_now", "user", "weekly", "dark"),
     ]
+    assert user_bot_service.calls == [("_send", "user-chat", "user text", {"inline": []})]
+
+
+def test_auto_expire_plugin_does_not_import_private_notification_user_bot_service():
+    path = _REPO_ROOT / "app/plugins/auto_expire/plugin.py"
+    rel_path = path.relative_to(_REPO_ROOT).as_posix()
+    tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(rel_path))
+    violations = []
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            imported_names = {alias.name for alias in node.names}
+            if node.module == "app.domains.notifications.user_bot_service":
+                violations.append(f"{rel_path}:{node.lineno}")
+            if node.module == "app.domains.notifications" and (
+                "user_bot_service" in imported_names or "*" in imported_names
+            ):
+                violations.append(f"{rel_path}:{node.lineno}")
+        elif isinstance(node, ast.Import):
+            imported_modules = {alias.name for alias in node.names}
+            if "app.domains.notifications.user_bot_service" in imported_modules:
+                violations.append(f"{rel_path}:{node.lineno}")
+
+    assert violations == []
 
 
 def test_external_callers_do_not_import_notification_bot_singleton():

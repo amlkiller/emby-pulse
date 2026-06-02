@@ -7,6 +7,12 @@ def _get_bot():
     return bot
 
 
+def _get_user_bot_service():
+    from app.domains.notifications import user_bot_service
+
+    return user_bot_service
+
+
 def send_message(chat_id, text, parse_mode="HTML", reply_markup=None, platform="all"):
     return _get_bot().send_message(chat_id, text, parse_mode, reply_markup, platform)
 
@@ -41,3 +47,11 @@ def send_to_channels(photo_io, caption, keyboard=None):
 
 def push_report_now(user_id, period, theme):
     return _get_bot().push_now(user_id, period, theme)
+
+
+def is_user_bot_running() -> bool:
+    return bool(_get_user_bot_service().user_bot.running)
+
+
+def send_user_bot_message(chat_id, text, reply_markup=None):
+    return _get_user_bot_service()._send(chat_id, text, reply_markup)

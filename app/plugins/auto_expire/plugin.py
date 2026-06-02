@@ -9,6 +9,7 @@ import datetime
 from fastapi import Request
 from app.plugins.base import PluginBase
 from app.domains.users import public_service as user_service
+from app.domains.notifications import public_service as notification_service
 from app.infra.clients.media_server_client import media_api
 
 logger = logging.getLogger("uvicorn")
@@ -325,8 +326,7 @@ class AutoExpirePlugin(PluginBase):
 
     def _send_user_remind(self, user_id, days_left, expire_date):
         try:
-            from app.domains.notifications.user_bot_service import user_bot, _send as user_bot_send
-            if not user_bot.running: return
+            if not notification_service.is_user_bot_running(): return
             # tg_user_bindings 表：tg_user_id 对应 emby_user_id
             chat_id = user_service.get_tg_user_id_by_emby_id(user_id)
             if not chat_id:
@@ -334,7 +334,7 @@ class AutoExpirePlugin(PluginBase):
             msg = (f"⏰ <b>账号到期提醒</b>\n\n"
                    f"您的账号将在 <b>{days_left} 天后</b>（{expire_date}）到期。\n"
                    f"请及时续费以免服务中断。")
-            user_bot_send(chat_id, msg)
+            notification_service.send_user_bot_message(chat_id, msg)
             print(f"[到期提醒] 已向用户 {user_id} (TG:{chat_id}) 发送到期提醒")
         except Exception as e:
             print(f"[到期提醒] ❌ 发送用户提醒失败: {e}")
