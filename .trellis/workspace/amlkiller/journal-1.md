@@ -1740,3 +1740,36 @@ Moved the reports router preview and push admin checks off private users auth im
 ### Next Steps
 
 - None - task complete
+
+
+## Session 53: PWA router public auth facade boundary
+
+**Date**: 2026-06-02
+**Task**: PWA router public auth facade boundary
+**Branch**: `main`
+
+### Summary
+
+Moved PWA router admin checks off private users auth imports, routed them through the users public facade, and added import-boundary plus config/delete authorization tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c4dfacd` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
