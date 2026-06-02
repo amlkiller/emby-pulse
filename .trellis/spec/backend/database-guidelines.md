@@ -448,6 +448,7 @@ tokens = list_api_tokens(user_id)
 - New local DDL in `app.infra.db.database.init_db()` for tables listed in `_REGISTRY_COMPAT_SIMPLE_INIT_TABLES` -> fail focused database-init/schema registry tests.
 - New local `sys_notifications` table DDL in `app.infra.db.database.init_db()` compatibility initialization -> fail focused database-init/schema registry tests.
 - New local `msg_conversations`, `msg_items`, or `msg_notify_block` table DDL in `app.infra.db.database.init_db()` late message-table initialization -> fail focused database-init/schema registry tests.
+- New local `login_failures` or `api_tokens` table DDL in `app.infra.db.database._create_system_tables()` -> fail focused auth/API-token database-init tests.
 - New local calendar-notify config table DDL in `app.domains.notifications.calendar_notify_dao.ensure_calendar_notify_config_table()` for registry-owned `calendar_notify_config` -> fail focused calendar-notify bootstrap/schema registry tests.
 - New local PWA table DDL in `app.domains.pwa.pwa_dao` for registry-owned `pwa_config` or `user_pwa_icons` -> fail focused PWA bootstrap/schema registry tests.
 - New local plugin DAO table DDL in `app.plugins.plugin_dao.ensure_plugin_tables()` for registry-owned `plugin_state` or `plugin_logs` -> fail focused plugin DAO bootstrap/schema registry tests.
@@ -461,6 +462,7 @@ tokens = list_api_tokens(user_id)
 - Good: `app.domains.system.system_tool_dao` imports `SYSTEM_TABLES` from `app.infra.db.schema_registry`.
 - Good: `app.domains.system.system_tool_dao.repair_core_system_tables()` creates repaired registry-owned tables from `TABLE_SCHEMAS` / `PLAYBACK_SCHEMA` and applies `TABLE_ALTERS`.
 - Good: `app.infra.db.database._create_system_tables()` routes simple registry-owned startup tables through `_REGISTRY_SYSTEM_INIT_TABLES` plus `schema_bootstrap.ensure_registered_table(...)`, while keeping unregistered or high-risk migration tables local until their own slice.
+- Good: `app.infra.db.database._create_system_tables()` creates `login_failures` and `api_tokens` through `_REGISTRY_SYSTEM_INIT_TABLES` plus `schema_bootstrap.ensure_registered_table(...)`, while keeping lookup indexes local until index metadata is centralized.
 - Good: `app.infra.db.notification_dao.ensure_notifications_table()` uses `TABLE_SCHEMAS["sys_notifications"]` and `TABLE_ALTERS["sys_notifications"]`.
 - Good: `app.domains.system.system_tool_dao` dashboard helpers use `TABLE_SCHEMAS["sys_dashboard"]`.
 - Good: `app.domains.media_requests.gap_dao.ensure_gap_tables()` loops its registry-owned `gap_*` table subset through `TABLE_SCHEMAS`, applies `TABLE_ALTERS["gap_perfect_series"]`, and recreates legacy `gap_scan_cache` from `TABLE_SCHEMAS["gap_scan_cache"]`.
@@ -495,6 +497,7 @@ tokens = list_api_tokens(user_id)
 - Focused identity test: assert `app.infra.db.database.SYSTEM_TABLES is app.infra.db.schema_registry.SYSTEM_TABLES`.
 - Focused repair test: run `repair_core_system_tables()` against a temporary database and assert registry-backed table creation plus registered ALTER application.
 - Focused database-init test: run `init_system_db()` against a temporary database and assert `_REGISTRY_SYSTEM_INIT_TABLES` tables are created from registry metadata, registered ALTER columns exist, indexes are preserved, and local DDL remains only for unregistered/high-risk tables.
+- Focused auth/API-token database-init test: run `init_system_db()` against a temporary database and assert registry-backed `login_failures` / `api_tokens` creation, preserved login/token indexes, auth login-failure DAO smoke paths, API token store smoke paths, and no local duplicate DDL in `app.infra.db.database._create_system_tables()`.
 - Focused database-init compatibility test: run `init_db(skip_migration=True)` against temporary system and playback database paths and assert compatibility `point_logs` / `point_config`, `_REGISTRY_COMPAT_SIMPLE_INIT_TABLES`, and late message-table creation come from registry metadata with no local duplicate migrated-table DDL in `init_db()`.
 - Focused bootstrap test: run small registry-owned bootstrap helpers against a temporary database and assert registry-backed table creation plus registered ALTER application.
 - Focused gap bootstrap test: run `ensure_gap_tables()` against a temporary database and assert registry-backed table creation, `gap_perfect_series.tmdb_id` ALTER application, default `gap_config.cache_interval_hours = 6`, legacy `gap_scan_cache` migration, and no local duplicate gap table DDL in the DAO source.

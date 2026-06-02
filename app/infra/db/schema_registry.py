@@ -15,7 +15,8 @@ SYSTEM_TABLES = [
     "gap_perfect_series", "gap_scan_cache", "dedupe_results", "dedupe_whitelist",
     "dedupe_config", "keep_alive_violations",
     "task_config", "task_translations", "tv_calendar_cache", "tg_reg_logs",
-    "local_users", "msg_conversations", "msg_items", "msg_notify_block", "user_mutes",
+    "local_users", "login_failures", "api_tokens",
+    "msg_conversations", "msg_items", "msg_notify_block", "user_mutes",
     "announcements", "announcement_reads",
     "bot_notify_mutes", "user_audit_logs", "notify_rules", "calendar_notify_config",
     "pwa_config", "user_pwa_icons"
@@ -385,6 +386,27 @@ TABLE_SCHEMAS = {
         totp_secret TEXT DEFAULT '',
         totp_enabled INTEGER DEFAULT 0,
         totp_pending_secret TEXT DEFAULT ''
+    )""",
+
+    "login_failures": """CREATE TABLE IF NOT EXISTS login_failures (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        lock_key TEXT NOT NULL UNIQUE,
+        lock_type TEXT NOT NULL,
+        failure_count INTEGER DEFAULT 0,
+        locked_until DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )""",
+
+    "api_tokens": """CREATE TABLE IF NOT EXISTS api_tokens (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        token TEXT NOT NULL UNIQUE,
+        name TEXT NOT NULL,
+        expires_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        last_used_at DATETIME,
+        FOREIGN KEY (user_id) REFERENCES users_meta(user_id)
     )""",
 
     # ==================== 消息中心 ====================

@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend guideline index for schema registry bootstrap work."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Schema registry ownership and database bootstrap contracts."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Required uv-based verification commands."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Domain DAO and infra boundary guidance."}

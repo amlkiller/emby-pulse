@@ -44,6 +44,24 @@ def test_init_system_db_creates_simple_tables_from_schema_registry(monkeypatch, 
         assert {"totp_secret", "totp_enabled", "totp_pending_secret"}.issubset(
             _columns(conn, "local_users")
         )
+        assert {
+            "id",
+            "lock_key",
+            "lock_type",
+            "failure_count",
+            "locked_until",
+            "created_at",
+            "updated_at",
+        }.issubset(_columns(conn, "login_failures"))
+        assert {
+            "id",
+            "user_id",
+            "token",
+            "name",
+            "expires_at",
+            "created_at",
+            "last_used_at",
+        }.issubset(_columns(conn, "api_tokens"))
         assert {"action", "disabled"}.issubset(_columns(conn, "keep_alive_violations"))
 
         indexes = {
@@ -54,6 +72,58 @@ def test_init_system_db_creates_simple_tables_from_schema_registry(monkeypatch, 
         }
         assert "idx_point_logs_user" in indexes
         assert "idx_msg_conversations_user" in indexes
+        assert "idx_login_failures_key" in indexes
+        assert "idx_login_failures_type" in indexes
+        assert "idx_login_failures_locked" in indexes
+        assert "idx_api_tokens_user" in indexes
+        assert "idx_api_tokens_token" in indexes
+
+
+def test_auth_and_api_token_daos_work_after_registry_system_init(monkeypatch, tmp_path):
+    from app.domains.users import auth_dao
+    from app.infra.db import api_token_store, database
+    from app.infra.db.system_store import system_store
+
+    db_path = tmp_path / "system_store.db"
+    monkeypatch.setattr(database, "SYSTEM_DB_PATH", str(db_path))
+    monkeypatch.setattr(system_store, "db_path", str(db_path))
+
+    database.init_system_db()
+
+    auth_dao.upsert_login_failure("ip:127.0.0.1", "ip", 2, "2099-01-01 00:00:00")
+    login_failure = auth_dao.get_login_failure("ip:127.0.0.1")
+    assert login_failure is not None
+    assert login_failure["failure_count"] == 2
+    assert auth_dao.get_login_failure_count("ip:127.0.0.1") == 2
+
+    auth_dao.upsert_login_failure("ip:expired", "ip", 1, "2000-01-01 00:00:00")
+    assert auth_dao.cleanup_expired_login_locks() == 1
+    auth_dao.clear_login_failure("ip:127.0.0.1")
+    assert auth_dao.get_login_failure_count("ip:127.0.0.1") is None
+
+    system_store.execute(
+        "INSERT INTO users_meta (user_id, created_at) VALUES (?, ?)",
+        ("user-1", "2026-06-02 00:00:00"),
+    )
+    api_token_store.create_api_token_record(
+        "user-1",
+        "token-hash-1",
+        "Integration",
+        "2099-01-01 00:00:00",
+        "2026-06-02 00:00:00",
+    )
+
+    tokens = api_token_store.list_api_tokens("user-1")
+    assert len(tokens) == 1
+    assert tokens[0]["name"] == "Integration"
+    assert api_token_store.get_api_token_by_hash("token-hash-1")["expires_at"] == "2099-01-01 00:00:00"
+
+    api_token_store.mark_api_token_used("token-hash-1")
+    tokens = api_token_store.list_api_tokens("user-1")
+    assert tokens[0]["last_used_at"] is not None
+
+    api_token_store.delete_api_token(tokens[0]["id"], "user-1")
+    assert api_token_store.list_api_tokens("user-1") == []
 
 
 def test_init_db_creates_compat_point_core_tables_from_schema_registry(monkeypatch, tmp_path):
@@ -161,8 +231,8 @@ def test_database_system_init_uses_registry_for_selected_simple_tables():
         assert f"CREATE TABLE IF NOT EXISTS {table_name}" not in source
 
     assert "CREATE TABLE IF NOT EXISTS media_requests" in source
-    assert "CREATE TABLE IF NOT EXISTS login_failures" in source
-    assert "CREATE TABLE IF NOT EXISTS api_tokens" in source
+    assert "CREATE TABLE IF NOT EXISTS login_failures" not in source
+    assert "CREATE TABLE IF NOT EXISTS api_tokens" not in source
 
 
 def test_database_compat_init_uses_registry_for_point_core_tables():

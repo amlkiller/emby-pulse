@@ -49,6 +49,8 @@ _REGISTRY_SYSTEM_INIT_TABLES = (
     "user_mutes",
     "keep_alive_violations",
     "local_users",
+    "login_failures",
+    "api_tokens",
     "bot_notify_mutes",
 )
 
@@ -374,17 +376,10 @@ def init_system_db():
 def _create_system_tables(c):
     """创建系统表（内部函数）"""
     ensure_registered_table(c, "users_meta")
+    for table_name in _REGISTRY_SYSTEM_INIT_TABLES:
+        ensure_registered_table(c, table_name)
 
     # 🔒 安全：登录失败锁定表（持久化，防止重启后丢失）
-    c.execute('''CREATE TABLE IF NOT EXISTS login_failures (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        lock_key TEXT NOT NULL UNIQUE,
-        lock_type TEXT NOT NULL,
-        failure_count INTEGER DEFAULT 0,
-        locked_until DATETIME,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )''')
     try: c.execute("CREATE INDEX IF NOT EXISTS idx_login_failures_key ON login_failures(lock_key)")
     except Exception: pass
     try: c.execute("CREATE INDEX IF NOT EXISTS idx_login_failures_type ON login_failures(lock_type)")
@@ -393,16 +388,6 @@ def _create_system_tables(c):
     except Exception: pass
 
     # 🔑 API Token 表（用于第三方应用调用）
-    c.execute('''CREATE TABLE IF NOT EXISTS api_tokens (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id TEXT NOT NULL,
-        token TEXT NOT NULL UNIQUE,
-        name TEXT NOT NULL,
-        expires_at DATETIME,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        last_used_at DATETIME,
-        FOREIGN KEY (user_id) REFERENCES users_meta(user_id)
-    )''')
     try: c.execute("CREATE INDEX IF NOT EXISTS idx_api_tokens_user ON api_tokens(user_id)")
     except Exception: pass
     try: c.execute("CREATE INDEX IF NOT EXISTS idx_api_tokens_token ON api_tokens(token)")
@@ -413,9 +398,6 @@ def _create_system_tables(c):
 
     c.execute('''CREATE TABLE IF NOT EXISTS tv_series_status (tmdb_id TEXT PRIMARY KEY, series_name TEXT, status TEXT DEFAULT 'continuing', last_checked TEXT, updated_at TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS media_requests (tmdb_id INTEGER, media_type TEXT, title TEXT, year TEXT, poster_path TEXT, status INTEGER DEFAULT 0, season INTEGER DEFAULT 0, reject_reason TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (tmdb_id, season))''')
-
-    for table_name in _REGISTRY_SYSTEM_INIT_TABLES:
-        ensure_registered_table(c, table_name)
     
     # 🔥 彩票系统表
     c.execute('''CREATE TABLE IF NOT EXISTS lottery_tickets (
