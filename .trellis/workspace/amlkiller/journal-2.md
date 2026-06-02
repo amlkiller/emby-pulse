@@ -401,3 +401,36 @@ Moved notification center router admin checks off private users auth imports, ro
 ### Next Steps
 
 - None - task complete
+
+
+## Session 72: Media requests router public auth facade boundary
+
+**Date**: 2026-06-02
+**Task**: Media requests router public auth facade boundary
+**Branch**: `main`
+
+### Summary
+
+Moved media request router admin checks off private users auth imports, routed them through the users public facade, and added import-boundary plus representative authorization regression tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f2dd845` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
