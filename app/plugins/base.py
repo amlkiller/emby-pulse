@@ -121,10 +121,6 @@ class PluginBase:
         with _config_cache_lock:
             return dict(_config_cache.get(self.id, {}))
 
-    def _refresh_config_cache(self):
-        """刷新配置缓存（保存配置后调用）"""
-        self._load_config_to_cache()
-
     def _is_notification_enabled(self):
         """检查插件通知是否启用"""
         config = self._get_config()
