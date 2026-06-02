@@ -104,3 +104,36 @@ Moved system client blacklist/whitelist/data/block route admin checks off privat
 ### Next Steps
 
 - None - task complete
+
+
+## Session 63: System DB tools public auth facade boundary
+
+**Date**: 2026-06-02
+**Task**: System DB tools public auth facade boundary
+**Branch**: `main`
+
+### Summary
+
+Moved system database management route admin checks off private users auth imports, routed them through the users public facade, and added import-boundary plus representative JSONResponse authorization tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `357f81a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
