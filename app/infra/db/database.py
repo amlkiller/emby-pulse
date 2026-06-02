@@ -7,7 +7,7 @@ from app.core.config import DB_PATH, SYSTEM_DB_PATH
 from app.infra.db.notification_dao import add_system_notification
 from app.infra.db.playback_filters import get_base_filter as _get_base_filter
 from app.infra.db.query_perf import get_query_perf_stats
-from app.infra.db.schema_bootstrap import ensure_registered_table
+from app.infra.db.schema_bootstrap import ensure_playback_table, ensure_registered_table
 from app.infra.db.schema_registry import PLAYBACK_TABLES, SYSTEM_TABLES
 
 _REGISTRY_SYSTEM_INIT_TABLES = (
@@ -456,7 +456,7 @@ def init_db(skip_migration=False):
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
 
-        c.execute('''CREATE TABLE IF NOT EXISTS PlaybackActivity (Id INTEGER PRIMARY KEY AUTOINCREMENT, UserId TEXT, UserName TEXT, ItemId TEXT, ItemName TEXT, PlayDuration INTEGER, DateCreated DATETIME DEFAULT CURRENT_TIMESTAMP, Client TEXT, DeviceName TEXT, RemoteEndPoint TEXT, Location TEXT, ISP TEXT)''')
+        ensure_playback_table(c)
         ensure_registered_table(c, "users_meta")
 
         for table_name in _REGISTRY_COMPAT_SENSITIVE_INIT_TABLES:
@@ -471,14 +471,6 @@ def init_db(skip_migration=False):
         # 💰 积分系统（确保表存在）
         for table_name in _REGISTRY_COMPAT_INIT_TABLES:
             ensure_registered_table(c, table_name)
-
-        # 🔥 播放历史增强：新增 IP、归属地、运营商字段（兼容旧数据库）
-        try: c.execute("ALTER TABLE PlaybackActivity ADD COLUMN RemoteEndPoint TEXT")
-        except Exception: pass
-        try: c.execute("ALTER TABLE PlaybackActivity ADD COLUMN Location TEXT")
-        except Exception: pass
-        try: c.execute("ALTER TABLE PlaybackActivity ADD COLUMN ISP TEXT")
-        except Exception: pass
 
         # 🔥 性能优化：创建索引（大幅提升查询速度）
         # 播放历史表索引

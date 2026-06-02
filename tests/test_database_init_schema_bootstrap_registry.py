@@ -199,7 +199,7 @@ def test_calendar_status_daos_work_after_registry_system_init(monkeypatch, tmp_p
 
 def test_init_db_creates_compat_point_core_tables_from_schema_registry(monkeypatch, tmp_path):
     from app.infra.db import database
-    from app.infra.db.schema_registry import SYSTEM_TABLES, TABLE_SCHEMAS
+    from app.infra.db.schema_registry import PLAYBACK_SCHEMA, SYSTEM_TABLES, TABLE_SCHEMAS
 
     system_db_path = tmp_path / "system_store.db"
     compat_db_path = tmp_path / "playback_reporting.db"
@@ -269,6 +269,11 @@ def test_init_db_creates_compat_point_core_tables_from_schema_registry(monkeypat
         assert {"id", "type", "title", "message", "is_read", "is_cleared"}.issubset(
             _columns(conn, "sys_notifications")
         )
+        assert {"RemoteEndPoint", "Location", "ISP", "ClientName", "ItemType"}.issubset(
+            _columns(conn, "PlaybackActivity")
+        )
+        for column_name in ("ClientName", "ItemType"):
+            assert column_name in PLAYBACK_SCHEMA
 
     with sqlite3.connect(system_db_path) as conn:
         existing_tables = {
@@ -304,6 +309,43 @@ def test_init_db_creates_compat_point_core_tables_from_schema_registry(monkeypat
         assert {"id", "user_id", "created_at"}.issubset(_columns(conn, "msg_notify_block"))
 
 
+def test_init_db_applies_registered_playback_alters_to_legacy_table(monkeypatch, tmp_path):
+    from app.infra.db import database
+    from app.infra.db.schema_registry import TABLE_ALTERS
+
+    system_db_path = tmp_path / "system_store.db"
+    compat_db_path = tmp_path / "playback_reporting.db"
+    monkeypatch.setattr(database, "SYSTEM_DB_PATH", str(system_db_path))
+    monkeypatch.setattr(database, "DB_PATH", str(compat_db_path))
+
+    with sqlite3.connect(compat_db_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE PlaybackActivity (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                UserId TEXT,
+                UserName TEXT
+            )
+            """
+        )
+        conn.commit()
+
+    database.init_db(skip_migration=True)
+
+    with sqlite3.connect(compat_db_path) as conn:
+        assert {"RemoteEndPoint", "Location", "ISP", "ClientName", "ItemType"}.issubset(
+            _columns(conn, "PlaybackActivity")
+        )
+
+    assert TABLE_ALTERS["PlaybackActivity"] == [
+        "ALTER TABLE PlaybackActivity ADD COLUMN RemoteEndPoint TEXT",
+        "ALTER TABLE PlaybackActivity ADD COLUMN Location TEXT",
+        "ALTER TABLE PlaybackActivity ADD COLUMN ISP TEXT",
+        "ALTER TABLE PlaybackActivity ADD COLUMN ClientName TEXT",
+        "ALTER TABLE PlaybackActivity ADD COLUMN ItemType TEXT",
+    ]
+
+
 def test_database_system_init_uses_registry_for_selected_simple_tables():
     from app.infra.db import database
 
@@ -328,6 +370,9 @@ def test_database_compat_init_uses_registry_for_point_core_tables():
 
     source = inspect.getsource(database.init_db)
 
+    assert "ensure_playback_table(c)" in source
+    assert "CREATE TABLE IF NOT EXISTS PlaybackActivity" not in source
+    assert "ALTER TABLE PlaybackActivity ADD COLUMN" not in source
     assert "for table_name in _REGISTRY_COMPAT_INIT_TABLES:" in source
     assert "ensure_registered_table(c, table_name)" in source
 

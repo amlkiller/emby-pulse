@@ -1,6 +1,6 @@
 from typing import Optional
 
-from app.infra.db.schema_registry import TABLE_ALTERS, TABLE_SCHEMAS
+from app.infra.db.schema_registry import PLAYBACK_SCHEMA, TABLE_ALTERS, TABLE_SCHEMAS
 
 
 def column_name_from_alter(alter_sql: str) -> str:
@@ -23,6 +23,15 @@ def ensure_registered_table(cursor, table_name: str, only_columns: Optional[set[
     cursor.execute(TABLE_SCHEMAS[table_name])
     columns = table_columns(cursor, table_name)
 
+    return apply_registered_alters(cursor, table_name, columns, only_columns)
+
+
+def apply_registered_alters(
+    cursor,
+    table_name: str,
+    columns: set[str],
+    only_columns: Optional[set[str]] = None,
+) -> set[str]:
     for alter_sql in TABLE_ALTERS.get(table_name, []):
         column_name = column_name_from_alter(alter_sql)
         if only_columns is not None and column_name not in only_columns:
@@ -32,3 +41,9 @@ def ensure_registered_table(cursor, table_name: str, only_columns: Optional[set[
             columns.add(column_name)
 
     return columns
+
+
+def ensure_playback_table(cursor, only_columns: Optional[set[str]] = None) -> set[str]:
+    cursor.execute(PLAYBACK_SCHEMA)
+    columns = table_columns(cursor, "PlaybackActivity")
+    return apply_registered_alters(cursor, "PlaybackActivity", columns, only_columns)

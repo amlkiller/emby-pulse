@@ -51,7 +51,7 @@ def test_repair_creates_missing_tables_from_schema_registry(monkeypatch, tmp_pat
         assert set(REPAIRED_TABLES).issubset(existing_tables)
 
         playback_columns = _columns(conn, "PlaybackActivity")
-        for column_name in ("RemoteEndPoint", "Location", "ISP"):
+        for column_name in ("RemoteEndPoint", "Location", "ISP", "ClientName", "ItemType"):
             assert column_name in playback_columns
             assert column_name in PLAYBACK_SCHEMA
 
@@ -98,7 +98,7 @@ def test_repair_applies_registered_alters_to_existing_tables(monkeypatch, tmp_pa
     assert "已升级: 求片主表字段 episodes" in results
 
     with sqlite3.connect(db_path) as conn:
-        assert {"RemoteEndPoint", "Location", "ISP", "ClientName"}.issubset(
+        assert {"RemoteEndPoint", "Location", "ISP", "ClientName", "ItemType"}.issubset(
             _columns(conn, "PlaybackActivity")
         )
         assert {"episodes", "request_type", "series_id"}.issubset(

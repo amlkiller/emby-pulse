@@ -400,7 +400,8 @@ tokens = list_api_tokens(user_id)
 
 - The `app.core.database` and `app.core.db_manager` compatibility shells have been removed; imports must target `app.infra.db.database`, `app.infra.db.db_manager`, DAO modules, or query service modules directly.
 - `app.infra.db.schema_registry` owns schema metadata definitions and is the import point for schema metadata.
-- `app.infra.db.schema_bootstrap.ensure_registered_table(cursor, table_name, only_columns=None)` is the shared helper for registry-backed `CREATE TABLE` plus safe `TABLE_ALTERS` application in small bootstrap paths.
+- `app.infra.db.schema_bootstrap.ensure_registered_table(cursor, table_name, only_columns=None)` is the shared helper for registry-backed system-table `CREATE TABLE` plus safe `TABLE_ALTERS` application in small bootstrap paths.
+- `app.infra.db.schema_bootstrap.ensure_playback_table(cursor, only_columns=None)` is the shared helper for registry-backed `PlaybackActivity` creation from `PLAYBACK_SCHEMA` plus compatible `TABLE_ALTERS["PlaybackActivity"]`.
 - `app.core.db_schemas` is only a compatibility re-export for older imports during migration.
 - `app.infra.db.migration_service` is the new boundary for migration, health, backup, restore, and database-tool deep-check orchestration and currently delegates to existing implementations.
 
@@ -416,6 +417,7 @@ tokens = list_api_tokens(user_id)
 - Import schema metadata from `app.infra.db.schema_registry`.
 - Current exports: `SYSTEM_TABLES`, `PLAYBACK_TABLES`, `TABLE_SCHEMAS`, `TABLE_ALTERS`, `PLAYBACK_SCHEMA`, and `CORE_TABLES`.
 - Shared helper: `app.infra.db.schema_bootstrap.ensure_registered_table(cursor, table_name: str, only_columns: set[str] | None = None) -> set[str]`.
+- Shared helper: `app.infra.db.schema_bootstrap.ensure_playback_table(cursor, only_columns: set[str] | None = None) -> set[str]`.
 - Shared helper: `app.infra.db.schema_bootstrap.registered_alter_columns(table_name: str) -> set[str]`.
 
 ### 3. Contracts
@@ -424,7 +426,8 @@ tokens = list_api_tokens(user_id)
 - During the transition, `app.core.db_schemas` may re-export values from `schema_registry` for compatibility; other app modules must not import `app.core.db_schemas` directly.
 - Runtime modules must not keep local copies of `SYSTEM_TABLES` or `PLAYBACK_TABLES`; use the registry object so table lists cannot drift.
 - Repair helpers for registry-owned tables must create tables from `TABLE_SCHEMAS` / `PLAYBACK_SCHEMA` and apply compatible entries from `TABLE_ALTERS`; do not keep a second handwritten DDL copy in the repair path.
-- Small bootstrap helpers for registry-owned tables must also create tables from `TABLE_SCHEMAS` and apply compatible entries from `TABLE_ALTERS`; do not keep local `CREATE TABLE` / registry-owned `ALTER TABLE` copies in DAO bootstrap paths.
+- Small bootstrap helpers for registry-owned system tables must also create tables from `TABLE_SCHEMAS` and apply compatible entries from `TABLE_ALTERS`; do not keep local `CREATE TABLE` / registry-owned `ALTER TABLE` copies in DAO bootstrap paths.
+- Small bootstrap helpers for `PlaybackActivity`, including compatibility startup and local webhook/bot fallback writes, must use `ensure_playback_table(...)`; do not keep local `PLAYBACK_SCHEMA` copies or local playback `ALTER TABLE` loops.
 - If more than one DAO needs to ensure a registry-owned table or column, use `schema_bootstrap.ensure_registered_table(...)` instead of copying PRAGMA/ALTER loops or importing another domain DAO for its bootstrap helper.
 - This boundary does not authorize behavior changes to DDL, ALTER order, migration mode, or repair semantics.
 
@@ -449,6 +452,7 @@ tokens = list_api_tokens(user_id)
 - New local point game table DDL or local optional-column ALTER statements in `app.domains.points.point_dao.ensure_points_schema()` for registry-owned lottery, scratch-card, red-packet, transfer, robbery, or PK tables -> fail focused point-core bootstrap/schema registry tests.
 - New local lottery or scratch-card table DDL or `scratch_cards` ALTER statements in `app.infra.db.database._create_system_tables()` -> fail focused database-init/schema registry tests.
 - New local `point_logs` or `point_config` table DDL in `app.infra.db.database.init_db()` compatibility initialization -> fail focused database-init/schema registry tests.
+- New local `PlaybackActivity` table DDL or playback `ALTER TABLE ... ADD COLUMN` in `app.infra.db.database.init_db()` -> fail focused database-init/schema registry tests; use `schema_bootstrap.ensure_playback_table(...)`.
 - New local DDL in `app.infra.db.database.init_db()` for tables listed in `_REGISTRY_COMPAT_SIMPLE_INIT_TABLES` -> fail focused database-init/schema registry tests.
 - New local DDL or ALTER statements in `app.infra.db.database.init_db()` for tables listed in `_REGISTRY_COMPAT_SENSITIVE_INIT_TABLES` (`invitations`, `sys_license`, `tg_user_bindings`) -> fail focused database-init/schema registry tests.
 - New local `sys_notifications` table DDL in `app.infra.db.database.init_db()` compatibility initialization -> fail focused database-init/schema registry tests.
@@ -460,6 +464,7 @@ tokens = list_api_tokens(user_id)
 - New local keep-alive plugin table DDL or ALTER statements in `app.plugins.keep_alive.keep_alive_dao.ensure_keep_alive_violations_table()` for registry-owned `keep_alive_violations` -> fail focused plugin DAO bootstrap/schema registry tests.
 - New local plugin-private table DDL in `app.plugins.temp_account.temp_account_dao`, `app.plugins.season_poster_updater.season_poster_dao`, `app.plugins.emby_restart.emby_restart_dao`, or `app.plugins.smart_collections.smart_collection_dao` for registry-owned `temp_accounts`, `temp_account_password_history`, `season_poster_logs`, `season_poster_cache`, `emby_restart_history`, `smart_collections`, `smart_collection_items`, or `smart_collection_sync_logs` -> fail focused plugin-private bootstrap/schema registry tests.
 - New local `ALTER TABLE temp_accounts ADD COLUMN` in `app.plugins.temp_account.temp_account_dao.ensure_temp_account_tables()` -> fail focused plugin-private bootstrap/schema registry tests; compatible optional columns belong in `TABLE_ALTERS["temp_accounts"]`.
+- New local `PlaybackActivity` table DDL or playback `ALTER TABLE ... ADD COLUMN` in `app.infra.db.local_playback_store` -> fail focused local playback bootstrap/schema registry tests; webhook and bot fallback writes must use `ensure_playback_table(...)`.
 - New cross-domain import solely to reuse a schema bootstrap helper -> fail architecture review; move the helper to `app.infra.db.schema_bootstrap` or another infra/shared boundary.
 - Need a new schema metadata value -> add/export it through `schema_registry`, then update focused tests.
 
@@ -484,6 +489,8 @@ tokens = list_api_tokens(user_id)
 - Good: `app.infra.db.database`, `app.domains.media_requests.media_request_dao`, and `app.domains.points.point_dao` use `schema_bootstrap.ensure_registered_table(...)` for `users_meta` instead of keeping local `users_meta` ALTER statements.
 - Good: `app.domains.media_requests.media_request_dao.ensure_media_request_schema()` uses `schema_bootstrap.ensure_registered_table(...)` for registry-owned `media_requests`, `request_users`, and `media_feedback`, applies compatible `TABLE_ALTERS`, and keeps only high-risk legacy table-shape rebuild decisions and data-copy SQL local.
 - Good: `app.infra.db.database.init_db()` routes registry-owned compatibility startup tables such as `point_logs` and `point_config` through a small table list plus `schema_bootstrap.ensure_registered_table(...)`, while leaving unrelated high-risk compatibility DDL local.
+- Good: `app.infra.db.database.init_db()` creates and upgrades `PlaybackActivity` through `schema_bootstrap.ensure_playback_table(...)`, while keeping playback indexes local until index metadata is centralized.
+- Good: `app.infra.db.local_playback_store` uses `schema_bootstrap.ensure_playback_table(...)` for webhook and bot fallback writes, including registered compatible columns such as `ItemType`.
 - Good: `app.infra.db.database.init_db()` routes low-risk registry-owned compatibility tables, including `media_requests`, through `_REGISTRY_COMPAT_SIMPLE_INIT_TABLES` plus `schema_bootstrap.ensure_registered_table(...)`.
 - Good: `app.infra.db.database.init_db()` routes ALTER-sensitive registry-owned compatibility tables such as `invitations`, `sys_license`, and `tg_user_bindings` through `_REGISTRY_COMPAT_SENSITIVE_INIT_TABLES` plus `schema_bootstrap.ensure_registered_table(...)`, relying on `TABLE_ALTERS` for compatible optional columns.
 - Good: `app.infra.db.database.init_db()` routes compatibility `sys_notifications` creation through `schema_bootstrap.ensure_registered_table(...)` so registered columns such as `is_cleared` are applied consistently.
@@ -511,7 +518,8 @@ tokens = list_api_tokens(user_id)
 - Focused user-tags database-init test: run `init_system_db()` against a temporary database and assert registry-backed `user_tags` creation, selected user-tag DAO smoke paths, and no local duplicate `user_tags` DDL in `app.infra.db.database._create_system_tables()`.
 - Focused calendar-status database-init test: run `init_system_db()` against a temporary database and assert registry-backed `tv_series_status` creation, selected calendar-status DAO smoke paths, and no local duplicate `tv_series_status` DDL in `app.infra.db.database._create_system_tables()`.
 - Focused auth/API-token database-init test: run `init_system_db()` against a temporary database and assert registry-backed `login_failures` / `api_tokens` creation, preserved login/token indexes, auth login-failure DAO smoke paths, API token store smoke paths, and no local duplicate DDL in `app.infra.db.database._create_system_tables()`.
-- Focused database-init compatibility test: run `init_db(skip_migration=True)` against temporary system and playback database paths and assert compatibility `point_logs` / `point_config`, `_REGISTRY_COMPAT_SIMPLE_INIT_TABLES`, `_REGISTRY_COMPAT_SENSITIVE_INIT_TABLES`, and late message-table creation come from registry metadata with no local duplicate migrated-table DDL in `init_db()`.
+- Focused database-init compatibility test: run `init_db(skip_migration=True)` against temporary system and playback database paths and assert `PlaybackActivity` plus compatibility `point_logs` / `point_config`, `_REGISTRY_COMPAT_SIMPLE_INIT_TABLES`, `_REGISTRY_COMPAT_SENSITIVE_INIT_TABLES`, and late message-table creation come from registry metadata with no local duplicate migrated-table DDL in `init_db()`.
+- Focused local playback bootstrap test: run webhook and bot fallback insert helpers against temporary fresh and legacy playback databases, assert registered playback columns such as `RemoteEndPoint`, `Location`, `ISP`, `ClientName`, and `ItemType` exist, and assert no local duplicate playback DDL/ALTER remains in `app.infra.db.local_playback_store`.
 - Focused bootstrap test: run small registry-owned bootstrap helpers against a temporary database and assert registry-backed table creation plus registered ALTER application.
 - Focused gap bootstrap test: run `ensure_gap_tables()` against a temporary database and assert registry-backed table creation, `gap_perfect_series.tmdb_id` ALTER application, default `gap_config.cache_interval_hours = 6`, legacy `gap_scan_cache` migration, and no local duplicate gap table DDL in the DAO source.
 - Focused dedupe bootstrap test: run `init_dedupe_tables()` against a temporary database and assert registry-backed table creation, registered `dedupe_results` / `dedupe_whitelist` ALTER application, legacy `dedupe_whitelist` migration, and no local duplicate dedupe table DDL or ALTER map in the DAO source.
@@ -551,6 +559,7 @@ from app.infra.db.schema_registry import SYSTEM_TABLES
 - Do not import `app.core.db_schemas` directly outside its compatibility module; implementation code should import schema metadata from `app.infra.db.schema_registry`.
 - Do not copy schema metadata lists such as `SYSTEM_TABLES` into runtime modules.
 - Do not copy registry-owned `CREATE TABLE` SQL into repair helpers; use `TABLE_SCHEMAS`, `TABLE_ALTERS`, and `PLAYBACK_SCHEMA`.
+- Do not copy `PlaybackActivity` DDL or ALTER loops into startup or fallback helpers; use `schema_bootstrap.ensure_playback_table(...)`.
 - Do not copy registry-owned `CREATE TABLE` / `ALTER TABLE` SQL into small bootstrap helpers; use `TABLE_SCHEMAS` and `TABLE_ALTERS`.
 - Do not recreate legacy registry-owned tables with ad hoc SQL during DAO migrations; after dropping an old table shape, recreate it from `TABLE_SCHEMAS`.
 - Do not add new `query_db()` usage in migrated modules.

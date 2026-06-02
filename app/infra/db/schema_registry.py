@@ -886,7 +886,8 @@ TABLE_ALTERS = {
         "ALTER TABLE PlaybackActivity ADD COLUMN RemoteEndPoint TEXT",
         "ALTER TABLE PlaybackActivity ADD COLUMN Location TEXT",
         "ALTER TABLE PlaybackActivity ADD COLUMN ISP TEXT",
-        "ALTER TABLE PlaybackActivity ADD COLUMN ClientName TEXT"
+        "ALTER TABLE PlaybackActivity ADD COLUMN ClientName TEXT",
+        "ALTER TABLE PlaybackActivity ADD COLUMN ItemType TEXT"
     ],
     "gap_perfect_series": [
         "ALTER TABLE gap_perfect_series ADD COLUMN tmdb_id TEXT"
@@ -935,8 +936,10 @@ PLAYBACK_SCHEMA = """CREATE TABLE IF NOT EXISTS PlaybackActivity (
     PlayDuration INTEGER,
     DateCreated DATETIME DEFAULT CURRENT_TIMESTAMP,
     Client TEXT,
+    ClientName TEXT,
     DeviceName TEXT,
     RemoteEndPoint TEXT,
+    ItemType TEXT,
     Location TEXT,
     ISP TEXT
 )"""
