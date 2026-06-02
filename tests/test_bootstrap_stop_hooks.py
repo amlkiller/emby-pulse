@@ -178,6 +178,7 @@ def test_notification_bot_event_subscriptions_are_reversible(monkeypatch):
     assert len(FakeThread.instances) == 3
     assert daemon.schedule_thread.name == "notification-daemon-scheduler"
     assert daemon.library_thread.name == "notification-daemon-library"
+    assert notifier.poll_thread.name == "notification-bot-polling"
 
     expected = [
         ("webhook.received", daemon.on_webhook_event),
@@ -212,8 +213,10 @@ def test_notification_bot_event_subscriptions_are_reversible(monkeypatch):
     assert notifier._subscribed is False
     assert FakeThread.instances[0].join_timeout == 1
     assert FakeThread.instances[1].join_timeout == 1
+    assert FakeThread.instances[2].join_timeout == 1
     assert daemon.schedule_thread is None
     assert daemon.library_thread is None
+    assert notifier.poll_thread is None
 
     daemon.start()
     notifier.start()
@@ -221,6 +224,7 @@ def test_notification_bot_event_subscriptions_are_reversible(monkeypatch):
     assert subscriptions == expected
     assert daemon.schedule_thread is FakeThread.instances[3]
     assert daemon.library_thread is FakeThread.instances[4]
+    assert notifier.poll_thread is FakeThread.instances[5]
 
 
 def test_notification_media_quality_uses_color_transfer_hdr_fallback(monkeypatch):

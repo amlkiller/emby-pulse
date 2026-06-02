@@ -933,6 +933,7 @@ class NotificationBot:
         self.delete_cache = {}
         self._msg_reply_mode = {}  # chat_id -> user_id 存储回复模式
         self._subscribed = False
+        self._stop_event = threading.Event()
 
     def _is_muted(self, user_id, event_type):
         if not user_id: return False
@@ -945,17 +946,28 @@ class NotificationBot:
         if self.running: return
         if not get_bot_tg_token() and not get_wecom_corpid(): return
         self._subscribe_events()
+        self._stop_event.clear()
         self.running = True
         self._set_commands()
         self._set_wecom_menu() 
         if get_bot_tg_token():
-            self.poll_thread = threading.Thread(target=self._polling_loop, daemon=True)
+            self.poll_thread = threading.Thread(
+                target=self._polling_loop,
+                daemon=True,
+                name="notification-bot-polling",
+            )
             self.poll_thread.start()
         logger.info("🤖 Notification Bot Started")
 
     def stop(self):
         self.running = False
+        self._stop_event.set()
         self._unsubscribe_events()
+        thread = self.poll_thread
+        if thread and thread.is_alive():
+            thread.join(timeout=1)
+        if not thread or not thread.is_alive():
+            self.poll_thread = None
 
     def _subscribe_events(self):
         if self._subscribed:
@@ -2169,7 +2181,7 @@ class NotificationBot:
     def _polling_loop(self):
         token = get_notify_tg_bot_token()
         
-        while self.running:
+        while self.running and not self._stop_event.is_set():
             raw_cids = str(get_tg_chat_id())
             admin_ids = [c.strip() for c in raw_cids.replace('，', ',').split(',') if c.strip()]
             
@@ -2205,8 +2217,10 @@ class NotificationBot:
                             if not admin_ids or cid not in admin_ids:
                                 continue
                             _submit_bot_task(self._handle_callback, cq)
-                else: time.sleep(5)
-            except: time.sleep(5)
+                else:
+                    if self._stop_event.wait(5): return
+            except:
+                if self._stop_event.wait(5): return
 
     def _handle_callback(self, cq):
         data = cq.get("data", ""); cid = str(cq["message"]["chat"]["id"])
