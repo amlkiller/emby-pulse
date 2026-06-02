@@ -731,3 +731,36 @@ Moved CalendarService background sync start/stop logic into the public start and
 ### Next Steps
 
 - None - task complete
+
+
+## Session 23: Remove session manager initialize redirect
+
+**Date**: 2026-06-03
+**Task**: Remove session manager initialize redirect
+**Branch**: `Compiled`
+
+### Summary
+
+Inlined SessionManager initialization logic into initialize(), switched internal session creation path to call the public initializer, verified focused tests and full suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6d02d34` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
