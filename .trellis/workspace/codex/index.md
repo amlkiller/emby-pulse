@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 11
+- **Total Sessions**: 12
 - **Last Active**: 2026-06-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~370 | Active |
+| `journal-1.md` | ~403 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 12 | 2026-06-03 | Remove pro startup redirect | `b34cf77` | `Compiled` |
 | 11 | 2026-06-03 | Remove dedupe startup redirect | `b268493` | `Compiled` |
 | 10 | 2026-06-03 | Remove session stop redirect | `843946e` | `Compiled` |
 | 9 | 2026-06-03 | Remove audit startup redirect | `411dcac` | `Compiled` |

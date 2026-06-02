@@ -368,3 +368,36 @@ Removed start_dedupe_services, a pure redirect to init_dedupe_db. Bootstrap now 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 12: Remove pro startup redirect
+
+**Date**: 2026-06-03
+**Task**: Remove pro startup redirect
+**Branch**: `Compiled`
+
+### Summary
+
+Removed start_pro_services, a pure redirect to ensure_pro_schema. Bootstrap now registers ensure_pro_schema directly, and the lifecycle test patches the real startup function. Left ensure_pro_schema error handling and logging unchanged and continued skipping config/variable accessors, DAO SQL helpers, public facades, and wrappers with adaptation/orchestration semantics. Verified alias search, compileall, UTF-8 import check, focused bootstrap lifecycle tests, and full pytest suite: 385 passed, 3 warnings.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b34cf77` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
