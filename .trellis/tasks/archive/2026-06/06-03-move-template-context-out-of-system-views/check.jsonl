@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend spec index for quality verification."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Verify cross-domain import removal and no-wrapper compliance."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "uv verification and test expectations."}
