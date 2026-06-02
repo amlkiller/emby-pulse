@@ -137,3 +137,36 @@ Moved system database management route admin checks off private users auth impor
 ### Next Steps
 
 - None - task complete
+
+
+## Session 64: System tools public auth facade boundary
+
+**Date**: 2026-06-02
+**Task**: System tools public auth facade boundary
+**Branch**: `main`
+
+### Summary
+
+Moved system diagnostics/log/debug/restart/weather route admin checks off private users auth imports, routed them through the users public facade, and added import-boundary plus representative authorization tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5061d80` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
