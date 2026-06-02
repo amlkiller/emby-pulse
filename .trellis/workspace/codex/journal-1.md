@@ -599,3 +599,36 @@ Moved the notification table startup implementation into start_notifications_rou
 ### Next Steps
 
 - None - task complete
+
+
+## Session 19: Remove notify rules startup redirect
+
+**Date**: 2026-06-03
+**Task**: Remove notify rules startup redirect
+**Branch**: `Compiled`
+
+### Summary
+
+Moved bot notify mute table startup handling into start_notify_rules_services and removed the private _ensure_bot_notify_mutes_table redirect. Verified compileall, focused notification tests, import check, and full pytest suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `49714fa` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
