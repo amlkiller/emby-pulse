@@ -401,3 +401,36 @@ Removed start_pro_services, a pure redirect to ensure_pro_schema. Bootstrap now 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 13: Remove media request stop redirect
+
+**Date**: 2026-06-03
+**Task**: Remove media request stop redirect
+**Branch**: `Compiled`
+
+### Summary
+
+Removed the pure stop_media_request_services redirect and registered/called stop_community_cache_refresh_loop directly. Verified compileall, focused lifecycle tests, import check, and full pytest suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `42fe0c8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
