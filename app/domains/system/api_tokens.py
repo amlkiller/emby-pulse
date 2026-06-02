@@ -12,7 +12,7 @@ from app.domains.system.api_token_dao import (
     list_api_tokens,
     mark_api_token_used,
 )
-from app.domains.users.auth import is_admin_user
+from app.domains.users import public_service as user_service
 from app.core.jwt_token import create_api_token, verify_api_token
 from app.core.security_utils import safe_error_message
 
@@ -42,7 +42,7 @@ async def create_token(request: Request, data: CreateTokenRequest):
     user = request.session.get("user")
     if not user:
         raise HTTPException(status_code=401, detail="未登录")
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         raise HTTPException(status_code=403, detail="需要管理员权限")
 
     # 检查过期时间上限
@@ -93,7 +93,7 @@ async def list_tokens(request: Request):
     user = request.session.get("user")
     if not user:
         raise HTTPException(status_code=401, detail="未登录")
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         raise HTTPException(status_code=403, detail="需要管理员权限")
 
     try:
@@ -111,7 +111,7 @@ async def delete_token(request: Request, token_id: int):
     user = request.session.get("user")
     if not user:
         raise HTTPException(status_code=401, detail="未登录")
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         raise HTTPException(status_code=403, detail="需要管理员权限")
 
     try:
