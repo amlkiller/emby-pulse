@@ -27,7 +27,7 @@ from app.infra.config.request_portal_settings import (
     get_user_portal_url,
     is_redirect_to_community_enabled,
 )
-from app.domains.users.auth import check_permission, PAGE_PERMISSION_MAP
+from app.domains.users import public_service as user_service
 import logging
 import random
 
@@ -67,7 +67,7 @@ def get_first_allowed_page(request: Request) -> str:
     
     # 按优先级返回第一个有权限的页面
     # 权限 ID 到页面路径的反向映射
-    perm_to_path = {v: k for k, v in PAGE_PERMISSION_MAP.items()}
+    perm_to_path = {v: k for k, v in user_service.get_page_permission_map().items()}
     
     # 定义页面优先级顺序
     priority_pages = ['dashboard', 'content', 'users', 'requests_admin', 'clients', 'settings']
@@ -126,8 +126,8 @@ def check_page_permission(request: Request, path: str):
         return None
     
     # 子账号检查权限
-    perm_id = PAGE_PERMISSION_MAP.get(path)
-    if perm_id and not check_permission(request, perm_id):
+    perm_id = user_service.get_page_permission_map().get(path)
+    if perm_id and not user_service.check_permission(request, perm_id):
         # 没有权限，返回错误提示页面
         import html as _html
         user_name = _html.escape(str(user.get("name", "用户")))

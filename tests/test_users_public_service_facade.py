@@ -159,6 +159,15 @@ def test_users_public_service_delegates_permission_check(monkeypatch):
     assert calls == [(request, "points")]
 
 
+def test_users_public_service_exposes_page_permission_map(monkeypatch):
+    from app.domains.users import auth, public_service
+
+    permission_map = {"/settings": "settings", "/clients": "clients"}
+    monkeypatch.setattr(auth, "PAGE_PERMISSION_MAP", permission_map)
+
+    assert public_service.get_page_permission_map() is permission_map
+
+
 def test_users_router_cache_helpers_use_public_service(monkeypatch):
     from app.domains.users import router
 

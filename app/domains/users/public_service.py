@@ -22,6 +22,12 @@ def check_permission(request, page: str) -> bool:
     return auth_check_permission(request, page)
 
 
+def get_page_permission_map() -> dict:
+    from app.domains.users.auth import PAGE_PERMISSION_MAP
+
+    return PAGE_PERMISSION_MAP
+
+
 def get_emby_users_cached():
     """Get Emby users with the same short-lived cache used by the users router."""
     if _emby_users_cache["data"] and time.time() < _emby_users_cache["expires"]:
