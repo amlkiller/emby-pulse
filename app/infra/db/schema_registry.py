@@ -7,7 +7,7 @@
 
 # 🔥 系统数据表清单（与 SYSTEM_TABLES 保持同步）
 SYSTEM_TABLES = [
-    "users_meta", "invitations", "sys_license", "tg_user_bindings",
+    "users_meta", "user_tags", "invitations", "sys_license", "tg_user_bindings",
     "tg_user_blacklist", "tg_bot_users", "tg_channel_bindings",
     "media_requests", "request_users", "media_feedback",
     "request_admin_messages", "risk_logs", "sys_notifications", "point_logs", "point_config",
@@ -55,6 +55,13 @@ TABLE_SCHEMAS = {
         emby_pw_hash TEXT DEFAULT '',
         admin_enabled_folders TEXT,
         hidden_libraries TEXT DEFAULT ''
+    )""",
+
+    "user_tags": """CREATE TABLE IF NOT EXISTS user_tags (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE NOT NULL,
+        color TEXT DEFAULT 'blue',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )""",
 
     "invitations": """CREATE TABLE IF NOT EXISTS invitations (

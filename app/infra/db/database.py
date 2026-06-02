@@ -11,6 +11,7 @@ from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.schema_registry import PLAYBACK_TABLES, SYSTEM_TABLES
 
 _REGISTRY_SYSTEM_INIT_TABLES = (
+    "user_tags",
     "invitations",
     "sys_license",
     "tv_calendar_cache",
@@ -397,9 +398,6 @@ def _create_system_tables(c):
     except Exception: pass
     try: c.execute("CREATE INDEX IF NOT EXISTS idx_api_tokens_token ON api_tokens(token)")
     except Exception: pass
-
-    # 🔥 用户标签配置表
-    c.execute('''CREATE TABLE IF NOT EXISTS user_tags (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, color TEXT DEFAULT 'blue', created_at DATETIME DEFAULT CURRENT_TIMESTAMP)''')
 
     c.execute('''CREATE TABLE IF NOT EXISTS tv_series_status (tmdb_id TEXT PRIMARY KEY, series_name TEXT, status TEXT DEFAULT 'continuing', last_checked TEXT, updated_at TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS media_requests (tmdb_id INTEGER, media_type TEXT, title TEXT, year TEXT, poster_path TEXT, status INTEGER DEFAULT 0, season INTEGER DEFAULT 0, reject_reason TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (tmdb_id, season))''')

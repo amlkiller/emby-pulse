@@ -78,6 +78,7 @@ def test_init_system_db_creates_simple_tables_from_schema_registry(monkeypatch, 
         assert {"card_id", "slot_number", "prize_amount", "is_scratched"}.issubset(
             _columns(conn, "scratch_card_slots")
         )
+        assert {"id", "name", "color", "created_at"}.issubset(_columns(conn, "user_tags"))
 
         indexes = {
             row[1]
@@ -139,6 +140,33 @@ def test_auth_and_api_token_daos_work_after_registry_system_init(monkeypatch, tm
 
     api_token_store.delete_api_token(tokens[0]["id"], "user-1")
     assert api_token_store.list_api_tokens("user-1") == []
+
+
+def test_user_tag_daos_work_after_registry_system_init(monkeypatch, tmp_path):
+    from app.domains.users import user_dao
+    from app.infra.db import database
+    from app.infra.db.system_store import system_store
+
+    db_path = tmp_path / "system_store.db"
+    monkeypatch.setattr(database, "SYSTEM_DB_PATH", str(db_path))
+    monkeypatch.setattr(system_store, "db_path", str(db_path))
+
+    database.init_system_db()
+
+    tag_id = user_dao.create_user_tag("vip", "red")
+    rows = user_dao.list_user_tags()
+    assert len(rows) == 1
+    assert rows[0]["id"] == tag_id
+    assert rows[0]["name"] == "vip"
+    assert rows[0]["color"] == "red"
+
+    user_dao.save_user_tags("user-a", "vip,trial", "2026-06-02")
+    assert user_dao.get_user_tags("user-a") == "vip,trial"
+
+    assert user_dao.delete_user_tag_by_name("vip") is True
+    assert user_dao.delete_user_tag_by_name("missing") is False
+    assert user_dao.list_user_tags() == []
+    assert user_dao.get_user_tags("user-a") == "trial"
 
 
 def test_init_db_creates_compat_point_core_tables_from_schema_registry(monkeypatch, tmp_path):
@@ -248,6 +276,7 @@ def test_database_system_init_uses_registry_for_selected_simple_tables():
     assert "CREATE TABLE IF NOT EXISTS media_requests" in source
     assert "CREATE TABLE IF NOT EXISTS login_failures" not in source
     assert "CREATE TABLE IF NOT EXISTS api_tokens" not in source
+    assert "CREATE TABLE IF NOT EXISTS user_tags" not in source
     assert "ALTER TABLE scratch_cards ADD COLUMN" not in source
 
 
