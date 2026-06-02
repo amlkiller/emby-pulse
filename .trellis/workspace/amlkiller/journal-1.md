@@ -1707,3 +1707,36 @@ Moved the proxy router clear-cache admin check off private users auth imports, r
 ### Next Steps
 
 - None - task complete
+
+
+## Session 52: Reports router public auth facade boundary
+
+**Date**: 2026-06-02
+**Task**: Reports router public auth facade boundary
+**Branch**: `main`
+
+### Summary
+
+Moved the reports router preview and push admin checks off private users auth imports, routed them through the users public facade, and added import-boundary plus preview/push authorization tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1aea5ea` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

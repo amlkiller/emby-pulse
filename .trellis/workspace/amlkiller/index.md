@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 51
+- **Total Sessions**: 52
 - **Last Active**: 2026-06-02
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1709 | Active |
+| `journal-1.md` | ~1742 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 52 | 2026-06-02 | Reports router public auth facade boundary | `1aea5ea` | `main` |
 | 51 | 2026-06-02 | Proxy router public auth facade boundary | `9fd1323` | `main` |
 | 50 | 2026-06-02 | Playback calendar public facade boundary | `2dd1107` | `main` |
 | 49 | 2026-06-02 | Plugins router public facade boundary | `7d794ee` | `main` |
