@@ -1027,7 +1027,6 @@ class NotificationBot:
         for ep in episodes: season_groups[ep.get('ParentIndexNumber', 1)].append(ep)
             
         season_strs = []; total_eps = 0
-        def zf(num): return str(num).zfill(2)
 
         for s_idx in sorted(season_groups.keys()):
             s_eps = season_groups[s_idx]
@@ -1038,12 +1037,12 @@ class NotificationBot:
                 for idx in ep_indices[1:]:
                     if idx == end + 1: end = idx
                     else:
-                        ranges.append(f"E{zf(start)}" if start == end else f"E{zf(start)}-E{zf(end)}")
+                        ranges.append(f"E{str(start).zfill(2)}" if start == end else f"E{str(start).zfill(2)}-E{str(end).zfill(2)}")
                         start = idx; end = idx
-                ranges.append(f"E{zf(start)}" if start == end else f"E{zf(start)}-E{zf(end)}")
-                season_strs.append(f"S{zf(s_idx)}{', '.join(ranges)}")
+                ranges.append(f"E{str(start).zfill(2)}" if start == end else f"E{str(start).zfill(2)}-E{str(end).zfill(2)}")
+                season_strs.append(f"S{str(s_idx).zfill(2)}{', '.join(ranges)}")
             elif len(ep_indices) == 1:
-                season_strs.append(f"S{zf(s_idx)}E{zf(ep_indices[0])}")
+                season_strs.append(f"S{str(s_idx).zfill(2)}E{str(ep_indices[0]).zfill(2)}")
 
         final_ep_str = ", ".join(season_strs)
         title_suffix = f"{final_ep_str} (共{total_eps}集)" if total_eps > 1 else final_ep_str
