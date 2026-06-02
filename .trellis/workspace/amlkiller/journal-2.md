@@ -803,3 +803,36 @@ Merged Compiled into main using Compiled's wrapper-removal direction, resolved c
 ### Next Steps
 
 - None - task complete
+
+
+## Session 84: Remove notification rule public wrapper
+
+**Date**: 2026-06-03
+**Task**: Remove notification rule public wrapper
+**Branch**: `main`
+
+### Summary
+
+Removed redundant notification rule public-service wrapper, pointed rule lookups at notify_admin, preserved notification send facade, and verified compile/import scans plus focused and full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `753b195` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

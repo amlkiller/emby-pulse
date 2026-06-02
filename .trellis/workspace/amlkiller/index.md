@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 83
+- **Total Sessions**: 84
 - **Last Active**: 2026-06-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~805 | Active |
+| `journal-2.md` | ~838 | Active |
 | `journal-1.md` | ~1973 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 84 | 2026-06-03 | Remove notification rule public wrapper | `753b195` | `main` |
 | 83 | 2026-06-03 | Merge Compiled wrapper cleanup | `8d3361f`, `9f3cd0a` | `main` |
 | 82 | 2026-06-03 | Notification bot reports facade | `3959390`, `8c702e5` | `main` |
 | 81 | 2026-06-03 | Media requests user bot notification facade | `61fa108`, `554752c` | `main` |
