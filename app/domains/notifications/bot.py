@@ -20,11 +20,11 @@ from app.infra.config.bot_settings import (
 from app.infra.config.notification_settings import get_wecom_runtime_config
 from app.infra.config.user_bot_settings import (
     get_user_bot_allowed_groups,
-    get_user_bot_notify_group_enabled,
-    get_user_bot_notify_user_enabled,
-    get_user_bot_open_reg_enabled,
     get_user_bot_reg_quota,
     get_user_bot_reg_quota_mode,
+    is_user_bot_open_reg_enabled,
+    is_user_bot_open_reg_notify_group_enabled,
+    is_user_bot_open_reg_notify_user_enabled,
     set_user_bot_registration_batch_used,
 )
 from app.domains.notifications.bot_admin_dao import (
@@ -269,8 +269,8 @@ def api_send_open_reg_notify(request: Request, data: dict):
         return {"status": "error", "message": "需要管理员权限"}
     
     is_open = data.get("is_open", False)
-    notify_user = get_user_bot_notify_user_enabled()
-    notify_group = get_user_bot_notify_group_enabled()
+    notify_user = is_user_bot_open_reg_notify_user_enabled()
+    notify_group = is_user_bot_open_reg_notify_group_enabled()
     
     if not notify_user and not notify_group:
         return {"status": "success", "message": "未开启通知"}
@@ -700,7 +700,7 @@ async def api_get_reg_quota_status(request: Request):
             "batch_used": batch_used,
             "total_users": total_users,
             "open_reg_total": open_reg_total,
-            "open_reg_enabled": get_user_bot_open_reg_enabled(),
+            "open_reg_enabled": is_user_bot_open_reg_enabled(),
             "reg_queue": {
                 "active": user_bot_service._reg_active,
                 "waiting": user_bot_service._reg_waiters,

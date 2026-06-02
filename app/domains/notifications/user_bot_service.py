@@ -27,11 +27,11 @@ from app.infra.config.user_bot_settings import (
     get_user_bot_allow_routes,
     get_user_bot_block_routes,
     get_user_bot_max_reg,
-    get_user_bot_notify_group_enabled,
-    get_user_bot_notify_user_enabled,
-    get_user_bot_open_reg_enabled,
     get_user_bot_required_channels,
     get_user_bot_required_groups,
+    is_user_bot_open_reg_enabled,
+    is_user_bot_open_reg_notify_group_enabled,
+    is_user_bot_open_reg_notify_user_enabled,
     set_user_bot_open_reg_enabled,
     set_user_bot_token,
     set_user_bot_allowed_groups,
@@ -214,8 +214,8 @@ def _leave_reg_queue():
 
 def _send_open_reg_closed_notify(reason=""):
     """发送开放注册关闭通知"""
-    notify_user = get_user_bot_notify_user_enabled()
-    notify_group = get_user_bot_notify_group_enabled()
+    notify_user = is_user_bot_open_reg_notify_user_enabled()
+    notify_group = is_user_bot_open_reg_notify_group_enabled()
     
     if not notify_user and not notify_group:
         return
@@ -476,8 +476,8 @@ _user_state = {}  # tg_user_id -> {"action": "register_name", ...}
 
 def _send_open_reg_closed_notify(reason=""):
     """发送开放注册关闭通知（名额已满等场景）"""
-    notify_user = get_user_bot_notify_user_enabled()
-    notify_group = get_user_bot_notify_group_enabled()
+    notify_user = is_user_bot_open_reg_notify_user_enabled()
+    notify_group = is_user_bot_open_reg_notify_group_enabled()
     
     if not notify_user and not notify_group:
         return
@@ -809,7 +809,7 @@ def cmd_bind(chat_id, tg_user_id, args, tg_username="", tg_display_name=""):
 
 
 def cmd_register(chat_id, tg_user_id, tg_name):
-    if not get_user_bot_open_reg_enabled():
+    if not is_user_bot_open_reg_enabled():
         _send(chat_id, "❌ 开放注册未开启，请联系管理员获取注册码后使用 /code 注册码")
         return
     if _get_binding(tg_user_id):
@@ -1051,7 +1051,7 @@ def _do_register(chat_id, tg_user_id, custom_name, tg_username="", tg_display_na
     quota = 0
     try:
         # 检查开放注册是否开启
-        if not get_user_bot_open_reg_enabled():
+        if not is_user_bot_open_reg_enabled():
             _send(chat_id, "❌ 开放注册已关闭，请联系管理员获取注册码后使用 /code 注册码")
             return
 
