@@ -19,14 +19,12 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 
 from app.plugins.user_backup.user_backup_dao import (
-    get_user_meta_for_backup,
     list_point_logs_for_backup,
     list_tg_bindings_detail_for_backup,
-    list_users_meta_for_backup,
     replace_point_logs_for_backup,
-    upsert_user_meta_for_backup,
 )
 from app.plugins.base import PluginBase
+from app.domains.users import user_dao
 from app.domains.users import public_service as user_service
 from app.infra.clients.media_server_client import media_api
 from app.infra.clients.webdav_client import webdav_client
@@ -166,7 +164,7 @@ class UserBackupPlugin(PluginBase):
             emby_users = res.json()
             
             # 获取本地扩展属性
-            meta_rows = list_users_meta_for_backup()
+            meta_rows = user_dao.list_all_user_meta()
             meta_map = {r['user_id']: dict(r) for r in meta_rows} if meta_rows else {}
             
             # 获取 TG 绑定关系
@@ -823,7 +821,7 @@ class UserBackupPlugin(PluginBase):
                             current_policy = res.json().get('Policy', {})
                         
                         # 获取当前 meta
-                        current_meta = get_user_meta_for_backup(uid)
+                        current_meta = user_dao.get_user_meta(uid)
                         
                         # 更新 meta 字段
                         meta_updates = {}
@@ -969,9 +967,9 @@ class UserBackupPlugin(PluginBase):
                         # 执行更新
                         if meta_updates:
                             if current_meta:
-                                upsert_user_meta_for_backup(uid, meta_updates, datetime.now().isoformat())
+                                user_dao.upsert_user_meta_fields(uid, meta_updates, datetime.now().isoformat())
                             else:
-                                upsert_user_meta_for_backup(uid, meta_updates, datetime.now().isoformat())
+                                user_dao.upsert_user_meta_fields(uid, meta_updates, datetime.now().isoformat())
                         
                         if policy_updates and user_exists:
                             new_policy = {**current_policy, **policy_updates}
