@@ -4,7 +4,7 @@ import re
 from datetime import date
 from fastapi import APIRouter, Request, Depends, BackgroundTasks
 from fastapi.responses import JSONResponse
-from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.domains.users import public_service as user_service
 from app.core.security import validate_password_strength  # 🔒 统一密码强度校验
 from pydantic import BaseModel
 from typing import Optional, List
@@ -391,7 +391,7 @@ def request_system_logout(request: Request):
 @router.get("/api/requests/item_info")
 def get_item_info(item_id: str, request: Request):
     # 🔒 安全检查：管理员或已绑定 Emby 的报片用户
-    if not (is_admin_user(request) or request.session.get("req_user")):
+    if not (user_service.is_admin_user(request) or request.session.get("req_user")):
         return {"status": "error", "message": "请先登录"}
     try:
         admin_id = get_emby_admin()
@@ -542,7 +542,7 @@ def get_tmdb_trending(request: Request):
 @router.get("/api/requests/tv/{tmdb_id}")
 def get_tv_details(tmdb_id: int, request: Request):
     # 🔒 安全检查：管理员或已绑定 Emby 的报片用户
-    if not (is_admin_user(request) or request.session.get("req_user")):
+    if not (user_service.is_admin_user(request) or request.session.get("req_user")):
         return {"status": "error", "message": "请先登录"}
     proxies = get_safe_proxies()
     try:
@@ -587,7 +587,7 @@ def get_tv_details(tmdb_id: int, request: Request):
 @router.get("/api/requests/check/{media_type}/{tmdb_id}")
 def check_local_status(media_type: str, tmdb_id: int, request: Request):
     # 🔒 安全检查：管理员或已绑定 Emby 的报片用户
-    if not (is_admin_user(request) or request.session.get("req_user")):
+    if not (user_service.is_admin_user(request) or request.session.get("req_user")):
         return {"status": "error", "message": "请先登录"}
     exists = check_emby_exists(tmdb_id, media_type)
     return {"status": "success", "exists": exists}
@@ -724,7 +724,7 @@ def get_my_requests(request: Request):
 
 @router.get("/api/manage/requests")
 def get_all_requests(request: Request):
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     rows = list_all_requests()
     
     # 🔥 收集需要获取 TMDB 封面的 tmdb_id
@@ -813,7 +813,7 @@ def get_all_requests(request: Request):
 
 @router.post("/api/manage/requests/batch")
 def batch_manage_action(data: BulkAdminActionModel, request: Request):
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     
     # 🔥 预先批量查询所有需要通知的工单信息（优化数据库查询）
     notify_items = []  # 收集所有需要通知的工单
@@ -934,13 +934,13 @@ def batch_manage_action(data: BulkAdminActionModel, request: Request):
 
 @router.post("/api/manage/requests/action")
 def manage_request_action(data: AdminActionModel, request: Request):
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     return batch_manage_action(BulkAdminActionModel(items=[{"tmdb_id": data.tmdb_id, "season": data.season}], action=data.action, reject_reason=data.reject_reason), request)
 
 @router.get("/api/requests/pending_notify")
 def get_pending_notify(request: Request):
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     try:
         req_count, req_rows, feed_count, feed_rows = get_pending_notify_data()
         
@@ -1055,14 +1055,14 @@ def get_my_feedback(request: Request):
 
 @router.get("/api/manage/feedback")
 def get_all_feedback(request: Request):
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     rows = list_all_feedback()
     results = [{"id": r[0], "item_name": r[1], "username": r[2], "issue_type": r[3], "description": r[4], "status": r[5], "created_at": r[6]} for r in rows]
     return {"status": "success", "data": results}
 
 @router.post("/api/manage/feedback/action")
 def manage_feedback_action(data: FeedbackActionModel, request: Request):
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     status_map = {"fix": 1, "done": 2, "reject": 3, "delete": -1}
     st = status_map.get(data.action, 0)
     update_feedback_status(data.id, st)
@@ -1070,7 +1070,7 @@ def manage_feedback_action(data: FeedbackActionModel, request: Request):
 
 @router.post("/api/manage/feedback/batch")
 def batch_feedback_action(data: BulkFeedbackActionModel, request: Request):
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
+    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     status_map = {"fix": 1, "done": 2, "reject": 3, "delete": -1}
     st = status_map.get(data.action, 0)
     update_feedback_status_batch(data.items, st)
@@ -1378,7 +1378,7 @@ def refresh_community_cache_api(request: Request):
     """手动刷新用户社区首页缓存（管理员接口）"""
     if not request.session.get("user"):
         return JSONResponse(status_code=401, content={"status": "error", "message": "未登录"})
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return JSONResponse(status_code=403, content={"status": "error", "message": "需要管理员权限"})
 
     # 后台执行刷新
@@ -1391,7 +1391,7 @@ def clear_community_cache_api(request: Request):
     """清除用户社区首页缓存（管理员接口）"""
     if not request.session.get("user"):
         return JSONResponse(status_code=401, content={"status": "error", "message": "未登录"})
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return JSONResponse(status_code=403, content={"status": "error", "message": "需要管理员权限"})
 
     _invalidate_cache()
@@ -1832,7 +1832,7 @@ async def submit_update_request_batch(request: Request):
 def search_episodes_for_update(payload: dict, request: Request):
     """搜索单集资源（追新工单使用，复用缺集搜索逻辑）"""
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "无权访问"}
     
     tmdb_id = payload.get("tmdb_id")
@@ -1893,7 +1893,7 @@ def search_episodes_for_update(payload: dict, request: Request):
 def download_episodes_for_update(payload: dict, request: Request):
     """下载单集资源（追新工单使用，复用缺集下载逻辑）"""
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "无权访问"}
     
     series_id = payload.get("series_id")
