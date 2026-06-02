@@ -323,7 +323,8 @@ def test_user_bot_worker_threads_stop_and_restart(monkeypatch):
     monkeypatch.setattr(user_bot_service, "get_user_bot_token", lambda: "token")
     monkeypatch.setattr(user_bot_service.UserBot, "_set_commands", lambda self: None)
     monkeypatch.setattr(user_bot_service, "_load_batch_used_from_cfg", lambda: None)
-    monkeypatch.setattr(user_bot_service, "_start_batch_flush_thread", lambda: None)
+    user_bot_service._batch_flush_thread = None
+    user_bot_service._batch_flush_stop.clear()
 
     flush_calls = []
     monkeypatch.setattr(user_bot_service, "_flush_batch_used", lambda force=False: flush_calls.append(force))
@@ -358,47 +359,67 @@ def test_user_bot_worker_threads_stop_and_restart(monkeypatch):
     user_bot.start()
     user_bot.start()
 
-    assert len(FakeThread.instances) == 2
+    assert len(FakeThread.instances) == 3
     assert user_bot.poll_thread.name == "user-bot-polling"
     assert user_bot.scheduler_thread.name == "user-bot-scheduler"
+    assert user_bot_service._batch_flush_thread.name == "batch-flush"
     assert user_bot._stop_event.is_set() is False
 
     user_bot.stop()
 
     assert flush_calls == [True]
     assert user_bot._stop_event.is_set() is True
+    assert user_bot_service._batch_flush_stop.is_set() is True
     assert FakeThread.instances[0].join_timeout == 1
     assert FakeThread.instances[1].join_timeout == 1
+    assert FakeThread.instances[2].join_timeout == 1
     assert user_bot.poll_thread is None
     assert user_bot.scheduler_thread is None
+    assert user_bot_service._batch_flush_thread is None
 
     user_bot.start()
 
-    assert len(FakeThread.instances) == 4
+    assert len(FakeThread.instances) == 6
     assert user_bot._stop_event.is_set() is False
-    assert user_bot.poll_thread is FakeThread.instances[2]
-    assert user_bot.scheduler_thread is FakeThread.instances[3]
+    assert user_bot_service._batch_flush_stop.is_set() is False
+    assert user_bot.poll_thread is FakeThread.instances[3]
+    assert user_bot.scheduler_thread is FakeThread.instances[4]
+    assert user_bot_service._batch_flush_thread is FakeThread.instances[5]
 
     polling_source = inspect.getsource(user_bot_service.UserBot._polling_loop)
     scheduler_source = inspect.getsource(user_bot_service.UserBot._scheduler_loop)
+    batch_flush_source = inspect.getsource(user_bot_service._batch_flush_loop)
     assert "_stop_event.wait(3)" in polling_source
     assert "_stop_event.wait(5)" in polling_source
     assert "_stop_event.wait(30)" in scheduler_source
     assert "_stop_event.wait(60)" in scheduler_source
+    assert "_batch_flush_stop.wait(BATCH_FLUSH_INTERVAL)" in batch_flush_source
+    assert "_batch_flush_stop.wait(5)" in batch_flush_source
     assert "time.sleep" not in polling_source
     assert "time.sleep" not in scheduler_source
+    assert "time.sleep" not in batch_flush_source
 
     sticky_bot = user_bot_service.UserBot()
     sticky_bot.start()
     sticky_bot.poll_thread.join = lambda timeout=None: setattr(sticky_bot.poll_thread, "join_timeout", timeout)
+    user_bot_service._batch_flush_thread.join = (
+        lambda timeout=None: setattr(user_bot_service._batch_flush_thread, "join_timeout", timeout)
+    )
     sticky_bot.stop()
-    assert sticky_bot.poll_thread is FakeThread.instances[4]
+    assert sticky_bot.poll_thread is FakeThread.instances[6]
     assert sticky_bot.scheduler_thread is None
+    assert user_bot_service._batch_flush_thread is FakeThread.instances[5]
+    assert user_bot_service._batch_flush_thread.join_timeout == 1
 
     sticky_bot.start()
-    assert len(FakeThread.instances) == 6
-    assert sticky_bot.poll_thread is FakeThread.instances[4]
+    assert len(FakeThread.instances) == 8
+    assert sticky_bot.poll_thread is FakeThread.instances[6]
     assert sticky_bot.scheduler_thread is None
+    assert user_bot_service._batch_flush_thread is FakeThread.instances[5]
+
+    user_bot_service._batch_flush_thread.alive = False
+    user_bot_service._stop_batch_flush_thread()
+    assert user_bot_service._batch_flush_thread is None
 
 
 def test_notification_media_quality_uses_color_transfer_hdr_fallback(monkeypatch):

@@ -879,6 +879,17 @@ def _start_batch_flush_thread():
     _batch_flush_thread.start()
 
 
+def _stop_batch_flush_thread():
+    """停止后台 flush 线程并清理已停止的句柄"""
+    global _batch_flush_thread
+    _batch_flush_stop.set()
+    thread = _batch_flush_thread
+    if thread and thread.is_alive():
+        thread.join(timeout=1)
+    if not thread or not thread.is_alive():
+        _batch_flush_thread = None
+
+
 def get_batch_used_snapshot():
     """对外暴露的 batch_used 当前值，供 API 读取（避免 cfg.json 滞后）"""
     with _batch_used_lock:
@@ -3604,7 +3615,7 @@ class UserBot:
         self.running = False
         self._stop_event.set()
         # 同步 flush 一次防止丢失增量
-        _batch_flush_stop.set()
+        _stop_batch_flush_thread()
         try:
             _flush_batch_used(force=True)
         except Exception:
