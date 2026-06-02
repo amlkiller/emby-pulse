@@ -8,7 +8,7 @@ import datetime
 import threading
 import time
 from fastapi import APIRouter, Request
-from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.domains.users import public_service as user_service
 from pydantic import BaseModel
 from typing import Optional, List
 from app.core.security_utils import safe_error_message
@@ -49,7 +49,7 @@ class CalendarNotifyConfig(BaseModel):
 def get_notify_config(request: Request):
     """获取日历通知配置"""
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "未授权"}
     
     try:
@@ -75,7 +75,7 @@ def get_notify_config(request: Request):
 def save_notify_config(request: Request, config: CalendarNotifyConfig):
     """保存日历通知配置"""
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "未授权"}
     
     try:
@@ -98,7 +98,7 @@ def save_notify_config(request: Request, config: CalendarNotifyConfig):
 def test_notify(request: Request):
     """测试发送日历通知"""
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "未授权"}
     
     try:
@@ -114,7 +114,7 @@ def test_notify(request: Request):
 def manual_send(request: Request):
     """手动触发发送日历通知"""
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "未授权"}
     
     try:
