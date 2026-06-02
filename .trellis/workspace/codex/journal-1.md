@@ -104,3 +104,36 @@ Removed pure _log compatibility aliases from auto_expire, cloud115, and keep_ali
 ### Next Steps
 
 - None - task complete
+
+
+## Session 4: Remove notification DAO short alias
+
+**Date**: 2026-06-03
+**Task**: Remove notification DAO short alias
+**Branch**: `Compiled`
+
+### Summary
+
+Removed the pure notification_dao.add_sys_notification alias and pointed callers/tests at add_system_notification directly. Kept database.py add_sys_notification because it adds error logging. Verified compileall, focused notification/user/media-request boundary tests, search assertion, and full pytest suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9bf53cb` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
