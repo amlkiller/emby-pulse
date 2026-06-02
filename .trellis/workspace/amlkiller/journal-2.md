@@ -667,3 +667,37 @@ Moved risk service user warning and ban notification sends through notifications
 ### Next Steps
 
 - None - task complete
+
+
+## Session 80: Media requests playback stats facade
+
+**Date**: 2026-06-03
+**Task**: Media requests playback stats facade
+**Branch**: `main`
+
+### Summary
+
+Moved media requests top/latest playback stats calls through playback public_service, added public facade wrappers and boundary tests. Verified compile/import checks, private import scan, focused tests, and full pytest: 393 passed, 3 warnings.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b1d278b` | (see git log) |
+| `fc615fe` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
