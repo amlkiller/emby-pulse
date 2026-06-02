@@ -74,7 +74,7 @@ def test_bootstrap_services_use_registry_and_skip_duplicate_starts(monkeypatch):
     monkeypatch.setattr(services, "stop_calendar_service", record("stop:calendar"))
     monkeypatch.setattr(services, "start_notifications_router_services", record("notifications-router"))
     monkeypatch.setattr(services, "start_calendar_notify_services", record("calendar-notify"))
-    monkeypatch.setattr(services, "stop_calendar_notify_services", record("stop:calendar-notify"))
+    monkeypatch.setattr(services.calendar_notify_service, "stop", record("stop:calendar-notify"))
     monkeypatch.setattr(services, "init_dedupe_db", record("dedupe"))
     monkeypatch.setattr(services, "start_gap_services", record("gaps"))
     monkeypatch.setattr(services, "stop_gap_services", record("stop:gaps"))
@@ -142,7 +142,7 @@ def test_bootstrap_uses_calendar_notify_owner_without_service_wrapper():
     assert not (_REPO_ROOT / "app/domains/notifications/calendar_notify_service.py").exists()
     assert (
         "from app.domains.notifications.calendar_notify import "
-        "start_calendar_notify_services, stop_calendar_notify_services"
+        "calendar_notify_service, start_calendar_notify_services"
     ) in services_source
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):

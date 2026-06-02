@@ -7,13 +7,13 @@ if _repo_root not in sys.path:
     sys.path.insert(0, _repo_root)
 
 
-def test_calendar_notify_stop_services_stops_global_service(monkeypatch):
+def test_calendar_notify_service_stop_stops_global_service(monkeypatch):
     from app.domains.notifications import calendar_notify
 
     calls = []
     monkeypatch.setattr(calendar_notify.calendar_notify_service, "stop", lambda: calls.append("stop"))
 
-    calendar_notify.stop_calendar_notify_services()
+    calendar_notify.calendar_notify_service.stop()
 
     assert calls == ["stop"]
 

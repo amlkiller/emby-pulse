@@ -375,7 +375,3 @@ def init_calendar_notify_service():
 def start_calendar_notify_services():
     _ensure_table()
     init_calendar_notify_service()
-
-
-def stop_calendar_notify_services():
-    calendar_notify_service.stop()
