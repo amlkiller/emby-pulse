@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Request
-from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
 from fastapi.responses import RedirectResponse
 from app.core.config import templates
+from app.domains.system import public_service as system_service
+from app.domains.users import public_service as user_service
 from app.plugins import get_all_plugins, set_plugin_enabled, get_plugin_config, save_plugin_config, update_plugin_config, get_plugin, get_plugin_logs, clear_plugin_logs, _registry
-from app.domains.users.auth import check_permission, is_admin_user  # 🔒 引入管理员权限检查
 
 router = APIRouter()
 
@@ -23,22 +23,20 @@ def set_app(app):
 
 @router.get("/plugins")
 async def plugins_page(request: Request):
-    from app.domains.system.views import get_common_vars
-
     if not request.session.get("user"):
         return RedirectResponse("/login", status_code=303)
     
     # 权限检查
-    if not check_permission(request, "plugins"):
+    if not user_service.check_permission(request, "plugins"):
         return RedirectResponse("/?no_permission=1", status_code=303)
     
-    return templates.TemplateResponse("plugins.html", get_common_vars(request, "plugins"))
+    return templates.TemplateResponse("plugins.html", system_service.get_common_vars(request, "plugins"))
 
 
 @router.get("/api/plugins")
 def api_list_plugins(request: Request):
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     return {"status": "success", "data": get_all_plugins()}
 
@@ -46,7 +44,7 @@ def api_list_plugins(request: Request):
 @router.post("/api/plugins/{plugin_id}/toggle")
 async def api_toggle_plugin(plugin_id: str, request: Request):
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     data = await request.json()
     enabled = data.get("enabled", False)
@@ -93,7 +91,7 @@ async def api_toggle_plugin(plugin_id: str, request: Request):
 @router.get("/api/plugins/{plugin_id}/config")
 def api_get_plugin_config(plugin_id: str, request: Request):
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     plugin = get_plugin(plugin_id)
     if not plugin:
@@ -117,7 +115,7 @@ def api_get_plugin_config(plugin_id: str, request: Request):
 @router.post("/api/plugins/{plugin_id}/config")
 async def api_save_plugin_config(plugin_id: str, request: Request):
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     data = await request.json()
     # 支持两种格式：直接传配置对象 或 包裹在 config 字段中
@@ -131,7 +129,7 @@ async def api_save_plugin_config(plugin_id: str, request: Request):
 def api_get_plugin_logs(plugin_id: str, request: Request, limit: int = 50):
     """获取插件日志"""
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     plugin = get_plugin(plugin_id)
     if not plugin:
@@ -144,7 +142,7 @@ def api_get_plugin_logs(plugin_id: str, request: Request, limit: int = 50):
 def api_clear_plugin_logs(plugin_id: str, request: Request):
     """清空插件日志"""
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     plugin = get_plugin(plugin_id)
     if not plugin:
@@ -160,7 +158,7 @@ def api_clear_plugin_logs(plugin_id: str, request: Request):
 def api_get_notify_template(template_key: str, request: Request, style: str = "default"):
     """获取指定风格的模板内容"""
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     plugin = get_plugin("notify_template")
     if not plugin:
@@ -185,7 +183,7 @@ def api_get_notify_template(template_key: str, request: Request, style: str = "d
 async def api_preview_notify_template(request: Request):
     """预览模板"""
     # 🔒 安全检查：必须管理员
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"status": "error", "message": "需要管理员权限"}
     data = await request.json()
     template_key = data.get("template_key", "library_new_episode")
