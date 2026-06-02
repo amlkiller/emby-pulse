@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 2
+- **Total Sessions**: 3
 - **Last Active**: 2026-06-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~73 | Active |
+| `journal-1.md` | ~106 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 3 | 2026-06-03 | Remove plugin log alias wrappers | `81baf64` | `Compiled` |
 | 2 | 2026-06-03 | Remove notification orchestrator pass-throughs | `a519821` | `Compiled` |
 | 1 | 2026-06-03 | Remove pass-through wrappers | `f6a8bce` | `Compiled` |
 <!-- @@@/auto:session-history -->
