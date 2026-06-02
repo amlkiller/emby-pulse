@@ -1674,3 +1674,36 @@ Moved the playback calendar router off private users auth and system views impor
 ### Next Steps
 
 - None - task complete
+
+
+## Session 51: Proxy router public auth facade boundary
+
+**Date**: 2026-06-02
+**Task**: Proxy router public auth facade boundary
+**Branch**: `main`
+
+### Summary
+
+Moved the proxy router clear-cache admin check off private users auth imports, routed it through the users public facade, and added import-boundary plus cache authorization tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9fd1323` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
