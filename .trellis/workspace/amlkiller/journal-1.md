@@ -1278,3 +1278,36 @@ Moved notification bot service EventBus subscriptions into reversible start/stop
 ### Next Steps
 
 - None - task complete
+
+
+## Session 39: Schema index fact-source convergence
+
+**Date**: 2026-06-02
+**Task**: Schema index fact-source convergence
+**Branch**: `main`
+
+### Summary
+
+Centralized simple schema index DDL in TABLE_INDEXES, taught schema_bootstrap and repair paths to apply registered indexes with legacy-column guards, removed local index SQL from database and DAO bootstrap helpers, updated backend database specs, and verified compile, ruff, focused schema tests, diff check, and full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b76a84f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

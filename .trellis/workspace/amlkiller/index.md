@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 38
+- **Total Sessions**: 39
 - **Last Active**: 2026-06-02
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~1280 | Active |
+| `journal-1.md` | ~1313 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 39 | 2026-06-02 | Schema index fact-source convergence | `b76a84f` | `main` |
 | 38 | 2026-06-02 | Notification bot event subscription stop | `17bead7` | `main` |
 | 37 | 2026-06-02 | Risk monitor event subscription stop | `ff830c1` | `main` |
 | 36 | 2026-06-02 | Bot admin message plugin lifecycle stop | `3b2cad6` | `main` |
