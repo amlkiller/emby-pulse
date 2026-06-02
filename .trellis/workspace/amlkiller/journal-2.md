@@ -1793,3 +1793,36 @@ Extracted scratch card persistence functions from the large points point_dao mod
 ### Next Steps
 
 - None - task complete
+
+
+## Session 114: Extract media request community cache service
+
+**Date**: 2026-06-03
+**Task**: Extract media request community cache service
+**Branch**: `main`
+
+### Summary
+
+Extracted user community cache state, refresh implementation, and lifecycle loop from the large media_requests router into a domain-local community_cache_service while preserving router compatibility exports and monkeypatch behavior. Verified with compile checks, focused lifecycle/auth tests, import compatibility check, and full pytest suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `acd860a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
