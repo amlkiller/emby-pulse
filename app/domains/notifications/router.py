@@ -14,7 +14,7 @@ from app.infra.db.notification_dao import (
     list_notifications,
     mark_notifications_read,
 )
-from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
+from app.domains.users import public_service as user_service
 
 logger = logging.getLogger("uvicorn")
 
@@ -39,7 +39,7 @@ def start_notifications_router_services():
 @router.get("")
 @router.get("/")
 async def get_notifications(request: Request, limit: int = 10, history: bool = False):
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"success": False, "msg": "需要管理员权限"}
 
     try:
@@ -53,7 +53,7 @@ async def get_notifications(request: Request, limit: int = 10, history: bool = F
 
 @router.post("/read")
 async def mark_as_read(req: MarkReadReq, request: Request):
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"success": False, "msg": "需要管理员权限"}
 
     try:
@@ -65,7 +65,7 @@ async def mark_as_read(req: MarkReadReq, request: Request):
 
 @router.delete("/clear")
 async def clear_notifications(request: Request):
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"success": False, "msg": "需要管理员权限"}
 
     try:
@@ -77,7 +77,7 @@ async def clear_notifications(request: Request):
 
 @router.delete("/{nid}")
 async def delete_single_notification(nid: int, request: Request):
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"success": False, "msg": "需要管理员权限"}
 
     try:
@@ -89,7 +89,7 @@ async def delete_single_notification(nid: int, request: Request):
 
 @router.get("/test_push")
 async def test_push_notification(request: Request):
-    if not is_admin_user(request):
+    if not user_service.is_admin_user(request):
         return {"success": False, "msg": "需要管理员权限"}
 
     ensure_notifications_table()
