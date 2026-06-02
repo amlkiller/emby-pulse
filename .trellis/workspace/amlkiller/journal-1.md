@@ -1113,3 +1113,36 @@ Added a stoppable/restartable lifecycle hook for the bootstrap-started gap backg
 ### Next Steps
 
 - None - task complete
+
+
+## Session 34: Dashboard cache stop hook
+
+**Date**: 2026-06-02
+**Task**: Dashboard cache stop hook
+**Branch**: `main`
+
+### Summary
+
+Added a stoppable and restartable lifecycle hook for bootstrap-started dashboard cache tasks, saved and cancelled preload and refresh asyncio task handles, registered the dashboard-cache bootstrap stop callback, added focused cancel/restart and registry tests, and verified focused checks plus full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a588274` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
