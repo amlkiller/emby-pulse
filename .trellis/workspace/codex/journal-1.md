@@ -896,3 +896,36 @@ Removed the module-level save_config redirect, updated system settings routes an
 ### Next Steps
 
 - None - task complete
+
+
+## Session 28: Remove weather preload redirect
+
+**Date**: 2026-06-03
+**Task**: Remove weather preload redirect
+**Branch**: `Compiled`
+
+### Summary
+
+Removed preload_weather_cache because it only forwarded to start_weather_cache_refresh; bootstrap runtime now calls the refresh starter directly. Verified compile, imports, focused checks, and the full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `788a81e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
