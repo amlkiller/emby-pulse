@@ -439,7 +439,7 @@ tokens = list_api_tokens(user_id)
 - New local DDL in `app.infra.db.database._create_system_tables()` for tables listed in `_REGISTRY_SYSTEM_INIT_TABLES` -> fail focused database-init/schema registry tests.
 - New local `CREATE TABLE IF NOT EXISTS user_tags` in `app.infra.db.database._create_system_tables()` -> fail focused database-init/schema registry tests; `user_tags` is registry-owned and belongs in `_REGISTRY_SYSTEM_INIT_TABLES`.
 - New local `CREATE TABLE IF NOT EXISTS tv_series_status` in `app.infra.db.database._create_system_tables()` -> fail focused database-init/schema registry tests; `tv_series_status` is registry-owned and belongs in `_REGISTRY_SYSTEM_INIT_TABLES`.
-- New local `CREATE TABLE IF NOT EXISTS sys_notifications` or `CREATE TABLE IF NOT EXISTS sys_dashboard` in small bootstrap helpers -> fail focused bootstrap/schema registry tests.
+- New local `CREATE TABLE IF NOT EXISTS sys_notifications`, `CREATE TABLE IF NOT EXISTS sys_dashboard`, or `CREATE TABLE IF NOT EXISTS audit_logs` in small bootstrap helpers -> fail focused bootstrap/schema registry tests.
 - New local gap table DDL in `app.domains.media_requests.gap_dao.ensure_gap_tables()` for registry-owned `gap_*` tables -> fail focused gap bootstrap/schema registry tests.
 - New local dedupe table DDL or dedupe ALTER map in `app.domains.playback.dedupe_dao.init_dedupe_tables()` for registry-owned `dedupe_*` tables -> fail focused dedupe bootstrap/schema registry tests.
 - New local notification/message table DDL in selected bootstrap helpers for registry-owned `request_admin_messages`, `bot_notify_mutes`, `notify_rules`, `msg_*`, `user_mutes`, `announcements`, or `announcement_reads` tables -> fail focused notification bootstrap/schema registry tests.
@@ -479,6 +479,7 @@ tokens = list_api_tokens(user_id)
 - Good: `app.infra.db.database._create_system_tables()` creates `login_failures` and `api_tokens` through `_REGISTRY_SYSTEM_INIT_TABLES` plus `schema_bootstrap.ensure_registered_table(...)`, while keeping lookup indexes local until index metadata is centralized.
 - Good: `app.infra.db.notification_dao.ensure_notifications_table()` uses `TABLE_SCHEMAS["sys_notifications"]` and `TABLE_ALTERS["sys_notifications"]`.
 - Good: `app.domains.system.system_tool_dao` dashboard helpers use `TABLE_SCHEMAS["sys_dashboard"]`.
+- Good: `app.infra.db.audit_logger_dao.ensure_audit_table()` creates registry-owned `audit_logs` through `schema_bootstrap.ensure_registered_table(...)` while keeping audit-log indexes local until index metadata is centralized.
 - Good: `app.domains.media_requests.gap_dao.ensure_gap_tables()` loops its registry-owned `gap_*` table subset through `TABLE_SCHEMAS`, applies `TABLE_ALTERS["gap_perfect_series"]`, and recreates legacy `gap_scan_cache` from `TABLE_SCHEMAS["gap_scan_cache"]`.
 - Good: `app.domains.playback.dedupe_dao.init_dedupe_tables()` creates registry-owned `dedupe_*` tables from `TABLE_SCHEMAS`, applies `TABLE_ALTERS`, and keeps only the legacy whitelist data-copy migration logic local.
 - Good: small notification/message bootstrap helpers create registry-owned request-admin, notify-rule, bot-mute, message, notify-block, user-mute, and announcement tables from `TABLE_SCHEMAS` / `schema_bootstrap.ensure_registered_table(...)`, while keeping non-table extras such as indexes local.
@@ -505,6 +506,7 @@ tokens = list_api_tokens(user_id)
 - Bad: `app.infra.db.db_manager` imports `TABLE_SCHEMAS` directly from `app.core.db_schemas`.
 - Bad: `repair_core_system_tables()` contains a second hand-written `CREATE TABLE IF NOT EXISTS media_requests (...)` definition.
 - Bad: `ensure_notifications_table()` contains a second hand-written `CREATE TABLE IF NOT EXISTS sys_notifications (...)` definition.
+- Bad: `ensure_audit_table()` contains a second hand-written `CREATE TABLE IF NOT EXISTS audit_logs (...)` definition.
 - Bad: `app.infra.db.database` defines its own `SYSTEM_TABLES` list.
 - Bad: `media_request_dao.py` imports `app.domains.users.user_dao` only to add a missing `users_meta` column.
 
@@ -521,6 +523,7 @@ tokens = list_api_tokens(user_id)
 - Focused database-init compatibility test: run `init_db(skip_migration=True)` against temporary system and playback database paths and assert `PlaybackActivity` plus compatibility `point_logs` / `point_config`, `_REGISTRY_COMPAT_SIMPLE_INIT_TABLES`, `_REGISTRY_COMPAT_SENSITIVE_INIT_TABLES`, and late message-table creation come from registry metadata with no local duplicate migrated-table DDL in `init_db()`.
 - Focused local playback bootstrap test: run webhook and bot fallback insert helpers against temporary fresh and legacy playback databases, assert registered playback columns such as `RemoteEndPoint`, `Location`, `ISP`, `ClientName`, and `ItemType` exist, and assert no local duplicate playback DDL/ALTER remains in `app.infra.db.local_playback_store`.
 - Focused bootstrap test: run small registry-owned bootstrap helpers against a temporary database and assert registry-backed table creation plus registered ALTER application.
+- Focused audit-log bootstrap test: run `ensure_audit_table()` against a temporary database and assert registry-backed `audit_logs` creation, preserved audit-log indexes, insert/list/stats/cleanup DAO smoke paths, and no local duplicate audit-log table DDL in the DAO source.
 - Focused gap bootstrap test: run `ensure_gap_tables()` against a temporary database and assert registry-backed table creation, `gap_perfect_series.tmdb_id` ALTER application, default `gap_config.cache_interval_hours = 6`, legacy `gap_scan_cache` migration, and no local duplicate gap table DDL in the DAO source.
 - Focused dedupe bootstrap test: run `init_dedupe_tables()` against a temporary database and assert registry-backed table creation, registered `dedupe_results` / `dedupe_whitelist` ALTER application, legacy `dedupe_whitelist` migration, and no local duplicate dedupe table DDL or ALTER map in the DAO source.
 - Focused notification bootstrap test: run selected notification/message bootstrap helpers against a temporary database and assert registry-backed table creation, preserved request-admin-message index creation, announcement DAO smoke paths, and no local duplicate registry-owned table DDL in the DAO source.
