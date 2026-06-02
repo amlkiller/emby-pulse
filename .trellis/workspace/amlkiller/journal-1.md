@@ -915,3 +915,36 @@ Registered tv_series_status in schema_registry, routed system database startup t
 ### Next Steps
 
 - None - task complete
+
+
+## Session 28: Compat sensitive schema registry bootstrap
+
+**Date**: 2026-06-02
+**Task**: Compat sensitive schema registry bootstrap
+**Branch**: `main`
+
+### Summary
+
+Routed init_db compatibility creation for invitations, sys_license, and tg_user_bindings through ensure_registered_table, removed duplicate local DDL/ALTER copies, updated focused compatibility tests and backend database guidance, and verified focused checks plus full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4b46379` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
