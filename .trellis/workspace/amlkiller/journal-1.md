@@ -1905,3 +1905,36 @@ Moved playback dedupe admin checks off private users auth imports, routed them t
 ### Next Steps
 
 - None - task complete
+
+
+## Session 58: System pro public auth facade boundary
+
+**Date**: 2026-06-02
+**Task**: System pro public auth facade boundary
+**Branch**: `main`
+
+### Summary
+
+Moved system pro admin checks off private users auth imports, routed them through the users public facade, and added import-boundary plus activation/status authorization tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `32349b7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
