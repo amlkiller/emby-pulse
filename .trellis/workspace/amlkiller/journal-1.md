@@ -717,3 +717,36 @@ Routed media_feedback bootstrap through schema_bootstrap, registered its poster_
 ### Next Steps
 
 - None - task complete
+
+
+## Session 22: Auth and API token schema registry bootstrap
+
+**Date**: 2026-06-02
+**Task**: Auth and API token schema registry bootstrap
+**Branch**: `main`
+
+### Summary
+
+Registered login_failures and api_tokens in schema_registry, routed database system initialization through schema_bootstrap while preserving lookup indexes, added focused init and DAO smoke coverage, updated backend schema-boundary guidance, and verified the full PRD batch with focused checks, compile, ruff, diff-check, and full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9026279` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
