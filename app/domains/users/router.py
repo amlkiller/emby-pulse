@@ -1298,7 +1298,7 @@ def api_manage_user_delete(user_id: str, request: Request):
 
             # 🔥 发送用户删除通知
             try:
-                from app.infra.db.notification_dao import add_sys_notification
+                from app.infra.db.notification_dao import add_system_notification
                 from app.domains.notifications import public_service as notification_service
 
                 rule = notify_admin.get_notify_rule('user_delete')
@@ -1313,7 +1313,7 @@ def api_manage_user_delete(user_id: str, request: Request):
 
                     # Web通知中心
                     if 'web' in channels:
-                        add_sys_notification("user", f"用户删除: {user_name}", f"操作人: {admin_name}", "/users_manage")
+                        add_system_notification("user", f"用户删除: {user_name}", f"操作人: {admin_name}", "/users_manage")
             except Exception as e:
                 pass
 

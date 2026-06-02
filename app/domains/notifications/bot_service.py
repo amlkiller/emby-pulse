@@ -10,7 +10,7 @@ import ipaddress
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from app.core.config import REPORT_COVER_URL, FALLBACK_IMAGE_URL
-from app.infra.db.notification_dao import add_sys_notification
+from app.infra.db.notification_dao import add_system_notification
 from app.domains.media_requests import gap_dao, media_request_dao
 from app.domains.media_requests.public_service import remove_gap_from_scan_state
 from app.domains.users import user_bot_dao
@@ -1001,7 +1001,7 @@ class NotificationBot:
         self.send_message("sys_notify", msg, reply_markup=keyboard if keyboard["inline_keyboard"] else None, platform="all")
 
         try:
-            add_sys_notification(
+            add_system_notification(
                 notify_type="risk",
                 title=f"🚨 并发越界: {username}",
                 message=f"当前并发 {current} / 额度 {limit}，处理: {action_text}",
@@ -1538,8 +1538,8 @@ class NotificationBot:
                 
                 # Web通知中心
                 if 'web' in channels:
-                    from app.infra.db.notification_dao import add_sys_notification
-                    add_sys_notification("user", f"用户登录: {user_name}", f"{ip} ({loc}) - {client}", "/users_manage")
+                    from app.infra.db.notification_dao import add_system_notification
+                    add_system_notification("user", f"用户登录: {user_name}", f"{ip} ({loc}) - {client}", "/users_manage")
             except Exception as e:
                 logger.error(f"[用户登录通知] 发送失败: {e}")
                 # 兜底：使用旧方式
