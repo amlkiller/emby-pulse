@@ -1,18 +1,12 @@
+from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
 
 
 def ensure_emby_restart_history_table() -> None:
-    system_store.execute(
-        """
-        CREATE TABLE IF NOT EXISTS emby_restart_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            time TEXT NOT NULL,
-            mode TEXT,
-            success INTEGER,
-            detail TEXT
-        )
-        """
-    )
+    with system_store.connect() as conn:
+        cursor = conn.cursor()
+        ensure_registered_table(cursor, "emby_restart_history")
+        conn.commit()
 
 
 def list_emby_restart_history(limit: int = 20):

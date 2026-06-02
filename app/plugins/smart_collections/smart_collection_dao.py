@@ -1,58 +1,22 @@
 import json
 from typing import Optional
 
+from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
+
+
+_SMART_COLLECTION_REGISTRY_TABLES = (
+    "smart_collections",
+    "smart_collection_items",
+    "smart_collection_sync_logs",
+)
 
 
 def ensure_smart_collection_tables() -> None:
     with system_store.connect() as conn:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS smart_collections (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE,
-                icon TEXT DEFAULT 'fa-layer-group',
-                icon_color TEXT DEFAULT 'from-purple-500 to-pink-500',
-                source_type TEXT DEFAULT 'tmdb_trending',
-                source_config TEXT DEFAULT '{}',
-                min_rating REAL DEFAULT 7.0,
-                update_mode TEXT DEFAULT 'incremental',
-                is_enabled INTEGER DEFAULT 1,
-                last_sync TEXT,
-                last_count INTEGER DEFAULT 0,
-                created_at TEXT,
-                updated_at TEXT
-            )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS smart_collection_items (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                collection_id INTEGER NOT NULL,
-                item_id TEXT NOT NULL,
-                tmdb_id TEXT,
-                title TEXT,
-                sort_order INTEGER DEFAULT 0,
-                added_at TEXT,
-                FOREIGN KEY (collection_id) REFERENCES smart_collections(id) ON DELETE CASCADE,
-                UNIQUE(collection_id, item_id)
-            )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS smart_collection_sync_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                collection_id INTEGER,
-                action TEXT,
-                status TEXT,
-                message TEXT,
-                count INTEGER DEFAULT 0,
-                created_at TEXT
-            )
-            """
-        )
+        cursor = conn.cursor()
+        for table_name in _SMART_COLLECTION_REGISTRY_TABLES:
+            ensure_registered_table(cursor, table_name)
         conn.commit()
 
 

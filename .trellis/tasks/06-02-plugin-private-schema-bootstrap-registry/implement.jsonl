@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend spec index for plugin-private schema registry refactor."}
+{"file": ".trellis/spec/backend/database-guidelines.md", "reason": "Database schema ownership and plugin DAO bootstrap boundary contracts."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Required uv-based compile, lint, and test command conventions."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Avoid duplicated plugin-private DDL facts while moving schema ownership."}

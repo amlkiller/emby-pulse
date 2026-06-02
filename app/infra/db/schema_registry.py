@@ -14,6 +14,9 @@ SYSTEM_TABLES = [
     "UserList", "client_blacklist", "client_whitelist", "gap_records", "gap_config",
     "gap_perfect_series", "gap_scan_cache", "dedupe_results", "dedupe_whitelist",
     "dedupe_config", "keep_alive_violations",
+    "temp_accounts", "temp_account_password_history",
+    "season_poster_logs", "season_poster_cache", "emby_restart_history",
+    "smart_collections", "smart_collection_items", "smart_collection_sync_logs",
     "task_config", "task_translations", "tv_calendar_cache", "tg_reg_logs",
     "local_users", "login_failures", "api_tokens",
     "msg_conversations", "msg_items", "msg_notify_block", "user_mutes",
@@ -647,6 +650,105 @@ TABLE_SCHEMAS = {
         UNIQUE(user_id, year_month)
     )""",
 
+    "temp_accounts": """CREATE TABLE IF NOT EXISTS temp_accounts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL UNIQUE,
+        emby_user_id TEXT,
+        current_password TEXT NOT NULL,
+        template_user_id TEXT,
+        allow_routes TEXT DEFAULT '',
+        block_routes TEXT DEFAULT '',
+        req_free INTEGER DEFAULT 0,
+        req_free_count INTEGER DEFAULT -1,
+        auto_update_enabled INTEGER DEFAULT 1,
+        update_interval_hours INTEGER DEFAULT 24,
+        update_interval_minutes INTEGER DEFAULT 0,
+        last_password_update TEXT,
+        next_password_update TEXT,
+        notify_tg INTEGER DEFAULT 1,
+        notify_wecom INTEGER DEFAULT 0,
+        enabled INTEGER DEFAULT 1,
+        created_at TEXT NOT NULL,
+        remark TEXT DEFAULT '临时账号',
+        tags TEXT DEFAULT ''
+    )""",
+
+    "temp_account_password_history": """CREATE TABLE IF NOT EXISTS temp_account_password_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        account_id INTEGER NOT NULL,
+        old_password TEXT,
+        new_password TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        notify_sent INTEGER DEFAULT 0,
+        FOREIGN KEY (account_id) REFERENCES temp_accounts(id)
+    )""",
+
+    "season_poster_logs": """CREATE TABLE IF NOT EXISTS season_poster_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        time TEXT NOT NULL,
+        series_id TEXT,
+        series_name TEXT,
+        season_number INTEGER,
+        old_poster TEXT,
+        new_poster TEXT,
+        success INTEGER,
+        message TEXT
+    )""",
+
+    "season_poster_cache": """CREATE TABLE IF NOT EXISTS season_poster_cache (
+        series_id TEXT PRIMARY KEY,
+        series_name TEXT,
+        season_count INTEGER,
+        last_season_number INTEGER,
+        last_updated TEXT
+    )""",
+
+    "emby_restart_history": """CREATE TABLE IF NOT EXISTS emby_restart_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        time TEXT NOT NULL,
+        mode TEXT,
+        success INTEGER,
+        detail TEXT
+    )""",
+
+    "smart_collections": """CREATE TABLE IF NOT EXISTS smart_collections (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        icon TEXT DEFAULT 'fa-layer-group',
+        icon_color TEXT DEFAULT 'from-purple-500 to-pink-500',
+        source_type TEXT DEFAULT 'tmdb_trending',
+        source_config TEXT DEFAULT '{}',
+        min_rating REAL DEFAULT 7.0,
+        update_mode TEXT DEFAULT 'incremental',
+        is_enabled INTEGER DEFAULT 1,
+        last_sync TEXT,
+        last_count INTEGER DEFAULT 0,
+        created_at TEXT,
+        updated_at TEXT
+    )""",
+
+    "smart_collection_items": """CREATE TABLE IF NOT EXISTS smart_collection_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        collection_id INTEGER NOT NULL,
+        item_id TEXT NOT NULL,
+        tmdb_id TEXT,
+        title TEXT,
+        sort_order INTEGER DEFAULT 0,
+        added_at TEXT,
+        FOREIGN KEY (collection_id) REFERENCES smart_collections(id) ON DELETE CASCADE,
+        UNIQUE(collection_id, item_id)
+    )""",
+
+    "smart_collection_sync_logs": """CREATE TABLE IF NOT EXISTS smart_collection_sync_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        collection_id INTEGER,
+        action TEXT,
+        status TEXT,
+        message TEXT,
+        count INTEGER DEFAULT 0,
+        created_at TEXT
+    )""",
+
     # ==================== 机器人通知屏蔽 ====================
     "bot_notify_mutes": """CREATE TABLE IF NOT EXISTS bot_notify_mutes (
         user_id TEXT,
@@ -730,6 +832,13 @@ TABLE_ALTERS = {
     ],
     "media_feedback": [
         "ALTER TABLE media_feedback ADD COLUMN poster_path TEXT"
+    ],
+    "temp_accounts": [
+        "ALTER TABLE temp_accounts ADD COLUMN allow_routes TEXT DEFAULT ''",
+        "ALTER TABLE temp_accounts ADD COLUMN block_routes TEXT DEFAULT ''",
+        "ALTER TABLE temp_accounts ADD COLUMN tags TEXT DEFAULT ''",
+        "ALTER TABLE temp_accounts ADD COLUMN req_free INTEGER DEFAULT 0",
+        "ALTER TABLE temp_accounts ADD COLUMN req_free_count INTEGER DEFAULT -1"
     ],
     "scratch_cards": [
         "ALTER TABLE scratch_cards ADD COLUMN chat_id TEXT DEFAULT ''",

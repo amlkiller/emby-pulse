@@ -1,59 +1,15 @@
+from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
+
+
+_TEMP_ACCOUNT_REGISTRY_TABLES = ("temp_accounts", "temp_account_password_history")
 
 
 def ensure_temp_account_tables() -> None:
     with system_store.connect() as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS temp_accounts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT NOT NULL UNIQUE,
-                emby_user_id TEXT,
-                current_password TEXT NOT NULL,
-                template_user_id TEXT,
-                allow_routes TEXT DEFAULT '',
-                block_routes TEXT DEFAULT '',
-                req_free INTEGER DEFAULT 0,
-                req_free_count INTEGER DEFAULT -1,
-                auto_update_enabled INTEGER DEFAULT 1,
-                update_interval_hours INTEGER DEFAULT 24,
-                update_interval_minutes INTEGER DEFAULT 0,
-                last_password_update TEXT,
-                next_password_update TEXT,
-                notify_tg INTEGER DEFAULT 1,
-                notify_wecom INTEGER DEFAULT 0,
-                enabled INTEGER DEFAULT 1,
-                created_at TEXT NOT NULL,
-                remark TEXT DEFAULT '临时账号',
-                tags TEXT DEFAULT ''
-            )
-            """
-        )
-        for ddl in [
-            "ALTER TABLE temp_accounts ADD COLUMN allow_routes TEXT DEFAULT ''",
-            "ALTER TABLE temp_accounts ADD COLUMN block_routes TEXT DEFAULT ''",
-            "ALTER TABLE temp_accounts ADD COLUMN tags TEXT DEFAULT ''",
-            "ALTER TABLE temp_accounts ADD COLUMN req_free INTEGER DEFAULT 0",
-            "ALTER TABLE temp_accounts ADD COLUMN req_free_count INTEGER DEFAULT -1",
-        ]:
-            try:
-                cursor.execute(ddl)
-            except Exception:
-                pass
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS temp_account_password_history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                account_id INTEGER NOT NULL,
-                old_password TEXT,
-                new_password TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                notify_sent INTEGER DEFAULT 0,
-                FOREIGN KEY (account_id) REFERENCES temp_accounts(id)
-            )
-            """
-        )
+        for table_name in _TEMP_ACCOUNT_REGISTRY_TABLES:
+            ensure_registered_table(cursor, table_name)
         conn.commit()
 
 

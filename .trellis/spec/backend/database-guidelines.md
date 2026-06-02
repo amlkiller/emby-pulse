@@ -455,6 +455,8 @@ tokens = list_api_tokens(user_id)
 - New local PWA table DDL in `app.domains.pwa.pwa_dao` for registry-owned `pwa_config` or `user_pwa_icons` -> fail focused PWA bootstrap/schema registry tests.
 - New local plugin DAO table DDL in `app.plugins.plugin_dao.ensure_plugin_tables()` for registry-owned `plugin_state` or `plugin_logs` -> fail focused plugin DAO bootstrap/schema registry tests.
 - New local keep-alive plugin table DDL or ALTER statements in `app.plugins.keep_alive.keep_alive_dao.ensure_keep_alive_violations_table()` for registry-owned `keep_alive_violations` -> fail focused plugin DAO bootstrap/schema registry tests.
+- New local plugin-private table DDL in `app.plugins.temp_account.temp_account_dao`, `app.plugins.season_poster_updater.season_poster_dao`, `app.plugins.emby_restart.emby_restart_dao`, or `app.plugins.smart_collections.smart_collection_dao` for registry-owned `temp_accounts`, `temp_account_password_history`, `season_poster_logs`, `season_poster_cache`, `emby_restart_history`, `smart_collections`, `smart_collection_items`, or `smart_collection_sync_logs` -> fail focused plugin-private bootstrap/schema registry tests.
+- New local `ALTER TABLE temp_accounts ADD COLUMN` in `app.plugins.temp_account.temp_account_dao.ensure_temp_account_tables()` -> fail focused plugin-private bootstrap/schema registry tests; compatible optional columns belong in `TABLE_ALTERS["temp_accounts"]`.
 - New cross-domain import solely to reuse a schema bootstrap helper -> fail architecture review; move the helper to `app.infra.db.schema_bootstrap` or another infra/shared boundary.
 - Need a new schema metadata value -> add/export it through `schema_registry`, then update focused tests.
 
@@ -485,6 +487,7 @@ tokens = list_api_tokens(user_id)
 - Good: `app.domains.pwa.pwa_dao` creates registry-owned `pwa_config` and `user_pwa_icons` tables through `schema_bootstrap.ensure_registered_table(...)` and keeps config/icon reads and writes local to the DAO.
 - Good: `app.plugins.plugin_dao.ensure_plugin_tables()` creates registry-owned `plugin_state` and `plugin_logs` tables through `schema_bootstrap.ensure_registered_table(...)`, while keeping the plugin-log index local to the DAO.
 - Good: `app.plugins.keep_alive.keep_alive_dao.ensure_keep_alive_violations_table()` creates and upgrades registry-owned `keep_alive_violations` through `schema_bootstrap.ensure_registered_table(...)`.
+- Good: plugin-private DAO helpers such as temp-account, season-poster, Emby-restart, and smart-collection bootstraps loop their registry-owned table names through `schema_bootstrap.ensure_registered_table(...)`, keep read/write behavior local, and rely on `TABLE_ALTERS["temp_accounts"]` for compatible temp-account optional columns.
 - Base: `app.core.db_schemas` temporarily re-exports values from `app.infra.db.schema_registry`.
 - Bad: `app.infra.db.db_manager` imports `TABLE_SCHEMAS` directly from `app.core.db_schemas`.
 - Bad: `repair_core_system_tables()` contains a second hand-written `CREATE TABLE IF NOT EXISTS media_requests (...)` definition.
@@ -514,6 +517,7 @@ tokens = list_api_tokens(user_id)
 - Focused calendar-notify bootstrap test: run `ensure_calendar_notify_config_table()` against a temporary database and assert registry-backed table creation, preserved default row, DAO save/mark-sent smoke paths, and no local duplicate `calendar_notify_config` DDL in the DAO source.
 - Focused PWA bootstrap test: run `ensure_pwa_config_table()` and `ensure_user_pwa_icons_table()` against a temporary database and assert registry-backed table creation, config/icon DAO smoke paths, and no local duplicate `pwa_config` or `user_pwa_icons` DDL in the DAO source.
 - Focused plugin DAO bootstrap test: run plugin table and keep-alive violation bootstrap helpers against a temporary database and assert registry-backed table creation, registered keep-alive ALTER application, preserved plugin-log index creation, DAO smoke paths, and no local duplicate `plugin_state`, `plugin_logs`, or `keep_alive_violations` DDL/ALTER in DAO sources.
+- Focused plugin-private bootstrap test: run temp-account, season-poster, Emby-restart, and smart-collection bootstrap helpers against a temporary database and assert registry-backed table creation, registered `temp_accounts` ALTER application for legacy table shapes, selected DAO smoke paths, and no local duplicate registry-owned table DDL/ALTER in DAO sources.
 - Compile/import check changed database modules with `uv run --with-requirements requirements.txt`.
 - Run the full pytest suite before completing a schema boundary batch.
 
