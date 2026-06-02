@@ -144,7 +144,7 @@ def fetch_emby_tasks():
 
 async def poll_emby_tasks():
     global _task_last_end_times, _poller_initialized
-    while True:
+    while _task_poller_started:
         try:
             tasks = await asyncio.to_thread(fetch_emby_tasks)
             if tasks:

@@ -90,6 +90,8 @@ def test_calendar_notify_service_thread_lifecycle(monkeypatch):
 
 
 def test_system_task_stop_cancels_poller_and_allows_restart():
+    import inspect
+
     from app.domains.system import tasks
 
     async def run_check():
@@ -109,6 +111,11 @@ def test_system_task_stop_cancels_poller_and_allows_restart():
         assert tasks._poller_initialized is False
 
     asyncio.run(run_check())
+
+    poller_source = inspect.getsource(tasks.poll_emby_tasks)
+    assert "while _task_poller_started" in poller_source
+    assert "while True" not in poller_source
+    assert "await asyncio.sleep(5)" in poller_source
 
 
 def test_auth_lock_cleanup_stop_resets_state_and_allows_restart(monkeypatch):
