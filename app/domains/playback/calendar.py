@@ -4,9 +4,9 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from app.domains.playback.calendar_service import calendar_service
 from app.core.config import templates
-from app.domains.system.views import get_common_vars
 from app.domains.users import public_service as user_service
 from app.infra.config.calendar_settings import get_calendar_public_url, set_calendar_cache_ttl
+from app.shared.view_context import get_common_vars
 
 router = APIRouter()
 logger = logging.getLogger("uvicorn")

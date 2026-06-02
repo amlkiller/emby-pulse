@@ -28,6 +28,7 @@ from app.infra.config.request_portal_settings import (
     is_redirect_to_community_enabled,
 )
 from app.domains.users import public_service as user_service
+from app.shared.view_context import get_common_vars
 import logging
 import random
 
@@ -310,53 +311,6 @@ def check_page_permission(request: Request, path: str):
             status_code=403
         )
     return None
-
-def get_common_vars(request: Request, active_page: str, extra_vars: dict = None):
-    # 优先用 get_main_public_url 解析多线路配置
-    emby_url = get_media_server_main_public_or_host()
-    emby_url = emby_url.strip().rstrip('/')
-    
-    server_id = ""
-    try:
-        sys_res = media_api.get("/System/Info", timeout=2)
-        if sys_res.status_code == 200: 
-            raw_id = sys_res.json().get("Id", "")
-            if raw_id:
-                server_id = str(raw_id).replace('\r', '').replace('\n', '').strip()
-    except Exception: pass
-
-    # ================= 🔥 新增：查询 Pro 状态 =================
-    is_pro = True
-    # =========================================================
-
-    # ================= 🔥 新增：用户权限信息 =================
-    user = request.session.get("user", {})
-    user_permissions = user.get("permissions", [])
-    if isinstance(user_permissions, str):
-        try:
-            user_permissions = json.loads(user_permissions)
-        except:
-            user_permissions = []
-    
-    is_admin = user.get("auth_type") == "emby" or user.get("role") == "admin"
-    user_name = user.get("name", "用户")  # 当前登录用户名
-    user_avatar = user.get("avatar", "")  # 当前登录用户头像
-    # =========================================================
-
-    vars_dict = {
-        "request": request,
-        "version": APP_VERSION,
-        "active_page": active_page,
-        "emby_url": emby_url,
-        "server_id": server_id,
-        "is_pro": is_pro,
-        "user_permissions": user_permissions,  # 用户权限列表
-        "is_admin": is_admin,  # 是否为管理员
-        "user_name": user_name,  # 当前登录用户名
-        "user_avatar": user_avatar,  # 当前登录用户头像
-    }
-    if extra_vars: vars_dict.update(extra_vars)
-    return vars_dict
 
 @router.get("/apple-touch-icon.png")
 @router.get("/apple-touch-icon-precomposed.png")

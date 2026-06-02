@@ -9,11 +9,11 @@ from typing import List, Optional
 from app.core.config import templates
 from app.infra.db.notification_dao import add_sys_notification
 from app.domains.system import invitation_dao
-from app.domains.system.views import get_common_vars
 from app.domains.users import public_service as user_service
 from app.domains.points import point_dao
 from app.infra.clients.media_server_client import media_api
 from app.domains.notifications import public_service as notification_service
+from app.shared.view_context import get_common_vars
 
 router = APIRouter()
 from app.core.security_utils import safe_error_message

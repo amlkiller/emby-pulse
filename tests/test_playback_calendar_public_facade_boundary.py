@@ -16,6 +16,7 @@ def test_calendar_router_does_not_import_private_users_auth_or_system_public_ser
     rel_path = path.relative_to(_REPO_ROOT).as_posix()
     tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(rel_path))
     violations = []
+    imports_shared_view_context = False
 
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
@@ -26,14 +27,23 @@ def test_calendar_router_does_not_import_private_users_auth_or_system_public_ser
                 violations.append(f"{rel_path}:{node.lineno}")
             if node.module == "app.domains.system" and ("public_service" in imported_names or "*" in imported_names):
                 violations.append(f"{rel_path}:{node.lineno}")
+            if node.module == "app.domains.system.views" and (
+                "get_common_vars" in imported_names or "*" in imported_names
+            ):
+                violations.append(f"{rel_path}:{node.lineno}")
+            if node.module == "app.shared.view_context" and "get_common_vars" in imported_names:
+                imports_shared_view_context = True
         elif isinstance(node, ast.Import):
             imported_modules = {alias.name for alias in node.names}
             if "app.domains.users.auth" in imported_modules:
                 violations.append(f"{rel_path}:{node.lineno}")
             if "app.domains.system.public_service" in imported_modules:
                 violations.append(f"{rel_path}:{node.lineno}")
+            if "app.domains.system.views" in imported_modules:
+                violations.append(f"{rel_path}:{node.lineno}")
 
     assert violations == []
+    assert imports_shared_view_context is True
 
 
 def test_calendar_page_uses_permission_facade_and_direct_template_context(monkeypatch):

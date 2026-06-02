@@ -14,20 +14,26 @@ def test_system_views_does_not_import_private_users_auth():
     rel_path = path.relative_to(_REPO_ROOT).as_posix()
     tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(rel_path))
     violations = []
+    imports_shared_view_context = False
 
     for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "get_common_vars":
+            violations.append(f"{rel_path}:{node.lineno}")
         if isinstance(node, ast.ImportFrom):
             imported_names = {alias.name for alias in node.names}
             if node.module == "app.domains.users.auth":
                 violations.append(f"{rel_path}:{node.lineno}")
             if node.module == "app.domains.users" and ("auth" in imported_names or "*" in imported_names):
                 violations.append(f"{rel_path}:{node.lineno}")
+            if node.module == "app.shared.view_context" and "get_common_vars" in imported_names:
+                imports_shared_view_context = True
         elif isinstance(node, ast.Import):
             imported_modules = {alias.name for alias in node.names}
             if "app.domains.users.auth" in imported_modules:
                 violations.append(f"{rel_path}:{node.lineno}")
 
     assert violations == []
+    assert imports_shared_view_context is True
 
 
 def test_check_page_permission_uses_public_facade_for_sub_account(monkeypatch):
