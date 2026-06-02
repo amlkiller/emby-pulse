@@ -38,12 +38,6 @@ class CalendarService:
         self._background_sync_thread = None
 
     def start(self):
-        self._start_background_sync()
-
-    def stop(self):
-        self._stop_background_sync()
-
-    def _start_background_sync(self):
         """
         后台独立线程：每隔 12 小时自动拉取 TMDB 排期并落盘。
         防止用户在服务器重启或长时间未访问后，首次打开页面加载过慢。
@@ -75,7 +69,7 @@ class CalendarService:
         self._background_sync_thread = threading.Thread(target=sync_task, daemon=True, name="calendar-background-sync")
         self._background_sync_thread.start()
 
-    def _stop_background_sync(self):
+    def stop(self):
         with self._background_sync_start_lock:
             if not self._background_sync_started:
                 return
