@@ -632,3 +632,36 @@ Moved bot notify mute table startup handling into start_notify_rules_services an
 ### Next Steps
 
 - None - task complete
+
+
+## Session 20: Remove auth domain stop redirect
+
+**Date**: 2026-06-03
+**Task**: Remove auth domain stop redirect
+**Branch**: `Compiled`
+
+### Summary
+
+Moved login lock cleanup stop handling into stop_auth_domain_services and removed the private _stop_lock_cleanup redirect. Verified compileall, focused auth/bootstrap tests, import check, and full pytest suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `57b6f6a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
