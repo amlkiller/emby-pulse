@@ -698,3 +698,36 @@ Removed the pure start_bootstrap_services redirect and pointed lifespan/tests di
 ### Next Steps
 
 - None - task complete
+
+
+## Session 22: Remove calendar service internal lifecycle redirects
+
+**Date**: 2026-06-03
+**Task**: Remove calendar service internal lifecycle redirects
+**Branch**: `Compiled`
+
+### Summary
+
+Moved CalendarService background sync start/stop logic into the public start and stop methods and removed private lifecycle redirect helpers. Verified compileall, focused lifecycle tests, import check, and full pytest suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `766b641` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
