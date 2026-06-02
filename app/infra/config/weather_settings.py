@@ -1,8 +1,21 @@
 from app.core.config import cfg
 
 
+_WEATHER_SOURCE_DEFAULT = "wttr"
+_WEATHER_SOURCES = {"wttr", "qweather", "amap"}
+
+
+def _coerce_weather_source(value) -> str:
+    if isinstance(value, bool):
+        return _WEATHER_SOURCE_DEFAULT
+    normalized = str(value or "").strip().lower()
+    if normalized in _WEATHER_SOURCES:
+        return normalized
+    return _WEATHER_SOURCE_DEFAULT
+
+
 def get_weather_source() -> str:
-    return cfg.get("weather_source", "wttr")
+    return _coerce_weather_source(cfg.get("weather_source", _WEATHER_SOURCE_DEFAULT))
 
 
 def get_weather_qweather_key() -> str:
@@ -30,7 +43,7 @@ def set_weather_greeting(value: str) -> None:
 
 
 def set_weather_source(value: str) -> None:
-    cfg.set("weather_source", value)
+    cfg.set("weather_source", _coerce_weather_source(value))
 
 
 def set_weather_qweather_host(value: str) -> None:
