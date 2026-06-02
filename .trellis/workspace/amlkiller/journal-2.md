@@ -1034,3 +1034,36 @@ Made notification SystemDaemon scheduler and library notification threads stoppa
 ### Next Steps
 
 - None - task complete
+
+
+## Session 91: Notification bot polling lifecycle convergence
+
+**Date**: 2026-06-03
+**Task**: Notification bot polling lifecycle convergence
+**Branch**: `main`
+
+### Summary
+
+Made NotificationBot Telegram polling thread stoppable, joinable, and restartable; replaced retry sleeps with stop-event waits and verified focused plus full tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8c10b9c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

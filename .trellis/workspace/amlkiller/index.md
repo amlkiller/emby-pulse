@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 90
+- **Total Sessions**: 91
 - **Last Active**: 2026-06-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~1036 | Active |
+| `journal-2.md` | ~1069 | Active |
 | `journal-1.md` | ~1973 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 91 | 2026-06-03 | Notification bot polling lifecycle convergence | `8c10b9c` | `main` |
 | 90 | 2026-06-03 | Notification daemon lifecycle convergence | `2c511b4` | `main` |
 | 89 | 2026-06-03 | Weather cache lifecycle convergence | `818e504` | `main` |
 | 88 | 2026-06-03 | Remove users router cache wrappers | `fc1c192` | `main` |
