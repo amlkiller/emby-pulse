@@ -519,3 +519,36 @@ Routed init_db compatibility creation of point_logs and point_config through sch
 ### Next Steps
 
 - None - task complete
+
+
+## Session 16: Announcement schema registry bootstrap
+
+**Date**: 2026-06-02
+**Task**: Announcement schema registry bootstrap
+**Branch**: `main`
+
+### Summary
+
+Registered announcements and announcement_reads in schema_registry, routed message_dao announcement bootstrap through schema_bootstrap, extended notification schema regression coverage, and updated backend schema-boundary guidance.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `75ebe38` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
