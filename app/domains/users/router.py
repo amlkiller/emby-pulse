@@ -1306,11 +1306,10 @@ def api_manage_user_delete(user_id: str, request: Request):
 
             # 🔥 发送用户删除通知
             try:
-                from app.domains.notifications.notify_admin import get_notify_rule
                 from app.infra.db.notification_dao import add_sys_notification
                 from app.domains.notifications import public_service as notification_service
 
-                rule = get_notify_rule('user_delete')
+                rule = notification_service.get_notify_rule('user_delete')
                 if rule and rule.get('enabled'):
                     channels = rule.get('channels', [])
                     msg = f"🗑️ <b>用户删除通知</b>\n\n👤 <b>用户:</b>{user_name}\n👮 <b>操作人:</b>{admin_name}\n🕒 <b>时间:</b>{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"

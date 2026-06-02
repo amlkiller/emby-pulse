@@ -94,6 +94,25 @@ def test_notification_public_service_delegates_and_returns(monkeypatch):
     assert user_bot_service.calls == [("_send", "user-chat", "user text", {"inline": []})]
 
 
+def test_notification_public_service_get_notify_rule_delegates(monkeypatch):
+    from app.domains.notifications import notify_admin, public_service
+
+    calls = []
+
+    def fake_get_notify_rule(notify_type):
+        calls.append(("get_notify_rule", notify_type))
+        return {"notify_type": notify_type, "enabled": 1, "channels": ["tg_bot"]}
+
+    monkeypatch.setattr(notify_admin, "get_notify_rule", fake_get_notify_rule)
+
+    assert public_service.get_notify_rule("user_delete") == {
+        "notify_type": "user_delete",
+        "enabled": 1,
+        "channels": ["tg_bot"],
+    }
+    assert calls == [("get_notify_rule", "user_delete")]
+
+
 def test_auto_expire_plugin_does_not_import_private_notification_user_bot_service():
     path = _REPO_ROOT / "app/plugins/auto_expire/plugin.py"
     rel_path = path.relative_to(_REPO_ROOT).as_posix()
