@@ -1,7 +1,6 @@
 import json
-import sqlite3
 
-from app.infra.db.schema_registry import TABLE_ALTERS, TABLE_SCHEMAS
+from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
 
 
@@ -12,14 +11,7 @@ def ensure_gap_tables(logger=None) -> None:
     with system_store.connect() as conn:
         cursor = conn.cursor()
         for table_name in GAP_TABLES:
-            cursor.execute(TABLE_SCHEMAS[table_name])
-
-        for alter_sql in TABLE_ALTERS.get("gap_perfect_series", []):
-            try:
-                cursor.execute(alter_sql)
-            except sqlite3.OperationalError as exc:
-                if "duplicate column name" not in str(exc).lower():
-                    raise
+            ensure_registered_table(cursor, table_name)
 
         cursor.execute("SELECT value FROM gap_config WHERE key = 'cache_interval_hours'")
         if not cursor.fetchone():
@@ -31,7 +23,7 @@ def ensure_gap_tables(logger=None) -> None:
             if logger:
                 logger.info("[缺集管理] 检测到旧版 gap_scan_cache 表结构，正在迁移...")
             cursor.execute("DROP TABLE gap_scan_cache")
-            cursor.execute(TABLE_SCHEMAS["gap_scan_cache"])
+            ensure_registered_table(cursor, "gap_scan_cache")
 
         conn.commit()
 

@@ -109,12 +109,15 @@ def test_gap_bootstrap_migrates_legacy_scan_cache_to_registry_shape(monkeypatch,
 def test_gap_bootstrap_uses_schema_registry_instead_of_local_gap_ddl():
     source = (_REPO_ROOT / "app/domains/media_requests/gap_dao.py").read_text(encoding="utf-8")
 
-    assert "from app.infra.db.schema_registry import TABLE_ALTERS, TABLE_SCHEMAS" in source
-    assert "cursor.execute(TABLE_SCHEMAS[table_name])" in source
+    assert "from app.infra.db.schema_bootstrap import ensure_registered_table" in source
+    assert "from app.infra.db.schema_registry import TABLE_ALTERS, TABLE_SCHEMAS" not in source
+    assert "ensure_registered_table(cursor, table_name)" in source
+    assert 'ensure_registered_table(cursor, "gap_scan_cache")' in source
     for table_name in ("gap_config", "gap_records", "gap_perfect_series", "gap_scan_cache"):
         assert f"\"{table_name}\"" in source
 
-    assert "TABLE_ALTERS.get(\"gap_perfect_series\"" in source
+    assert "TABLE_SCHEMAS[" not in source
+    assert "TABLE_ALTERS.get" not in source
     assert "CREATE TABLE IF NOT EXISTS gap_config" not in source
     assert "CREATE TABLE IF NOT EXISTS gap_records" not in source
     assert "CREATE TABLE IF NOT EXISTS gap_perfect_series" not in source
