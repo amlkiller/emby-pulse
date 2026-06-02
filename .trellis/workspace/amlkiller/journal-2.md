@@ -1628,3 +1628,36 @@ Hardened user bot registration-related settings with canonical quota and route m
 ### Next Steps
 
 - None - task complete
+
+
+## Session 109: Notification worker settings contract convergence
+
+**Date**: 2026-06-03
+**Task**: Notification worker settings contract convergence
+**Branch**: `main`
+
+### Summary
+
+Hardened notification worker and queue sizing settings with shared bounded integer coercion, added focused regression tests, documented the helper bounds, and verified focused plus full test suites.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f673a0a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
