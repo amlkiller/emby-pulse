@@ -420,3 +420,36 @@ Registered PWA config/icon tables in schema_registry, routed PWA DAO bootstraps 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 13: Database init schema registry bootstrap
+
+**Date**: 2026-06-02
+**Task**: Database init schema registry bootstrap
+**Branch**: `main`
+
+### Summary
+
+Routed simple registry-owned startup table creation in app.infra.db.database through schema_bootstrap, preserved local high-risk/unregistered DDL, added focused init-system-db regression coverage, and updated backend database schema-boundary guidance.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e5e03f8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
