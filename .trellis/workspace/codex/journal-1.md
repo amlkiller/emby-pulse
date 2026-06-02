@@ -797,3 +797,36 @@ Removed two private plugin _ensure_dir helpers that only forwarded to os.makedir
 ### Next Steps
 
 - None - task complete
+
+
+## Session 25: Remove notification message log redirect
+
+**Date**: 2026-06-03
+**Task**: Remove notification message log redirect
+**Branch**: `Compiled`
+
+### Summary
+
+Deleted the local log_msg helper that only forwarded to print(..., flush=True), updated internal notification message call sites to print directly, and verified compile, import, focused notification message tests, and the full suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `29012c5` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
