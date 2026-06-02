@@ -618,3 +618,36 @@ Routed low-risk init_db compatibility simple tables through schema_bootstrap, pr
 ### Next Steps
 
 - None - task complete
+
+
+## Session 19: Database init sys notifications schema registry bootstrap
+
+**Date**: 2026-06-02
+**Task**: Database init sys notifications schema registry bootstrap
+**Branch**: `main`
+
+### Summary
+
+Routed init_db compatibility sys_notifications creation through schema_bootstrap, preserved registered is_cleared ALTER behavior, added focused database-init coverage, updated backend schema-boundary guidance, and verified focused checks plus full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4a62cdd` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
