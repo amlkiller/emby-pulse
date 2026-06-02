@@ -235,12 +235,6 @@ def start_weather_cache_refresh():
     _weather_refresh_thread.start()
     print("[天气缓存] 🔄 后台定时刷新已启动（每小时）")
 
-def preload_weather_cache():
-    """启动时初始化天气缓存服务（不预热，等前端请求时再缓存）"""
-    # 🔥 不预热，因为不知道用户设置的城市
-    # 前端第一次请求时会触发缓存
-    start_weather_cache_refresh()
-
 # ==========================================
 # 🔥 核心黑科技：全局底层流劫持器 (Stdout/Stderr Tee)
 # 抛弃原生 logging 拦截，直接在最底层劫持所有 print() 和系统输出
