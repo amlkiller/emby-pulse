@@ -138,9 +138,11 @@ def test_local_users_totp_dao_paths_work_after_registry_bootstrap(monkeypatch, t
 def test_local_users_bootstrap_uses_schema_registry_instead_of_local_ddl():
     source = (_REPO_ROOT / "app/domains/users/auth_dao.py").read_text(encoding="utf-8")
 
-    assert "from app.infra.db.schema_registry import TABLE_ALTERS, TABLE_SCHEMAS" in source
-    assert "TABLE_SCHEMAS[\"local_users\"]" in source
-    assert "TABLE_ALTERS.get(table_name, [])" in source
+    assert "from app.infra.db.schema_bootstrap import ensure_registered_table" in source
+    assert "from app.infra.db.schema_registry import TABLE_ALTERS, TABLE_SCHEMAS" not in source
+    assert 'ensure_registered_table(cursor, "local_users")' in source
+    assert "TABLE_SCHEMAS[" not in source
+    assert "TABLE_ALTERS.get" not in source
     assert "CREATE TABLE IF NOT EXISTS local_users" not in source
     assert "ALTER TABLE local_users ADD COLUMN" not in source
 

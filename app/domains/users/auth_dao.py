@@ -1,7 +1,6 @@
-import sqlite3
 from typing import Optional
 
-from app.infra.db.schema_registry import TABLE_ALTERS, TABLE_SCHEMAS
+from app.infra.db.schema_bootstrap import ensure_registered_table
 from app.infra.db.system_store import system_store
 
 
@@ -46,20 +45,10 @@ def cleanup_expired_login_locks() -> int:
     return system_store.execute("DELETE FROM login_failures WHERE locked_until IS NOT NULL AND locked_until < CURRENT_TIMESTAMP")
 
 
-def _apply_table_alters(cursor, table_name: str) -> None:
-    for alter_sql in TABLE_ALTERS.get(table_name, []):
-        try:
-            cursor.execute(alter_sql)
-        except sqlite3.OperationalError as exc:
-            if "duplicate column name" not in str(exc).lower():
-                raise
-
-
 def ensure_local_users_table() -> None:
     with system_store.connect() as conn:
         cursor = conn.cursor()
-        cursor.execute(TABLE_SCHEMAS["local_users"])
-        _apply_table_alters(cursor, "local_users")
+        ensure_registered_table(cursor, "local_users")
         conn.commit()
 
 
