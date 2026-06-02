@@ -1476,3 +1476,36 @@ Added a system invitation public facade, moved points and notification user-bot 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 45: Playback public service facade for keep alive
+
+**Date**: 2026-06-02
+**Task**: Playback public service facade for keep alive
+**Branch**: `main`
+
+### Summary
+
+Added a playback public facade for user play summaries, moved the keep-alive plugin off private playback stats queries, and covered the boundary with facade/import tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `57e7b80` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
