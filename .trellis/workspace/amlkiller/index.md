@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 77
+- **Total Sessions**: 78
 - **Last Active**: 2026-06-02
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~601 | Active |
+| `journal-2.md` | ~635 | Active |
 | `journal-1.md` | ~1973 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 78 | 2026-06-02 | Media requests notification rule facade | `95f3eef`, `07fa5bc` | `main` |
 | 77 | 2026-06-02 | Users notification rule facade boundary | `d1fd179` | `main` |
 | 76 | 2026-06-02 | Users invitation system facade boundary | `7050714` | `main` |
 | 75 | 2026-06-02 | Playback stats auth facade boundary | `c5adfa0` | `main` |

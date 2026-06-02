@@ -599,3 +599,37 @@ Routed users-router delete notification rule lookup through the notifications pu
 ### Next Steps
 
 - None - task complete
+
+
+## Session 78: Media requests notification rule facade
+
+**Date**: 2026-06-02
+**Task**: Media requests notification rule facade
+**Branch**: `main`
+
+### Summary
+
+Moved media requests notification rule lookups through notifications public_service and added boundary regression tests. Verified compile/import checks, private import scan, focused tests, and full pytest: 385 passed, 3 warnings.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `95f3eef` | (see git log) |
+| `07fa5bc` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
