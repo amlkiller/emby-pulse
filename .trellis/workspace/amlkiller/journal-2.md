@@ -902,3 +902,36 @@ Moved get_common_vars out of system.views into app.shared.view_context as the re
 ### Next Steps
 
 - None - task complete
+
+
+## Session 87: Remove points config router alias
+
+**Date**: 2026-06-03
+**Task**: Remove points config router alias
+**Branch**: `main`
+
+### Summary
+
+Removed the points router get_point_config alias, pointed notification lottery pool and points router callers at point_dao.get_point_config directly, and verified compile/import scans plus focused and full pytest.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c1b3a5b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
