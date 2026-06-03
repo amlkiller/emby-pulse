@@ -31,6 +31,7 @@ from app.domains.notifications import user_bot_points_game_commands_service
 from app.domains.notifications import user_bot_registration_queue_service
 from app.domains.notifications import user_bot_registration_quota_service
 from app.domains.notifications import user_bot_restriction_service
+from app.domains.notifications import user_bot_shop_commands_service
 from app.domains.notifications import user_bot_service_info_commands_service
 from app.domains.notifications import user_bot_telegram_service
 from app.domains.playback import stats_queries
@@ -336,6 +337,20 @@ user_bot_points_game_commands_service.set_dependency_providers(
     send_provider=lambda: _send,
     point_dao_provider=lambda: point_dao,
     user_bot_dao_provider=lambda: user_bot_dao,
+    media_api_provider=lambda: media_api,
+    safe_error_message_provider=lambda: safe_error_message,
+    logger_provider=lambda: logger,
+)
+
+user_bot_shop_commands_service.set_dependency_providers(
+    get_binding_provider=lambda: _get_binding,
+    check_emby_account_provider=lambda: _check_emby_account,
+    unbind_user_provider=lambda: _unbind_user,
+    reply_provider=lambda: _reply,
+    send_provider=lambda: _send,
+    tg_api_provider=lambda: _tg_api,
+    main_menu_keyboard_provider=lambda: _main_menu_keyboard,
+    point_dao_provider=lambda: point_dao,
     media_api_provider=lambda: media_api,
     safe_error_message_provider=lambda: safe_error_message,
     logger_provider=lambda: logger,
@@ -2175,133 +2190,11 @@ def _scratch_draw_result(chat_id, card_id):
 
 
 def cmd_shop(chat_id, tg_user_id, msg_id=None):
-    binding = _get_binding(tg_user_id)
-    if not binding:
-        _send(chat_id, "❌ 请先绑定账号：/bind 用户名")
-        return
-    
-    # 检查 Emby 账号是否仍然有效
-    if not _check_emby_account(binding):
-        _unbind_user(tg_user_id)
-        _send(chat_id, "⚠️ 你的 Emby 账号已被删除，绑定已自动解除。请联系管理员。", 
-              reply_markup=_main_menu_keyboard(None))
-        return
-    
-    try:
-        points_info = point_dao.get_user_points_info(binding['emby_user_id'])
-        pts = points_info.get("points", 0)
-        items = points_info.get("store_items", [])
-        if not items:
-            _reply(chat_id, "🏪 积分商城暂无商品",
-                   reply_markup={"inline_keyboard": [[{"text": "🔙 主菜单", "callback_data": "ub_back_menu"}]]},
-                   msg_id=msg_id)
-            return
-        msg = f"🏪 <b>积分商城</b>\n💰 你的余额：<b>{pts}</b> 积分\n\n"
-        keyboard = {"inline_keyboard": []}
-        for item in items:
-            # 随机延期商品显示特殊信息
-            if item.get("type") == "random_renew":
-                base_days = item.get("base_days", 30)
-                random_min = item.get("random_min", -10)
-                random_max = item.get("random_max", 60)
-                min_days = base_days + random_min
-                max_days = base_days + random_max
-                msg += f"🎲 <b>{item['name']}</b> — {item['cost']} 积分\n  {item.get('desc', '')}\n  ⚡ 基础{base_days}天 + 随机{random_min}~{random_max}天 ({min_days}~{max_days}天)\n\n"
-            else:
-                msg += f"• <b>{item['name']}</b> — {item['cost']} 积分\n  {item.get('desc', '')}\n\n"
-            keyboard["inline_keyboard"].append([{"text": f"🛒 {item['name']} ({item['cost']}积分)", "callback_data": f"ub_redeem_{item['id']}"}])
-        keyboard["inline_keyboard"].append([{"text": "🔙 主菜单", "callback_data": "ub_back_menu"}])
-        _reply(chat_id, msg.strip(), reply_markup=keyboard, msg_id=msg_id)
-    except Exception as e:
-        logger.error(f"[商城] 加载失败: {e}")
-        _reply(chat_id, f"❌ 商城加载失败：{safe_error_message(e, '商城加载异常，请稍后重试')}", msg_id=msg_id)
+    return user_bot_shop_commands_service.cmd_shop(chat_id, tg_user_id, msg_id=msg_id)
 
 
 def cmd_redeem_callback(chat_id, tg_user_id, item_id, cq_id):
-    _tg_api("answerCallbackQuery", {"callback_query_id": cq_id})
-    binding = _get_binding(tg_user_id)
-    if not binding:
-        _send(chat_id, "❌ 未绑定账号")
-        return
-    
-    # 检查 Emby 账号是否仍然有效
-    if not _check_emby_account(binding):
-        _unbind_user(tg_user_id)
-        _send(chat_id, "⚠️ 你的 Emby 账号已被删除，绑定已自动解除。请联系管理员。", 
-              reply_markup=_main_menu_keyboard(None))
-        return
-    
-    uid = binding['emby_user_id']
-    uname = binding['emby_username']
-    try:
-        redeem_result = point_dao.redeem_store_item(uid, uname, item_id)
-        if redeem_result.get("status") != "success":
-            _send(chat_id, f"❌ {redeem_result.get('message', '兑换失败')}")
-            return
-
-        target_name = redeem_result["item_name"]
-        target_type = redeem_result["item_type"]
-        cost = redeem_result["cost"]
-        new_pts = redeem_result["balance"]
-        result_msg = ""
-        actual_days = redeem_result.get("actual_days", 0)
-        
-        if target_type == "renew":
-            new_exp = redeem_result["new_exp_str"]
-            try: media_api.post(f"/Users/{uid}/Policy", json={"IsDisabled": False}, timeout=3)
-            except Exception: pass
-            result_msg = f"📅 账号已续期至 {new_exp}"
-            
-        elif target_type == "random_renew":
-            base_days = redeem_result["base_days"]
-            random_min = redeem_result["random_min"]
-            random_max = redeem_result["random_max"]
-            random_bonus = redeem_result["random_bonus"]
-            new_exp = redeem_result["new_exp_str"]
-            try: media_api.post(f"/Users/{uid}/Policy", json={"IsDisabled": False}, timeout=3)
-            except Exception: pass
-            
-            bonus_text = f"+{random_bonus}" if random_bonus >= 0 else str(random_bonus)
-            
-            # 🔥 判断盲盒结果类型
-            range_span = random_max - random_min
-            if random_bonus >= random_max - range_span * 0.1:
-                result_emoji = "👑✨"
-                luck_text = "天选之人！欧皇降临！"
-            elif random_bonus >= random_max - range_span * 0.3:
-                result_emoji = "🍀🎉"
-                luck_text = "运气不错！"
-            elif random_bonus >= random_min + range_span * 0.3:
-                result_emoji = "✨"
-                luck_text = "还算可以"
-            elif random_bonus >= random_min:
-                result_emoji = "📦"
-                luck_text = "中规中矩"
-            elif random_bonus >= random_min - range_span * 0.2:
-                result_emoji = "😅"
-                luck_text = "稍微有点亏"
-            else:
-                result_emoji = "🌧️"
-                luck_text = "运气不佳..."
-            
-            result_msg = f"🎲 {result_emoji} {luck_text}\n随机结果：基础{base_days}天 {bonus_text} = {actual_days}天\n📅 账号已续期至 {new_exp}"
-        else:
-            result_msg = "⚠️ 此商品需人工发货，请联系管理员"
-
-        _send(chat_id, f"✅ <b>兑换成功！</b>\n\n🛒 {target_name}\n💰 花费 {cost} 积分，余额 {new_pts}\n{result_msg}")
-
-        try:
-            from app.domains.notifications.bot_service import bot
-            from app.infra.db.notification_dao import add_system_notification
-            notify_msg = f"🎁 <b>积分商城兑换</b>\n\n👤 {uname}\n🛒 {target_name}\n💰 {cost} 积分\n📱 来源：TG 用户机器人"
-            if target_type == "random_renew":
-                notify_msg += f"\n🎲 随机结果：{actual_days}天"
-            bot.notifier.send_message("sys_notify", notify_msg, platform="all")
-            add_system_notification("points", f"商城订单: {target_name}", f"用户 {uname} 通过TG机器人兑换", "/points")
-        except Exception: pass
-    except Exception as e:
-        logger.error(f"[兑换] 执行失败: {e}")
-        _send(chat_id, f"❌ 兑换失败：{safe_error_message(e, '兑换操作异常，请稍后重试')}")
+    return user_bot_shop_commands_service.cmd_redeem_callback(chat_id, tg_user_id, item_id, cq_id)
 
 
 def cmd_request(chat_id, tg_user_id, args):
