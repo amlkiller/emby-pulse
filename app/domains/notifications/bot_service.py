@@ -27,6 +27,7 @@ from app.domains.notifications import notification_bot_message_dispatch_service
 from app.domains.notifications import notification_bot_message_center_callback_service
 from app.domains.notifications import notification_bot_media_helper_service
 from app.domains.notifications import notification_bot_media_quality_service
+from app.domains.notifications import notification_bot_pending_sync_service
 from app.domains.notifications import notification_bot_playback_event_service
 from app.domains.notifications import notification_bot_playback_command_service
 from app.domains.notifications import notification_bot_polling_service
@@ -285,6 +286,13 @@ notification_bot_playback_event_service.set_dependency_providers(
     report_cover_url_provider=lambda: REPORT_COVER_URL,
     datetime_provider=lambda: datetime,
     re_provider=lambda: re,
+    logger_provider=lambda: logger,
+)
+
+notification_bot_pending_sync_service.set_dependency_providers(
+    media_request_dao_provider=lambda: media_request_dao,
+    media_api_provider=lambda: media_api,
+    admin_id_provider=lambda: get_admin_id,
     logger_provider=lambda: logger,
 )
 
@@ -716,55 +724,7 @@ class SystemDaemon:
                 if self._stop_event.wait(60): return
 
     def _sync_pending_requests(self):
-        try:
-            # 🔥 修复：检查所有未完成状态（待审批、下载中、手动接单、待入库）
-            rows = media_request_dao.list_pending_sync_requests()
-            if not rows: return
-            admin_id = get_admin_id()
-            if not admin_id: return
-            for r in rows:
-                tid = r['tmdb_id']; mtype = r['media_type']; sn = r['season']
-                request_type = r.get('request_type', 'new')
-                episodes_str = r.get('episodes', '')
-                
-                type_filter = "Movie" if mtype == "movie" else "Series"
-                params = {"AnyProviderIdEquals": f"tmdb.{tid}", "IncludeItemTypes": type_filter, "Recursive": "true"}
-                res = media_api.get(f"/Users/{admin_id}/Items", params=params, timeout=5).json()
-                if res.get("Items"):
-                    if mtype == "movie":
-                        media_request_dao.mark_sync_request_finished(tid)
-                        logger.info(f"[入库同步] 电影已入库: tmdb_id={tid}")
-                    else:
-                        # 🔥 追新请求：检查请求的集数是否都已入库
-                        sid = res["Items"][0]["Id"]
-                        
-                        if request_type == 'update' and episodes_str:
-                            # 追新请求：检查集数
-                            requested_eps = [int(e) for e in episodes_str.split(",") if e.strip().isdigit()]
-                            ep_params = {"ParentId": sid, "IncludeItemTypes": "Episode", "Recursive": "true", "Fields": "ParentIndexNumber,IndexNumber"}
-                            ep_res = media_api.get(f"/Users/{admin_id}/Items", params=ep_params, timeout=5).json()
-                            local_eps = []
-                            for ep in ep_res.get("Items", []):
-                                ep_season = ep.get("ParentIndexNumber")
-                                ep_num = ep.get("IndexNumber")
-                                if ep_season == sn and ep_num:
-                                    local_eps.append(ep_num)
-                            
-                            # 如果请求的集数都已入库，更新状态
-                            if requested_eps and all(e in local_eps for e in requested_eps):
-                                media_request_dao.mark_sync_request_finished(tid, sn)
-                                logger.info(f"[入库同步] 追新已入库: tmdb_id={tid}, season={sn}, episodes={episodes_str}")
-                        else:
-                            # 求片请求：检查季是否存在
-                            s_res = media_api.get(f"/Shows/{sid}/Seasons", params={"UserId": admin_id}, timeout=5).json()
-                            local_seasons = [s.get("IndexNumber") for s in s_res.get("Items", [])]
-                            if sn in local_seasons:
-                                media_request_dao.mark_sync_request_finished(tid, sn)
-                                logger.info(f"[入库同步] 求片已入库: tmdb_id={tid}, season={sn}")
-                if self._stop_event.wait(0.5):
-                    return
-        except Exception as e: 
-            logger.error(f"[入库同步] 定时同步异常: {e}")
+        return notification_bot_pending_sync_service.sync_pending_requests(self)
 
     def _check_user_expiration(self):
         try:

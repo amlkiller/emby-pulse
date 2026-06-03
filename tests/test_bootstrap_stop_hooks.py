@@ -199,7 +199,7 @@ def test_dashboard_cache_stop_cancels_tasks_and_allows_restart(monkeypatch):
 def test_notification_bot_event_subscriptions_are_reversible(monkeypatch):
     import inspect
 
-    from app.domains.notifications import bot_service
+    from app.domains.notifications import bot_service, notification_bot_pending_sync_service
 
     subscriptions = []
 
@@ -307,7 +307,7 @@ def test_notification_bot_event_subscriptions_are_reversible(monkeypatch):
     assert notifier.poll_thread is FakeThread.instances[5]
 
     library_group_source = inspect.getsource(bot_service.SystemDaemon._process_library_group)
-    pending_sync_source = inspect.getsource(bot_service.SystemDaemon._sync_pending_requests)
+    pending_sync_source = inspect.getsource(notification_bot_pending_sync_service.sync_pending_requests)
     assert "_stop_event.wait(2)" in library_group_source
     assert "_stop_event.wait(0.5)" in pending_sync_source
     assert "time.sleep" not in library_group_source
