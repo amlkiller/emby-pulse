@@ -120,6 +120,7 @@ def test_users_router_includes_child_routes_and_compat_exports():
     assert any(path == "/api/user/image/{user_id}" and "GET" in methods for path, methods in routes)
     assert any(path == "/api/manage/user/image" and "POST" in methods for path, methods in routes)
     assert any(path == "/api/user/avatar" and "POST" in methods for path, methods in routes)
+    assert any(path == "/api/user/password" and "POST" in methods for path, methods in routes)
     assert any(path == "/api/manage/user/pin" and "POST" in methods for path, methods in routes)
 
     from app.domains.users import avatar_router
@@ -128,10 +129,13 @@ def test_users_router_includes_child_routes_and_compat_exports():
     from app.domains.users import invitation_router
     from app.domains.users import library_visibility_router
     from app.domains.users import pin_router
+    from app.domains.users import self_password_router
 
     assert router.get_user_avatar is avatar_router.get_user_avatar
     assert router.api_update_user_image is avatar_router.api_update_user_image
     assert router.api_user_self_avatar is avatar_router.api_user_self_avatar
+    assert router.UserPasswordChangeModel is self_password_router.UserPasswordChangeModel
+    assert router.api_user_self_password is self_password_router.api_user_self_password
     assert router.api_get_audit_logs is audit_log_router.api_get_audit_logs
     assert router.api_get_audit_stats is audit_log_router.api_get_audit_stats
     assert router.api_delete_audit_log is audit_log_router.api_delete_audit_log
@@ -292,6 +296,58 @@ def test_self_avatar_denies_missing_req_user_before_file_read():
     result = asyncio.run(router.api_user_self_avatar(request, file=FileMustNotRead()))
 
     assert result == {"status": "error", "message": "请先登录"}
+
+
+def test_self_password_denies_missing_req_user_before_validation_or_media(monkeypatch):
+    from app.domains.users import router
+
+    request = SimpleNamespace(session={})
+
+    class MediaApiMustNotRun:
+        def authenticate_by_name(self, *_args, **_kwargs):
+            raise AssertionError("media_api.authenticate_by_name should not run before login authorization")
+
+        def post(self, *_args, **_kwargs):
+            raise AssertionError("media_api.post should not run before login authorization")
+
+    monkeypatch.setattr(router, "media_api", MediaApiMustNotRun())
+    monkeypatch.setattr(
+        router,
+        "validate_password_strength",
+        lambda _password: (_ for _ in ()).throw(
+            AssertionError("password validation should not run before login authorization")
+        ),
+    )
+
+    result = router.api_user_self_password(
+        router.UserPasswordChangeModel(old_password="old", new_password="new-valid"),
+        request,
+    )
+
+    assert result == {"status": "error", "message": "请先登录"}
+
+
+def test_self_password_rejects_invalid_new_password_before_media(monkeypatch):
+    from app.domains.users import router
+
+    request = SimpleNamespace(session={"req_user": {"Id": "u1", "Name": "Alice"}})
+
+    class MediaApiMustNotRun:
+        def authenticate_by_name(self, *_args, **_kwargs):
+            raise AssertionError("media_api.authenticate_by_name should not run before password validation")
+
+        def post(self, *_args, **_kwargs):
+            raise AssertionError("media_api.post should not run before password validation")
+
+    monkeypatch.setattr(router, "media_api", MediaApiMustNotRun())
+    monkeypatch.setattr(router, "validate_password_strength", lambda _password: (False, "密码太弱"))
+
+    result = router.api_user_self_password(
+        router.UserPasswordChangeModel(old_password="old", new_password="weak"),
+        request,
+    )
+
+    assert result == {"status": "error", "message": "密码太弱"}
 
 
 def test_pin_route_denies_unauthenticated_before_side_effects(monkeypatch):

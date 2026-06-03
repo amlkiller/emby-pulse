@@ -65,6 +65,12 @@ from app.domains.users.request_permission_router import (
     api_update_user_req_permission,
     router as request_permission_router,
 )
+from app.domains.users.self_password_router import (
+    UserPasswordChangeModel,
+    api_user_self_password,
+    router as self_password_router,
+    set_dependency_providers as set_self_password_dependency_providers,
+)
 from app.domains.users.tag_router import (
     TAG_COLORS,
     TagCreateModel,
@@ -126,6 +132,11 @@ set_pin_dependency_providers(
     client_ip_provider=lambda: get_client_ip,
     audit_log_provider=lambda: add_audit_log,
     now_provider=lambda: datetime.datetime.now().isoformat(),
+)
+set_self_password_dependency_providers(
+    media_api_provider=lambda: media_api,
+    validate_password_strength_provider=lambda: validate_password_strength,
+    safe_error_message_provider=lambda: safe_error_message,
 )
 
 # ==========================================
@@ -393,34 +404,7 @@ def api_get_single_user(user_id: str, request: Request):
 # C 端用户自助 API(修改头像 / 修改密码)
 # ==========================================
 router.include_router(avatar_router)
-
-class UserPasswordChangeModel(BaseModel):
-    old_password: str
-    new_password: str
-
-@router.post("/api/user/password")
-def api_user_self_password(data: UserPasswordChangeModel, request: Request):
-    """C 端用户自助修改密码(先验证旧密码)"""
-    user = request.session.get("req_user")
-    if not user or not user.get("Id"):
-        return {"status": "error", "message": "请先登录"}
-    user_id = user["Id"]
-    user_name = user.get("Name", "")
-    if not data.new_password:
-        return {"status": "error", "message": "新密码不能为空"}
-    pw_valid, pw_error = validate_password_strength(data.new_password)
-    if not pw_valid:
-        return {"status": "error", "message": pw_error}
-    try:
-        # 先用旧密码验证身份
-        auth_res = media_api.authenticate_by_name(user_name, data.old_password, timeout=8)
-        if auth_res.status_code != 200:
-            return {"status": "error", "message": "旧密码不正确"}
-        # 验证通过,修改密码
-        media_api.post(f"/Users/{user_id}/Password", json={"Id": user_id, "CurrentPw": data.old_password, "NewPw": data.new_password})
-        return {"status": "success", "message": "密码已修改"}
-    except Exception as e:
-        return {"status": "error", "message": safe_error_message(e, "修改失败")}
+router.include_router(self_password_router)
 
 
 router.include_router(library_visibility_router)
