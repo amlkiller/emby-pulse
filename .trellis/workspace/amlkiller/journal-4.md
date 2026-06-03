@@ -1523,3 +1523,36 @@ Extracted Telegram risk_ban_ callback handling from notification bot into notifi
 ### Next Steps
 
 - None - task complete
+
+
+## Session 226: Extract notification bot message center dispatcher
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot message center dispatcher
+**Branch**: `main`
+
+### Summary
+
+Moved Telegram msg_reply/msg_block/msg_cancel/msg_unblock dispatch from bot_service.py into notification_bot_message_center_callback_service, added cancel handling in the service, preserved existing wrapper compatibility, and added focused dispatcher/cancel coverage. Fixed the migrated cancel cleanup to use dict pop for _msg_reply_mode and recorded that migration gotcha in backend directory-structure spec. Verified compile, import, diff check, focused tests, and full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a6533ed` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
