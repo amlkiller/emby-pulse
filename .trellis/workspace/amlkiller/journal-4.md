@@ -1787,3 +1787,36 @@ Extracted daily poster period context and ranked-item preparation from report_se
 ### Next Steps
 
 - None - task complete
+
+
+## Session 234: Extract reports film strip poster layout service
+
+**Date**: 2026-06-04
+**Task**: Extract reports film strip poster layout service
+**Branch**: `main`
+
+### Summary
+
+Extracted the film-strip daily poster rendering layout from report_service into a reports-domain layout service. Kept ReportGenerator compatibility wrapper and poster/font provider pass-through behavior, added focused boundary tests, documented the pass-through compatibility gotcha in backend specs, and verified focused report checks plus the full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f99b2a7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
