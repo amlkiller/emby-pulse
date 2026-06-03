@@ -38,3 +38,36 @@ Extracted playback stats cache, auth, item-name, poster-id, admin-user, and user
 ### Next Steps
 
 - None - task complete
+
+
+## Session 121: Refactor notification announcements router
+
+**Date**: 2026-06-03
+**Task**: Refactor notification announcements router
+**Branch**: `main`
+
+### Summary
+
+Extracted notification announcement management and user announcement routes into app/domains/notifications/announcements_router.py, included the child router from messages.py, and preserved messages.py compatibility exports. Verified compile/import route checks, focused notification messages/schema tests, and the full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `da34e50` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
