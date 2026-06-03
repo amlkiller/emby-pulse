@@ -1028,3 +1028,36 @@ Extracted the playback stats recent_added endpoint into app/domains/playback/rec
 ### Next Steps
 
 - None - task complete
+
+
+## Session 151: Refactor playback stats recent activity router
+
+**Date**: 2026-06-03
+**Task**: Refactor playback stats recent activity router
+**Branch**: `main`
+
+### Summary
+
+Extracted the playback stats recent activity endpoint into app/domains/playback/recent_activity_router.py, included the child router from playback/stats.py at the original route position, preserved playback.stats compatibility export and runtime monkeypatch behavior for login, stats filter, playback store, user map, and media API dependencies, and verified compile checks, route/import compatibility, git diff checks, focused boundary tests, and the full pytest suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5c559e8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
