@@ -137,3 +137,36 @@ Extracted the admin users manage list route and expiration check helper into app
 ### Next Steps
 
 - None - task complete
+
+
+## Session 244: Refactor users update route
+
+**Date**: 2026-06-04
+**Task**: Refactor users update route
+**Branch**: `main`
+
+### Summary
+
+Extracted the users update route and request model into app/domains/users/update_router.py, preserved router compatibility exports and route order, and added focused authorization, health-check, and success mapping coverage. Verification: compileall changed files, import compatibility check, git diff --check, tests/test_users_public_service_facade.py -v (36 passed), and full tests/ -v (915 passed).
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `bff6fc5` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
