@@ -27,6 +27,7 @@ from app.domains.notifications import notification_bot_media_quality_service
 from app.domains.notifications import notification_bot_playback_command_service
 from app.domains.notifications import notification_bot_polling_service
 from app.domains.notifications import notification_bot_request_admin_message_sync_service
+from app.domains.notifications import notification_bot_risk_alert_service
 from app.domains.notifications import notification_bot_search_command_service
 from app.domains.notifications import notification_bot_stats_command_service
 from app.domains.notifications import notification_bot_wecom_service
@@ -214,6 +215,13 @@ notification_bot_polling_service.set_dependency_providers(
     safe_proxies_provider=lambda: get_safe_proxies,
     telegram_client_provider=lambda: telegram_client,
     submit_bot_task_provider=lambda: _submit_bot_task,
+)
+
+notification_bot_risk_alert_service.set_dependency_providers(
+    pulse_url_provider=lambda: get_pulse_url,
+    media_server_main_public_or_host_provider=lambda: get_media_server_main_public_or_host,
+    add_system_notification_provider=lambda: add_system_notification,
+    logger_provider=lambda: logger,
 )
 
 def _submit_bot_task(fn, *args):
@@ -786,48 +794,7 @@ class NotificationBot:
         self.on_playback_event(data, "stop")
 
     def on_risk_alert(self, data):
-        uid = data.get("user_id", "")
-        username = data.get("username", "未知")
-        current = data.get("current", 0)
-        limit = data.get("limit", 0)
-        devices_info = data.get("devices_info", "未知设备")
-        violation_action = data.get("violation_action", "warn_only")
-        
-        # 根据处理方式显示不同的状态标签
-        action_text = {
-            "warn_only": "🔔 仅提醒管理员",
-            "warn_user": "📢 已警告用户",
-            "auto_ban": "🚫 已自动封禁"
-        }.get(violation_action, "🔔 仅提醒管理员")
-        
-        msg = (f"🚨 <b>【风控预警】 账号并发越界</b>\n\n"
-               f"👤 <b>涉事用户：</b>{username}\n"
-               f"📈 <b>当前并发：</b>{current} / 额度 {limit}\n"
-               f"📱 <b>违规设备：</b>\n{devices_info}\n"
-               f"⚙️ <b>处理方式：</b>{action_text}\n\n"
-               f"⚠️ <i>天眼系统已记录，请立即进行处置！</i>")
-        
-        keyboard = {"inline_keyboard": []}
-        # 自动封禁模式下不显示封禁按钮
-        if uid and violation_action != "auto_ban":
-            keyboard["inline_keyboard"].append([{"text": "🚫 立即封禁此违规账号", "callback_data": f"risk_ban_{uid}"}])
-            
-        admin_url = get_pulse_url() or get_media_server_main_public_or_host()
-        if admin_url:
-            risk_url = f"{admin_url.rstrip('/')}/risk"
-            keyboard["inline_keyboard"].append([{"text": "🛡️ 前往风控大盘拔网线", "url": risk_url}])
-            
-        self.send_message("sys_notify", msg, reply_markup=keyboard if keyboard["inline_keyboard"] else None, platform="all")
-
-        try:
-            add_system_notification(
-                notify_type="risk",
-                title=f"🚨 并发越界: {username}",
-                message=f"当前并发 {current} / 额度 {limit}，处理: {action_text}",
-                action_url="/risk"
-            )
-        except Exception as e:
-            logger.error(f"写入风控通知失败: {e}")
+        return notification_bot_risk_alert_service.handle_risk_alert(self, data)
 
     def on_gap_cleared(self, data):
         if not get_enable_library_notify(): return
