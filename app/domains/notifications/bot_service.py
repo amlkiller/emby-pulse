@@ -40,6 +40,7 @@ from app.domains.notifications import notification_bot_plugin_callback_service
 from app.domains.notifications import notification_bot_polling_service
 from app.domains.notifications import notification_bot_request_admin_message_sync_service
 from app.domains.notifications import notification_bot_risk_alert_service
+from app.domains.notifications import notification_bot_risk_ban_callback_service
 from app.domains.notifications import notification_bot_search_command_service
 from app.domains.notifications import notification_bot_stats_command_service
 from app.domains.notifications import notification_bot_user_expiration_service
@@ -356,6 +357,11 @@ notification_bot_plugin_callback_service.set_dependency_providers(
 notification_bot_feedback_callback_service.set_dependency_providers(
     media_request_dao_provider=lambda: media_request_dao,
     telegram_client_provider=lambda: telegram_client,
+)
+
+notification_bot_risk_ban_callback_service.set_dependency_providers(
+    telegram_client_provider=lambda: telegram_client,
+    username_lookup_provider=lambda bot, user_id: bot._get_username(user_id),
 )
 
 def _submit_bot_task(fn, *args):
@@ -888,24 +894,7 @@ class NotificationBot:
             self._handle_msg_unblock_callback(cid, mid, user_id, token, proxies, cq)
             return
 
-        if data.startswith("risk_ban_"):
-            uid = data.replace("risk_ban_", "")
-            from app.domains.risk.risk_service import ban_user, log_risk_action
-            
-            operator = cq.get('from', {}).get('first_name', 'Admin')
-            target_username = self._get_username(uid) 
-            
-            if ban_user(uid):
-                log_risk_action(uid, target_username, "ban", f"机器快捷执法 (操作人: {operator})")
-                action_text = f"✅ 已成功封禁该违规账号！\n(执行人: {operator})"
-            else:
-                action_text = "❌ 封禁失败，可能 API 权限不足。"
-                
-            msg_obj = cq["message"]
-            orig_text = msg_obj.get("text", "风控警报")
-            new_text = f"{orig_text}\n\n━━━━━━━━━━━━━━\n{action_text}"
-            try: telegram_client.post_api(token, "editMessageText", json={"chat_id": cid, "message_id": mid, "text": new_text, "reply_markup": {"inline_keyboard": []}}, proxies=proxies, timeout=5)
-            except Exception: pass
+        if notification_bot_risk_ban_callback_service.handle_risk_ban_callback(self, data, cq, cid, mid, token, proxies):
             return
 
         if notification_bot_feedback_callback_service.handle_feedback_callback(data, cq, cid, mid, token, proxies):
