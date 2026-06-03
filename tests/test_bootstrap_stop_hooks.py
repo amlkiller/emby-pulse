@@ -387,12 +387,16 @@ def test_user_bot_worker_threads_stop_and_restart(monkeypatch):
     assert user_bot_service._batch_flush_thread is FakeThread.instances[5]
 
     polling_source = inspect.getsource(user_bot_service.UserBot._polling_loop)
-    scheduler_source = inspect.getsource(user_bot_service.UserBot._scheduler_loop)
+    from app.domains.notifications import user_bot_scheduler_service
+
+    scheduler_source = inspect.getsource(user_bot_scheduler_service.run_scheduler_loop)
+    scheduler_wrapper_source = inspect.getsource(user_bot_service.UserBot._scheduler_loop)
     batch_flush_source = inspect.getsource(user_bot_service._batch_flush_loop)
     assert "_stop_event.wait(3)" in polling_source
     assert "_stop_event.wait(5)" in polling_source
-    assert "_stop_event.wait(30)" in scheduler_source
-    assert "_stop_event.wait(60)" in scheduler_source
+    assert "stop_event.wait(30)" in scheduler_source
+    assert "stop_event.wait(60)" in scheduler_source
+    assert "user_bot_scheduler_service.run_scheduler_loop" in scheduler_wrapper_source
     assert "_batch_flush_stop.wait(BATCH_FLUSH_INTERVAL)" in batch_flush_source
     assert "_batch_flush_stop.wait(5)" in batch_flush_source
     assert "time.sleep" not in polling_source

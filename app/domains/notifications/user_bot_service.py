@@ -36,6 +36,7 @@ from app.domains.notifications import user_bot_registration_queue_service
 from app.domains.notifications import user_bot_registration_quota_service
 from app.domains.notifications import user_bot_request_commands_service
 from app.domains.notifications import user_bot_restriction_service
+from app.domains.notifications import user_bot_scheduler_service
 from app.domains.notifications import user_bot_shop_commands_service
 from app.domains.notifications import user_bot_scratch_commands_service
 from app.domains.notifications import user_bot_service_info_commands_service
@@ -562,6 +563,14 @@ user_bot_restriction_service.set_dependency_providers(
     check_user_in_chat_provider=lambda: _check_user_in_chat,
     logger_provider=lambda: logger,
     time_provider=lambda: time,
+)
+
+user_bot_scheduler_service.set_dependency_providers(
+    point_dao_provider=lambda: point_dao,
+    datetime_provider=lambda: datetime,
+    tg_api_provider=lambda: _tg_api,
+    do_lottery_draw_provider=lambda: do_lottery_draw,
+    logger_provider=lambda: logger,
 )
 
 
@@ -1173,70 +1182,10 @@ class UserBot:
                     return
 
     def _scheduler_loop(self):
-        """定时任务循环"""
-        if self._stop_event.wait(30):  # 等待服务完全启动
-            return
-        
-        while self.running and not self._stop_event.is_set():
-            try:
-                # 检查是否需要执行彩票开奖
-                config = point_dao.get_point_config()
-                
-                if int(config.get('enable_lottery', 0)) == 1:
-                    draw_hour = int(config.get('lottery_draw_hour', 20))
-                    now = datetime.datetime.now()
-                    current_hour = now.hour
-                    current_minute = now.minute
-                    
-                    # 检查是否到了开奖时间（整点后5分钟内执行）
-                    if current_hour == draw_hour and current_minute < 5:
-                        # 检查今天是否已开奖
-                        today = now.strftime('%Y-%m-%d')
-                        result = point_dao.get_lottery_winning_numbers(today)
-                        
-                        if not result or not result["winning_numbers"]:
-                            logger.info(f"[彩票] 到达开奖时间 {draw_hour}:00，执行自动开奖...")
-                            do_lottery_draw()
-                
-                # 🔥 处理过期的 PK 邀请
-                try:
-                    # 获取刚过期的邀请（有消息ID的）
-                    expired_invites = point_dao.list_expired_pending_pk_invites_with_messages()
-                    
-                    for invite in expired_invites:
-                        invite_id = invite["id"]
-                        chat_id = invite["chat_id"]
-                        msg_id = invite["message_id"]
-                        challenger_name = invite["challenger_tg_name"] or '用户'
-                        target_name = invite["target_tg_name"] or '用户'
-                        
-                        # 编辑消息显示已过期
-                        try:
-                            _tg_api("editMessageText", {
-                                "chat_id": chat_id,
-                                "message_id": msg_id,
-                                "text": f"⏰ <b>PK邀请已过期</b>\n\n{challenger_name} 向 {target_name} 发起的PK邀请已过期",
-                                "parse_mode": "HTML"
-                            })
-                        except:
-                            pass
-                        
-                        # 更新状态
-                        point_dao.mark_pk_invitation_expired(invite_id)
-                    
-                    if expired_invites:
-                        logger.info(f"[PK] 已处理 {len(expired_invites)} 个过期邀请")
-                except Exception as e:
-                    logger.error(f"[PK] 处理过期邀请失败: {e}")
-                
-                # 每60秒检查一次
-                if self._stop_event.wait(60):
-                    return
-                
-            except Exception as e:
-                logger.error(f"[UserBot] 定时任务异常: {e}")
-                if self._stop_event.wait(60):
-                    return
+        return user_bot_scheduler_service.run_scheduler_loop(
+            lambda: self.running,
+            self._stop_event,
+        )
 
     def _on_message(self, msg):
         text = (msg.get("text") or "").strip()
