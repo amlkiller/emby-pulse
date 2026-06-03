@@ -24,14 +24,16 @@ from app.domains.users.tag_router import (
     api_update_user_tags,
     router as tag_router,
 )
+from app.domains.users.template_router import (
+    api_get_default_template,
+    api_set_default_template,
+    router as template_router,
+)
 from app.infra.clients.media_server_client import media_api
 from app.infra.clients.network_client import network_client
 from app.infra.config.media_server_settings import get_media_server_public_host
 from app.infra.config.request_portal_settings import get_user_portal_url
-from app.infra.config.user_bot_settings import (
-    get_default_user_template_id,
-    set_default_user_template_id,
-)
+from app.infra.config.user_bot_settings import get_default_user_template_id
 from app.infra.config.user_visibility_settings import get_hidden_users
 from app.domains.users import public_service as user_service
 
@@ -1566,33 +1568,7 @@ def api_manage_users_batch(data: BatchActionModelLocal, request: Request):
         return {"status": "success", "message": f"成功操作了 {len(data.user_ids)} 个用户"}
     except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
-@router.post("/api/manage/template/default")
-def api_set_default_template(data: dict, request: Request):
-    """设置默认用户权限模板"""
-    if not request.session.get("user"): return {"status": "error", "message": "未登录"}
-
-    # 检查管理员权限
-    user = request.session.get("user", {})
-    if user.get("auth_type") != "emby" and user.get("role") != "admin":
-        return {"status": "error", "message": "需要管理员权限"}
-
-    try:
-        template_id = data.get("template_user_id", "")
-        set_default_user_template_id(template_id)
-        return {"status": "success", "message": "默认模板已更新"}
-    except Exception as e:
-        return {"status": "error", "message": safe_error_message(e)}
-
-@router.get("/api/manage/template/default")
-def api_get_default_template(request: Request):
-    """获取当前默认用户权限模板"""
-    if not request.session.get("user"): return {"status": "error", "message": "未登录"}
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    try:
-        template_id = get_default_user_template_id()
-        return {"status": "success", "data": {"template_user_id": template_id}}
-    except Exception as e:
-        return {"status": "error", "message": safe_error_message(e)}
+router.include_router(template_router)
 
 # ==================== 置顶用户功能 ====================
 
