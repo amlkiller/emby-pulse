@@ -19,6 +19,7 @@ from app.domains.notifications import notification_bot_check_command_service
 from app.domains.notifications import notification_bot_command_registration_service
 from app.domains.notifications import notification_bot_delivery_service
 from app.domains.notifications import notification_bot_emby_restart_command_service
+from app.domains.notifications import notification_bot_fresh_episode_service
 from app.domains.notifications import notification_bot_gap_clear_service
 from app.domains.notifications import notification_bot_info_command_service
 from app.domains.notifications import notification_bot_item_deleted_service
@@ -323,6 +324,12 @@ notification_bot_gap_clear_service.set_dependency_providers(
     remove_gap_from_scan_state_provider=lambda: remove_gap_from_scan_state,
 )
 
+notification_bot_fresh_episode_service.set_dependency_providers(
+    admin_id_provider=lambda: get_admin_id,
+    datetime_provider=lambda: datetime,
+    media_api_provider=lambda: media_api,
+)
+
 notification_bot_library_queue_service.set_dependency_providers(
     library_notify_queue_max_provider=lambda: get_library_notify_queue_max,
     logger_provider=lambda: logger,
@@ -550,35 +557,10 @@ class SystemDaemon:
                 logger.error(f"[入库通知] 处理失败: {e}")
 
     def _check_fresh_episodes(self, series_id):
-        admin_id = get_admin_id()
-        if not admin_id: return []
-        try:
-            params = { "ParentId": series_id, "Recursive": "true", "IncludeItemTypes": "Episode", "Limit": 1000, "SortBy": "DateCreated", "SortOrder": "Descending", "Fields": "DateCreated,Name,ParentIndexNumber,IndexNumber" }
-            res = media_api.get(f"/Users/{admin_id}/Items", params=params, timeout=10)
-            if res.status_code != 200: return []
-            items = res.json().get("Items", [])
-            if not items: return []
-            fresh_list = []; last_time = None
-            for i, item in enumerate(items):
-                curr_time = self._parse_emby_time(item.get("DateCreated"))
-                if not curr_time: 
-                    if i == 0: fresh_list.append(item)
-                    break
-                if i == 0: fresh_list.append(item); last_time = curr_time
-                else:
-                    delta = abs((last_time - curr_time).total_seconds())
-                    if delta <= 120: fresh_list.append(item); last_time = curr_time 
-                    else: break 
-            return fresh_list
-        except Exception as e: return []
+        return notification_bot_fresh_episode_service.check_fresh_episodes(series_id, self._parse_emby_time)
 
     def _parse_emby_time(self, date_str):
-        if not date_str: return None
-        try:
-            clean_str = date_str.replace('Z', '')[:26]
-            if '.' in clean_str: return datetime.datetime.strptime(clean_str, "%Y-%m-%dT%H:%M:%S.%f")
-            else: return datetime.datetime.strptime(clean_str, "%Y-%m-%dT%H:%M:%S")
-        except: return None
+        return notification_bot_fresh_episode_service.parse_emby_time(date_str)
 
     def _push_episode_group(self, series_id, episodes):
         admin_id = get_admin_id()
