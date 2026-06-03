@@ -22,6 +22,7 @@ from app.domains.notifications import notification_bot_emby_restart_command_serv
 from app.domains.notifications import notification_bot_gap_clear_service
 from app.domains.notifications import notification_bot_info_command_service
 from app.domains.notifications import notification_bot_item_deleted_service
+from app.domains.notifications import notification_bot_library_queue_service
 from app.domains.notifications import notification_bot_library_new_episode_service
 from app.domains.notifications import notification_bot_library_new_item_service
 from app.domains.notifications import notification_bot_latest_command_service
@@ -322,6 +323,11 @@ notification_bot_gap_clear_service.set_dependency_providers(
     remove_gap_from_scan_state_provider=lambda: remove_gap_from_scan_state,
 )
 
+notification_bot_library_queue_service.set_dependency_providers(
+    library_notify_queue_max_provider=lambda: get_library_notify_queue_max,
+    logger_provider=lambda: logger,
+)
+
 def _submit_bot_task(fn, *args):
     if not _bot_executor_slots.acquire(blocking=False):
         logger.warning("[Bot] 后台任务队列已满，丢弃本次异步任务")
@@ -489,14 +495,7 @@ class SystemDaemon:
         return notification_bot_gap_clear_service.clear_gap_record(item)
 
     def add_library_task(self, item):
-        with self.library_lock:
-            max_queue = 300
-            max_queue = get_library_notify_queue_max()
-            if len(self.library_queue) >= max_queue:
-                dropped = self.library_queue.pop(0)
-                logger.warning(f"[入库通知] 队列已满，丢弃最旧项目: {dropped.get('Name') or dropped.get('Id')}")
-            if not any(x.get('Id') == item.get('Id') for x in self.library_queue):
-                self.library_queue.append(item)
+        return notification_bot_library_queue_service.add_library_task(self, item)
 
     def _library_notify_loop(self):
         while self.running and not self._stop_event.is_set():
