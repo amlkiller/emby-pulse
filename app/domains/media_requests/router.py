@@ -44,6 +44,17 @@ from app.domains.media_requests.feedback_router import (
     set_dependency_providers as set_feedback_dependency_providers,
     submit_feedback,
 )
+from app.domains.media_requests.management_router import (
+    AdminActionModel,
+    BulkAdminActionModel,
+    batch_manage_action,
+    get_all_requests,
+    get_my_requests,
+    get_pending_notify,
+    manage_request_action,
+    router as management_router,
+    set_dependency_providers as set_management_dependency_providers,
+)
 from app.domains.media_requests.safe_media_router import (
     get_safe_latest,
     get_safe_top_media,
@@ -201,6 +212,29 @@ set_discovery_dependency_providers(
 )
 
 
+set_management_dependency_providers(
+    user_service_provider=lambda: user_service,
+    list_my_requests_provider=lambda: list_my_requests,
+    list_all_requests_provider=lambda: list_all_requests,
+    tmdb_client_provider=lambda: tmdb_client,
+    safe_proxies_provider=lambda: get_safe_proxies,
+    get_media_request_provider=lambda: get_media_request,
+    moviepilot_url_provider=lambda: get_moviepilot_url,
+    moviepilot_token_provider=lambda: get_moviepilot_token,
+    moviepilot_client_provider=lambda: moviepilot_client,
+    update_media_request_status_provider=lambda: update_media_request_status,
+    delete_media_request_provider=lambda: delete_media_request,
+    notify_admin_provider=lambda: notify_admin,
+    list_request_status_notify_items_provider=lambda: list_request_status_notify_items,
+    list_tg_bindings_provider=lambda: list_tg_bindings,
+    notification_service_provider=lambda: notification_service,
+    get_pending_notify_data_provider=lambda: get_pending_notify_data,
+    safe_error_message_provider=lambda: safe_error_message,
+    logger_provider=lambda: logger,
+    batch_manage_action_provider=lambda: batch_manage_action,
+)
+
+
 set_safe_media_dependency_providers(
     media_api_provider=lambda: media_api,
     playback_stats_provider=lambda: playback_stats,
@@ -227,17 +261,6 @@ set_cache_control_dependency_providers(
 class MediaRequestSubmitModel(BaseSubmitModel):
     seasons: List[int] = [0] 
     overview: Optional[str] = ""
-
-class AdminActionModel(BaseModel):
-    tmdb_id: int
-    season: int = 0
-    action: str
-    reject_reason: Optional[str] = None
-
-class BulkAdminActionModel(BaseModel):
-    items: List[dict]
-    action: str
-    reject_reason: Optional[str] = None
 
 router.include_router(auth_router)
 
@@ -349,272 +372,7 @@ async def submit_media_request(request: Request):
     except Exception as e:
         return {"status": "error", "message": safe_error_message(e, "提交失败")}
 
-@router.get("/api/requests/my")
-def get_my_requests(request: Request):
-    user = request.session.get("req_user")
-    if not user: return {"status": "error", "message": "未登录"}
-    uid = str(user.get("Id", ""))
-    rows = list_my_requests(uid)
-    
-    results = []
-    for r in rows:
-        results.append({
-            "tmdb_id": r[0], 
-            "title": r[1] + (f" (S{r[5]})" if r[6]=='tv' else ""), 
-            "year": r[2], 
-            "poster_path": r[3], 
-            "status": r[4], 
-            "season": r[5], 
-            "requested_at": r[7], 
-            "reject_reason": r[8],
-            "episodes": r[9] or "",
-            "request_type": r[10] or "new"
-        })
-    return {"status": "success", "data": results}
-
-@router.get("/api/manage/requests")
-def get_all_requests(request: Request):
-    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    rows = list_all_requests()
-    
-    # 🔥 收集需要获取 TMDB 封面的 tmdb_id
-    tmdb_ids_to_fetch = []
-    for r in rows:
-        poster_path = r[4] or ""
-        tmdb_id = r[0]
-        if poster_path and ("/emby/Items/" in poster_path or ":8096" in poster_path or poster_path.startswith("/api/library/image/")):
-            if tmdb_id:
-                tmdb_ids_to_fetch.append(tmdb_id)
-        elif not poster_path and tmdb_id:
-            tmdb_ids_to_fetch.append(tmdb_id)
-    
-    # 🔥 并发获取 TMDB 封面（ThreadPoolExecutor）
-    tmdb_posters = {}
-    if tmdb_ids_to_fetch:
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        proxies = get_safe_proxies()
-        def fetch_tmdb_poster(tid):
-            try:
-                tmdb_info = tmdb_client.get_tv_details(tid, proxies=proxies, timeout=3).json()
-                return (tid, tmdb_info.get("poster_path"))
-            except:
-                return (tid, None)
-        
-        with ThreadPoolExecutor(max_workers=10) as executor:
-            futures = [executor.submit(fetch_tmdb_poster, tid) for tid in set(tmdb_ids_to_fetch)]
-            for future in as_completed(futures, timeout=10):
-                tid, poster = future.result()
-                if poster:
-                    tmdb_posters[tid] = poster
-    
-    results = []
-    for r in rows:
-        # 判断是否为追新（有 episodes 或库里已有该剧）
-        is_update = r[12] == 'update' if r[12] else False
-        episodes_str = r[11] or ""
-        
-        # 构建标题显示
-        title_display = r[2]
-        series_name = r[2]  # 保存原始剧名用于追新
-        if r[1] == 'tv':
-            if episodes_str:
-                # 追新：显示具体集数，标题去掉季数
-                title_display = f"{r[2]} 第 {r[6]} 季 E{episodes_str.replace(',', '-')}集"
-            else:
-                title_display += f" 第 {r[6]} 季"
-        
-        # 🔥 处理封面路径（使用预获取的 TMDB 封面）
-        poster_path = r[4] or ""
-        tmdb_id = r[0]
-        
-        if poster_path and ("/emby/Items/" in poster_path or ":8096" in poster_path or poster_path.startswith("/api/library/image/")):
-            # 本地路径，使用预获取的 TMDB 封面
-            poster_path = ""
-            if tmdb_id in tmdb_posters:
-                poster_path = f"https://image.tmdb.org/t/p/w500{tmdb_posters[tmdb_id]}"
-        
-        if not poster_path:
-            # 尝试使用预获取的 TMDB 封面
-            if tmdb_id in tmdb_posters:
-                poster_path = f"https://image.tmdb.org/t/p/w500{tmdb_posters[tmdb_id]}"
-        elif not poster_path.startswith("http"):
-            # TMDB 相对路径，补全
-            poster_path = f"https://image.tmdb.org/t/p/w500{poster_path}"
-        
-        results.append({
-            "tmdb_id": r[0], 
-            "media_type": r[1], 
-            "title": title_display, 
-            "series_name": series_name,  # 原始剧名
-            "year": r[3], 
-            "poster_path": poster_path, 
-            "status": r[5], 
-            "season": r[6], 
-            "created_at": r[7], 
-            "request_count": r[8], 
-            "requested_by": r[9], 
-            "reject_reason": r[10],
-            "episodes": episodes_str,
-            "request_type": r[12] or "new",
-            "series_id": r[13] or "",
-            "is_update": is_update
-        })
-    return {"status": "success", "data": results}
-
-@router.post("/api/manage/requests/batch")
-def batch_manage_action(data: BulkAdminActionModel, request: Request):
-    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    
-    # 🔥 预先批量查询所有需要通知的工单信息（优化数据库查询）
-    notify_items = []  # 收集所有需要通知的工单
-    
-    for item in data.items:
-        tid = item['tmdb_id']; sn = item['season']
-        if data.action == "approve":
-            row = get_media_request(tid, sn)
-            
-            mp_url = get_moviepilot_url(); mp_token = get_moviepilot_token()
-            if mp_url and mp_token and row:
-                payload = { "name": row["title"], "tmdbid": int(tid), "year": str(row["year"]), "type": "电影" if row["media_type"]=="movie" else "电视剧" }
-                if row["media_type"] == "tv": payload["season"] = sn
-                try: moviepilot_client.subscribe(mp_url, mp_token, payload, timeout=10)
-                except Exception: pass
-            update_media_request_status(tid, sn, 1)
-            
-        elif data.action == "manual":
-            update_media_request_status(tid, sn, 4)
-            
-        elif data.action == "reject":
-            update_media_request_status(tid, sn, 3, data.reject_reason)
-        elif data.action == "finish":
-            update_media_request_status(tid, sn, 2)
-        elif data.action == "hdhive_done":
-            # 影巢转存完成后，状态设为待入库(7)
-            update_media_request_status(tid, sn, 7)
-        elif data.action == "delete":
-            delete_media_request(tid, sn)
-    
-    # 🔥 批量通知用户（审批通过、入库完成、拒绝、手动接单、影巢转存完成）
-    if data.action in ["approve", "finish", "reject", "manual", "hdhive_done"]:
-        try:
-            rule = notify_admin.get_notify_rule('request_status')
-            logger.info(f"[状态变更通知] action={data.action}, rule={rule}")
-            
-            if rule and rule.get('enabled') and 'tg_bot' in rule.get('channels', []):
-                # 🔥 批量查询所有工单信息和用户绑定关系
-                notify_items, user_ids = list_request_status_notify_items(data.items)
-                tg_bindings = list_tg_bindings(user_ids)
-                logger.info(f"[状态变更通知] 共 {len(notify_items)} 个工单需要通知，TG绑定数: {len(tg_bindings)}")
-                
-                # 🔥 发送通知
-                for ni in notify_items:
-                    req_row = ni['request']
-                    title = req_row['title']
-                    year = req_row['year'] or ''
-                    media_type = req_row['media_type']
-                    season = req_row['season']
-                    episodes = req_row['episodes'] or ''
-                    poster = req_row['poster_path'] or ''
-                    
-                    # 构建标题
-                    if media_type == 'tv':
-                        if episodes:
-                            title_text = f"{title} S{season}E{episodes.replace(',', '-')}"
-                        else:
-                            title_text = f"{title} S{season}"
-                    else:
-                        title_text = title
-                    
-                    # 状态文本和图标
-                    if data.action == "approve":
-                        status_icon = "🚀"
-                        status_text = "审批通过，正在下载中"
-                    elif data.action == "finish":
-                        status_icon = "✅"
-                        status_text = "已入库完成，可以观看啦！"
-                    elif data.action == "reject":
-                        status_icon = "❌"
-                        status_text = f"已拒绝\n📝 原因: {data.reject_reason or '未说明'}"
-                    elif data.action == "manual":
-                        status_icon = "✋"
-                        status_text = "已手动接单，正在处理中"
-                    elif data.action == "hdhive_done":
-                        status_icon = "📥"
-                        status_text = "影巢转存成功，等待入库"
-                    else:
-                        status_icon = "📢"
-                        status_text = "状态已更新"
-                    
-                    # 🔥 处理封面 URL
-                    img_url = None
-                    if poster:
-                        if poster.startswith('http://') or poster.startswith('https://'):
-                            img_url = poster
-                        elif poster.startswith('/'):
-                            img_url = f"https://image.tmdb.org/t/p/w300{poster}"
-                    
-                    msg = f"{status_icon} <b>求片状态更新</b>\n\n📺 <b>内容：</b>{title_text} ({year})\n📢 <b>状态：</b>{status_text}"
-                    
-                    # 发送通知给所有请求该片的用户
-                    for u in ni['users']:
-                        user_id = u['user_id']
-                        tg_id = tg_bindings.get(user_id)
-                        
-                        if tg_id:
-                            logger.info(f"[状态变更通知] 发送通知: user_id={user_id}, tg_id={tg_id}, action={data.action}")
-                            try:
-                                if img_url:
-                                    notification_service.send_user_bot_photo(int(tg_id), img_url, msg)
-                                else:
-                                    notification_service.send_user_bot_message(int(tg_id), msg)
-                                logger.info(f"[状态变更通知] 发送成功: tg_id={tg_id}")
-                            except Exception as e3:
-                                logger.error(f"[状态变更通知] 发送失败: tg_id={tg_id}, error={e3}")
-                        else:
-                            logger.info(f"[状态变更通知] 用户 {user_id} 未绑定TG，跳过通知")
-            else:
-                logger.warning(f"[状态变更通知] 规则未启用或渠道不含tg_bot")
-        except Exception as e:
-            logger.error(f"[状态变更通知] 发送失败: {e}")
-            
-    return {"status": "success", "message": f"操作已执行"}
-
-@router.post("/api/manage/requests/action")
-def manage_request_action(data: AdminActionModel, request: Request):
-    if not user_service.is_admin_user(request):
-        return {"status": "error", "message": "需要管理员权限"}
-    return batch_manage_action(BulkAdminActionModel(items=[{"tmdb_id": data.tmdb_id, "season": data.season}], action=data.action, reject_reason=data.reject_reason), request)
-
-@router.get("/api/requests/pending_notify")
-def get_pending_notify(request: Request):
-    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    try:
-        req_count, req_rows, feed_count, feed_rows = get_pending_notify_data()
-        
-        items = []
-        for r in req_rows:
-            items.append({
-                "id": f"req_{r['tmdb_id']}_{r['season']}", 
-                "title": r['title'] + (f" (第{r['season']}季)" if r['media_type'] == 'tv' else ""), 
-                "poster": r['poster_path'], 
-                "users": r['users'], 
-                "time": r['created_at'],
-                "type": "request"
-            })
-            
-        for f in feed_rows:
-            items.append({
-                "id": f"feed_{f['id']}",
-                "title": f"⚠️ 报错: {f['item_name']}",
-                "poster": f['poster'] or "", 
-                "users": f"{f['username']} - {f['issue_type']}",
-                "time": f['created_at'],
-                "type": "feedback"
-            })
-            
-        items.sort(key=lambda x: x['time'], reverse=True)
-        return {"status": "success", "count": req_count + feed_count, "items": items[:5]}
-    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
+router.include_router(management_router)
 
 router.include_router(feedback_router)
 

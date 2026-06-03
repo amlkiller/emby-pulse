@@ -123,6 +123,60 @@ def test_media_requests_router_includes_discovery_child_routes_and_compat_export
     assert trending_index < tv_index < check_index < submit_index
 
 
+def test_media_requests_router_includes_management_child_routes_and_compat_exports():
+    from app.domains.media_requests import management_router
+    from app.domains.media_requests import router as media_requests_router
+
+    routes = [
+        (route.path, route.methods)
+        for route in media_requests_router.router.routes
+        if hasattr(route, "methods")
+    ]
+
+    assert any(path == "/api/requests/my" and "GET" in methods for path, methods in routes)
+    assert any(path == "/api/manage/requests" and "GET" in methods for path, methods in routes)
+    assert any(path == "/api/manage/requests/batch" and "POST" in methods for path, methods in routes)
+    assert any(path == "/api/manage/requests/action" and "POST" in methods for path, methods in routes)
+    assert any(path == "/api/requests/pending_notify" and "GET" in methods for path, methods in routes)
+    assert media_requests_router.AdminActionModel is management_router.AdminActionModel
+    assert media_requests_router.BulkAdminActionModel is management_router.BulkAdminActionModel
+    assert media_requests_router.get_my_requests is management_router.get_my_requests
+    assert media_requests_router.get_all_requests is management_router.get_all_requests
+    assert media_requests_router.batch_manage_action is management_router.batch_manage_action
+    assert media_requests_router.manage_request_action is management_router.manage_request_action
+    assert media_requests_router.get_pending_notify is management_router.get_pending_notify
+
+    submit_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/requests/submit" and "POST" in methods
+    )
+    my_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/requests/my" and "GET" in methods
+    )
+    manage_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/manage/requests" and "GET" in methods
+    )
+    batch_index = next(
+        i
+        for i, (path, methods) in enumerate(routes)
+        if path == "/api/manage/requests/batch" and "POST" in methods
+    )
+    action_index = next(
+        i
+        for i, (path, methods) in enumerate(routes)
+        if path == "/api/manage/requests/action" and "POST" in methods
+    )
+    pending_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/requests/pending_notify" and "GET" in methods
+    )
+    feedback_index = next(
+        i
+        for i, (path, methods) in enumerate(routes)
+        if path == "/api/requests/feedback/submit" and "POST" in methods
+    )
+    assert submit_index < my_index < manage_index < batch_index < action_index < pending_index
+    assert pending_index < feedback_index
+
+
 def test_media_requests_router_includes_feedback_child_routes_and_compat_exports():
     from app.domains.media_requests import feedback_router
     from app.domains.media_requests import router as media_requests_router
