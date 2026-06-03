@@ -1,12 +1,10 @@
 import io
-import re
 import datetime
 import logging
-import math
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from app.core.config import THEMES
 from app.domains.reports.report_assets import HAS_PIL, POSTER_THEMES, _get_font, _load_font, get_theme_list
 from app.domains.reports import report_daily_poster_data_service
+from app.domains.reports import report_film_strip_poster_layout_service
 from app.domains.reports import report_poster_fetcher_service
 from app.domains.reports.report_queries import (
     build_report_base_filter,
@@ -38,6 +36,10 @@ report_daily_poster_data_service.set_dependency_providers(
     date_today_provider=lambda: datetime.date.today(),
     get_report_top_query_limit_provider=lambda: get_report_top_query_limit,
     list_report_ranked_items_provider=lambda: list_report_ranked_items,
+)
+
+report_film_strip_poster_layout_service.set_dependency_providers(
+    logger_provider=lambda: logger,
 )
 
 def get_user_map_internal():
@@ -224,295 +226,22 @@ class ReportGenerator:
             return self._draw_film_strip_layout(tv_list, movie_list, pc, theme_config, slogan)
 
     def _draw_film_strip_layout(self, tv_list, movie_list, pc, theme_config, slogan):
-        """电影胶片横排布局"""
-        colors = theme_config['colors']
-        bg_config = theme_config['background']
-        bg_colors = bg_config['colors']
-        decorations = theme_config.get('decorations', [])
-        
-        W = 1080
-        padding = 60
-        
-        # ========== 加载字体 ==========
-        try:
-            font_title = _get_font(72)          # 主标题
-            font_subtitle = _get_font(22)       # 英文副标题
-            font_date = _get_font(36)           # 日期
-            font_weekday = _get_font(28)        # 星期
-            font_section_cn = _get_font(36)     # 板块中文标题
-            font_section_en = _get_font(18)     # 板块英文标题
-            font_rank = _get_font(48)           # 排名数字
-            font_name = _get_font(24)           # 剧名/电影名
-            font_count = _get_font(18)          # 播放次数
-            font_watermark = _get_font(20)      # 水印
-        except:
-            font_title = font_subtitle = font_date = font_weekday = font_section_cn = font_section_en = font_rank = font_name = font_count = font_watermark = ImageFont.load_default()
-        
-        # ========== 计算所需高度 ==========
-        header_h = 200       # 报头区域
-        section_h = 380      # 每个榜单区域（标题60 + 封面240 + 名称80）
-        footer_h = 60        # 页脚
-        
-        num_sections = (1 if tv_list else 0) + (1 if movie_list else 0)
-        H = header_h + num_sections * section_h + footer_h + 40
-        
-        # ========== 创建画布 - 应用主题背景 ==========
-        bg_config = theme_config['background']
-        bg_colors = bg_config['colors']
-        
-        img = Image.new('RGB', (W, H), bg_colors[0])
-        draw = ImageDraw.Draw(img)
-        
-        # 绘制背景渐变
-        for y in range(H):
-            ratio = y / H
-            r = int(bg_colors[0][0] + ratio * (bg_colors[1][0] - bg_colors[0][0]))
-            g = int(bg_colors[0][1] + ratio * (bg_colors[1][1] - bg_colors[0][1]))
-            b = int(bg_colors[0][2] + ratio * (bg_colors[1][2] - bg_colors[0][2]))
-            draw.line([(0, y), (W, y)], fill=(r, g, b))
-        
-        # 绘制主题装饰
-        decorations = theme_config.get('decorations', [])
-        
-        if 'film_holes' in decorations:
-            # 电影胶片孔装饰
-            hole_w, hole_h = 12, 18
-            for i in range(0, H, 35):
-                draw.rounded_rectangle([(15, i+8), (15 + hole_w, i+8 + hole_h)], radius=3, 
-                                       fill=colors['shadow'], outline=colors['divider'])
-                draw.rounded_rectangle([(W - 15 - hole_w, i+8), (W - 15, i+8 + hole_h)], radius=3, 
-                                       fill=colors['shadow'], outline=colors['divider'])
-        
-        if 'spotlight' in decorations:
-            # 顶部聚光灯效果
-            for r in range(500, 0, -5):
-                draw.ellipse([(-150, -250), (r*2-150, r*2-250)], 
-                            fill=(bg_colors[1][0]+20, bg_colors[1][1]+15, bg_colors[1][2]+25))
-            for r in range(400, 0, -4):
-                draw.ellipse([(W-100, -200), (W+r*2-100, r*2-200)], 
-                            fill=(bg_colors[1][0]+15, bg_colors[1][1]+10, bg_colors[1][2]+20))
-        
-        if 'bottom_glow' in decorations:
-            # 底部光晕
-            for r in range(300, 0, -4):
-                draw.ellipse([(W//2 - r, H - 100), (W//2 + r, H + r)], 
-                            fill=(bg_colors[1][0]+5, bg_colors[1][1]+3, bg_colors[1][2]+8))
-        
-        effects = theme_config.get('effects', {})
-        
-        if 'neon_grid' in decorations:
-            # 霓虹网格
-            grid_color = effects.get('grid_color', (80, 40, 120))
-            for x in range(0, W, 80):
-                draw.line([(x, 0), (x, H)], fill=grid_color, width=1)
-            for y in range(0, H, 80):
-                draw.line([(0, y), (W, y)], fill=grid_color, width=1)
-        
-        if 'sun_glow' in decorations:
-            # 日落太阳光晕
-            sun_y = effects.get('sun_y', 100)
-            glow_color = effects.get('glow_color', (255, 150, 50))
-            for r in range(200, 0, -5):
-                opacity = r / 200
-                draw.ellipse([(W//2 - r, sun_y - r), (W//2 + r, sun_y + r)], 
-                            fill=(int(glow_color[0]*opacity), int(glow_color[1]*opacity), int(glow_color[2]*opacity)))
-        
-        if 'wave_lines' in decorations:
-            # 海洋波浪线
-            wave_color = effects.get('wave_color', (30, 80, 120))
-            for i in range(5):
-                wave_y = H - 50 - i * 20
-                for x in range(0, W, 10):
-                    y_offset = int(math.sin(x * 0.05 + i) * 8)
-                    draw.line([(x, wave_y + y_offset), (x + 10, wave_y + y_offset)], fill=wave_color, width=2)
-        
-        # ========== 顶部报头区域 ==========
-        current_y = 50
-        
-        draw.text((padding, current_y), pc['title'], font=font_title, fill=colors['title'])
-        current_y += 85
-        
-        date_text = pc['date_label']
-        weekday_text = pc['weekday']
-        draw.text((padding, current_y), date_text, font=font_date, fill=colors['date'])
-        draw.text((padding + 320, current_y + 6), weekday_text, font=font_weekday, fill=colors['weekday'])
-        
-        draw.text((W - padding - 300, 60), pc['subtitle'], font=font_subtitle, fill=(120, 125, 140))
-        draw.text((W - padding - 260, 90), slogan, font=font_count, fill=(100, 105, 120))
-        
-        current_y += 55
-        draw.line([(padding, current_y), (W - padding, current_y)], fill=(60, 65, 80), width=2)
-        current_y += 30
-        
-        # ========== 绘制封面排行区域的函数 ==========
-        # 🔥 tv_pattern 在整个函数范围内定义
-        tv_pattern = re.compile(r' - [sS]\d|第.+[集期]|EP?\d', re.IGNORECASE)
-        
-        def draw_rank_section(cn_title, en_title, items, y_start):
-            y = y_start
-            
-            # 板块标题：左侧中文 + 右侧英文
-            draw.text((padding, y), cn_title, font=font_section_cn, fill=colors['section_title'])
-            en_bbox = draw.textbbox((0, 0), en_title, font=font_section_en)
-            en_w = en_bbox[2] - en_bbox[0]
-            draw.text((W - padding - en_w, y + 10), en_title, font=font_section_en, fill=colors['section_en'])
-            y += 60
-            
-            # 封面参数 - 更大的封面
-            poster_w, poster_h = 170, 240
-            gap = 15
-            total_width = 5 * poster_w + 4 * gap
-            start_x = (W - total_width) // 2
-            
-            # 层次偏移（上下错落，更有动感）
-            offsets = [0, 12, -8, 10, -5]
-            
-            # 辅助函数：安全获取值
-            def get_val(item, key, default=None):
-                try:
-                    return item[key] if key in item.keys() else default
-                except:
-                    return item.get(key, default) if hasattr(item, 'get') else default
-            
-            # 并行获取封面（优化性能）
-            def fetch_poster_for_item(idx, item):
-                item_id = get_val(item, 'ItemId')
-                item_name = get_val(item, 'ItemName', '')
-                is_tv = "剧集" in cn_title and tv_pattern.search(item_name)
-                poster = self._get_best_poster(item_id, item_name, poster_w, poster_h, is_tv=is_tv)
-                return idx, poster
-            
-            # 并行获取最多5个封面
-            posters = {}
-            items_to_process = items[:5]
-            with ThreadPoolExecutor(max_workers=5) as executor:
-                futures = [executor.submit(fetch_poster_for_item, i, item) for i, item in enumerate(items_to_process)]
-                for future in as_completed(futures, timeout=30):
-                    try:
-                        idx, poster = future.result()
-                        posters[idx] = poster
-                    except Exception as e:
-                        logger.warning(f"[海报生成] 封面获取失败: {e}")
-            
-            # 获取海报圆角半径
-            poster_radius = colors.get('poster_radius', 12)
-            
-            # 绘制封面和排名
-            for i, item in enumerate(items[:5]):
-                poster = posters.get(i)
-                
-                x = start_x + i * (poster_w + gap)
-                poster_y = y + offsets[i]
-                
-                # 封面阴影
-                shadow_offset = 6
-                for s in range(3):
-                    draw.rounded_rectangle(
-                        [(x + shadow_offset + s, poster_y + shadow_offset + s), 
-                         (x + poster_w + shadow_offset - s, poster_y + poster_h + shadow_offset - s)],
-                        radius=poster_radius, fill=colors['shadow']
-                    )
-                
-                if poster:
-                    # 圆角封面
-                    mask = Image.new('L', (poster_w, poster_h), 0)
-                    mask_draw = ImageDraw.Draw(mask)
-                    mask_draw.rounded_rectangle([(0, 0), (poster_w, poster_h)], radius=poster_radius, fill=255)
-                    
-                    resized = poster.resize((poster_w, poster_h), Image.LANCZOS)
-                    rounded = Image.new('RGBA', (poster_w, poster_h), (0, 0, 0, 0))
-                    rounded.paste(resized, (0, 0))
-                    rounded.putalpha(mask)
-                    
-                    img.paste(rounded.convert('RGB'), (x, poster_y), rounded.split()[3])
-                else:
-                    # 占位封面 - 渐变效果
-                    placeholder_bg = colors['placeholder_bg']
-                    for py in range(poster_h):
-                        ratio = py / poster_h
-                        r = int(placeholder_bg[0][0] + ratio * (placeholder_bg[1][0] - placeholder_bg[0][0]))
-                        g = int(placeholder_bg[0][1] + ratio * (placeholder_bg[1][1] - placeholder_bg[0][1]))
-                        b = int(placeholder_bg[0][2] + ratio * (placeholder_bg[1][2] - placeholder_bg[0][2]))
-                        draw.line([(x, poster_y + py), (x + poster_w, poster_y + py)], fill=(r, g, b))
-                    draw.rounded_rectangle([(x, poster_y), (x + poster_w, poster_y + poster_h)], radius=poster_radius, outline=colors['divider'], width=1)
-                    draw.text((x + poster_w//2 - 36, poster_y + poster_h//2), "暂无封面", font=font_count, fill=colors['placeholder_text'])
-                
-                # 排名数字
-                rank_text = str(i + 1)
-                rank_x = x + 10
-                rank_y = poster_y + 10
-                
-                # 排名颜色（金银铜）
-                if i == 0:
-                    rank_color = colors['rank_1']
-                elif i == 1:
-                    rank_color = colors['rank_2']
-                elif i == 2:
-                    rank_color = colors['rank_3']
-                else:
-                    rank_color = colors['rank_other']
-                
-                # 排名背景圆
-                rank_size = 50
-                draw.ellipse([(rank_x, rank_y), (rank_x + rank_size, rank_y + rank_size)], fill=colors['rank_bg'])
-                draw.ellipse([(rank_x, rank_y), (rank_x + rank_size, rank_y + rank_size)], outline=rank_color, width=3)
-                
-                # 排名数字
-                rank_bbox = draw.textbbox((0, 0), rank_text, font=font_rank)
-                rank_w = rank_bbox[2] - rank_bbox[0]
-                rank_h = rank_bbox[3] - rank_bbox[1]
-                draw.text((rank_x + (rank_size - rank_w) // 2, rank_y + (rank_size - rank_h) // 2 - 5), 
-                         rank_text, font=font_rank, fill=rank_color)
-                
-                # 剧名/电影名 - 封面下方
-                name_y = poster_y + poster_h + 15
-                name_text = get_val(item, 'SeriesName') or get_val(item, 'ItemName') or '未知'
-                if len(name_text) > 8:
-                    name_text = name_text[:8] + '...'
-                
-                # 名称居中
-                name_bbox = draw.textbbox((0, 0), name_text, font=font_name)
-                name_w = name_bbox[2] - name_bbox[0]
-                name_x = x + (poster_w - name_w) // 2
-                draw.text((name_x, name_y), name_text, font=font_name, fill=colors['name'])
-                
-                # 播放时长
-                duration = get_val(item, 'Duration') or 0
-                hours = int(duration // 3600)
-                minutes = int((duration % 3600) // 60)
-                if hours > 0:
-                    duration_text = f"{hours}h{minutes}m"
-                else:
-                    duration_text = f"{minutes}分钟"
-                count_bbox = draw.textbbox((0, 0), duration_text, font=font_count)
-                count_w = count_bbox[2] - count_bbox[0]
-                count_x = x + (poster_w - count_w) // 2
-                draw.text((count_x, name_y + 32), duration_text, font=font_count, fill=colors['duration'])
-            
-            # 返回下一个区域的起始Y坐标
-            return y + poster_h + max(offsets) + 70
-        
-        # ========== 热播剧集 TOP 5 ==========
-        if tv_list:
-            current_y = draw_rank_section("热门剧集 TOP 5", "TV SHOWS TOP 5", tv_list, current_y)
-        
-        # ========== 热门电影 TOP 5 ==========
-        if movie_list:
-            current_y = draw_rank_section("热门电影 TOP 5", "MOVIES TOP 5", movie_list, current_y)
-        
-        # ========== 底部页脚 ==========
-        footer_y = current_y + 10
-        draw.line([(padding, footer_y), (W - padding, footer_y)], fill=colors['divider'], width=1)
-        
-        watermark_text = "By Emby Pulse"
-        bbox = draw.textbbox((0, 0), watermark_text, font=font_watermark)
-        watermark_w = bbox[2] - bbox[0]
-        draw.text(((W - watermark_w) // 2, footer_y + 15), watermark_text, font=font_watermark, fill=colors['watermark'])
-        
-        output = io.BytesIO()
-        img.save(output, format='JPEG', quality=85, optimize=True)
-        output.seek(0)
-        return output
+        return report_film_strip_poster_layout_service.draw_film_strip_layout(
+            tv_list,
+            movie_list,
+            pc,
+            theme_config,
+            slogan,
+            poster_provider=lambda item_id, item_name, width, height, is_tv=False: self._get_best_poster(
+                item_id,
+                item_name,
+                width,
+                height,
+                is_tv=is_tv,
+            ),
+            font_provider=lambda size: _get_font(size),
+            default_font_provider=lambda: ImageFont.load_default(),
+        )
 
     def _draw_text_list_layout(self, tv_list, movie_list, pc, theme_config, slogan):
         """简约文字榜单布局 - 无需封面"""
