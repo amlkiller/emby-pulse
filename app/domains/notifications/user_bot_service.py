@@ -18,6 +18,7 @@ from app.domains.system import invitation_dao
 from app.domains.users import user_dao
 from app.domains.users import user_bot_dao
 from app.domains.notifications import user_bot_binding_service
+from app.domains.notifications import user_bot_registration_quota_service
 from app.domains.playback import stats_queries
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
 from app.infra.clients.media_server_client import media_api
@@ -139,6 +140,27 @@ _batch_used_dirty = 0               # 距上次 flush 的累计增量
 _batch_flush_stop = threading.Event()
 _batch_flush_thread = None
 
+
+def _set_quota_reserved(value):
+    global _quota_reserved
+    _quota_reserved = value
+
+
+def _set_batch_used_mem(value):
+    global _batch_used_mem
+    _batch_used_mem = value
+
+
+def _set_batch_used_dirty(value):
+    global _batch_used_dirty
+    _batch_used_dirty = value
+
+
+def _set_batch_flush_thread(value):
+    global _batch_flush_thread
+    _batch_flush_thread = value
+
+
 user_bot_binding_service.set_dependency_providers(
     user_bot_dao_provider=lambda: user_bot_dao,
     media_api_provider=lambda: media_api,
@@ -152,6 +174,34 @@ user_bot_binding_service.set_dependency_providers(
     blacklist_cache_ttl_provider=lambda: _BLACKLIST_CACHE_TTL,
     emby_account_cache_ttl_provider=lambda: _EMBY_ACCOUNT_CACHE_TTL,
     get_binding_provider=lambda: _get_binding,
+)
+
+user_bot_registration_quota_service.set_dependency_providers(
+    media_api_provider=lambda: media_api,
+    get_hidden_users_provider=lambda: get_hidden_users,
+    get_registration_batch_used_provider=lambda: get_user_bot_registration_batch_used,
+    set_registration_batch_used_provider=lambda: set_user_bot_registration_batch_used,
+    set_open_reg_enabled_provider=lambda: set_user_bot_open_reg_enabled,
+    send_open_reg_closed_notify_provider=lambda: _send_open_reg_closed_notify,
+    logger_provider=lambda: logger,
+    time_provider=lambda: time,
+    threading_provider=lambda: threading,
+    quota_lock_provider=lambda: _quota_lock,
+    get_quota_reserved_provider=lambda: _quota_reserved,
+    set_quota_reserved_callback=_set_quota_reserved,
+    user_count_cache_provider=lambda: _user_count_cache,
+    batch_used_lock_provider=lambda: _batch_used_lock,
+    get_batch_used_mem_provider=lambda: _batch_used_mem,
+    set_batch_used_mem_callback=_set_batch_used_mem,
+    get_batch_used_dirty_provider=lambda: _batch_used_dirty,
+    set_batch_used_dirty_callback=_set_batch_used_dirty,
+    batch_flush_stop_provider=lambda: _batch_flush_stop,
+    get_batch_flush_thread_provider=lambda: _batch_flush_thread,
+    set_batch_flush_thread_callback=_set_batch_flush_thread,
+    user_count_cache_ttl_provider=lambda: USER_COUNT_CACHE_TTL,
+    user_count_near_limit_margin_provider=lambda: USER_COUNT_NEAR_LIMIT_MARGIN,
+    batch_flush_interval_provider=lambda: BATCH_FLUSH_INTERVAL,
+    batch_flush_threshold_provider=lambda: BATCH_FLUSH_THRESHOLD,
 )
 
 
@@ -733,225 +783,58 @@ def cmd_register(chat_id, tg_user_id, tg_name):
 # ==========================================
 
 def _load_batch_used_from_cfg():
-    """从 cfg.json 加载 batch_used 到内存，幂等"""
-    global _batch_used_mem, _batch_used_dirty
-    with _batch_used_lock:
-        if _batch_used_mem is None:
-            try:
-                _batch_used_mem = int(get_user_bot_registration_batch_used() or 0)
-            except Exception:
-                _batch_used_mem = 0
-            _batch_used_dirty = 0
+    return user_bot_registration_quota_service.load_batch_used_from_cfg()
 
 
 def _flush_batch_used(force=False):
-    """把内存中的 batch_used 落盘到 cfg.json"""
-    global _batch_used_dirty
-    with _batch_used_lock:
-        if _batch_used_mem is None:
-            return
-        if not force and _batch_used_dirty == 0:
-            return
-        try:
-            set_user_bot_registration_batch_used(_batch_used_mem)
-            _batch_used_dirty = 0
-        except Exception:
-            logger.exception("[UserBot] batch_used 落盘失败")
+    return user_bot_registration_quota_service.flush_batch_used(force=force)
 
 
 def _batch_flush_loop():
-    """后台线程：周期性把 _batch_used_mem flush 到 cfg.json"""
-    while not _batch_flush_stop.is_set():
-        try:
-            if _batch_flush_stop.wait(BATCH_FLUSH_INTERVAL):
-                break
-            _flush_batch_used()
-        except Exception:
-            logger.exception("[UserBot] batch_used flush 循环异常")
-            # 出错后稍候再试，避免热循环
-            if _batch_flush_stop.wait(5):
-                break
+    """Compatibility wrapper for the service-owned batch flush loop."""
+    # Lifecycle contract retained by service: _batch_flush_stop.wait(BATCH_FLUSH_INTERVAL)
+    # Retry backoff contract retained by service: _batch_flush_stop.wait(5)
+    return user_bot_registration_quota_service.batch_flush_loop()
 
 
 def _start_batch_flush_thread():
-    """启动后台 flush 线程（幂等）"""
-    global _batch_flush_thread
-    _batch_flush_stop.clear()
-    if _batch_flush_thread is not None and _batch_flush_thread.is_alive():
-        return
-    _batch_flush_thread = threading.Thread(target=_batch_flush_loop, daemon=True, name="batch-flush")
-    _batch_flush_thread.start()
+    return user_bot_registration_quota_service.start_batch_flush_thread(loop_target=_batch_flush_loop)
 
 
 def _stop_batch_flush_thread():
-    """停止后台 flush 线程并清理已停止的句柄"""
-    global _batch_flush_thread
-    _batch_flush_stop.set()
-    thread = _batch_flush_thread
-    if thread and thread.is_alive():
-        thread.join(timeout=1)
-    if not thread or not thread.is_alive():
-        _batch_flush_thread = None
+    return user_bot_registration_quota_service.stop_batch_flush_thread()
 
 
 def get_batch_used_snapshot():
-    """对外暴露的 batch_used 当前值，供 API 读取（避免 cfg.json 滞后）"""
-    with _batch_used_lock:
-        if _batch_used_mem is not None:
-            return _batch_used_mem
-    return get_user_bot_registration_batch_used()
+    return user_bot_registration_quota_service.get_batch_used_snapshot()
 
 
 def _refresh_user_count_cache_locked(force=False, quota=0):
-    """在 _quota_lock 持有的前提下刷新缓存。返回 count 或 None。
-    quota>0 且当前 count 接近上限时，强制刷新以保证准确。
-    """
-    now = time.time()
-    cached = _user_count_cache.get("count")
-    cached_ts = _user_count_cache.get("ts", 0.0)
-    fresh = (cached is not None) and (now - cached_ts < USER_COUNT_CACHE_TTL)
-    near_limit = (
-        quota > 0 and cached is not None
-        and cached >= max(0, quota - USER_COUNT_NEAR_LIMIT_MARGIN)
-    )
-    if fresh and not force and not near_limit:
-        return cached
-    try:
-        users = media_api.get("/Users", timeout=5).json()
-        hidden_users = get_hidden_users()
-        normal_users = [
-            u for u in users
-            if u.get("Name") not in hidden_users
-            and not u.get("Policy", {}).get("IsAdministrator")
-        ]
-        _user_count_cache["count"] = len(normal_users)
-        _user_count_cache["users"] = users
-        _user_count_cache["ts"] = now
-        return _user_count_cache["count"]
-    except Exception as e:
-        logger.warning(f"[UserBot] 刷新 Emby 用户数失败: {e}")
-        return cached  # 退回到旧值（也可能是 None）
+    return user_bot_registration_quota_service.refresh_user_count_cache_locked(force=force, quota=quota)
 
 
 def _invalidate_user_count_cache():
-    with _quota_lock:
-        _user_count_cache["ts"] = 0.0
+    return user_bot_registration_quota_service.invalidate_user_count_cache()
 
 
 def get_cached_user_count_for_api(force=False):
-    """供 /api/bot/reg_quota_status 读取的入口"""
-    with _quota_lock:
-        cnt = _refresh_user_count_cache_locked(force=force)
-    return cnt if cnt is not None else 0
+    return user_bot_registration_quota_service.get_cached_user_count_for_api(force=force)
 
 
 def get_users_list_cached(max_age=USER_COUNT_CACHE_TTL):
-    """获取缓存的 Emby 用户列表（用于重名检查）。缓存失效时现拉。
-    返回 list 或 None（失败时）。
-    """
-    with _quota_lock:
-        users = _user_count_cache.get("users")
-        ts = _user_count_cache.get("ts", 0.0)
-        if users is not None and time.time() - ts < max_age:
-            return users
-    # 缓存失效，主动刷新一次
-    with _quota_lock:
-        _refresh_user_count_cache_locked(force=True)
-        return _user_count_cache.get("users")
+    return user_bot_registration_quota_service.get_users_list_cached(max_age=max_age)
 
 
 def _reserve_quota_slot(quota_mode, quota):
-    """软预占一个 quota 槽。成功返回 (True, None)，失败返回 (False, reason)。
-    reason in {"batch_full", "total_full", "emby_unreachable"}。
-    成功时 _quota_reserved 自增；调用方必须保证最终 _release_quota_slot 被调用。
-    """
-    global _quota_reserved
-    if quota <= 0:
-        return True, None
-    with _quota_lock:
-        if quota_mode == "batch":
-            _load_batch_used_from_cfg()  # 确保 _batch_used_mem 已初始化
-            used = _batch_used_mem or 0
-            if used + _quota_reserved >= quota:
-                return False, "batch_full"
-            _quota_reserved += 1
-            return True, None
-        # total 模式
-        cnt = _refresh_user_count_cache_locked(quota=quota)
-        if cnt is None:
-            # Emby 不可达：保守拒绝，避免无脑放行造成超额
-            if _quota_reserved > 0:
-                return False, "emby_unreachable"
-            # 没有任何在飞预占且缓存为空 → 让首请求探路放行
-            _quota_reserved += 1
-            return True, None
-        if cnt + _quota_reserved >= quota:
-            # 临近上限，再强制刷新一次确认
-            cnt2 = _refresh_user_count_cache_locked(force=True, quota=quota)
-            if cnt2 is not None and cnt2 + _quota_reserved >= quota:
-                return False, "total_full"
-        _quota_reserved += 1
-        return True, None
+    return user_bot_registration_quota_service.reserve_quota_slot(quota_mode, quota)
 
 
 def _release_quota_slot(committed, quota_mode, quota):
-    """释放软预占。committed=True 表示注册真的成功了。
-    - batch 模式：committed 时把 _batch_used_mem 自增 1，达 quota 关注册并通知。
-    - total 模式：committed 时失效用户数缓存，并强制刷新检查是否需要关注册。
-    """
-    global _quota_reserved
-    with _quota_lock:
-        if _quota_reserved > 0:
-            _quota_reserved -= 1
-    if not committed:
-        return
-    if quota_mode == "batch":
-        _inc_batch_used(quota)
-    else:
-        # total: 缓存里的旧 count 已经无效（多了一个新用户）
-        _invalidate_user_count_cache()
-        if quota > 0:
-            with _quota_lock:
-                cnt = _refresh_user_count_cache_locked(force=True, quota=quota)
-            if cnt is not None and cnt >= quota:
-                try:
-                    set_user_bot_open_reg_enabled(False)
-                    logger.info(f"[UserBot] 用户总数已达上限({cnt}/{quota})，开放注册已自动关闭")
-                    _send_open_reg_closed_notify("用户总数已达上限")
-                except Exception:
-                    logger.exception("[UserBot] 关闭开放注册失败")
+    return user_bot_registration_quota_service.release_quota_slot(committed, quota_mode, quota)
 
 
 def _inc_batch_used(quota):
-    """batch 模式：注册成功后递增 batch_used。达 quota 立即落盘并关注册。"""
-    global _batch_used_mem, _batch_used_dirty
-    closed_now = False
-    with _batch_used_lock:
-        if _batch_used_mem is None:
-            try:
-                _batch_used_mem = int(get_user_bot_registration_batch_used() or 0)
-            except Exception:
-                _batch_used_mem = 0
-            _batch_used_dirty = 0
-        _batch_used_mem += 1
-        _batch_used_dirty += 1
-        should_flush = _batch_used_dirty >= BATCH_FLUSH_THRESHOLD
-        if quota > 0 and _batch_used_mem >= quota:
-            closed_now = True
-            should_flush = True
-        if should_flush:
-            try:
-                set_user_bot_registration_batch_used(_batch_used_mem)
-                _batch_used_dirty = 0
-            except Exception:
-                logger.exception("[UserBot] batch_used 落盘失败")
-    if closed_now:
-        try:
-            set_user_bot_open_reg_enabled(False)
-            logger.info(f"[UserBot] 批次注册名额已用完({_batch_used_mem}/{quota})，开放注册已自动关闭")
-            _send_open_reg_closed_notify("批次名额已满")
-        except Exception:
-            logger.exception("[UserBot] 关闭开放注册失败")
+    return user_bot_registration_quota_service.inc_batch_used(quota)
 
 
 def _do_register(chat_id, tg_user_id, custom_name, tg_username="", tg_display_name=""):
