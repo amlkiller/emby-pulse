@@ -1424,3 +1424,36 @@ Extracted user bot rate-limit and username-lock helpers into a focused notificat
 ### Next Steps
 
 - None - task complete
+
+
+## Session 163: Refactor notification user bot menu service
+
+**Date**: 2026-06-03
+**Task**: Refactor notification user bot menu service
+**Branch**: `main`
+
+### Summary
+
+Extracted the user bot main menu keyboard builder into a focused notification menu service while preserving the legacy user_bot_service wrapper, exact keyboard payloads, and patched portal URL provider behavior.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `59d54be` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
