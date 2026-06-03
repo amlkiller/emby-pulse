@@ -19,6 +19,7 @@ from app.domains.notifications import notification_bot_check_command_service
 from app.domains.notifications import notification_bot_command_registration_service
 from app.domains.notifications import notification_bot_delivery_service
 from app.domains.notifications import notification_bot_emby_restart_command_service
+from app.domains.notifications import notification_bot_gap_clear_service
 from app.domains.notifications import notification_bot_info_command_service
 from app.domains.notifications import notification_bot_item_deleted_service
 from app.domains.notifications import notification_bot_library_new_episode_service
@@ -316,6 +317,11 @@ notification_bot_webhook_event_service.set_dependency_providers(
     logger_provider=lambda: logger,
 )
 
+notification_bot_gap_clear_service.set_dependency_providers(
+    gap_dao_provider=lambda: gap_dao,
+    remove_gap_from_scan_state_provider=lambda: remove_gap_from_scan_state,
+)
+
 def _submit_bot_task(fn, *args):
     if not _bot_executor_slots.acquire(blocking=False):
         logger.warning("[Bot] 后台任务队列已满，丢弃本次异步任务")
@@ -480,18 +486,7 @@ class SystemDaemon:
         )
 
     def _clear_gap_record_async(self, item: dict):
-        try:
-            if item.get("Type") != "Episode": return
-            series_id = str(item.get("SeriesId"))
-            season = int(item.get("ParentIndexNumber", -1))
-            episode = int(item.get("IndexNumber", -1))
-            if season == -1 or episode == -1: return
-
-            gap_dao.delete_gap_record_by_series_episode(series_id, season, episode)
-            try:
-                remove_gap_from_scan_state(series_id, season, episode)
-            except Exception: pass
-        except Exception as e: pass
+        return notification_bot_gap_clear_service.clear_gap_record(item)
 
     def add_library_task(self, item):
         with self.library_lock:
