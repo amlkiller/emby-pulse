@@ -1094,3 +1094,36 @@ Extracted NotificationBot.on_playback_event into a domain-local notification_bot
 ### Next Steps
 
 - None - task complete
+
+
+## Session 213: Extract notification bot library new episode service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot library new episode service
+**Branch**: `main`
+
+### Summary
+
+Extracted NotificationBot.on_library_new_episode into a domain-local notification_bot_library_new_episode_service with lazy providers for legacy globals/plugin lookup, kept the legacy wrapper, and added boundary tests for enablement, episode range formatting, template rendering, platform routing, image fallback, quality logs, and channel fan-out.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9905513` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
