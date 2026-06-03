@@ -599,3 +599,36 @@ Extracted the media request user series endpoints into app/domains/media_request
 ### Next Steps
 
 - None - task complete
+
+
+## Session 138: Refactor media requests update router
+
+**Date**: 2026-06-03
+**Task**: Refactor media requests update router
+**Branch**: `main`
+
+### Summary
+
+Extracted the media request update endpoints into app/domains/media_requests/update_router.py, included the child router from media_requests/router.py at the original route position, and preserved media_requests.router compatibility exports for the moved update model, helper, and route handlers. Verified compile/import route checks, git diff checks, focused media request boundary tests, and the full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `fa3dcab` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
