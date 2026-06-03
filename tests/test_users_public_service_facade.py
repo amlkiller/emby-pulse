@@ -100,6 +100,8 @@ def test_users_router_includes_child_routes_and_compat_exports():
     assert any(path == "/api/manage/audit_logs/clear" and "POST" in methods for path, methods in routes)
     assert any(path == "/api/manage/user/verify_password" and "POST" in methods for path, methods in routes)
     assert any(path == "/api/manage/user/check_delete_verified" and "POST" in methods for path, methods in routes)
+    assert any(path == "/api/user/libraries" and "GET" in methods for path, methods in routes)
+    assert any(path == "/api/user/hidden_libraries" and "POST" in methods for path, methods in routes)
     assert any(path == "/api/manage/invite/gen" and "POST" in methods for path, methods in routes)
     assert any(path == "/api/manage/invites" and "GET" in methods for path, methods in routes)
     assert any(path == "/api/manage/invites/export" and "GET" in methods for path, methods in routes)
@@ -118,6 +120,7 @@ def test_users_router_includes_child_routes_and_compat_exports():
     from app.domains.users import audit_log_router
     from app.domains.users import delete_verification_router
     from app.domains.users import invitation_router
+    from app.domains.users import library_visibility_router
 
     assert router.api_get_audit_logs is audit_log_router.api_get_audit_logs
     assert router.api_get_audit_stats is audit_log_router.api_get_audit_stats
@@ -135,6 +138,9 @@ def test_users_router_includes_child_routes_and_compat_exports():
     assert router.api_get_invites is invitation_router.api_get_invites
     assert router.api_export_invites is invitation_router.api_export_invites
     assert router.api_manage_invites_batch is invitation_router.api_manage_invites_batch
+    assert router.HiddenLibrariesModel is library_visibility_router.HiddenLibrariesModel
+    assert router.api_get_user_libraries is library_visibility_router.api_get_user_libraries
+    assert router.api_update_hidden_libraries is library_visibility_router.api_update_hidden_libraries
 
     admin_index = next(
         i for i, (path, methods) in enumerate(routes) if path == "/api/manage/user/admin_list" and "GET" in methods
@@ -146,6 +152,9 @@ def test_users_router_includes_child_routes_and_compat_exports():
         i
         for i, (path, methods) in enumerate(routes)
         if path == "/api/manage/user/verify_password" and "POST" in methods
+    )
+    user_libraries_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/user/libraries" and "GET" in methods
     )
     hidden_libraries_index = next(
         i
@@ -159,7 +168,7 @@ def test_users_router_includes_child_routes_and_compat_exports():
         i for i, (path, methods) in enumerate(routes) if path == "/api/manage/user/library" and "POST" in methods
     )
     assert admin_index < audit_index < verify_index
-    assert hidden_libraries_index < invitation_index < library_index
+    assert verify_index < user_libraries_index < hidden_libraries_index < invitation_index < library_index
 
 
 def test_delete_verification_route_preserves_router_app_start_time_compat(monkeypatch):
