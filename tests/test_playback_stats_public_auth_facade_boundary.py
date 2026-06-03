@@ -1698,6 +1698,325 @@ def test_system_monitor_uses_stats_safe_error_message_monkeypatch(monkeypatch):
     ]
 
 
+def test_playback_stats_includes_item_detail_child_route_and_compat_export():
+    from app.domains.playback import item_detail_router
+    from app.domains.playback import stats
+
+    routes = [
+        (route.path, route.methods)
+        for route in stats.router.routes
+        if hasattr(route, "methods")
+    ]
+
+    assert any(path == "/api/stats/item_detail" and "GET" in methods for path, methods in routes)
+    assert stats.api_item_detail is item_detail_router.api_item_detail
+
+    system_monitor_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/system/monitor" and "GET" in methods
+    )
+    item_detail_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/item_detail" and "GET" in methods
+    )
+    assert system_monitor_index < item_detail_index
+
+
+def test_item_detail_denies_unauthenticated_before_media_or_query_side_effects(monkeypatch):
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"Id": "u1"}})
+    calls = []
+
+    def fake_check_login(seen_request):
+        calls.append(seen_request)
+        return False
+
+    def fail_media_get(*args, **kwargs):
+        raise AssertionError("item detail should not read media API without login")
+
+    def fail_query(*args, **kwargs):
+        raise AssertionError("item detail should not query playback stats without login")
+
+    monkeypatch.setattr(stats, "check_login", fake_check_login)
+    monkeypatch.setattr(stats.media_api, "get", fail_media_get)
+    monkeypatch.setattr(stats.playback_store, "query", fail_query)
+
+    response = stats.api_item_detail(request, item_id="item-1")
+
+    assert response == {"status": "error", "message": "请先登录"}
+    assert calls == [request]
+
+
+def test_item_detail_allows_admin_through_stats_monkeypatches(monkeypatch):
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"Id": "admin-id", "role": "admin"}})
+    calls = []
+
+    class ItemResponse:
+        status_code = 200
+
+        def json(self):
+            calls.append(("item_json",))
+            return {
+                "Id": "movie-1",
+                "Name": "Movie One",
+                "Type": "Movie",
+                "Overview": "overview",
+                "ProductionYear": 2026,
+                "CommunityRating": 8.5,
+                "Genres": ["Drama"],
+            }
+
+    def fake_check_login(seen_request):
+        calls.append(("check_login", seen_request))
+        return True
+
+    def fake_media_get(path):
+        calls.append(("media_get", path))
+        return ItemResponse()
+
+    def fake_query(sql, params):
+        normalized_sql = " ".join(sql.split())
+        calls.append(("query", normalized_sql, list(params)))
+        return [
+            {
+                "ItemName": "Movie One",
+                "ItemType": "Movie",
+                "PlayDuration": 120,
+                "UserId": "u1",
+                "DateCreated": "2026-06-03T10:00:00",
+            },
+            {
+                "ItemName": "Movie One",
+                "ItemType": "Movie",
+                "PlayDuration": 60,
+                "UserId": "u1",
+                "DateCreated": "2026-06-02T09:00:00",
+            },
+            {
+                "ItemName": "Movie One",
+                "ItemType": "Movie",
+                "PlayDuration": 30,
+                "UserId": "u2",
+                "DateCreated": "2026-06-01T08:00:00",
+            },
+        ]
+
+    def fake_get_user_map_local():
+        calls.append(("get_user_map_local",))
+        return {"u1": "Alice", "u2": "Bob"}
+
+    monkeypatch.setattr(stats, "check_login", fake_check_login)
+    monkeypatch.setattr(stats.media_api, "get", fake_media_get)
+    monkeypatch.setattr(stats.playback_store, "query", fake_query)
+    monkeypatch.setattr(stats, "get_user_map_local", fake_get_user_map_local)
+
+    response = stats.api_item_detail(request, item_id="movie-1")
+
+    assert response == {
+        "status": "success",
+        "data": {
+            "ItemInfo": {
+                "Id": "movie-1",
+                "Name": "Movie One",
+                "Type": "Movie",
+                "Overview": "overview",
+                "ProductionYear": 2026,
+                "CommunityRating": 8.5,
+                "Genres": ["Drama"],
+            },
+            "Stats": {"TotalPlays": 3, "TotalTime": 210, "TotalTimeHours": 0.1},
+            "TopUsers": [
+                {"UserId": "u1", "UserName": "Alice", "PlayCount": 2, "TotalTime": 180},
+                {"UserId": "u2", "UserName": "Bob", "PlayCount": 1, "TotalTime": 30},
+            ],
+            "RecentPlays": [
+                {"UserName": "Alice", "PlayDuration": 120, "DateCreated": "2026-06-03T10:00:00"},
+                {"UserName": "Alice", "PlayDuration": 60, "DateCreated": "2026-06-02T09:00:00"},
+                {"UserName": "Bob", "PlayDuration": 30, "DateCreated": "2026-06-01T08:00:00"},
+            ],
+            "TimeDistribution": {
+                "2026-06-03": {"plays": 1, "time": 120},
+                "2026-06-02": {"plays": 1, "time": 60},
+                "2026-06-01": {"plays": 1, "time": 30},
+            },
+        },
+    }
+    assert calls == [
+        ("check_login", request),
+        ("media_get", "/Users/admin-id/Items/movie-1"),
+        ("item_json",),
+        (
+            "query",
+            "SELECT ItemName, ItemType, PlayDuration, UserId, DateCreated FROM PlaybackActivity WHERE ItemId = ? ORDER BY DateCreated DESC LIMIT 100",
+            ["movie-1"],
+        ),
+        ("get_user_map_local",),
+    ]
+
+
+def test_item_detail_scopes_non_admin_name_lookup_through_stats_monkeypatches(monkeypatch):
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(
+        session={
+            "user": {"Id": "admin-id", "id": "local-user"},
+            "req_user": {"Id": "emby-user"},
+        }
+    )
+    calls = []
+
+    class MissingItemResponse:
+        status_code = 404
+
+        def json(self):
+            raise AssertionError("404 item detail response should not be decoded")
+
+    def fake_check_login(seen_request):
+        calls.append(("check_login", seen_request))
+        return True
+
+    def fake_media_get(path):
+        calls.append(("media_get", path))
+        return MissingItemResponse()
+
+    def fake_query(sql, params):
+        normalized_sql = " ".join(sql.split())
+        calls.append(("query", normalized_sql, list(params)))
+        return [
+            {
+                "ItemName": "Show One - s01e01 - 第 1 集",
+                "ItemType": "Episode",
+                "PlayDuration": 600,
+                "UserId": "emby-user",
+                "DateCreated": "2026-06-03T11:00:00",
+            }
+        ]
+
+    def fake_get_user_map_local():
+        calls.append(("get_user_map_local",))
+        return {"emby-user": "Viewer"}
+
+    monkeypatch.setattr(stats, "check_login", fake_check_login)
+    monkeypatch.setattr(stats.media_api, "get", fake_media_get)
+    monkeypatch.setattr(stats.playback_store, "query", fake_query)
+    monkeypatch.setattr(stats, "get_user_map_local", fake_get_user_map_local)
+
+    response = stats.api_item_detail(
+        request,
+        item_id="episode-1",
+        item_name="Show One - s01e05 - 第 5 集",
+    )
+
+    assert response["status"] == "success"
+    assert response["data"]["ItemInfo"] == {
+        "Id": "episode-1",
+        "Name": "Show One - 第 1 季",
+        "Type": "Episode",
+        "Overview": None,
+        "ProductionYear": None,
+        "CommunityRating": None,
+        "Genres": None,
+    }
+    assert response["data"]["Stats"] == {"TotalPlays": 1, "TotalTime": 600, "TotalTimeHours": 0.2}
+    assert response["data"]["TopUsers"] == [
+        {"UserId": "emby-user", "UserName": "Viewer", "PlayCount": 1, "TotalTime": 600}
+    ]
+    assert calls == [
+        ("check_login", request),
+        ("media_get", "/Users/admin-id/Items/episode-1"),
+        (
+            "query",
+            "SELECT ItemName, ItemType, PlayDuration, UserId, DateCreated FROM PlaybackActivity WHERE ItemName LIKE ? AND UserId = ? ORDER BY DateCreated DESC LIMIT 500",
+            ["%Show One%", "emby-user"],
+        ),
+        ("get_user_map_local",),
+    ]
+
+
+def test_item_detail_returns_no_record_without_user_map_side_effect(monkeypatch):
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"Id": "admin-id", "role": "admin"}})
+    calls = []
+
+    def fake_check_login(seen_request):
+        calls.append(("check_login", seen_request))
+        return True
+
+    def fake_media_get(path):
+        calls.append(("media_get", path))
+        return SimpleNamespace(status_code=500)
+
+    def fake_query(sql, params):
+        normalized_sql = " ".join(sql.split())
+        calls.append(("query", normalized_sql, list(params)))
+        return []
+
+    def fail_get_user_map_local():
+        raise AssertionError("item detail should not build user map without rows")
+
+    monkeypatch.setattr(stats, "check_login", fake_check_login)
+    monkeypatch.setattr(stats.media_api, "get", fake_media_get)
+    monkeypatch.setattr(stats.playback_store, "query", fake_query)
+    monkeypatch.setattr(stats, "get_user_map_local", fail_get_user_map_local)
+
+    response = stats.api_item_detail(request, item_id="missing-item")
+
+    assert response == {"status": "error", "message": "无播放记录"}
+    assert calls == [
+        ("check_login", request),
+        ("media_get", "/Users/admin-id/Items/missing-item"),
+        (
+            "query",
+            "SELECT ItemName, ItemType, PlayDuration, UserId, DateCreated FROM PlaybackActivity WHERE ItemId = ? ORDER BY DateCreated DESC LIMIT 100",
+            ["missing-item"],
+        ),
+    ]
+
+
+def test_item_detail_uses_stats_safe_error_message_monkeypatch(monkeypatch):
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"Id": "admin-id", "role": "admin"}})
+    calls = []
+
+    def fake_check_login(seen_request):
+        calls.append(("check_login", seen_request))
+        return True
+
+    def fake_media_get(path):
+        calls.append(("media_get", path))
+        return SimpleNamespace(status_code=500)
+
+    def fail_query(sql, params):
+        calls.append(("query", " ".join(sql.split()), list(params)))
+        raise RuntimeError("raw item failure")
+
+    def fake_safe_error_message(error):
+        calls.append(("safe_error_message", str(error)))
+        return "safe item error"
+
+    monkeypatch.setattr(stats, "check_login", fake_check_login)
+    monkeypatch.setattr(stats.media_api, "get", fake_media_get)
+    monkeypatch.setattr(stats.playback_store, "query", fail_query)
+    monkeypatch.setattr(stats, "safe_error_message", fake_safe_error_message)
+
+    response = stats.api_item_detail(request, item_id="bad-item")
+
+    assert response == {"status": "error", "message": "safe item error"}
+    assert calls == [
+        ("check_login", request),
+        ("media_get", "/Users/admin-id/Items/bad-item"),
+        (
+            "query",
+            "SELECT ItemName, ItemType, PlayDuration, UserId, DateCreated FROM PlaybackActivity WHERE ItemId = ? ORDER BY DateCreated DESC LIMIT 100",
+            ["bad-item"],
+        ),
+        ("safe_error_message", "raw item failure"),
+    ]
+
+
 def test_user_details_denies_unauthenticated_before_query_or_media_side_effects(monkeypatch):
     from app.domains.playback import stats
 
