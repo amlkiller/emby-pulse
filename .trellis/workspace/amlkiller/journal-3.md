@@ -1787,3 +1787,36 @@ Extracted user bot rank and robbery command handling into a focused notification
 ### Next Steps
 
 - None - task complete
+
+
+## Session 174: Refactor notification user bot shop commands
+
+**Date**: 2026-06-03
+**Task**: Refactor notification user bot shop commands
+**Branch**: `main`
+
+### Summary
+
+Extracted user bot shop and redeem command handling into a focused notification domain service while preserving legacy wrappers, runtime dependency providers, callback acknowledgement, and redemption notifications.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ca78a3f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
