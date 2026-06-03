@@ -1358,3 +1358,36 @@ Extracted notification bot fresh episode lookup and Emby timestamp parsing from 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 221: Extract notification bot library push service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot library push service
+**Branch**: `main`
+
+### Summary
+
+Extracted notification bot library episode-group and single-item push behavior from bot_service.py into notification_bot_library_push_service. Preserved media detail refresh, fallback payloads, gap-cleared event publication, per-season auto-finish calls, notify.library event payloads, and swallowed dependency-error behavior through dynamic legacy providers. Added focused boundary tests and verified compileall, focused tests, import check, diff check, and the full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `793c8a1` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
