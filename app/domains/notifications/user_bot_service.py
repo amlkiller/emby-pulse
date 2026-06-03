@@ -6,7 +6,6 @@ import threading
 import time
 import datetime
 import secrets
-import json
 import logging
 import re
 import random
@@ -20,6 +19,7 @@ from app.domains.users import user_bot_dao
 from app.domains.notifications import user_bot_binding_service
 from app.domains.notifications import user_bot_registration_queue_service
 from app.domains.notifications import user_bot_registration_quota_service
+from app.domains.notifications import user_bot_restriction_service
 from app.domains.playback import stats_queries
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
 from app.infra.clients.media_server_client import media_api
@@ -247,6 +247,19 @@ user_bot_registration_queue_service.set_dependency_providers(
     logger_provider=lambda: logger,
 )
 
+user_bot_restriction_service.set_dependency_providers(
+    tg_api_provider=lambda: _tg_api,
+    restriction_enabled_provider=lambda: is_user_bot_restriction_enabled,
+    required_channels_provider=lambda: get_user_bot_required_channels,
+    required_groups_provider=lambda: get_user_bot_required_groups,
+    restriction_cache_ttl_provider=lambda: get_user_bot_restriction_cache_ttl,
+    restriction_cache_provider=lambda: _restriction_cache,
+    restriction_cache_lock_provider=lambda: _restriction_cache_lock,
+    check_user_in_chat_provider=lambda: _check_user_in_chat,
+    logger_provider=lambda: logger,
+    time_provider=lambda: time,
+)
+
 
 def _submit_task(func, *args, **kwargs):
     return user_bot_registration_queue_service.submit_task(func, *args, **kwargs)
@@ -333,168 +346,19 @@ def _tg_api(method, data=None, token=None):
 
 
 def _check_user_in_chat(user_id: str, chat_id: str) -> bool:
-    """
-    检查用户是否在指定频道/群聊中
-    
-    Args:
-        user_id: Telegram 用户 ID
-        chat_id: 频道/群聊 ID（支持 @用户名 或数字 ID）
-    
-    Returns:
-        bool: True 表示用户在该频道/群聊中
-    """
-    try:
-        result = _tg_api("getChatMember", {"chat_id": chat_id, "user_id": user_id})
-        if not result or not result.get("ok"):
-            return False
-        
-        member = result.get("result", {})
-        status = member.get("status", "")
-        
-        # 有效状态：member, administrator, creator, restricted
-        # 无效状态：left, kicked
-        return status in ["member", "administrator", "creator", "restricted"]
-    except Exception as e:
-        logger.error(f"检查用户 {user_id} 是否在 {chat_id} 中失败: {e}")
-        return False
+    return user_bot_restriction_service.check_user_in_chat(user_id, chat_id)
 
 
 def _check_user_restrictions(tg_user_id: str) -> dict:
-    """
-    检查用户是否满足使用限制条件（智能缓存）
-    
-    缓存策略：
-    - 通过检查：缓存60秒，但每次使用时仍需验证（防止取关后继续使用）
-    - 未通过检查：不缓存（让用户加入后能立即使用）
-    
-    Args:
-        tg_user_id: Telegram 用户 ID
-    
-    Returns:
-        dict: {
-            "passed": bool,  # 是否通过检查
-            "missing_channels": list,  # 未关注的频道
-            "missing_groups": list     # 未加入的群聊
-        }
-    """
-    result = {"passed": True, "missing_channels": [], "missing_groups": []}
-    
-    # 检查是否启用限制
-    enabled = is_user_bot_restriction_enabled()
-    if not enabled:
-        return result
-    
-    # 🔥 检查缓存（缓存有效期内完全信任，不做任何 API 调用）
-    cache_ttl = get_user_bot_restriction_cache_ttl()
-    with _restriction_cache_lock:
-        cached = _restriction_cache.get(tg_user_id)
-        if cached and cached["passed"] and (time.time() - cached["cached_at"] < cache_ttl):
-            # 缓存有效，直接返回
-            return {"passed": True, "missing_channels": [], "missing_groups": []}
-    
-    # 获取必须关注的频道
-    required_channels = get_user_bot_required_channels()
-    if required_channels:
-        channels = [c.strip() for c in required_channels.split("\n") if c.strip()]
-        for channel in channels:
-            in_chat = _check_user_in_chat(tg_user_id, channel)
-            if not in_chat:
-                result["missing_channels"].append(channel)
-    
-    # 获取必须加入的群聊
-    required_groups = get_user_bot_required_groups()
-    logger.info(f"[使用限制] required_groups={repr(required_groups)}")
-    if required_groups:
-        try:
-            # 🔥 尝试解析 JSON 格式
-            groups_data = json.loads(required_groups) if required_groups.strip().startswith('[') else None
-            if groups_data:
-                # JSON 格式：[{"id": "-100123", "name": "群名称", "link": "https://t.me/xxx"}]
-                for group in groups_data:
-                    group_id = group.get("id", "")
-                    if group_id:
-                        in_chat = _check_user_in_chat(tg_user_id, group_id)
-                        logger.info(f"[使用限制] 检查群聊 {group_id}, user={tg_user_id}, in_chat={in_chat}")
-                        if not in_chat:
-                            result["missing_groups"].append({
-                                "id": group_id,
-                                "name": group.get("name", group_id),
-                                "link": group.get("link", "")
-                            })
-            else:
-                # 兼容旧格式：一行一个群 ID
-                groups = [g.strip() for g in required_groups.split("\n") if g.strip()]
-                logger.info(f"[使用限制] 解析后的群聊列表: {groups}")
-                for group in groups:
-                    in_chat = _check_user_in_chat(tg_user_id, group)
-                    logger.info(f"[使用限制] 检查群聊 {group}, user={tg_user_id}, in_chat={in_chat}")
-                    if not in_chat:
-                        result["missing_groups"].append({"id": group, "name": group, "link": ""})
-        except json.JSONDecodeError:
-            # JSON 解析失败，使用旧格式
-            groups = [g.strip() for g in required_groups.split("\n") if g.strip()]
-            for group in groups:
-                in_chat = _check_user_in_chat(tg_user_id, group)
-                if not in_chat:
-                    result["missing_groups"].append({"id": group, "name": group, "link": ""})
-    
-    # 判断是否通过
-    result["passed"] = len(result["missing_channels"]) == 0 and len(result["missing_groups"]) == 0
-    
-    # 🔥 只有通过检查才缓存
-    if result["passed"]:
-        with _restriction_cache_lock:
-            _restriction_cache[tg_user_id] = {
-                "passed": True,
-                "missing_channels": [],
-                "missing_groups": [],
-                "cached_at": time.time()
-            }
-    
-    return result
+    return user_bot_restriction_service.check_user_restrictions(tg_user_id)
 
 
 def _clear_restriction_cache(tg_user_id: str):
-    """清除用户的限制检查缓存"""
-    with _restriction_cache_lock:
-        _restriction_cache.pop(tg_user_id, None)
+    return user_bot_restriction_service.clear_restriction_cache(tg_user_id)
 
 
 def _format_restriction_message(check_result: dict) -> str:
-    """
-    格式化限制检查失败的消息
-    """
-    msg = "⚠️ <b>使用限制</b>\n\n"
-    msg += "使用本机器人需要满足以下条件：\n\n"
-    
-    if check_result["missing_channels"]:
-        msg += "📢 <b>必须关注的频道：</b>\n"
-        for ch in check_result["missing_channels"]:
-            # 如果是 @ 开头的用户名，显示为可点击链接
-            if ch.startswith("@"):
-                msg += f"• <a href=\"https://t.me/{ch[1:]}\">{ch}</a>\n"
-            else:
-                msg += f"• {ch}\n"
-        msg += "\n"
-    
-    if check_result["missing_groups"]:
-        msg += "👥 <b>必须加入的群聊：</b>\n"
-        for grp in check_result["missing_groups"]:
-            # 支持新旧格式
-            if isinstance(grp, dict):
-                name = grp.get("name", grp.get("id", "未知群"))
-                link = grp.get("link", "")
-                if link:
-                    msg += f"• <a href=\"{link}\">{name}</a>\n"
-                else:
-                    msg += f"• {name}\n"
-            else:
-                msg += f"• {grp}\n"
-        msg += "\n"
-    
-    msg += "💡 关注/加入后，发送 <b>/check</b> 重新验证。"
-    
-    return msg
+    return user_bot_restriction_service.format_restriction_message(check_result)
 
 
 def _send(chat_id, text, reply_markup=None):
