@@ -35,6 +35,7 @@ from app.domains.notifications import user_bot_restriction_service
 from app.domains.notifications import user_bot_shop_commands_service
 from app.domains.notifications import user_bot_service_info_commands_service
 from app.domains.notifications import user_bot_telegram_service
+from app.domains.notifications import user_bot_transfer_commands_service
 from app.domains.playback import stats_queries
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
 from app.infra.clients.media_server_client import media_api
@@ -372,6 +373,16 @@ user_bot_request_commands_service.set_dependency_providers(
     portal_url_provider=lambda: get_user_bot_portal_url,
     media_server_main_public_url_provider=lambda: get_media_server_main_public_url,
     safe_error_message_provider=lambda: safe_error_message,
+    logger_provider=lambda: logger,
+)
+
+user_bot_transfer_commands_service.set_dependency_providers(
+    get_binding_provider=lambda: _get_binding,
+    send_provider=lambda: _send,
+    delete_messages_later_provider=lambda: _delete_messages_later,
+    point_dao_provider=lambda: point_dao,
+    user_bot_dao_provider=lambda: user_bot_dao,
+    media_api_provider=lambda: media_api,
     logger_provider=lambda: logger,
 )
 
@@ -1375,166 +1386,23 @@ def cmd_pk_reject(chat_id, tg_user_id, text, is_group=False):
         return _send(chat_id, f"❌ 拒绝PK失败：{safe_error_message(e, '拒绝PK异常，请稍后重试')}")
 
 def cmd_transfer(chat_id, tg_user_id, text, is_group=False, entities=None):
-    """转赠积分"""
-    binding = _get_binding(tg_user_id)
-    if not binding:
-        return _send(chat_id, "❌ 请先私聊机器人绑定账号")
-    
-    # 解析参数: /transfer @用户 积分 或 /转赠 用户名 积分
-    parts = text.split()
-    if len(parts) < 3:
-        return _send(chat_id, "💡 使用方法：/transfer @用户 积分\n示例：/transfer @张三 100\n\n💡 也可以直接使用 Emby 用户名")
-    
-    try:
-        # 最后一个参数是积分，前面的是用户名
-        try:
-            amount = int(parts[-1])
-        except ValueError:
-            return _send(chat_id, "❌ 积分必须是数字")
-        
-        # 用户名可能是多个部分（如 /转赠 小宇 乐 50）
-        target = ' '.join(parts[1:-1]).lstrip('@')
-        
-        if not target:
-            return _send(chat_id, "❌ 请指定要转赠的用户")
-
-        # 🔥 优先从 entities 获取被 @ 用户的真实 TG ID
-        mentioned_user_id = None
-        if entities:
-            for ent in entities:
-                if ent.get("type") == "mention" or ent.get("type") == "text_mention":
-                    # text_mention 直接包含用户信息
-                    if ent.get("type") == "text_mention" and ent.get("user"):
-                        mentioned_user_id = str(ent["user"].get("id", ""))
-                        break
-                    elif ent.get("type") == "mention":
-                        offset = ent.get("offset", 0)
-                        length = ent.get("length", 0)
-                        mentioned_username = text[offset:offset+length].lstrip('@')
-                        mentioned_user_id = user_bot_dao.get_tg_user_id_by_username(mentioned_username)
-                        break
-        
-        if mentioned_user_id:
-            target = mentioned_user_id
-
-        target_binding = user_bot_dao.get_binding_by_tg_user_or_username(target)
-        to_user_id = target_binding["emby_user_id"] if target_binding else None
-        to_user_name = target_binding["emby_username"] if target_binding else None
-        display_name = target_binding["tg_display_name"] if target_binding else None
-
-        if not to_user_id:
-            try:
-                emby_users = media_api.get("/Users", timeout=5).json()
-                user_map = {u['Name']: u['Id'] for u in emby_users}
-                to_user_id = user_map.get(target)
-                to_user_name = target
-            except Exception:
-                pass
-
-        if not to_user_id:
-            return _send(chat_id, f"❌ 未找到用户：{target}\n\n💡 请确认对方已绑定机器人，或直接使用 Emby 用户名")
-
-        result = point_dao.transfer_points(
-            binding['emby_user_id'],
-            binding['emby_username'],
-            to_user_id,
-            to_user_name,
-            amount,
-            target_exists=True,
-        )
-        if result.get("status") != "success":
-            return _send(chat_id, f"❌ {result.get('message', '转赠失败')}")
-
-        new_from_points = result["balance"]
-        actual_amount = result["actual_amount"]
-        fee = result["fee"]
-        display_name = display_name or to_user_name
-        
-        result = _send(chat_id, f"✅ 转赠成功！\n\n💰 已转赠 <b>{actual_amount}</b> 积分给 <b>{display_name}</b>\n💸 手续费：{fee} 积分\n📊 余额：{new_from_points}")
-        
-        # 群聊中15秒后删除消息（转赠）
-        if is_group and result:
-            bot_msg_id = result.get("result", {}).get("message_id")
-            if bot_msg_id:
-                _delete_messages_later(chat_id, [bot_msg_id], 15)
-        
-        return result
-        
-    except ValueError:
-        return _send(chat_id, "❌ 积分必须是数字")
-    except Exception as e:
-        logger.error(f"[UserBot] 转赠失败: {e}")
-        return _send(chat_id, f"❌ 转赠失败：{str(e)}")
+    return user_bot_transfer_commands_service.cmd_transfer(
+        chat_id,
+        tg_user_id,
+        text,
+        is_group=is_group,
+        entities=entities,
+    )
 
 def cmd_redpacket(chat_id, tg_user_id, text, is_group=False, tg_name="", user_msg_id=None):
-    """发红包"""
-    binding = _get_binding(tg_user_id)
-    if not binding:
-        return _send(chat_id, "❌ 请先私聊机器人绑定账号")
-    
-    # 解析参数: /hb 总积分 数量 或 /红包 1000 10
-    parts = text.split()
-    if len(parts) < 3:
-        return _send(chat_id, "💡 使用方法：/hb 总积分 数量\n示例：/hb 1000 10")
-    
-    try:
-        total_amount = int(parts[1])
-        total_count = int(parts[2])
-
-        config = point_dao.get_point_config()
-        if int(config.get('enable_red_packet', 0)) == 0:
-            return _send(chat_id, "❌ 积分红包功能未开启")
-
-        # 检查是否仅管理员可发
-        if int(config.get('red_packet_admin_only', 1)) == 1:
-            # 检查是否是管理员 - 从 Emby API 获取用户信息
-            try:
-                user_info = media_api.get(f"/Users/{binding['emby_user_id']}", timeout=5).json()
-                is_admin = user_info.get('Policy', {}).get('IsAdministrator', False)
-            except:
-                is_admin = False
-            if not is_admin:
-                return _send(chat_id, "❌ 仅管理员可发红包")
-
-        # 检查红包数量
-        if total_count < 1 or total_count > 100:
-            return _send(chat_id, "❌ 红包数量需在 1-100 之间")
-
-        creator_display = tg_name or binding['emby_username']
-        red_packet_result = point_dao.create_red_packet(total_amount, total_count, str(chat_id), binding['emby_user_id'], creator_display)
-        if red_packet_result.get("status") != "success":
-            return _send(chat_id, f"❌ {red_packet_result.get('message', '发红包失败')}")
-
-        packet_id = red_packet_result.get("packet_id")
-        new_points = red_packet_result.get("balance", 0)
-        expire_hours = int(config.get('red_packet_expire_hours', 24))
-        
-        result = _send(chat_id, f"🧧 <b>积分红包</b>\n\n"
-                            f"🆔 红包ID：<b>#{packet_id}</b>\n"
-                            f"💰 总金额：<b>{total_amount}</b> 积分\n"
-                            f"📦 共 <b>{total_count}</b> 个\n"
-                            f"⏰ {expire_hours}小时后过期\n\n"
-                            f"💡 发送 /grab {packet_id} 抢红包")
-
-        if result and result.get("ok"):
-            msg_id = result.get("result", {}).get("message_id")
-            if msg_id:
-                try:
-                    point_dao.save_red_packet_message_id(packet_id, msg_id)
-                except Exception as e:
-                    logger.warning(f"[红包] 记录红包消息ID失败: {e}")
-        
-        # 群聊中只删除用户命令消息，红包消息等抢完或过期后再删
-        if is_group and user_msg_id:
-            _delete_messages_later(chat_id, [user_msg_id], 15)
-        
-        return result
-        
-    except ValueError:
-        return _send(chat_id, "❌ 参数必须是数字")
-    except Exception as e:
-        logger.error(f"[UserBot] 发红包失败: {e}")
-        return _send(chat_id, f"❌ 发红包失败：{str(e)}")
+    return user_bot_transfer_commands_service.cmd_redpacket(
+        chat_id,
+        tg_user_id,
+        text,
+        is_group=is_group,
+        tg_name=tg_name,
+        user_msg_id=user_msg_id,
+    )
 
 def cmd_pk(chat_id, tg_user_id, text, is_group=False, tg_name="", user_msg_id=None):
     """PK掷骰子游戏 - 使用Telegram骰子动画"""
