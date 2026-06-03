@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-3.md`
-- **Total Sessions**: 164
+- **Total Sessions**: 165
 - **Last Active**: 2026-06-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-3.md` | ~1492 | Active |
+| `journal-3.md` | ~1525 | Active |
 | `journal-2.md` | ~1993 | Archived |
 | `journal-1.md` | ~1973 | Archived |
 <!-- @@@/auto:active-documents -->
@@ -31,6 +31,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 165 | 2026-06-03 | Refactor notification user bot open registration notify service | `c825155` | `main` |
 | 164 | 2026-06-03 | Refactor notification user bot message cleanup service | `e2b3ee4` | `main` |
 | 163 | 2026-06-03 | Refactor notification user bot menu service | `59d54be` | `main` |
 | 162 | 2026-06-03 | Refactor notification user bot concurrency service | `ef973d9` | `main` |

@@ -1490,3 +1490,36 @@ Extracted delayed user bot Telegram message cleanup into a focused notification 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 165: Refactor notification user bot open registration notify service
+
+**Date**: 2026-06-03
+**Task**: Refactor notification user bot open registration notify service
+**Branch**: `main`
+
+### Summary
+
+Extracted the active open-registration closed notification helper into a focused notification service, removed the overwritten duplicate helper from user_bot_service, and preserved the legacy wrapper, user/group notification behavior, message text, logging, and monkeypatch-compatible providers.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c825155` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
