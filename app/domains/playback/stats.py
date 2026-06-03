@@ -1,6 +1,11 @@
 from fastapi import APIRouter, Request
 from typing import Optional
 from app.domains.playback import dashboard_cache_service
+from app.domains.playback.chart_router import (
+    api_chart_stats,
+    router as chart_router,
+    set_dependency_providers as set_chart_dependency_providers,
+)
 from app.domains.playback.latest_router import (
     api_latest_media,
     router as latest_router,
@@ -100,6 +105,12 @@ set_user_details_dependency_providers(
     get_clean_name_provider=lambda: get_clean_name,
     resolve_poster_ids_provider=lambda: resolve_poster_ids,
     media_api_provider=lambda: media_api,
+)
+
+set_chart_dependency_providers(
+    check_login_provider=lambda: check_login,
+    build_stats_base_filter_provider=lambda: build_stats_base_filter,
+    playback_store_provider=lambda: playback_store,
 )
 
 
@@ -213,40 +224,7 @@ router.include_router(top_movies_router)
 
 router.include_router(user_details_router)
 
-@router.get("/api/stats/chart")
-@router.get("/api/stats/trend")
-def api_chart_stats(request: Request, user_id: Optional[str] = None, dimension: str = 'day'):
-    # 🔒 安全检查
-    if not check_login(request):
-        return {"status": "error", "message": "请先登录"}
-    
-    # 🔒 权限检查：普通用户只能查看自己的数据
-    admin_user = request.session.get("user", {})
-    req_user = request.session.get("req_user", {})
-    is_admin = admin_user.get("auth_type") == "emby" or admin_user.get("role") == "admin"
-    
-    if not is_admin:
-        if req_user:
-            user_id = req_user.get("Id")
-        elif admin_user:
-            user_id = admin_user.get("id")
-    
-    try:
-        where, params = build_stats_base_filter(user_id)
-        # 🔥 时区修复
-        if dimension == 'week': 
-            sql = f"SELECT strftime('%Y-%W', substr(replace(DateCreated, 'T', ' '), 1, 19)) as Label, SUM(PlayDuration) as Duration FROM PlaybackActivity {where} AND DateCreated > date('now', 'localtime', '-120 days') GROUP BY Label ORDER BY Label"
-        elif dimension == 'month': 
-            sql = f"SELECT substr(replace(DateCreated, 'T', ' '), 1, 7) as Label, SUM(PlayDuration) as Duration FROM PlaybackActivity {where} AND DateCreated > date('now', 'localtime', '-365 days') GROUP BY Label ORDER BY Label"
-        else: 
-            sql = f"SELECT substr(replace(DateCreated, 'T', ' '), 1, 10) as Label, SUM(PlayDuration) as Duration FROM PlaybackActivity {where} AND DateCreated > date('now', 'localtime', '-30 days') GROUP BY Label ORDER BY Label"
-            
-        results = playback_store.query(sql, params)
-        data = {}
-        if results:
-            for r in results: data[r['Label']] = int(r['Duration'] or 0)
-        return {"status": "success", "data": data}
-    except: return {"status": "error", "data": {}}
+router.include_router(chart_router)
 
 @router.get("/api/stats/poster_data")
 def api_poster_data(request: Request, user_id: Optional[str] = None, period: str = 'all'):

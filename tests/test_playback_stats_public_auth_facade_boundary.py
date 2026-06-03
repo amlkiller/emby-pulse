@@ -160,6 +160,98 @@ def test_playback_stats_includes_user_details_child_route_and_compat_export():
     assert top_movies_index < user_details_index < chart_index
 
 
+def test_playback_stats_includes_chart_child_routes_and_compat_export():
+    from app.domains.playback import chart_router
+    from app.domains.playback import stats
+
+    routes = [
+        (route.path, route.methods)
+        for route in stats.router.routes
+        if hasattr(route, "methods")
+    ]
+
+    assert any(path == "/api/stats/chart" and "GET" in methods for path, methods in routes)
+    assert any(path == "/api/stats/trend" and "GET" in methods for path, methods in routes)
+    assert stats.api_chart_stats is chart_router.api_chart_stats
+
+    user_details_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/user_details" and "GET" in methods
+    )
+    chart_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/chart" and "GET" in methods
+    )
+    trend_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/trend" and "GET" in methods
+    )
+    poster_data_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/poster_data" and "GET" in methods
+    )
+    assert user_details_index < chart_index < trend_index < poster_data_index
+
+
+def test_chart_stats_denies_unauthenticated_before_query_side_effects(monkeypatch):
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"Id": "u1"}})
+    calls = []
+
+    def fake_check_login(seen_request):
+        calls.append(seen_request)
+        return False
+
+    def fail_build_stats_base_filter(*args, **kwargs):
+        raise AssertionError("chart stats should not build stats filter without login")
+
+    def fail_query(*args, **kwargs):
+        raise AssertionError("chart stats should not query playback stats without login")
+
+    monkeypatch.setattr(stats, "check_login", fake_check_login)
+    monkeypatch.setattr(stats, "build_stats_base_filter", fail_build_stats_base_filter)
+    monkeypatch.setattr(stats.playback_store, "query", fail_query)
+
+    response = stats.api_chart_stats(request)
+
+    assert response == {"status": "error", "message": "请先登录"}
+    assert calls == [request]
+
+
+def test_chart_stats_allows_non_admin_through_stats_monkeypatches(monkeypatch):
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"id": "local-u"}})
+    calls = []
+
+    def fake_check_login(seen_request):
+        calls.append(("check_login", seen_request))
+        return True
+
+    def fake_build_stats_base_filter(user_id):
+        calls.append(("build_stats_base_filter", user_id))
+        return "WHERE UserId = ?", [user_id]
+
+    def fake_query(sql, params):
+        normalized_sql = " ".join(sql.split())
+        calls.append(("query", normalized_sql, list(params)))
+        return [{"Label": "2026-06", "Duration": 120}]
+
+    monkeypatch.setattr(stats, "check_login", fake_check_login)
+    monkeypatch.setattr(stats, "build_stats_base_filter", fake_build_stats_base_filter)
+    monkeypatch.setattr(stats.playback_store, "query", fake_query)
+
+    response = stats.api_chart_stats(request, user_id="all", dimension="month")
+
+    assert response == {"status": "success", "data": {"2026-06": 120}}
+    assert calls == [
+        ("check_login", request),
+        ("build_stats_base_filter", "local-u"),
+        (
+            "query",
+            "SELECT substr(replace(DateCreated, 'T', ' '), 1, 7) as Label, SUM(PlayDuration) as Duration FROM PlaybackActivity WHERE UserId = ? AND DateCreated > date('now', 'localtime', '-365 days') GROUP BY Label ORDER BY Label",
+            ["local-u"],
+        ),
+    ]
+
+
 def test_user_details_denies_unauthenticated_before_query_or_media_side_effects(monkeypatch):
     from app.domains.playback import stats
 
