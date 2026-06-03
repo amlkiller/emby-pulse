@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend guideline index for the notification domain refactor slice."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Module organization rules for splitting domain-local services."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Exception swallowing/logging behavior must match project conventions and existing callback boundaries."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verification and uv command conventions for implementation."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Logging conventions for preserving callback failure logs."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared thinking guide index for code reuse and boundary checks."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Use existing callback service patterns instead of inventing a new abstraction."}

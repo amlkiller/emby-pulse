@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend guideline index for checking the refactor slice."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Check that the extracted service stays in the correct domain-local module boundary."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Verify callback exception handling remains intentional and compatible."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Quality gate and command conventions for final verification."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Verify preserved failure log behavior."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared thinking guide index for review."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Check consistency with existing callback service extraction patterns."}
