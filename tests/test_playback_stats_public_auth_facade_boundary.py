@@ -573,6 +573,130 @@ def test_top_users_list_allows_admin_through_stats_monkeypatches(monkeypatch):
     ]
 
 
+def test_playback_stats_includes_badges_child_route_and_compat_export():
+    from app.domains.playback import badges_router
+    from app.domains.playback import stats
+
+    routes = [
+        (route.path, route.methods)
+        for route in stats.router.routes
+        if hasattr(route, "methods")
+    ]
+
+    assert any(path == "/api/stats/badges" and "GET" in methods for path, methods in routes)
+    assert stats.api_badges is badges_router.api_badges
+
+    top_users_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/top_users_list" and "GET" in methods
+    )
+    badges_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/badges" and "GET" in methods
+    )
+    monthly_stats_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/monthly_stats" and "GET" in methods
+    )
+    assert top_users_index < badges_index < monthly_stats_index
+
+
+def test_badges_denies_unauthenticated_before_query_side_effects(monkeypatch):
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"Id": "u1"}})
+    calls = []
+
+    def fake_check_login(seen_request):
+        calls.append(seen_request)
+        return False
+
+    def fail_build_stats_base_filter(*args, **kwargs):
+        raise AssertionError("badges should not build stats filter without login")
+
+    def fail_get_playback_column_name():
+        raise AssertionError("badges should not inspect playback columns without login")
+
+    def fail_query(*args, **kwargs):
+        raise AssertionError("badges should not query playback stats without login")
+
+    monkeypatch.setattr(stats, "check_login", fake_check_login)
+    monkeypatch.setattr(stats, "build_stats_base_filter", fail_build_stats_base_filter)
+    monkeypatch.setattr(stats, "get_playback_column_name", fail_get_playback_column_name)
+    monkeypatch.setattr(stats.playback_store, "query", fail_query)
+
+    response = stats.api_badges(request)
+
+    assert response == {"status": "error", "message": "请先登录"}
+    assert calls == [request]
+
+
+def test_badges_allows_non_admin_through_stats_monkeypatches(monkeypatch):
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"id": "local-u"}})
+    calls = []
+    rows = [
+        {"DateCreated": "2026-06-01T10:00:00", "PlayDuration": 200000, "Client": "TV", "ItemId": "m1", "ItemName": "Movie One", "ItemType": "Movie"},
+        {"DateCreated": "2026-06-01T11:00:00", "PlayDuration": 1000, "Client": "Phone", "ItemId": "m1", "ItemName": "Movie One", "ItemType": "Movie"},
+        {"DateCreated": "2026-06-01T12:00:00", "PlayDuration": 1000, "Client": "TV", "ItemId": "m1", "ItemName": "Movie One", "ItemType": "Movie"},
+        {"DateCreated": "2026-06-01T13:00:00", "PlayDuration": 1000, "Client": "TV", "ItemId": "m2", "ItemName": "Movie Two", "ItemType": "Movie"},
+        {"DateCreated": "2026-06-01T14:00:00", "PlayDuration": 1000, "Client": "TV", "ItemId": "m3", "ItemName": "Movie Three", "ItemType": "Movie"},
+        {"DateCreated": "2026-06-06T03:00:00", "PlayDuration": 1000, "Client": "TV", "ItemId": "m4", "ItemName": "Movie Four", "ItemType": "Movie"},
+        {"DateCreated": "2026-06-06T04:00:00", "PlayDuration": 1000, "Client": "TV", "ItemId": "m5", "ItemName": "Movie Five", "ItemType": "Movie"},
+        {"DateCreated": "2026-06-06T05:00:00", "PlayDuration": 1000, "Client": "TV", "ItemId": "m6", "ItemName": "Movie Six", "ItemType": "Movie"},
+        {"DateCreated": "2026-06-06T06:00:00", "PlayDuration": 1000, "Client": "TV", "ItemId": "m7", "ItemName": "Movie Seven", "ItemType": "Movie"},
+        {"DateCreated": "2026-06-07T10:00:00", "PlayDuration": 1000, "Client": "TV", "ItemId": "e1", "ItemName": "Episode One", "ItemType": "Episode"},
+        {"DateCreated": "2026-06-07T11:00:00", "PlayDuration": 1000, "Client": "TV", "ItemId": "e2", "ItemName": "Episode Two", "ItemType": "Episode"},
+    ]
+
+    def fake_check_login(seen_request):
+        calls.append(("check_login", seen_request))
+        return True
+
+    def fake_build_stats_base_filter(user_id):
+        calls.append(("build_stats_base_filter", user_id))
+        return "WHERE UserId = ?", [user_id]
+
+    def fake_get_playback_column_name():
+        calls.append(("get_playback_column_name",))
+        return "ClientName"
+
+    def fake_query(sql, params):
+        normalized_sql = " ".join(sql.split())
+        calls.append(("query", normalized_sql, list(params)))
+        return rows
+
+    monkeypatch.setattr(stats, "check_login", fake_check_login)
+    monkeypatch.setattr(stats, "build_stats_base_filter", fake_build_stats_base_filter)
+    monkeypatch.setattr(stats, "get_playback_column_name", fake_get_playback_column_name)
+    monkeypatch.setattr(stats.playback_store, "query", fake_query)
+
+    response = stats.api_badges(request, user_id="all")
+
+    assert response["status"] == "success"
+    badge_ids = [badge["id"] for badge in response["data"]]
+    assert badge_ids == [
+        "night",
+        "weekend",
+        "liver",
+        "fish",
+        "morning",
+        "device",
+        "loyal",
+        "movie_lover",
+    ]
+    loyal_badge = next(badge for badge in response["data"] if badge["id"] == "loyal")
+    assert loyal_badge["desc"] == "对《Movie One》爱得深沉"
+    assert calls == [
+        ("check_login", request),
+        ("build_stats_base_filter", "local-u"),
+        ("get_playback_column_name",),
+        (
+            "query",
+            "SELECT DateCreated, PlayDuration, COALESCE(ClientName, DeviceName) as Client, ItemId, ItemName, ItemType FROM PlaybackActivity WHERE UserId = ?",
+            ["local-u"],
+        ),
+    ]
+
+
 def test_user_details_denies_unauthenticated_before_query_or_media_side_effects(monkeypatch):
     from app.domains.playback import stats
 
