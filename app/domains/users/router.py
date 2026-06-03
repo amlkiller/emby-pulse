@@ -13,6 +13,18 @@ from app.domains.users.audit_log_router import (
     api_get_audit_stats,
     router as audit_log_router,
 )
+from app.domains.users.delete_verification_router import (
+    APP_START_TIME,
+    PasswordVerifyModel,
+    admin_router as delete_verification_admin_router,
+    api_check_delete_verified,
+    api_get_admin_list,
+    api_verify_delete_password,
+    get_emby_admin_users,
+    router as delete_verification_router,
+    set_app_start_time_provider,
+    verify_emby_admin_password,
+)
 from app.domains.users.list_router import (
     api_get_users,
     router as list_router,
@@ -58,9 +70,7 @@ from app.core.security_utils import safe_error_message
 from app.core.rate_limiter import get_client_ip
 
 router = APIRouter()
-
-# 记录容器启动时间(用于验证重启后失效)
-APP_START_TIME = datetime.datetime.now().isoformat()
+set_app_start_time_provider(lambda: APP_START_TIME)
 
 # ==========================================
 # 操作审计日志
@@ -85,120 +95,9 @@ def add_audit_log(admin_id: str, admin_name: str, action: str,
     except Exception as e:
         logging.error(f"[审计日志] 添加失败: {e}")
 
-# ==========================================
-# 密码验证相关
-# ==========================================
-
-class PasswordVerifyModel(BaseModel):
-    username: str  # 管理员账号
-    password: str  # 管理员密码
-
-def verify_emby_admin_password(username: str, password: str) -> bool:
-    """验证指定的 Emby 管理员账号密码"""
-    try:
-        # 先验证该用户是否是管理员
-        users_res = media_api.get("/Users", timeout=10)
-        if users_res.status_code != 200:
-            return False
-
-        users = users_res.json()
-        # 找到指定的用户并验证是否是管理员
-        target_user = None
-        for u in users:
-            if u.get("Name") == username:
-                target_user = u
-                break
-
-        if not target_user:
-            return False  # 用户不存在
-
-        if not target_user.get("Policy", {}).get("IsAdministrator", False):
-            return False  # 不是管理员
-
-        # 使用 Emby 认证接口验证密码
-        auth_res = media_api.authenticate_by_name(username, password, timeout=10)
-        return auth_res.status_code == 200
-    except Exception as e:
-        logging.error(f"[密码验证] Emby 验证失败: {e}")
-        return False
-
-def get_emby_admin_users() -> List[str]:
-    """获取所有 Emby 管理员用户名列表"""
-    try:
-        users_res = media_api.get("/Users", timeout=10)
-        if users_res.status_code != 200:
-            return []
-
-        users = users_res.json()
-        admin_names = [u.get("Name") for u in users if u.get("Policy", {}).get("IsAdministrator", False)]
-        return admin_names
-    except Exception as e:
-        logging.error(f"[密码验证] 获取管理员列表失败: {e}")
-        return []
-
-@router.get("/api/manage/user/admin_list")
-def api_get_admin_list(request: Request):
-    """获取 Emby 管理员账号列表(用于密码验证选择)"""
-    if not request.session.get("user"):
-        return {"status": "error", "message": "未登录"}
-    if not is_admin_user(request):
-        return {"status": "error", "message": "需要管理员权限"}
-
-    admin_list = get_emby_admin_users()
-    return {"status": "success", "data": admin_list}
-
+router.include_router(delete_verification_admin_router)
 router.include_router(audit_log_router)
-
-@router.post("/api/manage/user/verify_password")
-def api_verify_delete_password(data: PasswordVerifyModel, request: Request):
-    """验证删除用户密码(需要管理员账号和密码)"""
-    if not request.session.get("user"):
-        return {"status": "error", "message": "未登录"}
-    if not is_admin_user(request):
-        return {"status": "error", "message": "需要管理员权限"}
-
-    if not data.username:
-        return {"status": "error", "message": "请输入管理员账号"}
-
-    if not data.password:
-        return {"status": "error", "message": "请输入密码"}
-
-    # 验证 Emby 管理员账号和密码
-    if verify_emby_admin_password(data.username, data.password):
-        # 验证成功,在 session 中记录验证状态(用于单次删除)
-        request.session["delete_verified"] = True
-        request.session["delete_verified_time"] = datetime.datetime.now().isoformat()
-        return {"status": "success", "message": "验证成功"}
-
-    return {"status": "error", "message": "账号或密码错误"}
-
-@router.post("/api/manage/user/check_delete_verified")
-def api_check_delete_verified(request: Request):
-    """检查是否已验证删除密码"""
-    if not request.session.get("user"):
-        return {"status": "error", "message": "未登录", "verified": False}
-    if not is_admin_user(request):
-        return {"status": "error", "message": "需要管理员权限", "verified": False}
-
-    verified = request.session.get("delete_verified", False)
-    verified_time = request.session.get("delete_verified_time", "")
-
-    # 验证有效期:30分钟内有效,且必须在容器启动时间之后
-    if verified and verified_time:
-        try:
-            verify_dt = datetime.datetime.fromisoformat(verified_time)
-            # 检查是否超过30分钟
-            if datetime.datetime.now() - verify_dt > datetime.timedelta(minutes=30):
-                verified = False
-                request.session["delete_verified"] = False
-            # 检查验证时间是否在容器启动之前(重启后失效)
-            elif verify_dt < datetime.datetime.fromisoformat(APP_START_TIME):
-                verified = False
-                request.session["delete_verified"] = False
-        except:
-            verified = False
-
-    return {"status": "success", "verified": verified}
+router.include_router(delete_verification_router)
 
 # 🔥 remark 字段迁移已由 database.py 的 ensure_tables() 处理,此处不再重复
 # 移除重复的 ALTER TABLE 代码,避免日志报错

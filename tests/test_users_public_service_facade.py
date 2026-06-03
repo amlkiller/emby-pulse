@@ -93,10 +93,13 @@ def test_users_router_includes_child_routes_and_compat_exports():
     routes = [(route.path, route.methods) for route in router.router.routes if hasattr(route, "methods")]
 
     assert any(path == "/api/users" and "GET" in methods for path, methods in routes)
+    assert any(path == "/api/manage/user/admin_list" and "GET" in methods for path, methods in routes)
     assert any(path == "/api/manage/audit_logs" and "GET" in methods for path, methods in routes)
     assert any(path == "/api/manage/audit_logs/stats" and "GET" in methods for path, methods in routes)
     assert any(path == "/api/manage/audit_logs/{log_id}" and "DELETE" in methods for path, methods in routes)
     assert any(path == "/api/manage/audit_logs/clear" and "POST" in methods for path, methods in routes)
+    assert any(path == "/api/manage/user/verify_password" and "POST" in methods for path, methods in routes)
+    assert any(path == "/api/manage/user/check_delete_verified" and "POST" in methods for path, methods in routes)
     assert any(path == "/api/manage/template/default" and "POST" in methods for path, methods in routes)
     assert any(path == "/api/manage/template/default" and "GET" in methods for path, methods in routes)
     assert any(path == "/api/manage/user/req_permission" and "POST" in methods for path, methods in routes)
@@ -109,11 +112,49 @@ def test_users_router_includes_child_routes_and_compat_exports():
     assert any(path == "/api/manage/user/tags" and "GET" in methods for path, methods in routes)
 
     from app.domains.users import audit_log_router
+    from app.domains.users import delete_verification_router
 
     assert router.api_get_audit_logs is audit_log_router.api_get_audit_logs
     assert router.api_get_audit_stats is audit_log_router.api_get_audit_stats
     assert router.api_delete_audit_log is audit_log_router.api_delete_audit_log
     assert router.api_clear_audit_logs is audit_log_router.api_clear_audit_logs
+    assert router.PasswordVerifyModel is delete_verification_router.PasswordVerifyModel
+    assert router.verify_emby_admin_password is delete_verification_router.verify_emby_admin_password
+    assert router.get_emby_admin_users is delete_verification_router.get_emby_admin_users
+    assert router.api_get_admin_list is delete_verification_router.api_get_admin_list
+    assert router.api_verify_delete_password is delete_verification_router.api_verify_delete_password
+    assert router.api_check_delete_verified is delete_verification_router.api_check_delete_verified
+
+    admin_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/manage/user/admin_list" and "GET" in methods
+    )
+    audit_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/manage/audit_logs" and "GET" in methods
+    )
+    verify_index = next(
+        i
+        for i, (path, methods) in enumerate(routes)
+        if path == "/api/manage/user/verify_password" and "POST" in methods
+    )
+    assert admin_index < audit_index < verify_index
+
+
+def test_delete_verification_route_preserves_router_app_start_time_compat(monkeypatch):
+    from app.domains.users import delete_verification_router, router
+
+    request = SimpleNamespace(
+        session={
+            "user": {"id": "admin-1"},
+            "delete_verified": True,
+            "delete_verified_time": "2000-01-01T00:00:00",
+        }
+    )
+
+    monkeypatch.setattr(router, "APP_START_TIME", "2999-01-01T00:00:00")
+    monkeypatch.setattr(delete_verification_router, "is_admin_user", lambda request: True)
+
+    assert router.api_check_delete_verified(request) == {"status": "success", "verified": False}
+    assert request.session["delete_verified"] is False
 
 
 def test_selected_external_callers_use_real_user_dao_for_persistence_calls():
