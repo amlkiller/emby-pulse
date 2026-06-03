@@ -345,6 +345,56 @@ def test_media_requests_router_includes_user_series_child_routes_and_compat_expo
     assert clear_index < my_series_index < refresh_index < update_index
 
 
+def test_media_requests_router_includes_update_child_routes_and_compat_exports():
+    from app.domains.media_requests import router as media_requests_router
+    from app.domains.media_requests import update_router
+
+    routes = [
+        (route.path, route.methods)
+        for route in media_requests_router.router.routes
+        if hasattr(route, "methods")
+    ]
+
+    assert any(path == "/api/user/request_update" and "POST" in methods for path, methods in routes)
+    assert any(path == "/api/user/request_update_batch" and "POST" in methods for path, methods in routes)
+    assert any(path == "/api/manage/requests/search_episodes" and "POST" in methods for path, methods in routes)
+    assert any(path == "/api/manage/requests/download_episodes" and "POST" in methods for path, methods in routes)
+    assert media_requests_router.UpdateRequestModel is update_router.UpdateRequestModel
+    assert media_requests_router.getRequestStatusTextSync is update_router.getRequestStatusTextSync
+    assert media_requests_router.submit_update_request is update_router.submit_update_request
+    assert media_requests_router.submit_update_request_batch is update_router.submit_update_request_batch
+    assert media_requests_router.search_episodes_for_update is update_router.search_episodes_for_update
+    assert media_requests_router.download_episodes_for_update is update_router.download_episodes_for_update
+
+    refresh_index = next(
+        i
+        for i, (path, methods) in enumerate(routes)
+        if path == "/api/user/my_series/refresh" and "POST" in methods
+    )
+    update_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/user/request_update" and "POST" in methods
+    )
+    batch_index = next(
+        i
+        for i, (path, methods) in enumerate(routes)
+        if path == "/api/user/request_update_batch" and "POST" in methods
+    )
+    search_index = next(
+        i
+        for i, (path, methods) in enumerate(routes)
+        if path == "/api/manage/requests/search_episodes" and "POST" in methods
+    )
+    download_index = next(
+        i
+        for i, (path, methods) in enumerate(routes)
+        if path == "/api/manage/requests/download_episodes" and "POST" in methods
+    )
+    register_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/requests/register" and "POST" in methods
+    )
+    assert refresh_index < update_index < batch_index < search_index < download_index < register_index
+
+
 def test_media_requests_router_includes_registration_child_routes_and_compat_exports():
     from app.domains.media_requests import registration_router
     from app.domains.media_requests import router as media_requests_router

@@ -75,9 +75,18 @@ from app.domains.media_requests.user_series_router import (
     router as user_series_router,
     set_dependency_providers as set_user_series_dependency_providers,
 )
+from app.domains.media_requests.update_router import (
+    UpdateRequestModel,
+    download_episodes_for_update,
+    getRequestStatusTextSync,
+    router as update_router,
+    search_episodes_for_update,
+    set_dependency_providers as set_update_dependency_providers,
+    submit_update_request,
+    submit_update_request_batch,
+)
 from app.domains.users import public_service as user_service
 from app.core.security import validate_password_strength  # 🔒 统一密码强度校验
-from pydantic import BaseModel
 from typing import Optional, List
 
 from app.core.config import REPORT_COVER_URL
@@ -301,6 +310,25 @@ set_user_series_dependency_providers(
 )
 
 
+set_update_dependency_providers(
+    user_service_provider=lambda: user_service,
+    check_user_exists_provider=lambda: _check_user_exists,
+    get_tmdb_season_info_provider=lambda: get_tmdb_season_info,
+    submit_update_request_record_provider=lambda: submit_update_request_record,
+    submit_batch_update_request_records_provider=lambda: submit_batch_update_request_records,
+    safe_proxies_provider=lambda: get_safe_proxies,
+    tmdb_client_provider=lambda: tmdb_client,
+    system_notification_provider=lambda: add_system_notification,
+    notification_service_provider=lambda: notification_service,
+    pulse_url_provider=lambda: get_pulse_url,
+    media_server_public_url_provider=lambda: get_media_server_main_public_url,
+    report_cover_url_provider=lambda: REPORT_COVER_URL,
+    get_update_request_search_info_provider=lambda: get_update_request_search_info,
+    update_media_request_status_provider=lambda: update_media_request_status,
+    safe_error_message_provider=lambda: safe_error_message,
+)
+
+
 class MediaRequestSubmitModel(BaseSubmitModel):
     seasons: List[int] = [0] 
     overview: Optional[str] = ""
@@ -426,305 +454,6 @@ router.include_router(cache_control_router)
 
 router.include_router(user_series_router)
 
-
-# ==================== 追新功能 API ====================
-
-class UpdateRequestModel(BaseModel):
-    """追新请求模型"""
-    series_id: str
-    tmdb_id: int
-    title: str
-    year: Optional[str] = ""
-    poster_path: Optional[str] = ""
-    season: int
-    episodes: List[int]  # 请求的集数列表
-
-
-# 🔥 辅助函数：获取请求状态文本（同步版本）
-def getRequestStatusTextSync(status):
-    status_map = {0: '待审批', 1: '下载中', 2: '已完成', 3: '已拒绝', 4: '手动接单', 7: '待入库'}
-    return status_map.get(status, '未知')
-
-
-@router.post("/api/user/request_update")
-async def submit_update_request(request: Request):
-    """提交追新请求"""
-    user = request.session.get("req_user")
-    if not user:
-        return {"status": "error", "message": "未登录"}
-    
-    if not _check_user_exists(user.get("Id")):
-        request.session.pop("req_user", None)
-        return {"status": "error", "message": "账号已被删除", "account_deleted": True}
-    
-    uid = user['Id']
-    uname = user['Name']
-    
-    try:
-        data = await request.json()
-        series_id = data.get("series_id")
-        tmdb_id = int(data.get("tmdb_id") or 0)
-        title = data.get("title")
-        year = data.get("year", "")
-        poster_path = data.get("poster_path", "")
-        season = int(data.get("season") or 0)
-        episodes = data.get("episodes", [])  # 列表 [6, 7, 8]
-        
-        if not tmdb_id or not season or not episodes:
-            return {"status": "error", "message": "参数不完整"}
-        
-        # 验证集数
-        episodes = [int(e) for e in episodes if int(e) > 0]
-        if not episodes:
-            return {"status": "error", "message": "请选择有效的集数"}
-        
-        # 🔥 检查未播出集数（禁止追更未播出的剧集）
-        _, unaired_eps = get_tmdb_season_info(tmdb_id, season)
-        unaired_requested = [e for e in episodes if e in unaired_eps]
-        if unaired_requested:
-            return {"status": "error", "message": f"以下集数尚未播出，无法追更：E{','.join(str(e) for e in unaired_requested)}"}
-        
-        result = submit_update_request_record(uid, uname, series_id, tmdb_id, title, year, poster_path, season, episodes)
-        if not result.get("ok"):
-            return {"status": "error", "message": result.get("message", "提交失败")}
-        episodes_str = result["episodes_str"]
-        
-        # 发送通知
-        try:
-            # 🔥 从 TMDB 获取年份（前端提交的 year 可能为空）
-            actual_year = year
-            if not actual_year or actual_year == "":
-                try:
-                    proxies = get_safe_proxies()
-                    tmdb_info = tmdb_client.get_tv_details(tmdb_id, proxies=proxies, timeout=5).json()
-                    first_air_date = tmdb_info.get("first_air_date", "")
-                    actual_year = first_air_date[:4] if first_air_date else ""
-                except:
-                    actual_year = ""
-            
-            year_display = f" ({actual_year})" if actual_year else ""
-            
-            add_system_notification("request", f"收到追新请求: {title}", 
-                               f"用户 {uname} 请求更新 S{season}E{episodes_str}", "/requests_admin")
-            
-            msg = f"🔄 <b>收到追新请求</b>\n\n👤 <b>用户：</b>{uname}\n📺 <b>内容：</b>{title}{year_display}\n📀 <b>季集：</b>第 {season} 季 E{episodes_str.replace(',', '-')}集\n\n请及时处理。"
-            
-            admin_url = get_pulse_url() or get_media_server_main_public_url() or "http://127.0.0.1:10307"
-            keyboard = {"inline_keyboard": [
-                [{"text": "🔍 影巢搜索", "callback_data": f"req_hdhive_ep_{tmdb_id}_{season}_{episodes_str}_{title.replace('_', '-').replace(':', '').replace('：', '').replace(' ', '-')}"}],
-                [{"text": "✋ 手动接单", "callback_data": f"req_manual_{tmdb_id}_{season}"}, {"text": "💻 网页审批", "url": f"{admin_url.rstrip('/')}/requests_admin"}]
-            ]}
-            
-            # 🔥 处理封面路径：本地路径需要从 TMDB 获取
-            poster_url = REPORT_COVER_URL
-            if poster_path and poster_path.startswith("/api/"):
-                # 本地 API 路径，从 TMDB 获取封面
-                try:
-                    proxies = get_safe_proxies()
-                    tmdb_info = tmdb_client.get_tv_details(tmdb_id, proxies=proxies, timeout=5).json()
-                    tmdb_poster = tmdb_info.get("poster_path")
-                    if tmdb_poster:
-                        poster_url = f"https://image.tmdb.org/t/p/w500{tmdb_poster}"
-                except:
-                    pass
-            elif poster_path and poster_path.startswith("/") and not poster_path.startswith("/api/"):
-                # TMDB 相对路径
-                poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}"
-            elif poster_path and poster_path.startswith("http"):
-                # 完整 URL
-                poster_url = poster_path
-            
-            notification_service.send_photo("sys_notify", poster_url, msg, reply_markup=keyboard, platform="all")
-        except Exception as e:
-            print(f"[追新] 发送通知失败: {e}")
-        
-        return {"status": "success", "message": f"追新请求已提交！等待管理员处理 S{season}E{episodes_str}"}
-    
-    except Exception as e:
-        return {"status": "error", "message": safe_error_message(e, "提交失败")}
-
-
-@router.post("/api/user/request_update_batch")
-async def submit_update_request_batch(request: Request):
-    """批量提交追新请求（一次扣费）"""
-    user = request.session.get("req_user")
-    if not user:
-        return {"status": "error", "message": "未登录"}
-    
-    if not _check_user_exists(user.get("Id")):
-        request.session.pop("req_user", None)
-        return {"status": "error", "message": "账号已被删除", "account_deleted": True}
-    
-    uid = user['Id']
-    uname = user['Name']
-    
-    try:
-        data = await request.json()
-        requests_list = data.get("requests", [])
-        series_name = data.get("series_name", "")
-        tmdb_id = int(data.get("tmdb_id") or 0)
-        
-        if not requests_list:
-            return {"status": "error", "message": "没有追新请求"}
-        
-        result = submit_batch_update_request_records(uid, uname, requests_list, series_name, tmdb_id)
-        if not result.get("ok"):
-            return {"status": "error", "message": result.get("message", "提交失败")}
-        total_seasons = result["total_seasons"]
-        total_episodes = result["total_episodes"]
-        total_cost = result["total_cost"]
-        cost_mode = result["cost_mode"]
-        print(f"[追新批量] 模式={cost_mode}, 季数={total_seasons}, 集数={total_episodes}, 扣分={total_cost}")
-        
-        # 发送通知
-        try:
-            # 🔥 构建详细季集信息
-            season_details = []
-            for req in requests_list:
-                req_season = req.get("season")
-                req_episodes = req.get("episodes", [])
-                if req_season and req_episodes:
-                    eps_str = ",".join(str(e) for e in sorted(req_episodes))
-                    season_details.append(f"第 {req_season} 季 E{eps_str.replace(',', '-')}集")
-            
-            season_detail_str = "\n".join(season_details)
-            
-            add_system_notification("request", f"收到批量追新请求: {series_name}", 
-                               f"用户 {uname} 请求更新\n{season_detail_str}", "/requests_admin")
-            
-            # 🔥 从 TMDB 获取封面
-            poster_url = REPORT_COVER_URL
-            try:
-                proxies = get_safe_proxies()
-                tmdb_info = tmdb_client.get_tv_details(tmdb_id, proxies=proxies, timeout=5).json()
-                tmdb_poster = tmdb_info.get("poster_path")
-                first_air_date = tmdb_info.get("first_air_date", "")
-                year_display = f" ({first_air_date[:4]})" if first_air_date else ""
-                if tmdb_poster:
-                    poster_url = f"https://image.tmdb.org/t/p/w500{tmdb_poster}"
-            except:
-                year_display = ""
-            
-            msg = f"🔄 <b>收到批量追新请求</b>\n\n👤 <b>用户：</b>{uname}\n📺 <b>内容：</b>{series_name}{year_display}\n\n📀 <b>季集详情：</b>\n{season_detail_str}\n\n请及时处理。"
-            
-            admin_url = get_pulse_url() or get_media_server_main_public_url() or "http://127.0.0.1:10307"
-            
-            # 🔥 简化按钮：影巢搜索（标题）+ 手动接单 + 网页审批
-            keyboard = {"inline_keyboard": [
-                [{"text": "🔍 影巢搜索", "callback_data": f"req_hdhive_{tmdb_id}_{series_name.replace('_', '-').replace(':', '').replace('：', '').replace(' ', '-')}"}],
-                [{"text": "✋ 手动接单", "callback_data": f"req_manual_{tmdb_id}_0"}, {"text": "💻 网页审批", "url": f"{admin_url.rstrip('/')}/requests_admin"}]
-            ]}
-            
-            notification_service.send_photo("sys_notify", poster_url, msg, reply_markup=keyboard, platform="all")
-        except Exception as e:
-            print(f"[追新批量] 发送通知失败: {e}")
-        
-        return {"status": "success", "message": f"批量追新请求已提交！{total_seasons} 季 {total_episodes} 集"}
-    
-    except Exception as e:
-        print(f"[追新批量] 错误: {e}")
-        return {"status": "error", "message": safe_error_message(e, "提交失败")}
-
-
-@router.post("/api/manage/requests/search_episodes")
-def search_episodes_for_update(payload: dict, request: Request):
-    """搜索单集资源（追新工单使用，复用缺集搜索逻辑）"""
-    # 🔒 安全检查：必须管理员
-    if not user_service.is_admin_user(request):
-        return {"status": "error", "message": "无权访问"}
-    
-    tmdb_id = payload.get("tmdb_id")
-    season = payload.get("season")
-    episodes = payload.get("episodes", [])
-    
-    if not tmdb_id or season is None or not episodes:
-        return {"status": "error", "message": "参数不完整"}
-    
-    # 获取剧集名称 - 优先从数据库获取追新请求的标题
-    row = get_update_request_search_info(tmdb_id, season)
-    
-    series_name = row["title"] if row else "未知剧集"
-    series_id = row["series_id"] if row else ""
-    
-    # 调用缺集搜索 API - 传递完整参数
-    try:
-        from app.domains.media_requests.gaps import search_mp_for_gap
-        result = search_mp_for_gap({
-            "series_name": series_name,
-            "series_id": series_id,
-            "tmdb_id": tmdb_id,
-            "season": season,
-            "episodes": episodes,
-            "type": "tv"
-        })
-        # 转换返回格式，适配前端
-        if result.get("status") == "success" and result.get("data"):
-            raw_results = result["data"].get("results", [])
-            # 确保返回完整的字段
-            processed_results = []
-            for r in raw_results:
-                processed_results.append({
-                    "ui_title": r.get("ui_title", r.get("title", "")),
-                    "ui_size": r.get("ui_size", 0),
-                    "ui_seeders": r.get("ui_seeders", 0),
-                    "ui_extracted_episodes": r.get("ui_extracted_episodes", []),
-                    "ui_matched_episodes": r.get("ui_matched_episodes", []),
-                    "ui_site": r.get("ui_site", "MP"),
-                    "ui_desc": r.get("ui_desc", ""),
-                    "ui_resolution": r.get("ui_resolution", ""),
-                    "ui_resource": r.get("ui_resource", ""),
-                    "ui_labels": r.get("ui_labels", []),
-                    "ui_chinese_audio": r.get("ui_chinese_audio", False),
-                    "ui_chinese_sub": r.get("ui_chinese_sub", False),
-                    "match_score": r.get("match_score", 0),
-                    "is_pack": r.get("is_pack", False),
-                    "enclosure": r.get("enclosure", ""),
-                    "org_payload": r.get("org_payload", r)
-                })
-            return {"status": "success", "results": processed_results}
-        return result
-    except Exception as e:
-        return {"status": "error", "message": safe_error_message(e, "搜索失败")}
-
-
-@router.post("/api/manage/requests/download_episodes")
-def download_episodes_for_update(payload: dict, request: Request):
-    """下载单集资源（追新工单使用，复用缺集下载逻辑）"""
-    # 🔒 安全检查：必须管理员
-    if not user_service.is_admin_user(request):
-        return {"status": "error", "message": "无权访问"}
-    
-    series_id = payload.get("series_id")
-    series_name = payload.get("series_name")
-    tmdb_id = payload.get("tmdb_id")
-    season = payload.get("season")
-    episodes = payload.get("episodes", [])
-    torrent_info = payload.get("torrent_info", {})
-    
-    if not episodes:
-        return {"status": "error", "message": "未指定集数"}
-    
-    # 调用缺集下载 API
-    try:
-        from app.domains.media_requests.gaps import download_gap_item
-        result = download_gap_item({
-            "series_id": series_id or "",
-            "series_name": series_name,
-            "tmdb_id": tmdb_id,
-            "season": season,
-            "episodes": episodes,
-            "torrent_info": torrent_info
-        })
-        
-        # 更新工单状态为下载中
-        if result.get("status") == "success":
-            episodes_str = ",".join(str(e) for e in episodes)
-            # 更新所有匹配的追新工单
-            update_media_request_status(tmdb_id, season, 1)
-        
-        return result
-    except Exception as e:
-        return {"status": "error", "message": safe_error_message(e, "下载失败")}
-
+router.include_router(update_router)
 
 router.include_router(registration_router)
