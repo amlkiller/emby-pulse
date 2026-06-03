@@ -65,6 +65,12 @@ from app.domains.users.libraries_router import (
     router as libraries_router,
     set_dependency_providers as set_libraries_dependency_providers,
 )
+from app.domains.users.manage_list_router import (
+    api_manage_users,
+    check_expired_users,
+    router as manage_list_router,
+    set_dependency_providers as set_manage_list_dependency_providers,
+)
 from app.domains.users.list_router import (
     api_get_users,
     router as list_router,
@@ -148,6 +154,17 @@ set_libraries_dependency_providers(
     media_api_provider=lambda: media_api,
     is_admin_user_provider=lambda: is_admin_user,
     safe_error_message_provider=lambda: safe_error_message,
+)
+set_manage_list_dependency_providers(
+    media_api_provider=lambda: media_api,
+    user_dao_provider=lambda: user_dao,
+    user_bot_dao_provider=lambda: user_bot_dao,
+    user_service_provider=lambda: user_service,
+    is_admin_user_provider=lambda: is_admin_user,
+    public_host_provider=lambda: get_media_server_public_host(),
+    safe_error_message_provider=lambda: safe_error_message,
+    datetime_provider=lambda: datetime,
+    check_expired_users_provider=lambda: check_expired_users,
 )
 set_single_user_dependency_providers(
     media_api_provider=lambda: media_api,
@@ -308,99 +325,9 @@ def clone_policy(target_policy: dict, src_policy: dict, copy_lib: bool, copy_pol
             target_policy[k] = v
     return target_policy
 
-def check_expired_users():
-    """检查过期用户并自动禁用(标记为过期禁用,非管理员禁用)"""
-    try:
-        rows = user_dao.list_users_with_expire_date_for_check()
-        if not rows: return
-        now_str = datetime.datetime.now().strftime("%Y-%m-%d")
-        for row in rows:
-            if row['expire_date'] < now_str:
-                uid = row['user_id']
-                try:
-                    u_res = media_api.get(f"/Users/{uid}", timeout=5)
-                    if u_res.status_code == 200:
-                        user = u_res.json()
-                        policy = user.get('Policy', {})
-                        if not policy.get('IsDisabled', False):
-                            policy['IsDisabled'] = True
-                            media_api.post(f"/Users/{uid}/Policy", json=policy)
-                            # 标记为过期禁用(非管理员禁用)
-                            try:
-                                user_dao.set_user_admin_disabled(uid, False)
-                            except Exception: pass
-                except Exception as e: pass
-    except Exception as e: pass
-
 router.include_router(libraries_router)
 
-@router.get("/api/manage/users")
-def api_manage_users(request: Request, refresh: bool = False):
-    # 🔒 安全检查：必须管理员
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    check_expired_users()
-
-    # 如果请求强制刷新,清除缓存
-    if refresh:
-        user_service.invalidate_emby_users_cache()
-
-    public_host = get_media_server_public_host()
-    if public_host.endswith('/'): public_host = public_host[:-1]
-
-    try:
-        # 🔥 使用缓存的用户列表
-        emby_users = user_service.get_emby_users_cached()
-        if emby_users is None:
-            return {"status": "error", "message": "媒体服务器无法连接"}
-        meta_rows = user_dao.list_all_user_meta()
-        meta_map = {r['user_id']: dict(r) for r in meta_rows} if meta_rows else {}
-
-        # 查询 TG 绑定关系 (emby_user_id -> tg_user_id)
-        tg_bindings = {}
-        try:
-            rows = user_bot_dao.list_emby_tg_user_bindings()
-            tg_bindings = {row["emby_user_id"]: row["tg_user_id"] for row in rows if row["emby_user_id"]}
-        except:
-            pass
-
-        final_list = []
-        for u in emby_users:
-            uid = u['Id']
-            meta = meta_map.get(uid, {})
-            policy = u.get('Policy', {})
-            remark = meta.get('remark', '')
-
-            # 检查是否置顶(备注以 [PINNED] 开头)
-            is_pinned = remark.startswith('[PINNED]') if remark else False
-            # 显示时移除 [PINNED] 标记
-            display_remark = remark[8:] if is_pinned else remark
-
-            final_list.append({
-                "Id": uid, "Name": u['Name'], "LastLoginDate": u.get('LastLoginDate'),
-                "IsDisabled": policy.get('IsDisabled', False), "IsAdmin": policy.get('IsAdministrator', False),
-                "AdminDisabled": bool(meta.get('admin_disabled', 0)),  # 管理员禁用标记
-                "ExpireDate": meta.get('expire_date'), "Note": meta.get('note'), "PrimaryImageTag": u.get('PrimaryImageTag'),
-                "EnableAllFolders": policy.get('EnableAllFolders', True),
-                "EnabledFolders": policy.get('EnabledFolders', []), "ExcludedSubFolders": policy.get('ExcludedSubFolders', []),
-                "EnableDownloading": policy.get('EnableContentDownloading', True),
-                "EnableVideoTranscoding": policy.get('EnableVideoPlaybackTranscoding', True),
-                "EnableAudioTranscoding": policy.get('EnableAudioPlaybackTranscoding', True),
-                "MaxParentalRating": policy.get('MaxParentalRating'),
-                "MaxConcurrent": meta.get('max_concurrent'),
-                "IsVIP": bool(meta.get('is_vip', 0)),
-                "Remark": display_remark,
-                "Pinned": is_pinned,  # 置顶标记
-                "AllowRoutes": meta.get('allow_routes', ''),
-                "BlockRoutes": meta.get('block_routes', ''),
-                "TgUserId": tg_bindings.get(uid),  # TG 用户 ID
-                # 🔥 求片权限
-                "req_free": meta.get('req_free', 0),
-                "req_free_count": meta.get('req_free_count', -1),
-                # 🔥 用户标签
-                "tags": meta.get('tags', '')
-            })
-        return {"status": "success", "data": final_list, "emby_url": public_host}
-    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
+router.include_router(manage_list_router)
 
 router.include_router(single_user_router)
 

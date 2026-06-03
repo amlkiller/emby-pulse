@@ -79,13 +79,17 @@ def test_users_public_service_exposes_page_permission_map(monkeypatch):
 
 
 def test_users_router_uses_public_service_cache_owner():
-    path = _REPO_ROOT / "app/domains/users/router.py"
-    source = path.read_text(encoding="utf-8")
+    router_source = (_REPO_ROOT / "app/domains/users/router.py").read_text(encoding="utf-8")
+    manage_list_source = (_REPO_ROOT / "app/domains/users/manage_list_router.py").read_text(encoding="utf-8")
 
-    assert "def get_emby_users_cached(" not in source
-    assert "def invalidate_emby_users_cache(" not in source
-    assert "user_service.get_emby_users_cached()" in source
-    assert "user_service.invalidate_emby_users_cache()" in source
+    assert "def get_emby_users_cached(" not in router_source
+    assert "def invalidate_emby_users_cache(" not in router_source
+    assert "def get_emby_users_cached(" not in manage_list_source
+    assert "def invalidate_emby_users_cache(" not in manage_list_source
+    assert "user_service_provider=lambda: user_service" in router_source
+    assert "from app.domains.users import public_service as user_service" in manage_list_source
+    assert "service.get_emby_users_cached()" in manage_list_source
+    assert "service.invalidate_emby_users_cache()" in manage_list_source
 
 
 def test_users_router_includes_child_routes_and_compat_exports():
@@ -135,6 +139,7 @@ def test_users_router_includes_child_routes_and_compat_exports():
     from app.domains.users import invitation_router
     from app.domains.users import libraries_router
     from app.domains.users import library_visibility_router
+    from app.domains.users import manage_list_router
     from app.domains.users import new_user_router
     from app.domains.users import pin_router
     from app.domains.users import self_password_router
@@ -165,6 +170,8 @@ def test_users_router_includes_child_routes_and_compat_exports():
     assert router.HiddenLibrariesModel is library_visibility_router.HiddenLibrariesModel
     assert router.api_get_user_libraries is library_visibility_router.api_get_user_libraries
     assert router.api_update_hidden_libraries is library_visibility_router.api_update_hidden_libraries
+    assert router.api_manage_users is manage_list_router.api_manage_users
+    assert router.check_expired_users is manage_list_router.check_expired_users
     assert router.NewUserModelEx is new_user_router.NewUserModelEx
     assert router.api_manage_user_new is new_user_router.api_manage_user_new
     assert router.BatchActionModelLocal is batch_router.BatchActionModelLocal
@@ -246,6 +253,160 @@ def test_users_router_includes_child_routes_and_compat_exports():
     assert verify_index < user_libraries_index < hidden_libraries_index < invitation_index < library_index
     assert library_index < new_user_index < delete_user_index < batch_index
     assert template_index < pin_index < users_list_index
+
+
+def test_manage_users_denies_non_admin_before_expire_check_or_cache(monkeypatch):
+    from app.domains.users import router
+
+    request = SimpleNamespace(session={"user": {"id": "user-1", "role": "viewer"}})
+
+    monkeypatch.setattr(router, "is_admin_user", lambda _request: False)
+    monkeypatch.setattr(
+        router,
+        "check_expired_users",
+        lambda: (_ for _ in ()).throw(AssertionError("expire check should not run before admin authorization")),
+    )
+    monkeypatch.setattr(
+        router.user_service,
+        "get_emby_users_cached",
+        lambda: (_ for _ in ()).throw(AssertionError("cache read should not run before admin authorization")),
+    )
+    monkeypatch.setattr(
+        router.user_service,
+        "invalidate_emby_users_cache",
+        lambda: (_ for _ in ()).throw(AssertionError("cache invalidation should not run before admin authorization")),
+    )
+
+    result = router.api_manage_users(request, refresh=True)
+
+    assert result == {"status": "error", "message": "需要管理员权限"}
+
+
+def test_manage_users_preserves_refresh_and_response_mapping(monkeypatch):
+    from app.domains.users import router
+
+    calls = []
+    request = SimpleNamespace(session={"user": {"id": "admin-1", "role": "admin"}})
+
+    monkeypatch.setattr(router, "is_admin_user", lambda _request: True)
+    monkeypatch.setattr(router, "check_expired_users", lambda: calls.append(("check_expired_users",)))
+    monkeypatch.setattr(router, "get_media_server_public_host", lambda: "https://emby.example/")
+    monkeypatch.setattr(router.user_service, "invalidate_emby_users_cache", lambda: calls.append(("invalidate_cache",)))
+    monkeypatch.setattr(
+        router.user_service,
+        "get_emby_users_cached",
+        lambda: [
+            {
+                "Id": "u1",
+                "Name": "Alice",
+                "LastLoginDate": "2026-06-04T01:00:00",
+                "PrimaryImageTag": "image-1",
+                "Policy": {
+                    "IsDisabled": True,
+                    "IsAdministrator": False,
+                    "EnableAllFolders": False,
+                    "EnabledFolders": ["lib-1"],
+                    "ExcludedSubFolders": ["sub-1"],
+                    "EnableContentDownloading": False,
+                    "EnableVideoPlaybackTranscoding": False,
+                    "EnableAudioPlaybackTranscoding": False,
+                    "MaxParentalRating": 9,
+                },
+            }
+        ],
+    )
+
+    class UserDao:
+        def list_all_user_meta(self):
+            calls.append(("list_all_user_meta",))
+            return [
+                {
+                    "user_id": "u1",
+                    "admin_disabled": 1,
+                    "expire_date": "2026-12-31",
+                    "note": "legacy-note",
+                    "max_concurrent": 2,
+                    "is_vip": 1,
+                    "remark": "[PINNED]display note",
+                    "allow_routes": "route-a",
+                    "block_routes": "route-b",
+                    "req_free": 1,
+                    "req_free_count": 3,
+                    "tags": "vip,trial",
+                }
+            ]
+
+    class UserBotDao:
+        def list_emby_tg_user_bindings(self):
+            calls.append(("list_emby_tg_user_bindings",))
+            return [{"emby_user_id": "u1", "tg_user_id": "tg-1"}]
+
+    monkeypatch.setattr(router, "user_dao", UserDao())
+    monkeypatch.setattr(router, "user_bot_dao", UserBotDao())
+
+    result = router.api_manage_users(request, refresh=True)
+
+    assert result == {
+        "status": "success",
+        "data": [
+            {
+                "Id": "u1",
+                "Name": "Alice",
+                "LastLoginDate": "2026-06-04T01:00:00",
+                "IsDisabled": True,
+                "IsAdmin": False,
+                "AdminDisabled": True,
+                "ExpireDate": "2026-12-31",
+                "Note": "legacy-note",
+                "PrimaryImageTag": "image-1",
+                "EnableAllFolders": False,
+                "EnabledFolders": ["lib-1"],
+                "ExcludedSubFolders": ["sub-1"],
+                "EnableDownloading": False,
+                "EnableVideoTranscoding": False,
+                "EnableAudioTranscoding": False,
+                "MaxParentalRating": 9,
+                "MaxConcurrent": 2,
+                "IsVIP": True,
+                "Remark": "display note",
+                "Pinned": True,
+                "AllowRoutes": "route-a",
+                "BlockRoutes": "route-b",
+                "TgUserId": "tg-1",
+                "req_free": 1,
+                "req_free_count": 3,
+                "tags": "vip,trial",
+            }
+        ],
+        "emby_url": "https://emby.example",
+    }
+    assert calls == [
+        ("check_expired_users",),
+        ("invalidate_cache",),
+        ("list_all_user_meta",),
+        ("list_emby_tg_user_bindings",),
+    ]
+
+
+def test_manage_users_preserves_media_unavailable_and_safe_error_mapping(monkeypatch):
+    from app.domains.users import router
+
+    request = SimpleNamespace(session={"user": {"id": "admin-1", "role": "admin"}})
+
+    monkeypatch.setattr(router, "is_admin_user", lambda _request: True)
+    monkeypatch.setattr(router, "check_expired_users", lambda: None)
+    monkeypatch.setattr(router.user_service, "get_emby_users_cached", lambda: None)
+
+    assert router.api_manage_users(request) == {"status": "error", "message": "媒体服务器无法连接"}
+
+    monkeypatch.setattr(
+        router.user_service,
+        "get_emby_users_cached",
+        lambda: (_ for _ in ()).throw(RuntimeError("raw secret error")),
+    )
+    monkeypatch.setattr(router, "safe_error_message", lambda exc: f"safe:{exc}")
+
+    assert router.api_manage_users(request) == {"status": "error", "message": "safe:raw secret error"}
 
 
 def test_batch_users_denies_missing_login_before_auth_or_media(monkeypatch):
