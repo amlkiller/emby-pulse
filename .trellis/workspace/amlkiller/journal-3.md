@@ -1259,3 +1259,36 @@ Extracted binding, blacklist, channel binding, bot-user tracking, and Emby accou
 ### Next Steps
 
 - None - task complete
+
+
+## Session 158: Refactor notification user bot registration quota service
+
+**Date**: 2026-06-03
+**Task**: Refactor notification user bot registration quota service
+**Branch**: `main`
+
+### Summary
+
+Extracted notification user bot registration quota, cached user count, batch-used persistence, and batch flush lifecycle helpers into a focused service while preserving legacy user_bot_service globals and monkeypatch compatibility.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `87b7268` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

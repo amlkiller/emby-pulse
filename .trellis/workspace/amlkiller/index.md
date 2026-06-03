@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-3.md`
-- **Total Sessions**: 157
+- **Total Sessions**: 158
 - **Last Active**: 2026-06-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-3.md` | ~1261 | Active |
+| `journal-3.md` | ~1294 | Active |
 | `journal-2.md` | ~1993 | Archived |
 | `journal-1.md` | ~1973 | Archived |
 <!-- @@@/auto:active-documents -->
@@ -31,6 +31,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 158 | 2026-06-03 | Refactor notification user bot registration quota service | `87b7268` | `main` |
 | 157 | 2026-06-03 | Refactor notification user bot binding service | `a28c33d` | `main` |
 | 156 | 2026-06-03 | Refactor playback stats item detail router | `b68f96a` | `main` |
 | 155 | 2026-06-03 | Refactor playback stats dashboard init router | `f14256f` | `main` |
