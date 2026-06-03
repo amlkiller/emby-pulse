@@ -1556,3 +1556,36 @@ Moved Telegram msg_reply/msg_block/msg_cancel/msg_unblock dispatch from bot_serv
 ### Next Steps
 
 - None - task complete
+
+
+## Session 227: Extract notification bot request approval menu service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot request approval menu service
+**Branch**: `main`
+
+### Summary
+
+Extracted Telegram request approval menu callbacks req_reject_menu_* and req_back_* from bot_service.py into notification_bot_request_approval_menu_callback_service. Preserved reject/back keyboard payloads, hdhive plugin detection, Pulse URL fallback, DAO summary lookup, dynamic legacy providers, and swallowed Telegram edit failures. Verified compile, focused tests, import check, diff check, and full test suite before commit.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `71c6e4f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
