@@ -500,3 +500,36 @@ Extracted NotificationBot media and user helpers into notification_bot_media_hel
 ### Next Steps
 
 - None - task complete
+
+
+## Session 195: Extract notification bot message center callback service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot message center callback service
+**Branch**: `main`
+
+### Summary
+
+Extracted NotificationBot message center reply/block/unblock callback helpers into notification_bot_message_center_callback_service with lazy legacy providers; kept old wrappers and added boundary tests for reply mode, block/unblock edits, conversation creation, user-bot forwarding, and legacy monkeypatch compatibility.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f01b70d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
