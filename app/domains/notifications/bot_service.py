@@ -39,6 +39,7 @@ from app.domains.notifications import notification_bot_stats_command_service
 from app.domains.notifications import notification_bot_user_expiration_service
 from app.domains.notifications import notification_bot_user_login_service
 from app.domains.notifications import notification_bot_wecom_service
+from app.domains.notifications import notification_bot_webhook_event_service
 from app.domains.notifications import notification_bot_whois_command_service
 from app.domains.notifications import notify_admin_dao, notify_rule_dao
 from app.infra.db.playback_filters import get_base_filter
@@ -310,6 +311,11 @@ notification_bot_auto_finish_request_service.set_dependency_providers(
     logger_provider=lambda: logger,
 )
 
+notification_bot_webhook_event_service.set_dependency_providers(
+    bus_provider=lambda: bus,
+    logger_provider=lambda: logger,
+)
+
 def _submit_bot_task(fn, *args):
     if not _bot_executor_slots.acquire(blocking=False):
         logger.warning("[Bot] 后台任务队列已满，丢弃本次异步任务")
@@ -459,27 +465,7 @@ class SystemDaemon:
         self._subscribed = False
 
     def on_webhook_event(self, event: str, data: dict):
-        # 只对重要事件输出日志，减少刷屏
-        important_events = ["item.added", "library.new", "playback.start", "playback.stop", "auth", "login", "delete", "remove"]
-        if any(e in event for e in important_events):
-            logger.info(f"🔔 [Webhook] 收到事件: {event}")
-        
-        if "item.added" in event or "library.new" in event:
-            item = data.get("Item", {})
-            if item.get("Id"):
-                self.add_library_task(item)
-                if item.get("Type") == "Episode":
-                    from app.domains.playback.calendar_service import calendar_service
-                    calendar_service.mark_episode_ready(item.get("SeriesId"), item.get("ParentIndexNumber"), item.get("IndexNumber"))
-                    self._clear_gap_record_async(item)
-        elif "playback.start" in event:
-            logger.info(f"🔔 [Webhook] 发布 playback.start 事件")
-            bus.publish("notify.playback.start", data)
-        elif "playback.stop" in event:
-            logger.info(f"🔔 [Webhook] 发布 playback.stop 事件")
-            bus.publish("notify.playback.stop", data)
-        elif "auth" in event or "login" in event: bus.publish("notify.user.login", data)
-        elif "delete" in event or "remove" in event: bus.publish("notify.item.deleted", data)
+        return notification_bot_webhook_event_service.handle_webhook_event(self, event, data)
 
     def _auto_finish_request(self, tmdb_id, season=None):
         return notification_bot_auto_finish_request_service.auto_finish_request(self, tmdb_id, season)
