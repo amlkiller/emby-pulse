@@ -63,15 +63,16 @@ def _patch_dependencies(monkeypatch, *, rule=None):
 
 
 def _patch_sender(monkeypatch, calls, error=None):
-    from app.bot.user_bot import user_bot_service
+    from app.bot.notification_bot import notification_bot_auto_finish_request_service
 
     def fake_send(chat_id, message):
         calls.append((chat_id, message))
         if error:
             raise error
 
-    monkeypatch.setattr(user_bot_service, "_send", fake_send)
-    monkeypatch.setattr(user_bot_service, "_tg_api", object(), raising=False)
+    notification_bot_auto_finish_request_service.set_dependency_providers(
+        user_bot_send_provider=lambda: (lambda: fake_send),
+    )
 
 
 def test_auto_finish_empty_tmdb_id_skips_side_effects(monkeypatch):

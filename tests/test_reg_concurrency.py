@@ -22,8 +22,9 @@ os.environ.setdefault("PYTHONIOENCODING", "utf-8")
 
 
 def _patch_module_for_test(monkeypatch_like_setattr):
-    """把模块里的 media_api / _send_open_reg_closed_notify 替换成可控 mock"""
-    from app.bot.user_bot import user_bot_service as ub
+    """把 quota/queue service 的 media_api / 通知发送替换成可控 mock"""
+    from app.bot.user_bot import user_bot_registration_queue_service as queue
+    from app.bot.user_bot import user_bot_registration_quota_service as quota
     from app.infra.config import user_bot_settings as ubs
 
     # 模拟 cfg：内存字典
@@ -80,45 +81,52 @@ def _patch_module_for_test(monkeypatch_like_setattr):
             raise NotImplementedError(path)
 
     monkeypatch_like_setattr(ubs, "cfg", fake_cfg)
-    monkeypatch_like_setattr(ub, "media_api", FakeMediaApi())
-    monkeypatch_like_setattr(ub, "_send_open_reg_closed_notify", lambda *a, **kw: None)
+    quota.set_dependency_providers(
+        media_api_provider=lambda: FakeMediaApi(),
+        get_hidden_users_provider=lambda: (lambda: []),
+        get_registration_batch_used_provider=lambda: ubs.get_user_bot_registration_batch_used,
+        set_registration_batch_used_provider=lambda: ubs.set_user_bot_registration_batch_used,
+        set_open_reg_enabled_provider=lambda: ubs.set_user_bot_open_reg_enabled,
+        send_open_reg_closed_notify_provider=lambda: (lambda *a, **kw: None),
+    )
 
     # 重置模块状态
-    with ub._quota_lock:
-        ub._quota_reserved = 0
-        ub._user_count_cache["count"] = None
-        ub._user_count_cache["users"] = None
-        ub._user_count_cache["ts"] = 0.0
-    with ub._batch_used_lock:
-        ub._batch_used_mem = None
-        ub._batch_used_dirty = 0
-    with ub._reg_waiters_lock:
-        ub._reg_waiters = 0
-        ub._reg_active = 0
+    with quota._quota_lock:
+        quota._quota_reserved = 0
+        quota._user_count_cache["count"] = None
+        quota._user_count_cache["users"] = None
+        quota._user_count_cache["ts"] = 0.0
+    with quota._batch_used_lock:
+        quota._batch_used_mem = None
+        quota._batch_used_dirty = 0
+    with queue._reg_waiters_lock:
+        queue._reg_waiters = 0
+        queue._reg_active = 0
     # 重置信号量（drain 再补满）
     while True:
-        if not ub._reg_sema.acquire(blocking=False):
+        if not queue._reg_sema.acquire(blocking=False):
             break
-    for _ in range(ub.MAX_CONCURRENT_REG):
-        ub._reg_sema.release()
+    for _ in range(queue.MAX_CONCURRENT_REG):
+        queue._reg_sema.release()
+    queue.set_dependency_providers(send_provider=lambda: (lambda *a, **kw: None))
 
-    return ub, fake_cfg, fake_users
+    return quota, queue, fake_cfg, fake_users
 
 
 def test_total_mode_exactly_quota(monkeypatch):
     """100 线程同时预占，total quota=10，恰好 10 次成功"""
-    ub, fake_cfg, fake_users = _patch_module_for_test(monkeypatch.setattr)
+    quota, _queue, fake_cfg, fake_users = _patch_module_for_test(monkeypatch.setattr)
 
     successes = []
     failures = []
     s_lock = threading.Lock()
 
     def worker(i):
-        ok, reason = ub._reserve_quota_slot("total", 10)
+        ok, reason = quota.reserve_quota_slot("total", 10)
         if ok:
             # 模拟注册成功：把用户加入 fake_users，然后释放预占（committed=True）
             fake_users.add(f"user{i}")
-            ub._release_quota_slot(committed=True, quota_mode="total", quota=10)
+            quota.release_quota_slot(committed=True, quota_mode="total", quota=10)
             with s_lock:
                 successes.append(i)
         else:
@@ -137,7 +145,7 @@ def test_total_mode_exactly_quota(monkeypatch):
 
 def test_batch_mode_exactly_quota(monkeypatch):
     """100 线程同时预占，batch quota=10，最终 _batch_used_mem == 10"""
-    ub, fake_cfg, fake_users = _patch_module_for_test(monkeypatch.setattr)
+    quota, _queue, fake_cfg, fake_users = _patch_module_for_test(monkeypatch.setattr)
     fake_cfg.set("user_bot_reg_quota_mode", "batch")
     fake_cfg.set_calls = 0  # 重置计数，便于断言
 
@@ -146,9 +154,9 @@ def test_batch_mode_exactly_quota(monkeypatch):
     s_lock = threading.Lock()
 
     def worker(i):
-        ok, reason = ub._reserve_quota_slot("batch", 10)
+        ok, reason = quota.reserve_quota_slot("batch", 10)
         if ok:
-            ub._release_quota_slot(committed=True, quota_mode="batch", quota=10)
+            quota.release_quota_slot(committed=True, quota_mode="batch", quota=10)
             with s_lock:
                 successes.append(i)
         else:
@@ -163,8 +171,8 @@ def test_batch_mode_exactly_quota(monkeypatch):
     assert all(r == "batch_full" for _, r in failures)
 
     # _batch_used_mem 应该恰好等于 quota
-    with ub._batch_used_lock:
-        assert ub._batch_used_mem == 10
+    with quota._batch_used_lock:
+        assert quota._batch_used_mem == 10
 
     # 第 10 次应该已经把 open_reg 关掉
     assert fake_cfg.get("user_bot_open_reg") is False
@@ -176,20 +184,17 @@ def test_batch_mode_exactly_quota(monkeypatch):
 
 def test_fifo_queue_under_load(monkeypatch):
     """100 线程争 MAX_CONCURRENT_REG 个信号量，所有线程最终都被处理（不被秒拒）"""
-    ub, fake_cfg, fake_users = _patch_module_for_test(monkeypatch.setattr)
-
-    # 替换 _send 以避免 TG 调用
-    monkeypatch.setattr(ub, "_send", lambda *a, **kw: None)
+    _quota, queue, fake_cfg, fake_users = _patch_module_for_test(monkeypatch.setattr)
 
     entered = []
     e_lock = threading.Lock()
 
     def worker(i):
-        ok = ub._enter_reg_queue(chat_id=i)
+        ok = queue.enter_reg_queue(chat_id=i)
         if ok:
             with e_lock:
                 entered.append(i)
-            ub._leave_reg_queue()
+            queue.leave_reg_queue()
 
     with ThreadPoolExecutor(max_workers=100) as ex:
         list(ex.map(worker, range(100)))
@@ -198,6 +203,6 @@ def test_fifo_queue_under_load(monkeypatch):
     assert len(entered) == 100, f"应有 100 个全部进入临界区，实际 {len(entered)}"
 
     # 队列应该清空
-    with ub._reg_waiters_lock:
-        assert ub._reg_active == 0
-        assert ub._reg_waiters == 0
+    with queue._reg_waiters_lock:
+        assert queue._reg_active == 0
+        assert queue._reg_waiters == 0

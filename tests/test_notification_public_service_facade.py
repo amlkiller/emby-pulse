@@ -62,16 +62,7 @@ class FakeBot:
 
 class FakeUserBotService:
     def __init__(self):
-        self.calls = []
         self.user_bot = SimpleNamespace(running=True)
-
-    def _send(self, chat_id, text, reply_markup=None):
-        self.calls.append(("_send", chat_id, text, reply_markup))
-        return {"ok": True}
-
-    def _tg_api(self, method, data=None, token=None):
-        self.calls.append(("_tg_api", method, data, token))
-        return {"ok": True, "method": method}
 
 
 def test_notification_public_service_delegates_and_returns(monkeypatch):
@@ -79,8 +70,21 @@ def test_notification_public_service_delegates_and_returns(monkeypatch):
 
     bot = FakeBot()
     user_bot_service = FakeUserBotService()
+    user_bot_calls = []
     monkeypatch.setattr(public_service, "_get_bot", lambda: bot)
     monkeypatch.setattr(public_service, "_get_user_bot_service", lambda: user_bot_service)
+    from app.bot.user_bot import user_bot_telegram_service
+
+    def fake_user_bot_send(chat_id, text, reply_markup=None):
+        user_bot_calls.append(("send", chat_id, text, reply_markup))
+        return {"ok": True}
+
+    def fake_user_bot_tg_api(method, data=None, token=None):
+        user_bot_calls.append(("tg_api", method, data, token))
+        return {"ok": True, "method": method}
+
+    monkeypatch.setattr(user_bot_telegram_service, "send", fake_user_bot_send)
+    monkeypatch.setattr(user_bot_telegram_service, "tg_api", fake_user_bot_tg_api)
 
     assert public_service.send_message("chat", "text", reply_markup={"k": "v"}, platform="tg") == "message-result"
     assert public_service.send_photo(
@@ -110,10 +114,10 @@ def test_notification_public_service_delegates_and_returns(monkeypatch):
         ("edit_message", "chat", 42, "edited", "HTML", {"inline": True}, "tg"),
         ("send_to_channels", "poster", "caption", {"keyboard": True}),
     ]
-    assert user_bot_service.calls == [
-        ("_send", "user-chat", "user text", {"inline": []}),
+    assert user_bot_calls == [
+        ("send", "user-chat", "user text", {"inline": []}),
         (
-            "_tg_api",
+            "tg_api",
             "sendPhoto",
             {
                 "chat_id": "user-chat",

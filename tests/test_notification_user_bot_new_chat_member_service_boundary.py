@@ -8,7 +8,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 
 def _patch_dependencies(monkeypatch, *, token="12345:token", welcome_msg=""):
-    from app.bot.user_bot import user_bot_service
+    from tests.user_bot_worker_boundary import user_bot_worker_boundary as user_bot_service
 
     sent = []
     monkeypatch.setattr(user_bot_service, "get_user_bot_token", lambda: token)
@@ -18,7 +18,7 @@ def _patch_dependencies(monkeypatch, *, token="12345:token", welcome_msg=""):
 
 
 def test_new_chat_member_service_sends_custom_welcome_for_matching_bot(monkeypatch):
-    from app.bot.user_bot import user_bot_service
+    from tests.user_bot_worker_boundary import user_bot_worker_boundary as user_bot_service
 
     sent = _patch_dependencies(monkeypatch, welcome_msg="custom hello")
     bot = user_bot_service.UserBot()
@@ -29,7 +29,7 @@ def test_new_chat_member_service_sends_custom_welcome_for_matching_bot(monkeypat
 
 
 def test_new_chat_member_service_sends_default_welcome_when_custom_empty(monkeypatch):
-    from app.bot.user_bot import user_bot_service
+    from tests.user_bot_worker_boundary import user_bot_worker_boundary as user_bot_service
 
     sent = _patch_dependencies(monkeypatch, welcome_msg="")
     bot = user_bot_service.UserBot()
@@ -49,7 +49,7 @@ def test_new_chat_member_service_sends_default_welcome_when_custom_empty(monkeyp
 
 
 def test_new_chat_member_service_ignores_non_matching_members(monkeypatch):
-    from app.bot.user_bot import user_bot_service
+    from tests.user_bot_worker_boundary import user_bot_worker_boundary as user_bot_service
 
     sent = _patch_dependencies(monkeypatch, welcome_msg="custom hello")
     bot = user_bot_service.UserBot()
@@ -67,7 +67,7 @@ def test_new_chat_member_service_ignores_non_matching_members(monkeypatch):
 
 
 def test_new_chat_member_service_stops_after_first_matching_bot(monkeypatch):
-    from app.bot.user_bot import user_bot_service
+    from tests.user_bot_worker_boundary import user_bot_worker_boundary as user_bot_service
 
     sent = _patch_dependencies(monkeypatch, token="12345", welcome_msg="custom hello")
     bot = user_bot_service.UserBot()

@@ -57,7 +57,7 @@ class FakeLogger:
 
 
 def _reset_dice_pk_state(monkeypatch, dice_values=None):
-    from app.bot.user_bot import user_bot_service
+    from tests.user_bot_worker_boundary import user_bot_worker_boundary as user_bot_service
 
     sent = []
     deleted = []

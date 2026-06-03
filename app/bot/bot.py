@@ -302,13 +302,13 @@ def api_send_open_reg_notify(request: Request, data: dict):
     # 发送到用户机器人私聊（所有启动过机器人的用户）
     if notify_user:
         try:
-            from app.bot.user_bot.user_bot_service import _send, _get_all_bot_users
-            users = _get_all_bot_users()
+            from app.bot.user_bot import user_bot_binding_service, user_bot_telegram_service
+            users = user_bot_binding_service.get_all_bot_users()
             if users:
                 for u in users:
                     tg_id = u.get('tg_user_id')
                     try:
-                        _send(int(tg_id), msg)
+                        user_bot_telegram_service.send(int(tg_id), msg)
                         sent_count += 1
                     except Exception as e:
                         logger.error(f"[开放注册通知] 发送给用户 {tg_id} 失败: {e}")
@@ -318,13 +318,13 @@ def api_send_open_reg_notify(request: Request, data: dict):
     # 发送到群聊（使用用户机器人）
     if notify_group:
         try:
-            from app.bot.user_bot.user_bot_service import _send
+            from app.bot.user_bot import user_bot_telegram_service
             allowed_groups = get_user_bot_allowed_groups()
             if allowed_groups:
                 group_ids = [g.strip() for g in allowed_groups.replace('，', ',').split('\n') if g.strip()]
                 for gid in group_ids:
                     try:
-                        _send(int(gid), msg)
+                        user_bot_telegram_service.send(int(gid), msg)
                         sent_count += 1
                     except Exception as e:
                         logger.error(f"[开放注册通知] 发送到群 {gid} 失败: {e}")
@@ -600,8 +600,8 @@ async def api_add_user_blacklist(request: Request):
     tg_id = data.get("tg_user_id", "").strip()
     reason = data.get("reason", "管理员手动添加")
     if not tg_id: return {"status": "error", "message": "请输入 TG 用户 ID"}
-    from app.bot.user_bot.user_bot_service import _add_to_blacklist
-    _add_to_blacklist(tg_id, reason)
+    from app.bot.user_bot import user_bot_binding_service
+    user_bot_binding_service.add_to_blacklist(tg_id, reason)
     return {"status": "success"}
 
 
@@ -659,10 +659,10 @@ async def api_reset_reg_batch(request: Request):
     set_user_bot_registration_batch_used(0)
     # 同步重置内存中的 batch_used，避免后台线程把旧值写回
     try:
-        from app.bot.user_bot import user_bot_service
-        with user_bot_service._batch_used_lock:
-            user_bot_service._batch_used_mem = 0
-            user_bot_service._batch_used_dirty = 0
+        from app.bot.user_bot import user_bot_registration_quota_service
+        with user_bot_registration_quota_service._batch_used_lock:
+            user_bot_registration_quota_service._batch_used_mem = 0
+            user_bot_registration_quota_service._batch_used_dirty = 0
     except Exception:
         pass
     return {"status": "success"}
@@ -672,16 +672,16 @@ async def api_reset_reg_batch(request: Request):
 async def api_get_reg_quota_status(request: Request):
     """获取名额状态（用于前端显示）"""
     if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    from app.bot.user_bot import user_bot_service
+    from app.bot.user_bot import user_bot_registration_queue_service, user_bot_registration_quota_service
 
     quota_mode = get_user_bot_reg_quota_mode()
     quota = get_user_bot_reg_quota()
     # 直接读内存权威值，避免 cfg.json 落盘滞后
-    batch_used = user_bot_service.get_batch_used_snapshot()
+    batch_used = user_bot_registration_quota_service.get_batch_used_snapshot()
 
     # 用缓存的 Emby 用户数，避免每次轮询都打 /Users
     try:
-        total_users = user_bot_service.get_cached_user_count_for_api()
+        total_users = user_bot_registration_quota_service.get_cached_user_count_for_api()
     except Exception:
         total_users = 0
 
@@ -702,9 +702,9 @@ async def api_get_reg_quota_status(request: Request):
             "open_reg_total": open_reg_total,
             "open_reg_enabled": is_user_bot_open_reg_enabled(),
             "reg_queue": {
-                "active": user_bot_service._reg_active,
-                "waiting": user_bot_service._reg_waiters,
-                "max": user_bot_service.MAX_CONCURRENT_REG,
+                "active": user_bot_registration_queue_service._reg_active,
+                "waiting": user_bot_registration_queue_service._reg_waiters,
+                "max": user_bot_registration_queue_service.MAX_CONCURRENT_REG,
             },
         }
     }
@@ -810,8 +810,8 @@ def api_lottery_draw(request: Request):
     if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     
     try:
-        from app.bot.user_bot.user_bot_service import do_lottery_draw
-        do_lottery_draw()
+        from app.bot.user_bot import user_bot_lottery_draw_service
+        user_bot_lottery_draw_service.do_lottery_draw()
 
         # 获取开奖结果
         today = datetime.datetime.now().strftime('%Y-%m-%d')

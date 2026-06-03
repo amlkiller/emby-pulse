@@ -53,7 +53,7 @@ def _user(tg_user_id="tg1", first_name="Alice", last_name="", username="alice"):
 
 def _reset_message_dispatcher_state(monkeypatch, *, binding=None):
     from app.bot.user_bot import user_bot_message_dispatcher_service
-    from app.bot.user_bot import user_bot_service
+    from tests.user_bot_worker_boundary import user_bot_worker_boundary as user_bot_service
 
     calls = []
     sent = []

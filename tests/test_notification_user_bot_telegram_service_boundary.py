@@ -18,7 +18,7 @@ class FakeResponse:
 
 
 def test_tg_api_uses_legacy_token_client_proxy_and_timeout(monkeypatch):
-    from app.bot.user_bot import user_bot_service
+    from tests.user_bot_worker_boundary import user_bot_worker_boundary as user_bot_service
 
     calls = []
 
@@ -37,7 +37,7 @@ def test_tg_api_uses_legacy_token_client_proxy_and_timeout(monkeypatch):
 
 
 def test_tg_api_explicit_token_overrides_legacy_token_and_handles_failures(monkeypatch):
-    from app.bot.user_bot import user_bot_service
+    from tests.user_bot_worker_boundary import user_bot_worker_boundary as user_bot_service
 
     calls = []
 
@@ -64,7 +64,7 @@ def test_tg_api_explicit_token_overrides_legacy_token_and_handles_failures(monke
 
 
 def test_send_builds_legacy_payload_and_calls_legacy_tg_api(monkeypatch):
-    from app.bot.user_bot import user_bot_service
+    from tests.user_bot_worker_boundary import user_bot_worker_boundary as user_bot_service
 
     calls = []
 
@@ -85,7 +85,7 @@ def test_send_builds_legacy_payload_and_calls_legacy_tg_api(monkeypatch):
 
 
 def test_edit_uses_legacy_tg_api_and_falls_back_to_legacy_send(monkeypatch):
-    from app.bot.user_bot import user_bot_service
+    from tests.user_bot_worker_boundary import user_bot_worker_boundary as user_bot_service
 
     calls = []
 
@@ -112,7 +112,7 @@ def test_edit_uses_legacy_tg_api_and_falls_back_to_legacy_send(monkeypatch):
 
 
 def test_edit_returns_success_without_fallback(monkeypatch):
-    from app.bot.user_bot import user_bot_service
+    from tests.user_bot_worker_boundary import user_bot_worker_boundary as user_bot_service
 
     calls = []
 
@@ -138,7 +138,7 @@ def test_edit_returns_success_without_fallback(monkeypatch):
 
 
 def test_reply_routes_through_legacy_edit_or_send(monkeypatch):
-    from app.bot.user_bot import user_bot_service
+    from tests.user_bot_worker_boundary import user_bot_worker_boundary as user_bot_service
 
     calls = []
 

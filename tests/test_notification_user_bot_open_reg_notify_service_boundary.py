@@ -28,7 +28,7 @@ class FakeLogger:
 
 
 def _reset_open_reg_notify_state(monkeypatch):
-    from app.bot.user_bot import user_bot_service
+    from tests.user_bot_worker_boundary import user_bot_worker_boundary as user_bot_service
 
     logger = FakeLogger()
     monkeypatch.setattr(user_bot_service, "is_user_bot_open_reg_notify_user_enabled", lambda: False)

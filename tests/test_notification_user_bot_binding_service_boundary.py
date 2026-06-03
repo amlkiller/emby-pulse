@@ -28,7 +28,7 @@ class FakeLogger:
 
 
 def _reset_user_bot_binding_state(monkeypatch, now=100.0):
-    from app.bot.user_bot import user_bot_service
+    from tests.user_bot_worker_boundary import user_bot_worker_boundary as user_bot_service
 
     monkeypatch.setattr(user_bot_service, "_binding_cache", {})
     monkeypatch.setattr(user_bot_service, "_blacklist_cache", {})

@@ -21,7 +21,7 @@ class FakeLogger:
 
 
 def _reset_restriction_state(monkeypatch, now=100.0):
-    from app.bot.user_bot import user_bot_service
+    from tests.user_bot_worker_boundary import user_bot_worker_boundary as user_bot_service
 
     monkeypatch.setattr(user_bot_service, "_restriction_cache", {})
     monkeypatch.setattr(user_bot_service, "_restriction_cache_lock", threading.RLock())

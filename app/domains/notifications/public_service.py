@@ -58,11 +58,15 @@ def is_user_bot_running() -> bool:
 
 
 def send_user_bot_message(chat_id, text, reply_markup=None):
-    return _get_user_bot_service()._send(chat_id, text, reply_markup)
+    from app.bot.user_bot import user_bot_telegram_service
+
+    return user_bot_telegram_service.send(chat_id, text, reply_markup)
 
 
 def send_user_bot_photo(chat_id, photo, caption, parse_mode="HTML"):
-    return _get_user_bot_service()._tg_api(
+    from app.bot.user_bot import user_bot_telegram_service
+
+    return user_bot_telegram_service.tg_api(
         "sendPhoto",
         {"chat_id": chat_id, "photo": photo, "caption": caption, "parse_mode": parse_mode},
     )

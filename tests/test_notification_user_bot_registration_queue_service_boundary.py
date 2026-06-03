@@ -42,56 +42,77 @@ class FakeSemaphore:
 
 
 def _reset_registration_queue_state(monkeypatch):
-    from app.bot.user_bot import user_bot_service
+    from app.bot.user_bot import user_bot_registration_queue_service
 
-    monkeypatch.setattr(user_bot_service, "_active_tasks_lock", threading.RLock())
-    monkeypatch.setattr(user_bot_service, "_waiting_count_lock", threading.RLock())
-    monkeypatch.setattr(user_bot_service, "_active_tasks", 0)
-    monkeypatch.setattr(user_bot_service, "_waiting_count", 0)
-    monkeypatch.setattr(user_bot_service, "MAX_CONCURRENT_TASKS", 3)
-    monkeypatch.setattr(user_bot_service, "MAX_WAITING_TASKS", 2)
-    monkeypatch.setattr(user_bot_service, "_task_executor", FakeExecutor())
-    monkeypatch.setattr(user_bot_service, "_reg_waiters_lock", threading.RLock())
-    monkeypatch.setattr(user_bot_service, "_reg_waiters", 0)
-    monkeypatch.setattr(user_bot_service, "_reg_active", 0)
-    monkeypatch.setattr(user_bot_service, "MAX_CONCURRENT_REG", 2)
-    monkeypatch.setattr(user_bot_service, "REG_QUEUE_MAX_WAIT", 6)
-    monkeypatch.setattr(user_bot_service, "_reg_sema", FakeSemaphore())
-    monkeypatch.setattr(user_bot_service, "logger", FakeLogger())
-    return user_bot_service
+    monkeypatch.setattr(user_bot_registration_queue_service, "_active_tasks_lock", threading.RLock())
+    monkeypatch.setattr(user_bot_registration_queue_service, "_waiting_count_lock", threading.RLock())
+    monkeypatch.setattr(user_bot_registration_queue_service, "_active_tasks", 0)
+    monkeypatch.setattr(user_bot_registration_queue_service, "_waiting_count", 0)
+    monkeypatch.setattr(user_bot_registration_queue_service, "MAX_CONCURRENT_TASKS", 3)
+    monkeypatch.setattr(user_bot_registration_queue_service, "MAX_WAITING_TASKS", 2)
+    monkeypatch.setattr(user_bot_registration_queue_service, "_task_executor", FakeExecutor())
+    monkeypatch.setattr(user_bot_registration_queue_service, "_reg_waiters_lock", threading.RLock())
+    monkeypatch.setattr(user_bot_registration_queue_service, "_reg_waiters", 0)
+    monkeypatch.setattr(user_bot_registration_queue_service, "_reg_active", 0)
+    monkeypatch.setattr(user_bot_registration_queue_service, "MAX_CONCURRENT_REG", 2)
+    monkeypatch.setattr(user_bot_registration_queue_service, "REG_QUEUE_MAX_WAIT", 6)
+    monkeypatch.setattr(user_bot_registration_queue_service, "_reg_sema", FakeSemaphore())
+    monkeypatch.setattr(user_bot_registration_queue_service, "logger", FakeLogger())
+    user_bot_registration_queue_service.set_dependency_providers(
+        task_executor_provider=lambda: user_bot_registration_queue_service._task_executor,
+        active_tasks_lock_provider=lambda: user_bot_registration_queue_service._active_tasks_lock,
+        waiting_count_lock_provider=lambda: user_bot_registration_queue_service._waiting_count_lock,
+        get_active_tasks_provider=lambda: user_bot_registration_queue_service._active_tasks,
+        set_active_tasks_callback=None,
+        get_waiting_count_provider=lambda: user_bot_registration_queue_service._waiting_count,
+        set_waiting_count_callback=None,
+        max_concurrent_tasks_provider=lambda: user_bot_registration_queue_service.MAX_CONCURRENT_TASKS,
+        max_waiting_tasks_provider=lambda: user_bot_registration_queue_service.MAX_WAITING_TASKS,
+        reg_sema_provider=lambda: user_bot_registration_queue_service._reg_sema,
+        reg_waiters_lock_provider=lambda: user_bot_registration_queue_service._reg_waiters_lock,
+        get_reg_waiters_provider=lambda: user_bot_registration_queue_service._reg_waiters,
+        set_reg_waiters_callback=None,
+        get_reg_active_provider=lambda: user_bot_registration_queue_service._reg_active,
+        set_reg_active_callback=None,
+        max_concurrent_reg_provider=lambda: user_bot_registration_queue_service.MAX_CONCURRENT_REG,
+        reg_queue_max_wait_provider=lambda: user_bot_registration_queue_service.REG_QUEUE_MAX_WAIT,
+        send_provider=lambda: (lambda chat_id, text, reply_markup=None: None),
+        logger_provider=lambda: user_bot_registration_queue_service.logger,
+    )
+    return user_bot_registration_queue_service
 
 
 def test_submit_task_uses_legacy_executor_and_counters(monkeypatch):
-    user_bot_service = _reset_registration_queue_state(monkeypatch)
+    queue_service = _reset_registration_queue_state(monkeypatch)
     calls = []
 
-    assert user_bot_service._submit_task(lambda value, flag=False: calls.append((value, flag)), "x", flag=True) is True
-    assert user_bot_service._waiting_count == 1
-    assert user_bot_service._active_tasks == 0
-    assert len(user_bot_service._task_executor.submitted) == 1
+    assert queue_service.submit_task(lambda value, flag=False: calls.append((value, flag)), "x", flag=True) is True
+    assert queue_service._waiting_count == 1
+    assert queue_service._active_tasks == 0
+    assert len(queue_service._task_executor.submitted) == 1
 
-    user_bot_service._task_executor.submitted[0]()
+    queue_service._task_executor.submitted[0]()
 
     assert calls == [("x", True)]
-    assert user_bot_service._waiting_count == 0
-    assert user_bot_service._active_tasks == 0
+    assert queue_service._waiting_count == 0
+    assert queue_service._active_tasks == 0
 
 
 def test_submit_task_rejects_when_legacy_waiting_limit_is_full(monkeypatch):
-    user_bot_service = _reset_registration_queue_state(monkeypatch)
-    user_bot_service._waiting_count = 2
+    queue_service = _reset_registration_queue_state(monkeypatch)
+    queue_service._waiting_count = 2
 
-    assert user_bot_service._submit_task(lambda: None) is False
-    assert user_bot_service._waiting_count == 2
-    assert user_bot_service._task_executor.submitted == []
+    assert queue_service.submit_task(lambda: None) is False
+    assert queue_service._waiting_count == 2
+    assert queue_service._task_executor.submitted == []
 
 
 def test_get_queue_status_reads_legacy_state_and_limits(monkeypatch):
-    user_bot_service = _reset_registration_queue_state(monkeypatch)
-    user_bot_service._active_tasks = 1
-    user_bot_service._waiting_count = 2
+    queue_service = _reset_registration_queue_state(monkeypatch)
+    queue_service._active_tasks = 1
+    queue_service._waiting_count = 2
 
-    assert user_bot_service._get_queue_status() == {
+    assert queue_service.get_queue_status() == {
         "active": 1,
         "waiting": 2,
         "max_active": 3,
@@ -100,47 +121,54 @@ def test_get_queue_status_reads_legacy_state_and_limits(monkeypatch):
 
 
 def test_enter_reg_queue_updates_legacy_state_and_sends_position(monkeypatch):
-    user_bot_service = _reset_registration_queue_state(monkeypatch)
+    queue_service = _reset_registration_queue_state(monkeypatch)
     sent = []
     sema = FakeSemaphore(acquire_result=True)
 
-    user_bot_service._reg_active = 2
-    monkeypatch.setattr(user_bot_service, "_reg_sema", sema)
-    monkeypatch.setattr(user_bot_service, "_send", lambda chat_id, text, reply_markup=None: sent.append((chat_id, text)))
+    queue_service._reg_active = 2
+    monkeypatch.setattr(queue_service, "_reg_sema", sema)
+    queue_service.set_dependency_providers(
+        reg_sema_provider=lambda: queue_service._reg_sema,
+        send_provider=lambda: (lambda chat_id, text, reply_markup=None: sent.append((chat_id, text))),
+    )
 
-    assert user_bot_service._enter_reg_queue(chat_id=123) is True
+    assert queue_service.enter_reg_queue(chat_id=123) is True
 
-    assert user_bot_service._reg_waiters == 0
-    assert user_bot_service._reg_active == 3
+    assert queue_service._reg_waiters == 0
+    assert queue_service._reg_active == 3
     assert sema.acquire_calls == [6]
     assert sent == [(123, "⏳ 当前注册人数较多，你排在第 1 位，请稍候（最长等待 0 分钟）...")]
 
 
 def test_enter_reg_queue_timeout_sends_legacy_timeout_message(monkeypatch):
-    user_bot_service = _reset_registration_queue_state(monkeypatch)
+    queue_service = _reset_registration_queue_state(monkeypatch)
     sent = []
     sema = FakeSemaphore(acquire_result=False)
 
-    monkeypatch.setattr(user_bot_service, "_reg_sema", sema)
-    monkeypatch.setattr(user_bot_service, "_send", lambda chat_id, text, reply_markup=None: sent.append((chat_id, text)))
+    monkeypatch.setattr(queue_service, "_reg_sema", sema)
+    queue_service.set_dependency_providers(
+        reg_sema_provider=lambda: queue_service._reg_sema,
+        send_provider=lambda: (lambda chat_id, text, reply_markup=None: sent.append((chat_id, text))),
+    )
 
-    assert user_bot_service._enter_reg_queue(chat_id=456) is False
+    assert queue_service.enter_reg_queue(chat_id=456) is False
 
-    assert user_bot_service._reg_waiters == 0
-    assert user_bot_service._reg_active == 0
+    assert queue_service._reg_waiters == 0
+    assert queue_service._reg_active == 0
     assert sema.acquire_calls == [6]
     assert sent == [(456, "⌛ 注册排队等待超时，请稍后重试")]
 
 
 def test_leave_reg_queue_updates_legacy_state_and_logs_release_error(monkeypatch):
-    user_bot_service = _reset_registration_queue_state(monkeypatch)
+    queue_service = _reset_registration_queue_state(monkeypatch)
     sema = FakeSemaphore(release_error=True)
 
-    user_bot_service._reg_active = 1
-    monkeypatch.setattr(user_bot_service, "_reg_sema", sema)
+    queue_service._reg_active = 1
+    monkeypatch.setattr(queue_service, "_reg_sema", sema)
+    queue_service.set_dependency_providers(reg_sema_provider=lambda: queue_service._reg_sema)
 
-    user_bot_service._leave_reg_queue()
+    queue_service.leave_reg_queue()
 
-    assert user_bot_service._reg_active == 0
+    assert queue_service._reg_active == 0
     assert sema.release_calls == 1
-    assert user_bot_service.logger.calls == [("exception", "[UserBot] _reg_sema release 异常")]
+    assert queue_service.logger.calls == [("exception", "[UserBot] _reg_sema release 异常")]

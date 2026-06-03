@@ -13,9 +13,9 @@ def _default_get_notify_rule(rule_type):
 
 
 def _default_user_bot_send():
-    from app.bot.user_bot.user_bot_service import _send, _tg_api
+    from app.bot.user_bot import user_bot_telegram_service
 
-    return _send
+    return user_bot_telegram_service.send
 
 
 _media_request_dao_provider = lambda: media_request_dao

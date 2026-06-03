@@ -116,7 +116,7 @@ class FakeLock:
 
 
 def _reset_code_command_state(monkeypatch):
-    from app.bot.user_bot import user_bot_service
+    from tests.user_bot_worker_boundary import user_bot_worker_boundary as user_bot_service
 
     sent = []
     cleared = []
