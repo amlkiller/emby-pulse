@@ -137,3 +137,36 @@ Extracted users request-permission model and management routes into app/domains/
 ### Next Steps
 
 - None - task complete
+
+
+## Session 124: Refactor users template router
+
+**Date**: 2026-06-03
+**Task**: Refactor users template router
+**Branch**: `main`
+
+### Summary
+
+Extracted users default-template management routes into app/domains/users/template_router.py, included the child router from users/router.py at the original route position, and preserved users.router compatibility exports. Verified compile/import route checks, focused users router/public-service tests, and the full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `38e8e16` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
