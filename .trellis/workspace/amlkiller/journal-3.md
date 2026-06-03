@@ -1193,3 +1193,36 @@ Extracted GET /api/dashboard/init from app/domains/playback/stats.py into app/do
 ### Next Steps
 
 - None - task complete
+
+
+## Session 156: Refactor playback stats item detail router
+
+**Date**: 2026-06-03
+**Task**: Refactor playback stats item detail router
+**Branch**: `main`
+
+### Summary
+
+Extracted GET /api/stats/item_detail from app/domains/playback/stats.py into app/domains/playback/item_detail_router.py, preserving route order, login short-circuit, admin and non-admin query behavior, no-record response, safe error fallback, and stats.py compatibility provider monkeypatches. Verified with compileall, import check, focused facade tests, git diff --check, and full tests/ suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b68f96a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
