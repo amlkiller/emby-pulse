@@ -118,6 +118,47 @@ def test_media_requests_router_includes_feedback_child_routes_and_compat_exports
     assert pending_index < submit_index < my_index < all_index < action_index < batch_index < safe_top_index
 
 
+def test_media_requests_router_includes_cache_control_child_routes_and_compat_exports():
+    from app.domains.media_requests import cache_control_router
+    from app.domains.media_requests import router as media_requests_router
+
+    routes = [
+        (route.path, route.methods)
+        for route in media_requests_router.router.routes
+        if hasattr(route, "methods")
+    ]
+
+    assert any(path == "/api/requests/refresh_cache" and "POST" in methods for path, methods in routes)
+    assert any(path == "/api/requests/clear_cache" and "POST" in methods for path, methods in routes)
+    assert media_requests_router.start_community_cache_refresh_loop is (
+        cache_control_router.start_community_cache_refresh_loop
+    )
+    assert media_requests_router.stop_community_cache_refresh_loop is (
+        cache_control_router.stop_community_cache_refresh_loop
+    )
+    assert media_requests_router.start_media_request_services is cache_control_router.start_media_request_services
+    assert media_requests_router.refresh_community_cache_api is cache_control_router.refresh_community_cache_api
+    assert media_requests_router.clear_community_cache_api is cache_control_router.clear_community_cache_api
+
+    safe_latest_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/requests/safe_latest" and "GET" in methods
+    )
+    refresh_index = next(
+        i
+        for i, (path, methods) in enumerate(routes)
+        if path == "/api/requests/refresh_cache" and "POST" in methods
+    )
+    clear_index = next(
+        i
+        for i, (path, methods) in enumerate(routes)
+        if path == "/api/requests/clear_cache" and "POST" in methods
+    )
+    my_series_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/user/my_series" and "GET" in methods
+    )
+    assert safe_latest_index < refresh_index < clear_index < my_series_index
+
+
 def test_get_all_requests_denies_non_admin_before_dao_reads(monkeypatch):
     from app.domains.media_requests import router as media_requests_router
 

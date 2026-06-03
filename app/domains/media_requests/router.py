@@ -2,7 +2,6 @@ import json
 import re
 from datetime import date
 from fastapi import APIRouter, Request, Depends, BackgroundTasks
-from fastapi.responses import JSONResponse
 from app.domains.media_requests import community_cache_service
 from app.domains.media_requests.auth_router import (
     RequestLoginModel,
@@ -11,6 +10,15 @@ from app.domains.media_requests.auth_router import (
     request_system_logout,
     router as auth_router,
     set_dependency_providers as set_auth_dependency_providers,
+)
+from app.domains.media_requests.cache_control_router import (
+    clear_community_cache_api,
+    refresh_community_cache_api,
+    router as cache_control_router,
+    set_dependency_providers as set_cache_control_dependency_providers,
+    start_community_cache_refresh_loop,
+    start_media_request_services,
+    stop_community_cache_refresh_loop,
 )
 from app.domains.media_requests.feedback_router import (
     BulkFeedbackActionModel,
@@ -155,6 +163,16 @@ set_feedback_dependency_providers(
     notification_service_provider=lambda: notification_service,
     system_notification_provider=lambda: add_system_notification,
     logger_provider=lambda: logger,
+)
+
+
+set_cache_control_dependency_providers(
+    community_cache_service_provider=lambda: community_cache_service,
+    refresh_community_cache_provider=lambda: _refresh_community_cache,
+    invalidate_cache_provider=lambda: _invalidate_cache,
+    sync_task_state_provider=lambda: _sync_community_cache_task_state,
+    ensure_schema_provider=lambda: ensure_media_request_schema,
+    user_service_provider=lambda: user_service,
 )
 
 def get_tmdb_season_info(tmdb_id: int, season: int) -> tuple:
@@ -950,44 +968,7 @@ def get_safe_latest(limit: int = 15, request: Request = None):
         return {"status": "error", "data": []}
 
 
-def start_community_cache_refresh_loop() -> None:
-    community_cache_service.start_community_cache_refresh_loop(refresh_func=_refresh_community_cache)
-    _sync_community_cache_task_state()
-
-
-def stop_community_cache_refresh_loop() -> None:
-    community_cache_service.stop_community_cache_refresh_loop()
-    _sync_community_cache_task_state()
-
-
-def start_media_request_services() -> None:
-    ensure_media_request_schema()
-    start_community_cache_refresh_loop()
-
-
-@router.post("/api/requests/refresh_cache")
-def refresh_community_cache_api(request: Request):
-    """手动刷新用户社区首页缓存（管理员接口）"""
-    if not request.session.get("user"):
-        return JSONResponse(status_code=401, content={"status": "error", "message": "未登录"})
-    if not user_service.is_admin_user(request):
-        return JSONResponse(status_code=403, content={"status": "error", "message": "需要管理员权限"})
-
-    # 后台执行刷新
-    _refresh_community_cache()
-    return {"status": "success", "message": "缓存已刷新"}
-
-
-@router.post("/api/requests/clear_cache")
-def clear_community_cache_api(request: Request):
-    """清除用户社区首页缓存（管理员接口）"""
-    if not request.session.get("user"):
-        return JSONResponse(status_code=401, content={"status": "error", "message": "未登录"})
-    if not user_service.is_admin_user(request):
-        return JSONResponse(status_code=403, content={"status": "error", "message": "需要管理员权限"})
-
-    _invalidate_cache()
-    return {"status": "success", "message": "缓存已清除"}
+router.include_router(cache_control_router)
 
 
 # ==================== 追新功能 API ====================
