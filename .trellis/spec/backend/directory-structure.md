@@ -114,6 +114,12 @@ or cross-call orchestration. If a function only forwards arguments to a DAO,
 query module, service object, or view helper without additional behavior, remove
 the wrapper and point callers at the module that performs the work.
 
+Tests should follow the same boundary. When a pure forwarding wrapper is
+removed, do not keep tests that monkeypatch or call the deleted wrapper only to
+prove pass-through behavior. Migrate existing assertions to the real worker
+module when they still cover meaningful behavior. Delete a wrapper-boundary test
+only when it no longer covers behavior and the task explicitly approves removal.
+
 Foundation layers must not import concrete domains. `app/core/` and `app/infra/`
 can expose shared stores, query helpers, and compatibility functions, but they
 must not import `app.domains.*`. If a helper is needed by both infra/core and a
