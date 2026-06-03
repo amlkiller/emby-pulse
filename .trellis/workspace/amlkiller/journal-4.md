@@ -1193,3 +1193,36 @@ Extracted SystemDaemon user-expiration disable logic into a notification-domain 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 216: Extract notification bot auto finish request service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot auto finish request service
+**Branch**: `main`
+
+### Summary
+
+Extracted SystemDaemon auto-finish request handling and request-status notification into a notification-domain service with lazy legacy providers, kept daemon wrappers, and added focused boundary tests for empty TMDB IDs, finish DAO conversion/notification guards, disabled rules, bound Telegram sends, action message branches, send failures, and outer notification failures. Verification passed: compileall changed files, focused pytest, import check, git diff --check, and full pytest tests/.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `82f1af4` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
