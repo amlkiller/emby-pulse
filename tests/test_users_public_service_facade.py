@@ -87,6 +87,19 @@ def test_users_router_uses_public_service_cache_owner():
     assert "user_service.invalidate_emby_users_cache()" in source
 
 
+def test_users_router_includes_tag_routes():
+    from app.domains.users import router
+
+    routes = [(route.path, route.methods) for route in router.router.routes if hasattr(route, "methods")]
+
+    assert any(path == "/api/manage/tags" and "GET" in methods for path, methods in routes)
+    assert any(path == "/api/manage/tags" and "POST" in methods for path, methods in routes)
+    assert any(path == "/api/manage/tags/{tag_id}" and "DELETE" in methods for path, methods in routes)
+    assert any(path == "/api/manage/tags/name/{tag_name}" and "DELETE" in methods for path, methods in routes)
+    assert any(path == "/api/manage/user/tags" and "POST" in methods for path, methods in routes)
+    assert any(path == "/api/manage/user/tags" and "GET" in methods for path, methods in routes)
+
+
 def test_selected_external_callers_use_real_user_dao_for_persistence_calls():
     checked_paths = [
         _REPO_ROOT / "app/plugins/auto_expire/plugin.py",
