@@ -962,3 +962,36 @@ Extracted NotificationBot risk alert handling into a notification-domain service
 ### Next Steps
 
 - None - task complete
+
+
+## Session 209: Extract notification bot user login service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot user login service
+**Branch**: `main`
+
+### Summary
+
+Extracted NotificationBot user login notification handling into a notification-domain service with lazy providers for legacy monkeypatch compatibility. Kept NotificationBot.on_user_login as a wrapper, added a dynamic get_notify_rule compatibility helper, and added boundary tests for notification rule checks, legacy setting fallback, mute handling, channel fan-out, web notification persistence, fallback avatar URLs, and send-failure fallback. Verification passed: compileall, focused user-login tests, import check, git diff --check, and full tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c19b368` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
