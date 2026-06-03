@@ -1919,3 +1919,36 @@ Extracted user bot grab and lottery command handling into a focused notification
 ### Next Steps
 
 - None - task complete
+
+
+## Session 178: Refactor notification user bot scratch commands
+
+**Date**: 2026-06-03
+**Task**: Refactor notification user bot scratch commands
+**Branch**: `main`
+
+### Summary
+
+Extracted user bot scratch command and callback handling into a focused notification domain service while preserving legacy wrappers, late-bound dependency providers, inline keyboard updates, and delayed cleanup behavior.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4dc4768` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
