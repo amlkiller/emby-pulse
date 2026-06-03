@@ -35,6 +35,7 @@ from app.domains.notifications import notification_bot_media_quality_service
 from app.domains.notifications import notification_bot_pending_sync_service
 from app.domains.notifications import notification_bot_playback_event_service
 from app.domains.notifications import notification_bot_playback_command_service
+from app.domains.notifications import notification_bot_plugin_callback_service
 from app.domains.notifications import notification_bot_polling_service
 from app.domains.notifications import notification_bot_request_admin_message_sync_service
 from app.domains.notifications import notification_bot_risk_alert_service
@@ -344,6 +345,10 @@ notification_bot_library_push_service.set_dependency_providers(
 )
 
 notification_bot_library_group_service.set_dependency_providers(
+    logger_provider=lambda: logger,
+)
+
+notification_bot_plugin_callback_service.set_dependency_providers(
     logger_provider=lambda: logger,
 )
 
@@ -836,59 +841,8 @@ class NotificationBot:
         try: telegram_client.post_api(token, "answerCallbackQuery", json={"callback_query_id": cq_id}, proxies=proxies, timeout=5)
         except Exception: pass
 
-        # 插件回调分发
-        if data.startswith("p115_"):
-            try:
-                from app.plugins.cloud115.plugin import handle_115_callback, handle_115_offline_callback
-                # 转存回调: p115_tf_xxx
-                if data.startswith("p115_tf_"):
-                    if handle_115_callback(data, cid, cq_id, "tg"):
-                        return
-                # 离线回调: p115_ol_xxx
-                elif data.startswith("p115_ol_"):
-                    if handle_115_offline_callback(data, cid, cq_id, "tg"):
-                        return
-            except Exception: pass
-
-        # 影巢搜索回调: hdhive_sr_xxx (115资源选择)
-        if data.startswith("hdhive_sr_"):
-            try:
-                from app.plugins.hdhive.plugin import handle_hdhive_search_callback
-                if handle_hdhive_search_callback(data, cid, cq_id, "tg"):
-                    return
-            except Exception: pass
-
-        # 影巢 TMDB 选择回调: hdhive_tmdb_xxx
-        if data.startswith("hdhive_tmdb_"):
-            try:
-                from app.plugins.hdhive.plugin import handle_hdhive_tmdb_callback
-                if handle_hdhive_tmdb_callback(data, cid, cq_id, "tg"):
-                    return
-            except Exception: pass
-
-        # 影巢 TMDB 分页回调: hdhive_tmdbprev_xxx 或 hdhive_tmdbnext_xxx
-        logger.info(f"[Bot] 检查TMDB分页回调: data={data[:50]}...")
-        if data.startswith("hdhive_tmdbprev_") or data.startswith("hdhive_tmdbnext_") or data.startswith("hdhive_tmdbpage_"):
-            logger.info(f"[Bot] 匹配到TMDB分页回调: {data}")
-            try:
-                from app.plugins.hdhive.plugin import handle_hdhive_tmdbpage_callback
-                message_id = cq.get("message", {}).get("message_id")
-                result = handle_hdhive_tmdbpage_callback(data, cid, cq_id, "tg", message_id)
-                logger.info(f"[Bot] TMDB分页回调结果: {result}")
-                if result:
-                    return
-            except Exception as e:
-                logger.error(f"[Bot] TMDB分页回调异常: {e}")
-                pass
-
-        # 影巢翻页回调: hdhive_page_xxx
-        if data.startswith("hdhive_page_"):
-            try:
-                from app.plugins.hdhive.plugin import handle_hdhive_page_callback
-                message_id = cq.get("message", {}).get("message_id")
-                if handle_hdhive_page_callback(data, cid, cq_id, "tg", message_id):
-                    return
-            except Exception: pass
+        if notification_bot_plugin_callback_service.handle_plugin_callback(data, cid, cq_id, cq):
+            return
 
         # Emby 重启回调: emby_restart:index 或 emby_restart:all
         if data.startswith("emby_restart:"):
@@ -897,14 +851,8 @@ class NotificationBot:
             )
             return
 
-        # 求片通知影巢搜索回调: req_hdhive_xxx
-        if data.startswith("req_hdhive_"):
-            try:
-                from app.plugins.hdhive.plugin import handle_request_hdhive_callback
-                if handle_request_hdhive_callback(data, cid, cq_id, "tg"):
-                    return
-            except Exception as e:
-                logger.error(f"[Bot] 求片影巢搜索回调异常: {e}")
+        if notification_bot_plugin_callback_service.handle_request_hdhive_callback(data, cid, cq_id):
+            return
 
         # 消息中心回调处理
         if data.startswith("msg_reply:"):
