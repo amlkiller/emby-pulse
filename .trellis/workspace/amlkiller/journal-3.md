@@ -1721,3 +1721,36 @@ Extracted user bot password command handling into a focused notification domain 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 172: Refactor notification user bot service info commands
+
+**Date**: 2026-06-03
+**Task**: Refactor notification user bot service info commands
+**Branch**: `main`
+
+### Summary
+
+Extracted user bot server, library, and calendar command handling into a focused notification domain service while preserving legacy wrappers and runtime dependency providers.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `36e1d2c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
