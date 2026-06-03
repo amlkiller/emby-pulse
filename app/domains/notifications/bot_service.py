@@ -5,7 +5,6 @@ import logging
 import urllib.parse
 import json 
 import re
-from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from app.core.config import REPORT_COVER_URL, FALLBACK_IMAGE_URL
 from app.infra.db.notification_dao import add_system_notification
@@ -23,6 +22,7 @@ from app.domains.notifications import notification_bot_fresh_episode_service
 from app.domains.notifications import notification_bot_gap_clear_service
 from app.domains.notifications import notification_bot_info_command_service
 from app.domains.notifications import notification_bot_item_deleted_service
+from app.domains.notifications import notification_bot_library_group_service
 from app.domains.notifications import notification_bot_library_queue_service
 from app.domains.notifications import notification_bot_library_new_episode_service
 from app.domains.notifications import notification_bot_library_new_item_service
@@ -343,6 +343,10 @@ notification_bot_library_push_service.set_dependency_providers(
     media_api_provider=lambda: media_api,
 )
 
+notification_bot_library_group_service.set_dependency_providers(
+    logger_provider=lambda: logger,
+)
+
 def _submit_bot_task(fn, *args):
     if not _bot_executor_slots.acquire(blocking=False):
         logger.warning("[Bot] 后台任务队列已满，丢弃本次异步任务")
@@ -538,31 +542,11 @@ class SystemDaemon:
                 if self._stop_event.wait(5): return
 
     def _process_library_group(self, items):
-        groups = defaultdict(list)
-        for item in items:
-            itype = item.get('Type')
-            if itype in ['Episode', 'Season'] and item.get('SeriesId'): groups[str(item.get('SeriesId'))].append(item)
-            elif itype == 'Series': groups[str(item.get('Id'))].append(item)
-            else: groups[str(item.get('Id'))].append(item)
-
-        for group_id, group_items in groups.items():
-            try:
-                is_tv = any(x.get('Type') in ['Episode', 'Season', 'Series'] for x in group_items)
-                if is_tv:
-                    fresh_episodes = self._check_fresh_episodes(group_id)
-                    if fresh_episodes: self._push_episode_group(group_id, fresh_episodes)
-                    else:
-                        series_item = next((x for x in group_items if x.get('Type') == 'Series'), None)
-                        if series_item: self._push_single_item(series_item)
-                        else:
-                            episodes_only = [x for x in group_items if x.get('Type') == 'Episode']
-                            if episodes_only: self._push_episode_group(group_id, episodes_only)
-                else:
-                    self._push_single_item(group_items[0])
-                if self._stop_event.wait(2):
-                    return
-            except Exception as e:
-                logger.error(f"[入库通知] 处理失败: {e}")
+        return notification_bot_library_group_service.process_library_group(
+            self,
+            items,
+            wait_between_groups=lambda: self._stop_event.wait(2),
+        )
 
     def _check_fresh_episodes(self, series_id):
         return notification_bot_fresh_episode_service.check_fresh_episodes(series_id, self._parse_emby_time)
