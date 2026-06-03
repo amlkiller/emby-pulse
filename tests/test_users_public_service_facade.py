@@ -1,4 +1,5 @@
 import ast
+import asyncio
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -116,12 +117,19 @@ def test_users_router_includes_child_routes_and_compat_exports():
     assert any(path == "/api/manage/tags/name/{tag_name}" and "DELETE" in methods for path, methods in routes)
     assert any(path == "/api/manage/user/tags" and "POST" in methods for path, methods in routes)
     assert any(path == "/api/manage/user/tags" and "GET" in methods for path, methods in routes)
+    assert any(path == "/api/user/image/{user_id}" and "GET" in methods for path, methods in routes)
+    assert any(path == "/api/manage/user/image" and "POST" in methods for path, methods in routes)
+    assert any(path == "/api/user/avatar" and "POST" in methods for path, methods in routes)
 
+    from app.domains.users import avatar_router
     from app.domains.users import audit_log_router
     from app.domains.users import delete_verification_router
     from app.domains.users import invitation_router
     from app.domains.users import library_visibility_router
 
+    assert router.get_user_avatar is avatar_router.get_user_avatar
+    assert router.api_update_user_image is avatar_router.api_update_user_image
+    assert router.api_user_self_avatar is avatar_router.api_user_self_avatar
     assert router.api_get_audit_logs is audit_log_router.api_get_audit_logs
     assert router.api_get_audit_stats is audit_log_router.api_get_audit_stats
     assert router.api_delete_audit_log is audit_log_router.api_delete_audit_log
@@ -164,11 +172,112 @@ def test_users_router_includes_child_routes_and_compat_exports():
     invitation_index = next(
         i for i, (path, methods) in enumerate(routes) if path == "/api/manage/invite/gen" and "POST" in methods
     )
+    avatar_image_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/user/image/{user_id}" and "GET" in methods
+    )
+    avatar_update_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/manage/user/image" and "POST" in methods
+    )
+    self_avatar_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/user/avatar" and "POST" in methods
+    )
+    password_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/user/password" and "POST" in methods
+    )
     library_index = next(
         i for i, (path, methods) in enumerate(routes) if path == "/api/manage/user/library" and "POST" in methods
     )
     assert admin_index < audit_index < verify_index
+    assert avatar_image_index < avatar_update_index < self_avatar_index < password_index
     assert verify_index < user_libraries_index < hidden_libraries_index < invitation_index < library_index
+
+
+def test_avatar_fetch_denies_non_admin_before_media_call(monkeypatch):
+    from app.domains.users import router
+
+    request = SimpleNamespace(session={"user": {"id": "admin-1"}})
+
+    class MediaApiMustNotRun:
+        def get(self, *_args, **_kwargs):
+            raise AssertionError("media_api.get should not run before admin authorization")
+
+    monkeypatch.setattr(router, "is_admin_user", lambda _request: False)
+    monkeypatch.setattr(router, "media_api", MediaApiMustNotRun())
+
+    response = router.get_user_avatar("u1", request)
+
+    assert response.status_code == 403
+
+
+def test_avatar_update_denies_non_admin_before_side_effects(monkeypatch):
+    from app.domains.users import router
+
+    request = SimpleNamespace(session={"user": {"id": "admin-1"}})
+
+    class MediaApiMustNotRun:
+        def get(self, *_args, **_kwargs):
+            raise AssertionError("media_api.get should not run before admin authorization")
+
+        def delete(self, *_args, **_kwargs):
+            raise AssertionError("media_api.delete should not run before admin authorization")
+
+        def post(self, *_args, **_kwargs):
+            raise AssertionError("media_api.post should not run before admin authorization")
+
+    class NetworkClientMustNotRun:
+        def get(self, *_args, **_kwargs):
+            raise AssertionError("network_client.get should not run before admin authorization")
+
+    class FileMustNotRead:
+        content_type = "image/jpeg"
+
+        async def read(self):
+            raise AssertionError("file.read should not run before admin authorization")
+
+    monkeypatch.setattr(router, "is_admin_user", lambda _request: False)
+    monkeypatch.setattr(router, "media_api", MediaApiMustNotRun())
+    monkeypatch.setattr(router, "network_client", NetworkClientMustNotRun())
+    monkeypatch.setattr(
+        router,
+        "add_audit_log",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("audit log should not run before admin authorization")
+        ),
+    )
+    monkeypatch.setattr(
+        router,
+        "get_client_ip",
+        lambda _request: (_ for _ in ()).throw(
+            AssertionError("client IP lookup should not run before admin authorization")
+        ),
+    )
+
+    result = asyncio.run(
+        router.api_update_user_image(
+            request,
+            user_id="u1",
+            url="https://example.com/avatar.jpg",
+            file=FileMustNotRead(),
+        )
+    )
+
+    assert result == {"status": "error", "message": "需要管理员权限"}
+
+
+def test_self_avatar_denies_missing_req_user_before_file_read():
+    from app.domains.users import router
+
+    request = SimpleNamespace(session={})
+
+    class FileMustNotRead:
+        content_type = "image/jpeg"
+
+        async def read(self):
+            raise AssertionError("file.read should not run before login authorization")
+
+    result = asyncio.run(router.api_user_self_avatar(request, file=FileMustNotRead()))
+
+    assert result == {"status": "error", "message": "请先登录"}
 
 
 def test_delete_verification_route_preserves_router_app_start_time_compat(monkeypatch):

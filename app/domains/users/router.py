@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request, Response, UploadFile, File, Form, Depends, HTTPException
+from fastapi import APIRouter, Request, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List
 from app.infra.db import audit_dao
@@ -12,6 +12,13 @@ from app.domains.users.audit_log_router import (
     api_get_audit_logs,
     api_get_audit_stats,
     router as audit_log_router,
+)
+from app.domains.users.avatar_router import (
+    api_update_user_image,
+    api_user_self_avatar,
+    get_user_avatar,
+    router as avatar_router,
+    set_dependency_providers as set_avatar_dependency_providers,
 )
 from app.domains.users.delete_verification_router import (
     APP_START_TIME,
@@ -80,7 +87,6 @@ from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限�
 from app.core.security import validate_password_strength  # 🔒 统一密码强度校验
 from app.utils.image_validator import check_magic_bytes  # 🔒 头像魔数校验
 import datetime
-import base64
 import logging
 from app.core.security_utils import safe_error_message
 from app.core.rate_limiter import get_client_ip
@@ -98,6 +104,15 @@ set_library_visibility_dependency_providers(
     media_api_provider=lambda: media_api,
     user_dao_provider=lambda: user_dao,
     logger_provider=lambda: logging,
+)
+set_avatar_dependency_providers(
+    media_api_provider=lambda: media_api,
+    network_client_provider=lambda: network_client,
+    is_admin_user_provider=lambda: is_admin_user,
+    check_magic_bytes_provider=lambda: check_magic_bytes,
+    safe_error_message_provider=lambda: safe_error_message,
+    client_ip_provider=lambda: get_client_ip,
+    audit_log_provider=lambda: add_audit_log,
 )
 
 # ==========================================
@@ -361,100 +376,14 @@ def api_get_single_user(user_id: str, request: Request):
         return {"status": "error"}
     except: return {"status": "error"}
 
-@router.get("/api/user/image/{user_id}")
-def get_user_avatar(user_id: str, request: Request):
-    if not request.session.get("user"):
-        return Response(status_code=401)
-    if not is_admin_user(request):
-        return Response(status_code=403)
-    try:
-        res = media_api.get(f"/Users/{user_id}/Images/Primary", params={"quality": 90}, timeout=5, stream=True)
-        if res.status_code == 200: return Response(content=res.content, media_type="image/jpeg", headers={"Cache-Control": "no-cache"})
-        return Response(status_code=404)
-    except: return Response(status_code=404)
-
-@router.post("/api/manage/user/image")
-async def api_update_user_image(request: Request, user_id: str = Form(...), url: str = Form(None), file: UploadFile = File(None)):
-    if not request.session.get("user"): return {"status": "error"}
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    try:
-        admin_user = request.session.get("user", {})
-        admin_name = admin_user.get("name", admin_user.get("username", "未知"))
-        ip_address = get_client_ip(request)
-
-        # 获取目标用户名
-        target_name = ""
-        try:
-            u_res = media_api.get(f"/Users/{user_id}", timeout=5)
-            if u_res.status_code == 200:
-                target_name = u_res.json().get("Name", "")
-        except Exception: pass
-
-        img_data = None; c_type = "image/png"
-        if url:
-            from app.utils.url_validator import validate_url
-            validation = validate_url(url, allow_internal=False)
-            if not validation["valid"]:
-                return {"status": "error", "message": f"URL 不安全: {validation['error']}"}
-            d_res = network_client.get(url, timeout=10, allow_redirects=False, stream=True)
-            if d_res.status_code == 200:
-                img_data = d_res.content
-                c_type = d_res.headers.get('Content-Type', 'image/png')
-        elif file:
-            img_data = await file.read()
-            c_type = file.content_type or "image/jpeg"
-        if not img_data: return {"status": "error", "message": "无图片数据"}
-        # 🔒 尺寸 + magic bytes 校验，防止伪装 Content-Type 上传非图像
-        if len(img_data) > 10 * 1024 * 1024:
-            return {"status": "error", "message": "图片不能超过 10MB"}
-        if not check_magic_bytes(img_data):
-            return {"status": "error", "message": "文件头校验失败，请上传有效的图片文件"}
-        b64 = base64.b64encode(img_data)
-        media_api.delete(f"/Users/{user_id}/Images/Primary")
-        media_api.post(f"/Users/{user_id}/Images/Primary", data=b64, headers={"Content-Type": c_type})
-
-        # 记录审计日志
-        source = "URL" if url else "文件上传"
-        add_audit_log(
-            admin_id=admin_user.get("id", ""),
-            admin_name=admin_name,
-            action="修改用户头像",
-            target_user_id=user_id,
-            target_user_name=target_name,
-            details=f"来源:{source}",
-            ip_address=ip_address
-        )
-
-        return {"status": "success"}
-    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
-
 # ==========================================
 # C 端用户自助 API(修改头像 / 修改密码)
 # ==========================================
+router.include_router(avatar_router)
+
 class UserPasswordChangeModel(BaseModel):
     old_password: str
     new_password: str
-
-@router.post("/api/user/avatar")
-async def api_user_self_avatar(request: Request, file: UploadFile = File(...)):
-    """C 端用户自助修改头像(从 session 读 user_id,不能改别人的)"""
-    user = request.session.get("req_user")
-    if not user or not user.get("Id"):
-        return {"status": "error", "message": "请先登录"}
-    user_id = user["Id"]
-    try:
-        img_data = await file.read()
-        if len(img_data) > 10 * 1024 * 1024:
-            return {"status": "error", "message": "图片不能超过 10MB"}
-        if not check_magic_bytes(img_data):
-            return {"status": "error", "message": "文件头校验失败，请上传有效的图片文件"}
-        c_type = file.content_type or "image/jpeg"
-        b64 = base64.b64encode(img_data)
-        media_api.delete(f"/Users/{user_id}/Images/Primary")
-        media_api.post(f"/Users/{user_id}/Images/Primary", data=b64, headers={"Content-Type": c_type})
-        return {"status": "success", "message": "头像已更新"}
-    except Exception as e:
-        return {"status": "error", "message": safe_error_message(e, "上传失败")}
 
 @router.post("/api/user/password")
 def api_user_self_password(data: UserPasswordChangeModel, request: Request):
