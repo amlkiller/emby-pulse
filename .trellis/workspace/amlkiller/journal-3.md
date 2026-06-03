@@ -1589,3 +1589,36 @@ Extracted user bot check, registration-code verification, invitation restore, an
 ### Next Steps
 
 - None - task complete
+
+
+## Session 168: Refactor notification user bot point commands
+
+**Date**: 2026-06-03
+**Task**: Refactor notification user bot point commands
+**Branch**: `main`
+
+### Summary
+
+Extracted user bot checkin and points command handling into a focused notification domain service while preserving legacy wrappers and monkeypatch-compatible providers.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3e72f9f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
