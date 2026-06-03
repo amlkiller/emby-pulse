@@ -1,12 +1,10 @@
 import threading
 import time
 import datetime
-import io
 import logging
 import urllib.parse
 import json 
 import re
-import ipaddress
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from app.core.config import REPORT_COVER_URL, FALLBACK_IMAGE_URL
@@ -17,6 +15,7 @@ from app.domains.users import user_bot_dao
 from app.domains.notifications import bot_service_dao, message_dao
 from app.domains.notifications import notification_bot_channel_service
 from app.domains.notifications import notification_bot_delivery_service
+from app.domains.notifications import notification_bot_media_helper_service
 from app.domains.notifications import notification_bot_media_quality_service
 from app.domains.notifications import notification_bot_request_admin_message_sync_service
 from app.domains.notifications import notification_bot_wecom_service
@@ -118,6 +117,13 @@ notification_bot_delivery_service.set_dependency_providers(
     submit_bot_task_provider=lambda: _submit_bot_task,
     extract_request_tmdb_id_provider=lambda: _extract_request_tmdb_id,
     record_request_admin_message_provider=lambda: _record_request_admin_message,
+    logger_provider=lambda: logger,
+)
+
+notification_bot_media_helper_service.set_dependency_providers(
+    media_api_provider=lambda: media_api,
+    get_isp_provider=lambda: get_isp,
+    insert_playback_history_provider=lambda: insert_bot_playback_history_record,
     logger_provider=lambda: logger,
 )
 
@@ -1273,58 +1279,19 @@ class NotificationBot:
         return True
 
     def _download_user_image(self, user_id):
-        if not user_id: return None
-        try:
-            params = {"maxHeight": 400, "maxWidth": 400, "quality": 90}
-            res = media_api.get(f"/Users/{user_id}/Images/Primary", params=params, timeout=5)
-            if res.status_code == 200: return io.BytesIO(res.content)
-        except Exception: pass
-        return None
+        return notification_bot_media_helper_service.download_user_image(user_id)
 
     def _get_username(self, user_id):
-        if user_id in self.user_cache: return self.user_cache[user_id]
-        try:
-            res = media_api.get("/Users", timeout=2)
-            if res.status_code == 200:
-                for u in res.json(): self.user_cache[u['Id']] = u['Name']
-        except Exception: pass
-        return self.user_cache.get(user_id, "Unknown User")
+        return notification_bot_media_helper_service.get_username(self, user_id)
 
     def _get_subnet_key(self, ip):
-        try:
-            ip_obj = ipaddress.ip_address(ip)
-            if ip_obj.version == 6:
-                parts = ip_obj.exploded.split(':')
-                return ':'.join(parts[:4]) + '::/64' 
-            return ip
-        except: return ip
+        return notification_bot_media_helper_service.get_subnet_key(ip)
 
     def _save_playback_history(self, data, user_id, user_name, item, ip, location):
-        """保存播放历史到本地数据库"""
-        try:
-            # 🔥 使用共享模块获取运营商信息
-            isp = get_isp(ip)
-            # 准备数据
-            item_id = item.get('Id', '')
-            item_name = item.get('Name', '未知内容')
-            item_type = item.get('Type', 'Unknown')
-            session = data.get('Session') or data
-            client = session.get('Client') or data.get('Client', '')
-            device = session.get('DeviceName') or data.get('DeviceName', '')
-            insert_bot_playback_history_record(user_id, user_name, item_id, item_name, item_type, client, device, ip, location, isp)
-        except Exception as e:
-            logger.error(f"[Playback] 保存历史记录失败: {e}")
+        return notification_bot_media_helper_service.save_playback_history(data, user_id, user_name, item, ip, location)
 
     def _download_emby_image(self, item_id, img_type='Primary', image_tag=None):
-        if not item_id: return None
-        try:
-            params = {"maxHeight": 800, "maxWidth": 600, "quality": 90}
-            if image_tag:
-                params["tag"] = image_tag
-            res = media_api.get(f"/Items/{item_id}/Images/{img_type}", params=params, timeout=15)
-            if res.status_code == 200: return io.BytesIO(res.content)
-        except Exception: pass
-        return None
+        return notification_bot_media_helper_service.download_emby_image(item_id, img_type, image_tag)
 
     def _get_wecom_token(self):
         return notification_bot_wecom_service.get_wecom_token(self)
