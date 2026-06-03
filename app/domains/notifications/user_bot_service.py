@@ -25,6 +25,7 @@ from app.domains.notifications import user_bot_concurrency_service
 from app.domains.notifications import user_bot_menu_service
 from app.domains.notifications import user_bot_message_cleanup_service
 from app.domains.notifications import user_bot_open_reg_notify_service
+from app.domains.notifications import user_bot_password_commands_service
 from app.domains.notifications import user_bot_points_commands_service
 from app.domains.notifications import user_bot_registration_queue_service
 from app.domains.notifications import user_bot_registration_quota_service
@@ -348,6 +349,20 @@ user_bot_channel_commands_service.set_dependency_providers(
     bind_channel_provider=lambda: _bind_channel,
     unbind_channel_provider=lambda: _unbind_channel,
     send_provider=lambda: _send,
+    safe_error_message_provider=lambda: safe_error_message,
+    logger_provider=lambda: logger,
+)
+
+user_bot_password_commands_service.set_dependency_providers(
+    get_binding_provider=lambda: _get_binding,
+    check_emby_account_provider=lambda: _check_emby_account,
+    unbind_user_provider=lambda: _unbind_user,
+    send_provider=lambda: _send,
+    main_menu_keyboard_provider=lambda: _main_menu_keyboard,
+    user_state_provider=lambda: _user_state,
+    validate_password_strength_provider=lambda: validate_password_strength,
+    media_api_provider=lambda: media_api,
+    user_bot_dao_provider=lambda: user_bot_dao,
     safe_error_message_provider=lambda: safe_error_message,
     logger_provider=lambda: logger,
 )
@@ -2623,99 +2638,7 @@ def cmd_unbind_channel(chat_id, tg_user_id, args):
 
 
 def cmd_password(chat_id, tg_user_id, args):
-    """修改密码"""
-    binding = _get_binding(tg_user_id)
-    if not binding:
-        _send(chat_id, "❌ 请先绑定账号")
-        return
-    
-    # 检查 Emby 账号是否仍然有效
-    if not _check_emby_account(binding):
-        _unbind_user(tg_user_id)
-        _send(chat_id, "⚠️ 你的 Emby 账号已被删除，绑定已自动解除。请联系管理员。", 
-              reply_markup=_main_menu_keyboard(None))
-        return
-
-    uname = binding['emby_username']
-
-    # 检查是否在修改密码流程中
-    state = _user_state.get(str(tg_user_id))
-    if state and state.get("action") == "change_pwd_step2":
-        # 用户已输入新密码，等待确认
-        new_pwd = args.strip() if args else ""
-        pw_valid, pw_error = validate_password_strength(new_pwd)
-        if not pw_valid:
-            _send(chat_id, f"❌ {pw_error}，请重新输入：")
-            return
-        # 确认新密码
-        _user_state[str(tg_user_id)] = {"action": "change_pwd_confirm", "new_pwd": new_pwd}
-        _send(chat_id, f"🔐 <b>确认新密码</b>\n\n请再次输入新密码进行确认：",
-              reply_markup={"inline_keyboard": [[{"text": "❌ 取消", "callback_data": "ub_cancel_state"}]]})
-        return
-
-    if state and state.get("action") == "change_pwd_confirm":
-        # 用户确认密码
-        confirm_pwd = args.strip() if args else ""
-        new_pwd = state.get("new_pwd", "")
-        if confirm_pwd != new_pwd:
-            _send(chat_id, "❌ 两次密码不一致，修改失败。",
-                  reply_markup={"inline_keyboard": [[{"text": "🔙 返回", "callback_data": "ub_back_menu"}]]})
-            _user_state.pop(str(tg_user_id), None)
-            return
-
-        # 执行修改密码
-        uid = binding['emby_user_id']
-        try:
-            res = media_api.post(f"/Users/{uid}/Password", json={"NewPw": new_pwd}, timeout=5)
-            if res.status_code in [200, 204]:
-                _send(chat_id, f"✅ <b>密码修改成功！</b>\n\n新密码：<code>{new_pwd}</code>\n\n请妥善保管你的密码",
-                      reply_markup={"inline_keyboard": [[{"text": "🔙 返回", "callback_data": "ub_back_menu"}]]})
-            else:
-                _send(chat_id, "❌ 修改密码失败，请稍后重试")
-        except Exception as e:
-            logger.error(f"[改密] 执行失败: {e}")
-            _send(chat_id, f"❌ 修改密码失败：{safe_error_message(e, '密码修改异常，请稍后重试')}")
-        _user_state.pop(str(tg_user_id), None)
-        return
-
-    # 开始修改密码流程
-    if not args or ' ' not in args.strip():
-        _send(chat_id, "🔐 <b>修改密码</b>\n\n请发送命令（当前密码和新密码用空格隔开）：\n<code>/password 当前密码 新密码</code>\n\n例如：<code>/password 当前密码 NewPass1</code>\n\n⚠️ 新密码至少 8 位，需包含小写字母 + 大写字母或数字",
-              reply_markup={"inline_keyboard": [[{"text": "❌ 取消", "callback_data": "ub_back_menu"}]]})
-        return
-
-    parts = args.strip().split(' ', 1)
-    old_pwd = parts[0].strip()
-    new_pwd = parts[1].strip() if len(parts) > 1 else ""
-
-    pw_valid, pw_error = validate_password_strength(new_pwd)
-    if not pw_valid:
-        _send(chat_id, f"❌ {pw_error}，请检查后重试")
-        return
-
-    # 验证当前密码 - 通过登录 API 验证
-    uid = binding['emby_user_id']
-    try:
-        # 先通过登录验证当前密码
-        auth_res = media_api.authenticate_by_name(uname, old_pwd, timeout=10)
-        if auth_res.status_code != 200:
-            _send(chat_id, "❌ 当前密码错误，请检查后重试")
-            return
-
-        # 验证成功后修改密码 - 使用 media_api
-        res = media_api.post(f"/Users/{uid}/Password", json={"NewPw": new_pwd}, timeout=10)
-        if res.status_code in [200, 204]:
-            # 如果是初始化密码，更新绑定记录
-            if binding.get('init_password'):
-                user_bot_dao.update_binding_init_password(tg_user_id, new_pwd)
-
-            _send(chat_id, f"✅ <b>密码修改成功！</b>\n\n新密码：<code>{new_pwd}</code>\n\n请妥善保管你的密码",
-                  reply_markup={"inline_keyboard": [[{"text": "🔙 返回", "callback_data": "ub_back_menu"}]]})
-        else:
-            _send(chat_id, "❌ 修改密码失败，请稍后重试")
-    except Exception as e:
-        logger.error(f"[设密] 执行失败: {e}")
-        _send(chat_id, f"❌ 修改密码失败：{safe_error_message(e, '密码修改异常，请稍后重试')}")
+    return user_bot_password_commands_service.cmd_password(chat_id, tg_user_id, args)
 
 
 def cmd_server(chat_id, tg_user_id, msg_id=None):
