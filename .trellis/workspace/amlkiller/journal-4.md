@@ -1325,3 +1325,36 @@ Extracted NotificationBot.add_library_task queue capacity, dedupe, locking, and 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 220: Extract notification bot fresh episode service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot fresh episode service
+**Branch**: `main`
+
+### Summary
+
+Extracted notification bot fresh episode lookup and Emby timestamp parsing from bot_service.py into notification_bot_fresh_episode_service with dynamic dependency providers for legacy monkeypatch compatibility. Preserved SystemDaemon wrappers, missing admin/non-200/empty/invalid timestamp/two-minute grouping/error swallowing behavior, and added focused boundary tests. Verified compileall, focused tests, import check, diff check, and full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d46674d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
