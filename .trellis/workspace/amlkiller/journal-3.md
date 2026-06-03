@@ -764,3 +764,36 @@ Extracted the playback stats live session endpoints into app/domains/playback/li
 ### Next Steps
 
 - None - task complete
+
+
+## Session 143: Refactor playback stats top movies router
+
+**Date**: 2026-06-03
+**Task**: Refactor playback stats top movies router
+**Branch**: `main`
+
+### Summary
+
+Extracted the playback stats top-movies endpoint into app/domains/playback/top_movies_router.py, included the child router from playback/stats.py at the original route position, and preserved playback.stats compatibility export plus old-module monkeypatch behavior for login, stats filter, playback store, clean-name helper, poster resolver, and logger access. Verified compile checks, import/route compatibility, git diff checks, focused playback stats boundary tests, and the full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `bb241a4` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
