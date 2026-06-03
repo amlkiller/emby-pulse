@@ -7,8 +7,8 @@
 ## Current Status
 
 <!-- @@@auto:current-status -->
-- **Active File**: `journal-3.md`
-- **Total Sessions**: 179
+- **Active File**: `journal-4.md`
+- **Total Sessions**: 180
 - **Last Active**: 2026-06-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,8 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-3.md` | ~1987 | Active |
+| `journal-4.md` | ~40 | Active |
+| `journal-3.md` | ~1987 | Archived |
 | `journal-2.md` | ~1993 | Archived |
 | `journal-1.md` | ~1973 | Archived |
 <!-- @@@/auto:active-documents -->
@@ -31,6 +32,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 180 | 2026-06-03 | Refactor notification user bot PK callbacks | `d391153` | `main` |
 | 179 | 2026-06-03 | Refactor notification user bot PK invitation commands | `9505839` | `main` |
 | 178 | 2026-06-03 | Refactor notification user bot scratch commands | `4dc4768` | `main` |
 | 177 | 2026-06-03 | Refactor notification user bot game commands | `bfcb89f` | `main` |
