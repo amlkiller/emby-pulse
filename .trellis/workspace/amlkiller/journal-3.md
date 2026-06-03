@@ -1325,3 +1325,36 @@ Extracted user bot task queue counters and FIFO registration queue helpers into 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 160: Refactor notification user bot restriction service
+
+**Date**: 2026-06-03
+**Task**: Refactor notification user bot restriction service
+**Branch**: `main`
+
+### Summary
+
+Extracted user bot restriction membership checks, restriction-cache helpers, and restriction failure message formatting into a focused notification service while preserving legacy user_bot_service globals and monkeypatch compatibility.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `80534d0` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
