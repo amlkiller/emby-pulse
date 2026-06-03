@@ -118,6 +118,43 @@ def test_media_requests_router_includes_feedback_child_routes_and_compat_exports
     assert pending_index < submit_index < my_index < all_index < action_index < batch_index < safe_top_index
 
 
+def test_media_requests_router_includes_safe_media_child_routes_and_compat_exports():
+    from app.domains.media_requests import router as media_requests_router
+    from app.domains.media_requests import safe_media_router
+
+    routes = [
+        (route.path, route.methods)
+        for route in media_requests_router.router.routes
+        if hasattr(route, "methods")
+    ]
+
+    assert any(path == "/api/requests/safe_top" and "GET" in methods for path, methods in routes)
+    assert any(path == "/api/requests/safe_latest" and "GET" in methods for path, methods in routes)
+    assert media_requests_router.get_safe_top_media is safe_media_router.get_safe_top_media
+    assert media_requests_router.get_safe_latest is safe_media_router.get_safe_latest
+
+    batch_index = next(
+        i
+        for i, (path, methods) in enumerate(routes)
+        if path == "/api/manage/feedback/batch" and "POST" in methods
+    )
+    safe_top_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/requests/safe_top" and "GET" in methods
+    )
+    safe_latest_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/requests/safe_latest" and "GET" in methods
+    )
+    refresh_index = next(
+        i
+        for i, (path, methods) in enumerate(routes)
+        if path == "/api/requests/refresh_cache" and "POST" in methods
+    )
+    my_series_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/user/my_series" and "GET" in methods
+    )
+    assert batch_index < safe_top_index < safe_latest_index < refresh_index < my_series_index
+
+
 def test_media_requests_router_includes_cache_control_child_routes_and_compat_exports():
     from app.domains.media_requests import cache_control_router
     from app.domains.media_requests import router as media_requests_router
