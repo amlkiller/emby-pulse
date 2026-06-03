@@ -698,3 +698,36 @@ Extracted the playback stats libraries endpoint into app/domains/playback/librar
 ### Next Steps
 
 - None - task complete
+
+
+## Session 141: Refactor playback stats latest router
+
+**Date**: 2026-06-03
+**Task**: Refactor playback stats latest router
+**Branch**: `main`
+
+### Summary
+
+Extracted the playback stats latest-media endpoint into app/domains/playback/latest_router.py, included the child router from playback/stats.py at the original route position, and preserved playback.stats compatibility export plus old-module monkeypatch behavior for login, admin user lookup, media API, TMDB client, and proxy provider access. Verified compile checks, import/route compatibility, git diff checks, focused playback stats boundary tests, and the full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e439d14` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
