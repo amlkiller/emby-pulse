@@ -514,7 +514,7 @@ tokens = list_api_tokens(user_id)
 - Bad: `ensure_notifications_table()` contains a second hand-written `CREATE TABLE IF NOT EXISTS sys_notifications (...)` definition.
 - Bad: `ensure_session_table()` contains a second hand-written `CREATE TABLE IF NOT EXISTS sessions (...)` definition.
 - Bad: `ensure_audit_table()` contains a second hand-written `CREATE TABLE IF NOT EXISTS audit_logs (...)` definition.
-- Bad: `ensure_session_table()`, `ensure_audit_table()`, `app.plugins.plugin_dao.ensure_plugin_tables()`, `app.domains.notifications.bot_service_dao.ensure_request_admin_messages_table()`, or `app.infra.db.database` locally executes simple `CREATE INDEX IF NOT EXISTS ...` for a registry-owned table.
+- Bad: `ensure_session_table()`, `ensure_audit_table()`, `app.plugins.plugin_dao.ensure_plugin_tables()`, `app.bot.notification_bot.bot_service_dao.ensure_request_admin_messages_table()`, or `app.infra.db.database` locally executes simple `CREATE INDEX IF NOT EXISTS ...` for a registry-owned table.
 - Bad: `app.infra.db.database` defines its own `SYSTEM_TABLES` list.
 - Bad: `media_request_dao.py` imports `app.domains.users.user_dao` only to add a missing `users_meta` column.
 
