@@ -731,3 +731,36 @@ Extracted NotificationBot /search command handling and _extract_tech_info into n
 ### Next Steps
 
 - None - task complete
+
+
+## Session 202: Extract notification bot stats command service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot stats command service
+**Branch**: `main`
+
+### Summary
+
+Extracted NotificationBot stats/report command handling into notification_bot_stats_command_service with lazy providers for base filter, playback store, report generator, HAS_PIL, report cover URL, and logger; kept the legacy _cmd_stats wrapper and added boundary tests for fallback text reports, poster mode, plugin exclude types, empty data labels, and DB error logging/failure messages.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e97979b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
