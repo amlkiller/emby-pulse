@@ -1,4 +1,3 @@
-import json
 import re
 from fastapi import APIRouter, Request, Depends, BackgroundTasks
 from app.domains.media_requests import community_cache_service
@@ -54,6 +53,13 @@ from app.domains.media_requests.management_router import (
     manage_request_action,
     router as management_router,
     set_dependency_providers as set_management_dependency_providers,
+)
+from app.domains.media_requests.registration_router import (
+    UserRegisterModel,
+    _restore_invitation_code,
+    router as registration_router,
+    set_dependency_providers as set_registration_dependency_providers,
+    user_community_register,
 )
 from app.domains.media_requests.safe_media_router import (
     get_safe_latest,
@@ -232,6 +238,23 @@ set_management_dependency_providers(
     safe_error_message_provider=lambda: safe_error_message,
     logger_provider=lambda: logger,
     batch_manage_action_provider=lambda: batch_manage_action,
+)
+
+
+set_registration_dependency_providers(
+    validate_password_strength_provider=lambda: validate_password_strength,
+    media_api_provider=lambda: media_api,
+    claim_registration_invitation_provider=lambda: claim_registration_invitation,
+    restore_invitation_code_provider=lambda: restore_invitation_code,
+    save_registered_user_meta_provider=lambda: save_registered_user_meta,
+    user_service_provider=lambda: user_service,
+    notify_admin_provider=lambda: notify_admin,
+    notification_service_provider=lambda: notification_service,
+    user_routes_provider=lambda: get_media_server_user_routes,
+    main_server_url_provider=lambda: get_media_server_main_public_or_host,
+    welcome_message_provider=lambda: get_media_server_welcome_message,
+    safe_error_message_provider=lambda: safe_error_message,
+    logger_provider=lambda: logger,
 )
 
 
@@ -913,189 +936,4 @@ def download_episodes_for_update(payload: dict, request: Request):
         return {"status": "error", "message": safe_error_message(e, "下载失败")}
 
 
-# ==================== 用户社区注册 API ====================
-
-class UserRegisterModel(BaseModel):
-    """用户社区注册模型"""
-    code: str
-    username: str
-    password: str
-
-def _restore_invitation_code(code):
-    """Emby 用户创建失败时回滚邀请码消费计数"""
-    try:
-        restore_invitation_code(code)
-    except Exception:
-        pass
-
-
-@router.post("/api/requests/register")
-async def user_community_register(data: UserRegisterModel, request: Request):
-    """用户社区注册 API - 注册成功后自动登录"""
-    try:
-        # 1. 先校验用户名和密码（不消耗邀请码）
-        username = data.username.strip()
-        if not username or len(username) < 2:
-            return {"status": "error", "message": "用户名至少需要 2 个字符"}
-
-        if len(username) > 16:
-            return {"status": "error", "message": "用户名最多 16 个字符，当前 " + str(len(username)) + " 个字符"}
-
-        safe_name = re.sub(r'[^a-zA-Z0-9一-龥_\-.@]', '', username)
-
-        if safe_name != username:
-            invalid_chars = set(re.findall(r'[^a-zA-Z0-9一-龥_\-.@]', username))
-            invalid_str = ', '.join(f"'{c}'" for c in list(invalid_chars)[:5])
-            return {"status": "error", "message": f"用户名包含不支持的字符: {invalid_str}。只允许字母、数字、中文、下划线(_)、连字符(-)、@ 和 ."}
-
-        if not safe_name:
-            return {"status": "error", "message": "用户名无效，请使用字母、数字、中文、下划线(_)、连字符(-)、@ 或 ."}
-
-        password = data.password.strip()
-        pw_valid, pw_error = validate_password_strength(password)
-        if not pw_valid:
-            return {"status": "error", "message": pw_error}
-
-        # 2. 检查 Emby 用户名是否已存在
-        try:
-            users = media_api.get("/Users", timeout=5).json()
-            if any(u['Name'].lower() == safe_name.lower() for u in users):
-                return {"status": "error", "message": f"用户名 {safe_name} 已被占用，请换一个"}
-        except Exception as e:
-            return {"status": "error", "message": safe_error_message(e, "检查用户名失败")}
-
-        # 3. 所有校验通过后，原子抢占邀请码（防 TOCTOU 竞态）
-        invite, invite_error = claim_registration_invitation(data.code, safe_name)
-        if invite_error:
-            return {"status": "error", "message": invite_error}
-
-        days = invite['days'] if invite['days'] else 30
-        template_user_id = invite['template_user_id'] if invite['template_user_id'] else None
-        routes = invite['routes'] if invite['routes'] else ''
-        route_mode = invite['route_mode'] if invite['route_mode'] else 'block'
-        req_free = invite['req_free'] if 'req_free' in invite.keys() else 0
-        req_free_count = invite['req_free_count'] if 'req_free_count' in invite.keys() else -1
-
-        # 4. 创建 Emby 用户
-        try:
-            create_res = media_api.post("/Users/New", json={"Name": safe_name}, timeout=10)
-            if create_res.status_code not in [200, 201]:
-                _restore_invitation_code(data.code)
-                return {"status": "error", "message": f"创建账号失败: {create_res.text}"}
-            
-            new_user = create_res.json()
-            uid = new_user.get("Id")
-            
-            # 设置密码
-            media_api.post(f"/Users/{uid}/Password", json={"NewPw": password}, timeout=5)
-            
-            # 应用模板（如果有）
-            admin_enabled_folders = None
-            if template_user_id:
-                try:
-                    tpl = media_api.get(f"/Users/{template_user_id}", timeout=5).json()
-                    if tpl.get("Policy"):
-                        policy = tpl["Policy"]
-                        policy["IsAdministrator"] = False
-                        policy["IsDisabled"] = False
-                        media_api.post(f"/Users/{uid}/Policy", json=policy, timeout=5)
-                        # 🔥 保存管理员设置的媒体库权限
-                        if not policy.get("EnableAllFolders", True):
-                            admin_enabled_folders = policy.get("EnabledFolders", [])
-                except:
-                    pass
-            else:
-                try:
-                    # 读取完整 Policy 再合并，避免 Emby 整体替换清空默认权限
-                    user_info = media_api.get(f"/Users/{uid}", timeout=5).json()
-                    policy = user_info.get("Policy", {})
-                    policy["IsDisabled"] = False
-                    media_api.post(f"/Users/{uid}/Policy", json=policy, timeout=3)
-                except:
-                    pass
-            
-            # 6. 保存用户元数据
-            import datetime as dt
-            # 处理永久注册码：days = -1 或 days = 0 或 days >= 36500（100年）视为永久
-            expire_date = None
-            if days == -1 or days == 0 or days >= 36500:
-                expire_date = None  # 永久有效用 None 表示
-            elif days > 0:
-                expire_date = (dt.date.today() + dt.timedelta(days=days)).strftime("%Y-%m-%d")
-            
-            allow_routes = ""
-            block_routes = ""
-            if routes:
-                if route_mode == 'allow':
-                    allow_routes = routes
-                else:
-                    block_routes = routes
-            
-            save_registered_user_meta(uid, expire_date, allow_routes, block_routes, req_free, req_free_count, admin_enabled_folders)
-
-            # 清除用户列表缓存
-            try:
-                from app.domains.users import public_service as user_service
-                user_service.invalidate_emby_users_cache()
-            except:
-                pass
-            
-            # 8. 发送通知
-            try:
-                from app.infra.db.notification_dao import add_system_notification
-                rule = notify_admin.get_notify_rule('user_register')
-                days_display = "永久" if (days == -1 or days == 0 or days >= 36500) else f"{days} 天"
-                msg = f"🎟️ <b>新用户注册</b>\n\n👤 {safe_name}\n📅 有效期：{days_display}\n🔗 邀请码：{data.code}\n📱 注册渠道：用户社区"
-                
-                if rule and rule.get('enabled'):
-                    channels = rule.get('channels', [])
-                    
-                    # TG机器人/企业微信
-                    if 'tg_bot' in channels or 'wecom' in channels:
-                        platform = "all" if ('tg_bot' in channels and 'wecom' in channels) else ("tg" if 'tg_bot' in channels else "wecom")
-                        notification_service.send_message("sys_notify", msg, platform=platform)
-                    
-                    # Web通知中心
-                    if 'web' in channels:
-                        add_system_notification("user", f"新用户注册: {safe_name}", f"用户社区注册，有效期 {days_display}", "/users_manage")
-                else:
-                    # 兜底：使用旧方式发送通知
-                    notification_service.send_message("sys_notify", msg, platform="all")
-                    add_system_notification("user", f"新用户注册: {safe_name}", f"用户社区注册，有效期 {days_display}", "/users_manage")
-            except Exception as e:
-                logger.error(f"[用户社区注册] 发送通知失败: {e}")
-            
-            # 9. 🔥 获取用户可访问的线路（使用 get_user_routes 根据权限过滤）
-            user_routes = get_media_server_user_routes(uid)
-            if not user_routes:
-                # 如果没有线路，使用默认服务器地址
-                server_url = get_media_server_main_public_or_host()
-                if server_url:
-                    user_routes = [{"name": "默认推荐节点", "url": server_url, "is_main": True}]
-            
-            # 10. 🔥 自动登录用户社区
-            # 🔥 安全：清除整个 Session，防止残留其他用户数据
-            request.session.clear()
-            request.session["req_user"] = {"Id": uid, "Name": safe_name}
-            
-            # 11. 获取欢迎消息
-            welcome_message = get_media_server_welcome_message()
-            
-            return {
-                "status": "success",
-                "message": "注册成功",
-                "user": {"Id": uid, "Name": safe_name},
-                "expire_days": days,
-                "expire_date": expire_date,
-                "server_url": json.dumps(user_routes) if user_routes else "",
-                "welcome_message": welcome_message
-            }
-            
-        except Exception as e:
-            logger.error(f"[用户社区注册] 创建用户失败: {e}")
-            _restore_invitation_code(data.code)
-            return {"status": "error", "message": safe_error_message(e, "注册失败")}
-            
-    except Exception as e:
-        logger.error(f"[用户社区注册] 系统错误: {e}")
-        return {"status": "error", "message": safe_error_message(e, "系统错误")}
+router.include_router(registration_router)

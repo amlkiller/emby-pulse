@@ -309,6 +309,32 @@ def test_media_requests_router_includes_cache_control_child_routes_and_compat_ex
     assert safe_latest_index < refresh_index < clear_index < my_series_index
 
 
+def test_media_requests_router_includes_registration_child_routes_and_compat_exports():
+    from app.domains.media_requests import registration_router
+    from app.domains.media_requests import router as media_requests_router
+
+    routes = [
+        (route.path, route.methods)
+        for route in media_requests_router.router.routes
+        if hasattr(route, "methods")
+    ]
+
+    assert any(path == "/api/requests/register" and "POST" in methods for path, methods in routes)
+    assert media_requests_router.UserRegisterModel is registration_router.UserRegisterModel
+    assert media_requests_router._restore_invitation_code is registration_router._restore_invitation_code
+    assert media_requests_router.user_community_register is registration_router.user_community_register
+
+    download_index = next(
+        i
+        for i, (path, methods) in enumerate(routes)
+        if path == "/api/manage/requests/download_episodes" and "POST" in methods
+    )
+    register_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/requests/register" and "POST" in methods
+    )
+    assert download_index < register_index
+
+
 def test_get_all_requests_denies_non_admin_before_dao_reads(monkeypatch):
     from app.domains.media_requests import router as media_requests_router
 
