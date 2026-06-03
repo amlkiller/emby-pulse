@@ -19,6 +19,7 @@ from app.domains.notifications import notification_bot_delivery_service
 from app.domains.notifications import notification_bot_emby_restart_command_service
 from app.domains.notifications import notification_bot_info_command_service
 from app.domains.notifications import notification_bot_latest_command_service
+from app.domains.notifications import notification_bot_message_dispatch_service
 from app.domains.notifications import notification_bot_message_center_callback_service
 from app.domains.notifications import notification_bot_media_helper_service
 from app.domains.notifications import notification_bot_media_quality_service
@@ -190,6 +191,12 @@ notification_bot_stats_command_service.set_dependency_providers(
 )
 
 notification_bot_info_command_service.set_dependency_providers(
+    logger_provider=lambda: logger,
+)
+
+notification_bot_message_dispatch_service.set_dependency_providers(
+    tg_chat_id_provider=lambda: get_tg_chat_id,
+    bus_provider=lambda: bus,
     logger_provider=lambda: logger,
 )
 
@@ -1726,45 +1733,10 @@ class NotificationBot:
         except Exception: pass
 
     def _is_admin(self, cid, platform="tg"):
-        """检查 chat_id 是否为配置的管理员"""
-        if platform == "tg":
-            raw_cids = str(get_tg_chat_id())
-            admin_ids = [c.strip() for c in raw_cids.replace('，', ',').split(',') if c.strip()]
-            return bool(admin_ids and str(cid) in admin_ids)
-        elif platform == "wecom":
-            # 企业微信通过 touser 配置控制
-            return True  # WeCom 消息由 API 直接发送，已受限
-        return False
+        return notification_bot_message_dispatch_service.is_admin(cid, platform)
 
     def _handle_message(self, text, cid, platform="tg"):
-        text = text.strip()
-        
-        # 检查是否在回复模式
-        if hasattr(self, '_msg_reply_mode') and cid in self._msg_reply_mode:
-            self._handle_msg_reply_message(text, cid)
-            return
-        
-        # 🔥 注意：更具体的命令要放在前面，避免被短命令匹配
-        if text.startswith("/check"): self._cmd_check(cid, platform)
-        elif text.startswith("/search"): self._cmd_search(cid, text, platform)
-        elif text.startswith("/stats"): self._cmd_stats(cid, 'day', platform)
-        elif text.startswith("/weekly"): self._cmd_stats(cid, 'week', platform)
-        elif text.startswith("/monthly"): self._cmd_stats(cid, 'month', platform)
-        elif text.startswith("/yearly"): self._cmd_stats(cid, 'year', platform)
-        elif text.startswith("/now"): self._cmd_now(cid, platform)
-        elif text.startswith("/latest"): self._cmd_latest(cid, platform)
-        elif text.startswith("/recent"): self._cmd_recent(cid, platform)
-        elif text.startswith("/calendar"): self._cmd_calendar(cid, platform)
-        elif text.startswith("/emby_restart"): self._cmd_emby_restart(cid, text, platform)
-        elif text.startswith("/whois"): self._cmd_whois(cid, text, platform)
-        elif text.startswith("/help"): self._cmd_help(cid, platform)
-        else:
-            # 非命令消息，仅管理员可触发事件总线
-            if not self._is_admin(cid, platform):
-                logger.warning(f"[Bot] 非管理员用户尝试发送非命令消息: {cid}")
-                return
-            logger.info(f"[Bot] 非命令消息，发布到事件总线: {text[:50]}...")
-            bus.publish("bot.admin_message", text, cid, platform)
+        return notification_bot_message_dispatch_service.handle_message(self, text, cid, platform)
 
     def _cmd_latest(self, cid, platform):
         return notification_bot_latest_command_service.cmd_latest(self, cid, platform)
