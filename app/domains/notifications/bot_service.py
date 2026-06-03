@@ -16,6 +16,7 @@ from app.domains.media_requests.public_service import remove_gap_from_scan_state
 from app.domains.users import user_bot_dao
 from app.domains.notifications import bot_service_dao, message_dao
 from app.domains.notifications import notification_bot_channel_service
+from app.domains.notifications import notification_bot_delivery_service
 from app.domains.notifications import notification_bot_media_quality_service
 from app.domains.notifications import notification_bot_request_admin_message_sync_service
 from app.domains.notifications import notification_bot_wecom_service
@@ -104,6 +105,20 @@ notification_bot_wecom_service.set_dependency_providers(
     report_cover_url_provider=lambda: REPORT_COVER_URL,
     logger_provider=lambda: logger,
     time_provider=lambda: time,
+)
+
+notification_bot_delivery_service.set_dependency_providers(
+    network_client_provider=lambda: network_client,
+    telegram_client_provider=lambda: telegram_client,
+    safe_proxies_provider=lambda: get_safe_proxies,
+    tg_bot_token_provider=lambda: get_notify_tg_bot_token,
+    tg_chat_id_provider=lambda: get_tg_chat_id,
+    wecom_corpid_provider=lambda: get_wecom_corpid,
+    wecom_touser_provider=lambda: get_wecom_touser,
+    submit_bot_task_provider=lambda: _submit_bot_task,
+    extract_request_tmdb_id_provider=lambda: _extract_request_tmdb_id,
+    record_request_admin_message_provider=lambda: _record_request_admin_message,
+    logger_provider=lambda: logger,
 )
 
 def _submit_bot_task(fn, *args):
@@ -1327,136 +1342,22 @@ class NotificationBot:
         return notification_bot_wecom_service.send_wecom_photo(self, photo_bytes, html_text, inline_keyboard, touser)
 
     def send_photo(self, chat_id, photo_io, caption, parse_mode="HTML", reply_markup=None, platform="all", wecom_photo_io=None):
-        logger.debug(f"[Bot] send_photo called: chat_id={chat_id}, platform={platform}, caption_len={len(caption)}")
-        photo_bytes = None
-        if isinstance(photo_io, str):
-            try: 
-                res = network_client.get(photo_io, proxies=get_safe_proxies() if "tmdb" in photo_io.lower() else None, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-                if res.status_code == 200: photo_bytes = res.content
-            except Exception: pass
-        else: photo_bytes = photo_io.read()
-
-        wecom_photo_bytes = photo_bytes
-        if wecom_photo_io is not None and wecom_photo_io != photo_io:
-            if isinstance(wecom_photo_io, str):
-                try: 
-                    res = network_client.get(wecom_photo_io, proxies=get_safe_proxies() if "tmdb" in wecom_photo_io.lower() else None, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-                    if res.status_code == 200: wecom_photo_bytes = res.content
-                except Exception: pass
-            else: wecom_photo_bytes = wecom_photo_io.read()
-
-        if platform in ["all", "wecom"] and get_wecom_corpid():
-            # 企业微信不识别 "sys_notify" 这样的虚拟 ID，统一使用配置的 touser 或 @all
-            wecom_touser = get_wecom_touser()
-            _submit_bot_task(self._send_wecom_photo, wecom_photo_bytes, caption, reply_markup, wecom_touser)
-
-        if platform in ["all", "tg"] and get_notify_tg_bot_token():
-            raw_cids = str(get_tg_chat_id())
-            # 🔥 处理不同格式的 chat_id
-            tg_cids = []
-            if chat_id in ["sys_notify", "admin"]:
-                # 系统通知：使用配置的 tg_chat_id
-                tg_cids = [c.strip() for c in raw_cids.replace('，', ',').split(',') if c.strip()]
-            elif chat_id.startswith("user_"):
-                # 用户通知：提取 user_ 后面的数字作为真实 TG chat_id
-                real_tg_id = chat_id.replace("user_", "")
-                tg_cids = [real_tg_id]
-                logger.info(f"[Bot] 用户TG照片通知: chat_id={chat_id} -> tg_id={real_tg_id}")
-            else:
-                # 其他情况：直接使用传入的 chat_id
-                tg_cids = [chat_id]
-            
-            logger.debug(f"[Bot] send_photo TG: tg_cids={tg_cids}")
-
-            for tg_cid in tg_cids:
-                try:
-                    data = {"chat_id": tg_cid, "caption": caption, "parse_mode": parse_mode}
-                    if reply_markup: data["reply_markup"] = json.dumps(reply_markup)
-                    if photo_bytes:
-                        r = telegram_client.send_photo(get_notify_tg_bot_token(), data=data, files={"photo": ("image.jpg", io.BytesIO(photo_bytes), "image/jpeg")}, proxies=get_safe_proxies(), timeout=20)
-                        logger.info(f"[Bot] TG photo response: {r.status_code} - {r.text[:300] if r.text else 'empty'}")
-                        if r.status_code == 200:
-                            try:
-                                tmdb_id = _extract_request_tmdb_id(reply_markup)
-                                result = r.json().get("result", {})
-                                _record_request_admin_message(tmdb_id, tg_cid, result.get("message_id"), True, caption)
-                            except Exception as e:
-                                logger.error(f"[求片审核同步] 解析发送结果失败: {e}")
-                        else:
-                            logger.error(f"[Bot] TG photo failed, fallback to text")
-                            self.send_message(tg_cid, caption, parse_mode, reply_markup, platform="tg")
-                    else:
-                        self.send_message(tg_cid, caption, parse_mode, reply_markup, platform="tg")
-                except Exception as e:
-                    logger.error(f"[Bot] TG photo error: {e}")
-                    self.send_message(tg_cid, caption, parse_mode, reply_markup, platform="tg")
+        return notification_bot_delivery_service.send_photo(
+            self,
+            chat_id,
+            photo_io,
+            caption,
+            parse_mode,
+            reply_markup,
+            platform,
+            wecom_photo_io,
+        )
 
     def send_message(self, chat_id, text, parse_mode="HTML", reply_markup=None, platform="all"):
-        # 🔥 记录发送的消息内容（截取前100字符）
-        text_preview = text[:100] + "..." if len(text) > 100 else text
-        text_preview = text_preview.replace("\n", " ")
-        logger.info(f"[Bot] 📤 发送消息 -> {chat_id}: {text_preview}")
-
-        if platform in ["all", "wecom"] and get_wecom_corpid():
-            # 企业微信不识别 "sys_notify" 这样的虚拟 ID，统一使用配置的 touser 或 @all
-            wecom_touser = get_wecom_touser()
-            _submit_bot_task(self._send_wecom_message, text, reply_markup, wecom_touser)
-
-        if platform in ["all", "tg"] and get_notify_tg_bot_token():
-            raw_cids = str(get_tg_chat_id())
-            # 🔥 处理不同格式的 chat_id
-            tg_cids = []
-            if chat_id in ["sys_notify", "admin"]:
-                # 系统通知：使用配置的 tg_chat_id
-                tg_cids = [c.strip() for c in raw_cids.replace('，', ',').split(',') if c.strip()]
-            elif chat_id.startswith("user_"):
-                # 用户通知：提取 user_ 后面的数字作为真实 TG chat_id
-                real_tg_id = chat_id.replace("user_", "")
-                tg_cids = [real_tg_id]
-            else:
-                # 其他情况：直接使用传入的 chat_id
-                tg_cids = [chat_id]
-            
-            for tg_cid in tg_cids:
-                try:
-                    data = {"chat_id": tg_cid, "text": text, "parse_mode": parse_mode}
-                    if reply_markup: data["reply_markup"] = json.dumps(reply_markup)
-                    r = telegram_client.send_message(get_notify_tg_bot_token(), data, proxies=get_safe_proxies(), timeout=10)
-                    if r.status_code == 200:
-                        try:
-                            tmdb_id = _extract_request_tmdb_id(reply_markup)
-                            result = r.json().get("result", {})
-                            _record_request_admin_message(tmdb_id, tg_cid, result.get("message_id"), False, text)
-                        except Exception as e:
-                            logger.error(f"[求片审核同步] 解析文字发送结果失败: {e}")
-                    else:
-                        logger.error(f"[Bot] ❌ 发送失败: {r.status_code} - {r.text[:200]}")
-                except Exception as e:
-                    logger.error(f"[Bot] ❌ 发送异常: {e}")
+        return notification_bot_delivery_service.send_message(self, chat_id, text, parse_mode, reply_markup, platform)
 
     def edit_message(self, chat_id, message_id, text, parse_mode="HTML", reply_markup=None, platform="tg"):
-        """编辑已发送的消息（仅支持 Telegram）"""
-        logger.info(f"[Bot] edit_message called: chat_id={chat_id}, message_id={message_id}")
-        
-        if platform != "tg" or not get_notify_tg_bot_token():
-            return False
-        
-        try:
-            data = {
-                "chat_id": chat_id,
-                "message_id": message_id,
-                "text": text,
-                "parse_mode": parse_mode
-            }
-            if reply_markup:
-                data["reply_markup"] = json.dumps(reply_markup)
-            
-            r = telegram_client.post_api(get_notify_tg_bot_token(), "editMessageText", json=data, proxies=get_safe_proxies(), timeout=10)
-            logger.info(f"[Bot] TG edit response: {r.status_code}")
-            return r.status_code == 200
-        except Exception as e:
-            logger.error(f"[Bot] TG edit error: {e}")
-            return False
+        return notification_bot_delivery_service.edit_message(self, chat_id, message_id, text, parse_mode, reply_markup, platform)
 
     def _polling_loop(self):
         token = get_notify_tg_bot_token()
