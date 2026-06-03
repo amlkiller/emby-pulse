@@ -1,0 +1,9 @@
+{"file": "docs/架构审计.md", "reason": "Verify the slice makes progress on P2 large-domain-file refactoring."}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend spec index and verification checklist for this refactor."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Verify child router inclusion, compatibility exports, and dependency direction."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Verify route error behavior remains compatible."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Verify audit/logging behavior remains appropriate."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verify focused tests and full suite coverage."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared guide index required by Trellis checks."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Check consistency with existing users child-router modules."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Check request/session/user DAO/audit data flow across the extracted route boundary."}
