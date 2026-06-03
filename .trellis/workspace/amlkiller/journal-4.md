@@ -1028,3 +1028,36 @@ Extracted NotificationBot item-deleted notification handling into a notification
 ### Next Steps
 
 - None - task complete
+
+
+## Session 211: Extract notification bot library new item service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot library new item service
+**Branch**: `main`
+
+### Summary
+
+Extracted NotificationBot.on_library_new_item into a domain-local notification_bot_library_new_item_service with lazy providers for legacy globals/plugin lookup, kept the legacy wrapper, and added boundary tests for notification gating, template fallback/rendering, platform routing, image fallback, channel fan-out, and swallowed error logging.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4396036` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
