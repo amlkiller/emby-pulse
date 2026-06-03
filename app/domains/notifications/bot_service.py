@@ -17,6 +17,7 @@ from app.domains.notifications import notification_bot_channel_service
 from app.domains.notifications import notification_bot_check_command_service
 from app.domains.notifications import notification_bot_delivery_service
 from app.domains.notifications import notification_bot_emby_restart_command_service
+from app.domains.notifications import notification_bot_info_command_service
 from app.domains.notifications import notification_bot_latest_command_service
 from app.domains.notifications import notification_bot_message_center_callback_service
 from app.domains.notifications import notification_bot_media_helper_service
@@ -185,6 +186,10 @@ notification_bot_stats_command_service.set_dependency_providers(
     report_gen_provider=lambda: report_gen,
     has_pil_provider=lambda: HAS_PIL,
     report_cover_url_provider=lambda: REPORT_COVER_URL,
+    logger_provider=lambda: logger,
+)
+
+notification_bot_info_command_service.set_dependency_providers(
     logger_provider=lambda: logger,
 )
 
@@ -1786,15 +1791,7 @@ class NotificationBot:
         return notification_bot_emby_restart_command_service.cmd_emby_restart(self, cid, text, platform)
 
     def _cmd_calendar(self, cid, platform):
-        """今日剧集更新"""
-        try:
-            from app.domains.notifications.calendar_notify import get_today_updates, format_notify_message
-            updates = get_today_updates()
-            message = format_notify_message(updates)
-            self.send_message(cid, message, platform=platform)
-        except Exception as e:
-            logger.error(f"[Bot] calendar error: {e}")
-            self.send_message(cid, "❌ 获取今日更新失败", platform=platform)
+        return notification_bot_info_command_service.cmd_calendar(self, cid, platform)
 
     def _format_expire_status(self, expire_date):
         return notification_bot_whois_command_service.format_expire_status(expire_date)
@@ -1806,24 +1803,7 @@ class NotificationBot:
         return notification_bot_whois_command_service.cmd_whois(self, cid, text, platform)
 
     def _cmd_help(self, cid, platform):
-        msg = ("🤖 <b>EmbyPulse 智能助理指南</b>\n\n"
-               "📊 <b>数据报表指令</b>\n"
-               "/stats - 获取今日播放大盘与用户排行\n"
-               "/weekly - 获取本周全站数据周报\n"
-               "/monthly - 获取本月活跃度月报\n"
-               "/yearly - 获取年度全景总结数据\n\n"
-               "🎬 <b>媒体库与状态指令</b>\n"
-               "/now - 查看当前服务器有谁正在播放\n"
-               "/latest - 获取最近新入库的 8 部影视剧\n"
-               "/recent - 查看本站最近的 10 条播放历史\n"
-               "/search [关键词] - 搜索影视资源并获取直达链接\n"
-               "/calendar - 查看今日剧集更新\n\n"
-               "🛠 <b>系统管理指令</b>\n"
-               "/check - 测试 Emby 服务器连通性与测速探针\n"
-               "/emby_restart - 重启 Emby 服务器（Pro）\n"
-               "/whois [TG用户名/TG ID/Emby用户名] - 查询绑定信息与到期时间\n"
-               "/help - 获取本帮助菜单")
-        self.send_message(cid, msg.strip(), platform=platform)
+        return notification_bot_info_command_service.cmd_help(self, cid, platform)
 
     def _handle_msg_reply_callback(self, cid, mid, user_id, token, proxies):
         return notification_bot_message_center_callback_service.handle_msg_reply_callback(self, cid, mid, user_id, token, proxies)
