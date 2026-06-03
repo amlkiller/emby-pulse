@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.7
+
 FROM python:3.9-slim AS builder
 WORKDIR /build
 COPY app/ ./app/
@@ -16,7 +18,8 @@ ENV UV_LINK_MODE=copy
 # 先按锁文件安装依赖，利用 Docker 层缓存
 COPY --from=ghcr.io/astral-sh/uv:0.11.7 /uv /uvx /bin/
 COPY pyproject.toml uv.lock ./
-RUN uv sync --locked --no-dev --no-install-project
+RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
+    uv sync --locked --no-dev --no-install-project
 RUN /workspace/.venv/bin/python -m uvicorn --version
 
 COPY --from=builder /build/app ./app
