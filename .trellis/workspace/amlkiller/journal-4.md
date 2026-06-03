@@ -1424,3 +1424,36 @@ Extracted notification bot library grouping and dispatch decision logic from bot
 ### Next Steps
 
 - None - task complete
+
+
+## Session 223: Extract notification bot plugin callback service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot plugin callback service
+**Branch**: `main`
+
+### Summary
+
+Extracted optional plugin callback pre-dispatch from NotificationBot._handle_callback into notification_bot_plugin_callback_service. Preserved lazy Cloud115 and HDHive imports, callback order, TMDB pagination logging, request-HDHive error logging, swallowed optional-plugin failures, and legacy _handle_callback entry behavior. Added focused boundary tests and verified compileall, focused tests, import check, diff check, and the full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4b69f22` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
