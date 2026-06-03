@@ -26,6 +26,7 @@ from app.domains.notifications import user_bot_dice_pk_commands_service
 from app.domains.notifications import user_bot_game_commands_service
 from app.domains.notifications import user_bot_menu_service
 from app.domains.notifications import user_bot_message_cleanup_service
+from app.domains.notifications import user_bot_message_dispatcher_service
 from app.domains.notifications import user_bot_open_registration_service
 from app.domains.notifications import user_bot_open_reg_notify_service
 from app.domains.notifications import user_bot_password_commands_service
@@ -602,6 +603,58 @@ user_bot_callback_dispatcher_service.set_dependency_providers(
     submit_request_provider=lambda: _submit_request,
     cmd_myrequests_provider=lambda: cmd_myrequests,
     handle_scratch_provider=lambda: _handle_scratch,
+)
+
+user_bot_message_dispatcher_service.set_dependency_providers(
+    logger_provider=lambda: logger,
+    get_channel_binding_provider=lambda: _get_channel_binding,
+    send_provider=lambda: _send,
+    rate_check_provider=lambda: _rate_check,
+    group_enabled_provider=lambda: get_user_bot_group_enabled,
+    allowed_groups_provider=lambda: get_user_bot_allowed_groups,
+    group_commands_provider=lambda: get_user_bot_group_commands,
+    delete_messages_later_provider=lambda: _delete_messages_later,
+    new_chat_members_handler_provider=lambda: user_bot._on_new_chat_members,
+    get_binding_provider=lambda: _get_binding,
+    check_user_restrictions_provider=lambda: _check_user_restrictions,
+    format_restriction_message_provider=lambda: _format_restriction_message,
+    user_state_provider=lambda: _user_state,
+    main_menu_keyboard_provider=lambda: _main_menu_keyboard,
+    check_emby_account_provider=lambda: _check_emby_account,
+    unbind_user_provider=lambda: _unbind_user,
+    do_register_provider=lambda: _do_register,
+    do_code_register_provider=lambda: _do_code_register,
+    cmd_checkin_provider=lambda: cmd_checkin,
+    cmd_points_provider=lambda: cmd_points,
+    cmd_rank_provider=lambda: cmd_rank,
+    cmd_transfer_provider=lambda: cmd_transfer,
+    cmd_rob_provider=lambda: cmd_rob,
+    cmd_pk_invite_provider=lambda: cmd_pk_invite,
+    cmd_redpacket_provider=lambda: cmd_redpacket,
+    cmd_grab_provider=lambda: cmd_grab,
+    cmd_pk_provider=lambda: cmd_pk,
+    cmd_lottery_provider=lambda: cmd_lottery,
+    cmd_scratch_provider=lambda: cmd_scratch,
+    cmd_check_provider=lambda: cmd_check,
+    cmd_start_provider=lambda: cmd_start,
+    cmd_help_provider=lambda: cmd_help,
+    cmd_bind_channel_provider=lambda: cmd_bind_channel,
+    cmd_bind_provider=lambda: cmd_bind,
+    cmd_register_provider=lambda: cmd_register,
+    cmd_code_provider=lambda: cmd_code,
+    cmd_unbind_channel_provider=lambda: cmd_unbind_channel,
+    cmd_unbind_provider=lambda: cmd_unbind,
+    cmd_profile_provider=lambda: cmd_profile,
+    cmd_renew_provider=lambda: cmd_renew,
+    cmd_calendar_provider=lambda: cmd_calendar,
+    cmd_shop_provider=lambda: cmd_shop,
+    cmd_request_provider=lambda: cmd_request,
+    cmd_myrequests_provider=lambda: cmd_myrequests,
+    cmd_server_provider=lambda: cmd_server,
+    cmd_library_provider=lambda: cmd_library,
+    cmd_password_provider=lambda: cmd_password,
+    cmd_pk_accept_provider=lambda: cmd_pk_accept,
+    cmd_pk_reject_provider=lambda: cmd_pk_reject,
 )
 
 user_bot_scheduler_service.set_dependency_providers(
@@ -1206,236 +1259,7 @@ class UserBot:
         )
 
     def _on_message(self, msg):
-        text = (msg.get("text") or "").strip()
-        chat = msg.get("chat", {})
-        chat_id = str(chat["id"])
-        chat_type = chat.get("type", "")
-        
-        # 🔥 处理频道身份发送的消息
-        sender_chat = msg.get("sender_chat")
-        from_user = msg.get("from")
-        
-        # 频道身份发送的消息
-        if sender_chat and not from_user:
-            channel_id = str(sender_chat["id"])
-            channel_title = sender_chat.get("title", "频道")
-            logger.info(f"[UserBot] 频道身份消息: channel_id={channel_id}, title={channel_title}, text={text[:50]}")
-            
-            # 检查频道是否绑定到用户
-            channel_binding = _get_channel_binding(channel_id)
-            if channel_binding:
-                # 使用绑定的用户身份
-                tg_user_id = channel_binding["bound_tg_user_id"]
-                logger.info(f"[UserBot] 频道绑定用户: tg_user_id={tg_user_id}")
-            else:
-                # 频道未绑定，提示用户
-                _send(chat_id, f"❌ 频道 <b>{channel_title}</b> 未绑定账号\n\n💡 请先私聊机器人发送 /bind_channel {channel_id} 绑定频道")
-                return
-        else:
-            # 普通消息，确保 from 字段存在
-            if not from_user:
-                logger.info(f"[UserBot] 消息缺少 from 字段，跳过")
-                return
-            
-            tg_user_id = str(from_user["id"])
-        
-        tg_name = from_user.get("first_name", "用户") if from_user else "频道用户"
-        # 获取完整的 TG 显示名称（first_name + last_name）
-        tg_last_name = msg["from"].get("last_name", "")
-        tg_display_name = f"{tg_name} {tg_last_name}".strip() if tg_last_name else tg_name
-        group_name = chat.get("title", "")  # 群名称
-        user_msg_id = msg.get("message_id")  # 用户消息ID，用于群聊删除
-        entities = msg.get("entities", [])  # 消息实体，用于获取@用户信息
-
-        # 频道消息直接忽略
-        if chat_type == "channel":
-            return
-
-        if not _rate_check(tg_user_id):
-            return
-
-        # ========== 群聊处理 ==========
-        if chat_type in ["group", "supergroup"]:
-            # 检查群聊功能是否启用
-            if not get_user_bot_group_enabled():
-                return
-            
-            # 检查群是否在白名单中
-            allowed_groups = get_user_bot_allowed_groups()
-            if allowed_groups:
-                allowed_list = [g.strip() for g in allowed_groups.split("\n") if g.strip()]
-                if chat_id not in allowed_list and f"@{chat.get('username', '')}" not in allowed_list:
-                    return  # 不在白名单，忽略
-            
-            # 获取群内允许的指令
-            group_commands = get_user_bot_group_commands()
-            allowed_cmds = [c.strip().lower() for c in group_commands.split(",") if c.strip()]
-            logger.info(f"[群聊] allowed_cmds={allowed_cmds}, text={text}")
-            
-            # 解析指令
-            cmd = text.split()[0].lower().lstrip("/") if text else ""
-            cmd_name = cmd.split("@")[0] if "@" in cmd else cmd  # 处理 /cmd@botname 格式
-            logger.info(f"[群聊] cmd={cmd}, cmd_name={cmd_name}")
-            
-            # 群内只响应白名单指令
-            if cmd_name in ["checkin", "签到", "qd"] and "checkin" in allowed_cmds:
-                cmd_checkin(chat_id, tg_user_id, is_group=True, group_name=group_name, user_msg_id=user_msg_id)
-                return
-            elif cmd_name in ["help", "帮助"] and "help" in allowed_cmds:
-                result = _send(chat_id, "🤖 <b>群内可用指令</b>\n\n"
-                      "✅ /checkin 或 /签到 - 每日签到获取积分\n"
-                      "✅ /points 或 /积分 - 查看积分余额\n"
-                      "✅ /rank 或 /排行 - 积分排行榜\n"
-                      "✅ /transfer 或 /转赠 - 转赠积分\n"
-                      "✅ /rob 或 /打劫 - 打劫好友积分\n"
-                      "✅ /hb 或 /红包 - 发积分红包\n"
-                      "✅ /grab 或 /抢 - 抢红包\n\n"
-                      "💡 更多功能请私聊机器人使用")
-                # 帮助消息也30秒后删除
-                if result and user_msg_id:
-                    bot_msg_id = result.get("result", {}).get("message_id")
-                    if bot_msg_id:
-                        _delete_messages_later(chat_id, [bot_msg_id, user_msg_id], 30)
-                return
-            elif cmd_name in ["points", "积分", "jf"] and "points" in allowed_cmds:
-                result = cmd_points(chat_id, tg_user_id, is_group=True, msg_id=None)
-                # 积分查询30秒后删除
-                if result and user_msg_id:
-                    bot_msg_id = result.get("result", {}).get("message_id")
-                    if bot_msg_id:
-                        _delete_messages_later(chat_id, [bot_msg_id, user_msg_id], 30)
-                return
-            # 🔥 新增：排行榜
-            elif cmd_name in ["rank", "排行", "ph"] and "rank" in allowed_cmds:
-                result = cmd_rank(chat_id, tg_user_id, is_group=True)
-                if result and user_msg_id:
-                    bot_msg_id = result.get("result", {}).get("message_id")
-                    if bot_msg_id:
-                        _delete_messages_later(chat_id, [bot_msg_id, user_msg_id], 30)
-                return
-            # 🔥 新增：转赠
-            elif cmd_name in ["transfer", "转赠", "zz"] and "transfer" in allowed_cmds:
-                cmd_transfer(chat_id, tg_user_id, text, is_group=True, entities=entities)
-                return
-            # 🔥 新增：打劫
-            elif cmd_name in ["rob", "打劫", "dj"] and "rob" in allowed_cmds:
-                cmd_rob(chat_id, tg_user_id, text, is_group=True, entities=entities)
-                return
-            # 🔥 用户PK命令
-            elif cmd_name in ["upk", "用户pk"] and "upk" in allowed_cmds:
-                cmd_pk_invite(chat_id, tg_user_id, text, is_group=True, entities=entities, user_msg_id=user_msg_id)
-                return
-            # 🔥 新增：红包
-            elif cmd_name in ["hb", "红包", "redpacket"] and "redpacket" in allowed_cmds:
-                cmd_redpacket(chat_id, tg_user_id, text, is_group=True, tg_name=tg_display_name, user_msg_id=user_msg_id)
-                return
-            # 🔥 新增：抢红包
-            elif cmd_name in ["grab", "抢", "q"] and "grab" in allowed_cmds:
-                cmd_grab(chat_id, tg_user_id, text, is_group=True, tg_name=tg_display_name, user_msg_id=user_msg_id)
-                return
-            # 🔥 新增：PK
-            elif cmd_name in ["pk", "PK", "骰子", "tz"] and "pk" in allowed_cmds:
-                cmd_pk(chat_id, tg_user_id, text, is_group=True, tg_name=tg_display_name, user_msg_id=user_msg_id)
-                return
-            # 🔥 新增：彩票
-            elif cmd_name in ["lottery", "彩票", "cp"] and "lottery" in allowed_cmds:
-                logger.info(f"[彩票] 群聊命令匹配成功，调用 cmd_lottery")
-                cmd_lottery(chat_id, tg_user_id, text, is_group=True, user_msg_id=user_msg_id)
-                return
-            # 🔥 新增：刮刮乐
-            elif cmd_name in ["scratch", "刮刮乐", "ggl"] and "scratch" in allowed_cmds:
-                cmd_scratch(chat_id, tg_user_id, text, is_group=True, tg_name=tg_display_name, user_msg_id=user_msg_id)
-                return
-            else:
-                # 处理新成员入群欢迎
-                if "new_chat_members" in msg:
-                    self._on_new_chat_members(chat_id, msg.get("new_chat_members", []), group_name)
-                    return
-                # 其他消息忽略
-                return
-
-        # ========== 私聊处理（原有逻辑）==========
-        binding = _get_binding(tg_user_id)
-
-        # 🔥 /check 命令用于手动刷新限制检查（在限制检查之前处理）
-        if text.startswith("/check") or text.startswith("/验证"):
-            cmd_check(chat_id, tg_user_id)
-            return
-
-        # 🔥 所有其他命令都需要检查使用限制
-        restriction_check = _check_user_restrictions(tg_user_id)
-        if not restriction_check["passed"]:
-            _send(chat_id, _format_restriction_message(restriction_check))
-            return
-
-        # 未绑定用户只能执行这些命令
-        if text.startswith("/start"): cmd_start(chat_id, tg_user_id, tg_name); return
-        if text.startswith("/help") or text.startswith("/帮助"): cmd_help(chat_id, tg_user_id); return
-        if text.startswith("/menu") or text.startswith("/菜单"): cmd_start(chat_id, tg_user_id, tg_name); return
-        # 🔥 bind_channel 要在 bind 前面，避免被 bind 匹配
-        if text.startswith("/bind_channel"): cmd_bind_channel(chat_id, tg_user_id, text.split(None, 1)[1] if len(text.split()) > 1 else ""); return
-        if text.startswith("/bind") or text.startswith("/绑定"): cmd_bind(chat_id, tg_user_id, text.split(None, 1)[1] if len(text.split()) > 1 else "", tg_username=msg["from"].get("username", ""), tg_display_name=tg_display_name); return
-        if text.startswith("/register") or text.startswith("/注册"): cmd_register(chat_id, tg_user_id, tg_name); return
-        if text.startswith("/code") or text.startswith("/注册码"): cmd_code(chat_id, tg_user_id, text.split(None, 1)[1] if len(text.split()) > 1 else ""); return
-
-        # 以下功能需要绑定
-        if not binding:
-            # 先检查是否有待处理的注册状态（用户正在输入用户名）
-            state = _user_state.get(tg_user_id)
-            if state and state.get("action") == "register_name" and not text.startswith('/'):
-                del _user_state[tg_user_id]
-                _do_register(chat_id, tg_user_id, text, tg_username=msg["from"].get("username", ""), tg_display_name=tg_display_name)
-                return
-            # 检查注册码激活时输入用户名的状态
-            if state and state.get("action") == "code_input_name" and not text.startswith('/'):
-                del _user_state[tg_user_id]
-                _do_code_register(chat_id, tg_user_id, text, state.get("code"), state.get("days"), state.get("tpl_id"), state.get("routes"), state.get("route_mode"), tg_username=msg["from"].get("username", ""), tg_display_name=tg_display_name)
-                return
-            _send(chat_id, "🔒 请先绑定或注册账号后才能使用此功能", reply_markup=_main_menu_keyboard(None))
-            return
-
-        # 检查 Emby 账号是否还存在
-        if not _check_emby_account(binding):
-            _unbind_user(tg_user_id)
-            _send(chat_id, "⚠️ 你的 Emby 账号已被管理员删除，绑定已自动解除。", reply_markup=_main_menu_keyboard(None))
-            return
-
-        # 🔥 unbind_channel 要在 unbind 前面
-        if text.startswith("/unbind_channel"): cmd_unbind_channel(chat_id, tg_user_id, text.split(None, 1)[1] if len(text.split()) > 1 else ""); return
-        if text.startswith("/unbind") or text.startswith("/解绑"): cmd_unbind(chat_id, tg_user_id); return
-        if text.startswith("/profile") or text.startswith("/个人中心"): cmd_profile(chat_id, tg_user_id); return
-        if text.startswith("/renew") or text.startswith("/续期"): cmd_renew(chat_id, tg_user_id, text.split(None, 1)[1] if len(text.split()) > 1 else ""); return
-        if text.startswith("/checkin") or text.startswith("/签到"): cmd_checkin(chat_id, tg_user_id); return
-        if text.startswith("/calendar") or text.startswith("/今日更新"): cmd_calendar(chat_id, tg_user_id); return
-        if text.startswith("/points") or text.startswith("/积分"): cmd_points(chat_id, tg_user_id); return
-        if text.startswith("/shop") or text.startswith("/商城"): cmd_shop(chat_id, tg_user_id); return
-        if text.startswith("/request") or text.startswith("/求片"): cmd_request(chat_id, tg_user_id, text.split(None, 1)[1] if len(text.split()) > 1 else ""); return
-        if text.startswith("/myrequests") or text.startswith("/我的求片"): cmd_myrequests(chat_id, tg_user_id); return
-        if text.startswith("/server") or text.startswith("/服务器"): cmd_server(chat_id, tg_user_id); return
-        if text.startswith("/library") or text.startswith("/媒体库"): cmd_library(chat_id, tg_user_id); return
-        if text.startswith("/password") or text.startswith("/密码"): cmd_password(chat_id, tg_user_id, text.split(None, 1)[1] if len(text.split()) > 1 else ""); return
-        # 和机器人PK（掷骰子比大小）
-        if text.startswith("/pk ") or text.startswith("/PK "): cmd_pk(chat_id, tg_user_id, text, tg_name=tg_display_name); return
-        if text.startswith("/骰子") or text.startswith("/tz"): cmd_pk(chat_id, tg_user_id, text, tg_name=tg_display_name); return
-        # 用户PK（挑战其他用户）
-        if text.startswith("/upk") or text.startswith("/用户pk") or text.startswith("/用户PK"): cmd_pk_invite(chat_id, tg_user_id, text, entities=entities); return
-        if text.startswith("/lottery") or text.startswith("/彩票") or text.startswith("/cp"): cmd_lottery(chat_id, tg_user_id, text); return
-        if text.startswith("/scratch") or text.startswith("/刮刮乐") or text.startswith("/ggl"): cmd_scratch(chat_id, tg_user_id, text, tg_name=tg_display_name); return
-        if text.startswith("/rob") or text.startswith("/打劫") or text.startswith("/dj"): cmd_rob(chat_id, tg_user_id, text, entities=entities); return
-        # 🔥 用户PK命令
-        if text.startswith("/upk") or text.startswith("/用户pk") or text.startswith("/用户PK"): cmd_pk_invite(chat_id, tg_user_id, text, entities=entities); return
-        if text.startswith("/accept") or text.startswith("/接受"): cmd_pk_accept(chat_id, tg_user_id, text); return
-        if text.startswith("/reject") or text.startswith("/拒绝"): cmd_pk_reject(chat_id, tg_user_id, text); return
-
-        # 非命令消息
-        if not text.startswith('/'):
-            # 检查是否有待处理的会话状态
-            state = _user_state.get(tg_user_id)
-            if state and state.get("action") == "register_name":
-                del _user_state[tg_user_id]
-                _do_register(chat_id, tg_user_id, text, tg_username=msg["from"].get("username", ""), tg_display_name=tg_display_name)
-                return
-            _send(chat_id, "💡 请从菜单中选择服务，或发送 /help 查看命令列表", reply_markup=_main_menu_keyboard(binding))
+        return user_bot_message_dispatcher_service.handle_message(msg)
 
     def _on_callback(self, cq):
         return user_bot_callback_dispatcher_service.handle_callback(cq)
