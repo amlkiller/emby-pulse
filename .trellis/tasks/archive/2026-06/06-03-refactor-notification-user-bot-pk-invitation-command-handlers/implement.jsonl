@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend spec entrypoint for this refactor slice."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Domain split guidance and service module naming rules for large file refactors."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Required uv-based verification commands for backend refactors."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Preserve existing command error behavior while moving implementations."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Preserve logger usage and avoid unsafe logging changes."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared thinking guide entrypoint required before implementation."}
