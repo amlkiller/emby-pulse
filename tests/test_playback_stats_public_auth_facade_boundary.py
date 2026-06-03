@@ -135,6 +135,188 @@ def test_playback_stats_includes_top_movies_child_route_and_compat_export():
     assert legacy_index < top_movies_index < user_details_index
 
 
+def test_playback_stats_includes_user_details_child_route_and_compat_export():
+    from app.domains.playback import stats
+    from app.domains.playback import user_details_router
+
+    routes = [
+        (route.path, route.methods)
+        for route in stats.router.routes
+        if hasattr(route, "methods")
+    ]
+
+    assert any(path == "/api/stats/user_details" and "GET" in methods for path, methods in routes)
+    assert stats.api_user_details is user_details_router.api_user_details
+
+    top_movies_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/top_movies" and "GET" in methods
+    )
+    user_details_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/user_details" and "GET" in methods
+    )
+    chart_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/chart" and "GET" in methods
+    )
+    assert top_movies_index < user_details_index < chart_index
+
+
+def test_user_details_denies_unauthenticated_before_query_or_media_side_effects(monkeypatch):
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"Id": "u1"}})
+    calls = []
+
+    def fake_check_login(seen_request):
+        calls.append(seen_request)
+        return False
+
+    def fail_build_stats_base_filter(*args, **kwargs):
+        raise AssertionError("user details should not build stats filter without login")
+
+    def fail_query(*args, **kwargs):
+        raise AssertionError("user details should not query playback stats without login")
+
+    def fail_media_get(*args, **kwargs):
+        raise AssertionError("user details should not read media API without login")
+
+    monkeypatch.setattr(stats, "check_login", fake_check_login)
+    monkeypatch.setattr(stats, "build_stats_base_filter", fail_build_stats_base_filter)
+    monkeypatch.setattr(stats.playback_store, "query", fail_query)
+    monkeypatch.setattr(stats.media_api, "get", fail_media_get)
+
+    response = stats.api_user_details(request)
+
+    assert response == {"status": "error", "message": "请先登录"}
+    assert calls == [request]
+
+
+def test_user_details_allows_admin_through_stats_monkeypatches(monkeypatch):
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"role": "admin"}})
+    calls = []
+
+    class MediaResponse:
+        status_code = 500
+
+        def json(self):
+            raise AssertionError("500 user detail response should not be decoded")
+
+    def fake_check_login(seen_request):
+        calls.append(("check_login", seen_request))
+        return True
+
+    def fake_build_stats_base_filter(user_id):
+        calls.append(("build_stats_base_filter", user_id))
+        return "WHERE UserId = ?", [user_id]
+
+    def fake_get_playback_column_name():
+        calls.append(("get_playback_column_name",))
+        return "ClientName"
+
+    def fake_query(sql, params):
+        normalized_sql = " ".join(sql.split())
+        calls.append(("query", normalized_sql, list(params)))
+        if normalized_sql == "SELECT * FROM PlaybackActivity LIMIT 1":
+            return [
+                {
+                    "DateCreated": "2026-06-03T12:30:00",
+                    "ItemName": "Movie One",
+                    "ItemId": "m1",
+                    "PlayDuration": 120,
+                    "UserId": "u1",
+                    "ItemType": "Movie",
+                    "DeviceName": "TV",
+                    "ClientName": "Emby Theater",
+                }
+            ]
+        return [
+            {
+                "DateCreated": "2026-06-03T12:30:00",
+                "ItemName": "Movie One",
+                "ItemId": "m1",
+                "PlayDuration": 120,
+                "UserId": "u1",
+                "ItemType": "Movie",
+                "Device": "TV",
+                "Client": "Emby Theater",
+            },
+            {
+                "DateCreated": "2026-06-03 13:00:00",
+                "ItemName": "Episode One",
+                "ItemId": "e1",
+                "PlayDuration": 60,
+                "UserId": "u2",
+                "ItemType": "Episode",
+                "Device": "Phone",
+                "Client": "Mobile",
+            },
+        ]
+
+    def fake_get_user_map_local():
+        calls.append(("get_user_map_local",))
+        return {"u1": "Alice", "u2": "Bob"}
+
+    def fake_get_clean_name(name, item_type):
+        calls.append(("get_clean_name", name, item_type))
+        return name
+
+    def fake_resolve_poster_ids(items):
+        calls.append(("resolve_poster_ids", [item.get("ItemId") for item in items]))
+        for item in items:
+            item["PosterResolved"] = True
+
+    def fake_media_get(path, timeout=None):
+        calls.append(("media_get", path, timeout))
+        return MediaResponse()
+
+    monkeypatch.setattr(stats, "check_login", fake_check_login)
+    monkeypatch.setattr(stats, "build_stats_base_filter", fake_build_stats_base_filter)
+    monkeypatch.setattr(stats, "get_playback_column_name", fake_get_playback_column_name)
+    monkeypatch.setattr(stats.playback_store, "query", fake_query)
+    monkeypatch.setattr(stats, "get_user_map_local", fake_get_user_map_local)
+    monkeypatch.setattr(stats, "get_clean_name", fake_get_clean_name)
+    monkeypatch.setattr(stats, "resolve_poster_ids", fake_resolve_poster_ids)
+    monkeypatch.setattr(stats.media_api, "get", fake_media_get)
+
+    response = stats.api_user_details(request, user_id="u1")
+
+    assert response["status"] == "success"
+    data = response["data"]
+    assert data["hourly"]["12"] == 1
+    assert data["hourly"]["13"] == 1
+    assert data["devices"] == [{"Device": "TV", "Plays": 1}, {"Device": "Phone", "Plays": 1}]
+    assert data["clients"] == [{"Client": "Emby Theater", "Plays": 1}, {"Client": "Mobile", "Plays": 1}]
+    assert data["preference"] == {"movie_plays": 1, "episode_plays": 1}
+    assert data["overview"] == {
+        "total_plays": 2,
+        "total_duration": 180,
+        "avg_duration": 90,
+        "account_age_days": 1,
+    }
+    assert data["logs"][0]["UserName"] == "Alice"
+    assert data["logs"][0]["PosterResolved"] is True
+    assert data["top_fav"]["ItemName"] == "Movie One"
+    assert data["top_fav"]["PosterResolved"] is True
+    assert calls == [
+        ("check_login", request),
+        ("build_stats_base_filter", "u1"),
+        ("get_playback_column_name",),
+        ("query", "SELECT * FROM PlaybackActivity LIMIT 1", []),
+        (
+            "query",
+            "SELECT DateCreated, ItemName, ItemId, PlayDuration, UserId, ItemType, COALESCE(DeviceName, 'Unknown') as Device, COALESCE(ClientName, 'Unknown') as Client FROM PlaybackActivity WHERE UserId = ? ORDER BY DateCreated DESC",
+            ["u1"],
+        ),
+        ("get_user_map_local",),
+        ("get_clean_name", "Movie One", "Movie"),
+        ("get_clean_name", "Episode One", "Episode"),
+        ("resolve_poster_ids", ["m1", "e1"]),
+        ("resolve_poster_ids", ["m1"]),
+        ("media_get", "/Users/u1", 3),
+    ]
+
+
 def test_top_movies_denies_unauthenticated_before_query_or_poster_side_effects(monkeypatch):
     from app.domains.playback import stats
 
