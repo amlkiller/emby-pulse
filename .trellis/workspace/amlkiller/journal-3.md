@@ -401,3 +401,36 @@ Extracted media request feedback endpoints into app/domains/media_requests/feedb
 ### Next Steps
 
 - None - task complete
+
+
+## Session 132: Refactor media requests cache control router
+
+**Date**: 2026-06-03
+**Task**: Refactor media requests cache control router
+**Branch**: `main`
+
+### Summary
+
+Extracted media request cache control endpoints and lifecycle wrappers into app/domains/media_requests/cache_control_router.py, included the child router from media_requests/router.py at the original route position, and preserved media_requests.router compatibility exports for bootstrap imports and monkeypatch-based tests. Verified compile/import route checks, git diff checks, focused media request and lifecycle tests, and the full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6ec0388` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
