@@ -1655,3 +1655,36 @@ Extracted the notification bot req_hdhive search action fallback from bot_servic
 ### Next Steps
 
 - None - task complete
+
+
+## Session 230: Extract notification bot callback dispatcher service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot callback dispatcher service
+**Branch**: `main`
+
+### Summary
+
+Extracted the notification bot Telegram callback dispatcher shell from bot_service into a domain-local service with dynamic provider wiring and focused boundary tests for permission rejection, ACK behavior, ACK failure swallowing, and request sub-dispatch ordering. Verified compileall, focused dispatcher tests, related callback tests, import check, diff check, and full tests before committing.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `42f084f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
