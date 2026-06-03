@@ -1,5 +1,4 @@
-import re
-from fastapi import APIRouter, Request
+from fastapi import APIRouter
 from app.domains.media_requests import community_cache_service
 from app.domains.media_requests.auth_router import (
     RequestLoginModel,
@@ -67,6 +66,12 @@ from app.domains.media_requests.safe_media_router import (
     router as safe_media_router,
     set_dependency_providers as set_safe_media_dependency_providers,
 )
+from app.domains.media_requests.submit_router import (
+    MediaRequestSubmitModel,
+    router as submit_router,
+    set_dependency_providers as set_submit_dependency_providers,
+    submit_media_request,
+)
 from app.domains.media_requests.user_series_router import (
     _get_local_episodes,
     _get_tmdb_season_episodes,
@@ -87,7 +92,6 @@ from app.domains.media_requests.update_router import (
 )
 from app.domains.users import public_service as user_service
 from app.core.security import validate_password_strength  # 🔒 统一密码强度校验
-from typing import Optional, List
 
 from app.core.config import REPORT_COVER_URL
 from app.infra.clients.moviepilot_client import moviepilot_client
@@ -126,8 +130,6 @@ from app.domains.media_requests.media_request_dao import (
     update_user_password_hash,
 )
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
-# 🔥 补回丢失的这一行：引入基础数据模型
-from app.schemas.models import MediaRequestSubmitModel as BaseSubmitModel
 from app.domains.notifications import public_service as notification_service
 from app.domains.notifications import notify_admin
 from app.domains.playback import stats as playback_stats
@@ -329,119 +331,24 @@ set_update_dependency_providers(
 )
 
 
-class MediaRequestSubmitModel(BaseSubmitModel):
-    seasons: List[int] = [0] 
-    overview: Optional[str] = ""
+set_submit_dependency_providers(
+    check_user_exists_provider=lambda: _check_user_exists,
+    submit_new_media_request_provider=lambda: submit_new_media_request,
+    pulse_url_provider=lambda: get_pulse_url,
+    media_server_public_url_provider=lambda: get_media_server_main_public_url,
+    notify_admin_provider=lambda: notify_admin,
+    notification_service_provider=lambda: notification_service,
+    system_notification_provider=lambda: add_system_notification,
+    report_cover_url_provider=lambda: REPORT_COVER_URL,
+    safe_error_message_provider=lambda: safe_error_message,
+    logger_provider=lambda: logger,
+)
 
 router.include_router(auth_router)
 
 router.include_router(discovery_router)
 
-@router.post("/api/requests/submit")
-async def submit_media_request(request: Request):
-    user = request.session.get("req_user")
-    if not user: return {"status": "error", "message": "请先绑定 Emby 账号"}
-    
-    # 检查 Emby 账号是否仍然存在
-    if not _check_user_exists(user.get("Id")):
-        request.session.pop("req_user", None)
-        return {"status": "error", "message": "账号已被删除，请重新登录", "account_deleted": True}
-    
-    uid = user['Id']
-    uname = user['Name']
-
-    try:
-        data = await request.json()
-        tmdb_id = int(data.get("tmdb_id") or 0)
-        # 兼容前端发 seasons(数组) 或 season(单数)
-        seasons_raw = data.get("seasons")
-        if seasons_raw is None:
-            seasons_raw = [data.get("season")] if data.get("season") is not None else []
-        # 过滤掉无效季数（0或负数）
-        seasons = [int(s) for s in seasons_raw if int(s) > 0] if isinstance(seasons_raw, list) else ([int(seasons_raw)] if int(seasons_raw) > 0 else [])
-        media_type = data.get("media_type")
-        
-        # 🔒 XSS 防护：过滤 title 中的危险字符
-        title_raw = data.get("title", "")
-        title = re.sub(r'<[^>]*>', '', title_raw)  # 移除 HTML 标签
-        title = title[:200]  # 限制长度
-        
-        year = data.get("year")
-        
-        # 🔒 XSS 防护：过滤 poster_path
-        poster_path_raw = data.get("poster_path", "")
-        poster_path = poster_path_raw[:500] if poster_path_raw else ""
-
-        # 验证季数
-        if media_type == "tv" and not seasons:
-            return {"status": "error", "message": "请选择有效的季数"}
-
-        # 电影没有季数概念，设置为0以便插入数据库
-        if media_type == "movie" and not seasons:
-            seasons = [0]
-
-        result = submit_new_media_request(uid, uname, tmdb_id, media_type, title, year, poster_path, seasons)
-        if not result.get("ok"):
-            return {"status": "error", "message": result.get("message", "提交失败")}
-
-        try:
-            season_str = f" 第 {','.join(str(s) for s in seasons)} 季" if media_type == "tv" and any(s > 0 for s in seasons) else ""
-            msg = f"🎬 <b>收到新求片心愿</b>\n\n👤 <b>用户：</b>{uname}\n📺 <b>内容：</b>{title} ({year}){season_str}\n\n请及时前往后台审批处理。"
-            
-            admin_url = get_pulse_url() or get_media_server_main_public_url() or "http://127.0.0.1:10307"
-            # 构建季数字符串用于回调（多季用逗号分隔）
-            season_str_cb = ",".join(str(s) for s in seasons) if media_type == "tv" and any(s > 0 for s in seasons) else "0"
-            # 标题需要编码以便在 callback_data 中使用（替换下划线）
-            title_safe = title.replace("_", "-")
-            
-            # 检查影巢插件是否启用
-            hdhive_enabled = False
-            try:
-                from app.plugins import get_plugin
-                hdhive_plugin = get_plugin("hdhive")
-                hdhive_enabled = hdhive_plugin and hdhive_plugin.enabled
-            except:
-                pass
-            
-            # 构建按钮：影巢搜索按钮（如果插件启用）
-            if hdhive_enabled:
-                keyboard = {"inline_keyboard": [
-                    [{"text": "🚀 推送 MP", "callback_data": f"req_approve_{tmdb_id}"}, {"text": "✋ 手动接单", "callback_data": f"req_manual_{tmdb_id}"}],
-                    [{"text": "🔍 影巢搜索", "callback_data": f"req_hdhive_{tmdb_id}_{media_type}_{season_str_cb}_{title_safe}"}, {"text": "❌ 拒绝求片", "callback_data": f"req_reject_menu_{tmdb_id}"}],
-                    [{"text": "💻 网页审批", "url": f"{admin_url.rstrip('/')}/requests_admin"}]
-                ]}
-            else:
-                keyboard = {"inline_keyboard": [
-                    [{"text": "🚀 推送 MP", "callback_data": f"req_approve_{tmdb_id}"}, {"text": "✋ 手动接单", "callback_data": f"req_manual_{tmdb_id}"}],
-                    [{"text": "❌ 拒绝求片", "callback_data": f"req_reject_menu_{tmdb_id}"}, {"text": "💻 网页审批", "url": f"{admin_url.rstrip('/')}/requests_admin"}]
-                ]}
-            
-            # 🔥 使用 notify_rules 配置控制通知渠道
-            rule = notify_admin.get_notify_rule('request_new')
-            if rule and rule.get('enabled'):
-                channels = rule.get('channels', [])
-                platform = "none"
-                if 'tg_bot' in channels and 'wecom' in channels:
-                    platform = "all"
-                elif 'tg_bot' in channels:
-                    platform = "tg"
-                elif 'wecom' in channels:
-                    platform = "wecom"
-                
-                if platform != "none":
-                    notification_service.send_photo("sys_notify", f"https://image.tmdb.org/t/p/w500{poster_path}" if poster_path else REPORT_COVER_URL, msg, reply_markup=keyboard, platform=platform)
-                
-                # Web 通知中心 - 只有勾选 web 才发送
-                if 'web' in channels:
-                    add_system_notification("request", f"收到新求片: {title}", f"用户 {uname} 提交了新的心愿单", "/requests_admin")
-            # else: 关闭状态不发送任何通知
-        except Exception as e:
-            logger.error(f"[求片通知] 发送失败: {e}")
-
-        return {"status": "success", "message": "心愿已提交！系统将尽快处理您的请求。"}
-        
-    except Exception as e:
-        return {"status": "error", "message": safe_error_message(e, "提交失败")}
+router.include_router(submit_router)
 
 router.include_router(management_router)
 

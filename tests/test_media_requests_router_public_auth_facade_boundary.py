@@ -123,6 +123,34 @@ def test_media_requests_router_includes_discovery_child_routes_and_compat_export
     assert trending_index < tv_index < check_index < submit_index
 
 
+def test_media_requests_router_includes_submit_child_routes_and_compat_exports():
+    from app.domains.media_requests import router as media_requests_router
+    from app.domains.media_requests import submit_router
+
+    routes = [
+        (route.path, route.methods)
+        for route in media_requests_router.router.routes
+        if hasattr(route, "methods")
+    ]
+
+    assert any(path == "/api/requests/submit" and "POST" in methods for path, methods in routes)
+    assert media_requests_router.MediaRequestSubmitModel is submit_router.MediaRequestSubmitModel
+    assert media_requests_router.submit_media_request is submit_router.submit_media_request
+
+    check_index = next(
+        i
+        for i, (path, methods) in enumerate(routes)
+        if path == "/api/requests/check/{media_type}/{tmdb_id}" and "GET" in methods
+    )
+    submit_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/requests/submit" and "POST" in methods
+    )
+    my_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/requests/my" and "GET" in methods
+    )
+    assert check_index < submit_index < my_index
+
+
 def test_media_requests_router_includes_management_child_routes_and_compat_exports():
     from app.domains.media_requests import management_router
     from app.domains.media_requests import router as media_requests_router
