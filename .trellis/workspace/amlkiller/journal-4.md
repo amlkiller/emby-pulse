@@ -401,3 +401,36 @@ Extracted NotificationBot channel fan-out helpers into a domain-local notificati
 ### Next Steps
 
 - None - task complete
+
+
+## Session 192: Extract notification bot wecom service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot wecom service
+**Branch**: `main`
+
+### Summary
+
+Extracted NotificationBot WeCom token, menu, text conversion, text send, and news-card photo send helpers into a domain-local notification_bot_wecom_service with lazy legacy providers; kept old class method wrappers and added boundary tests for token cache, HTML conversion, message send, and news-card fallback behavior.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `82d8d2f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
