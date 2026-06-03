@@ -764,3 +764,36 @@ Extracted NotificationBot stats/report command handling into notification_bot_st
 ### Next Steps
 
 - None - task complete
+
+
+## Session 203: Extract report poster fetcher service
+
+**Date**: 2026-06-03
+**Task**: Extract report poster fetcher service
+**Branch**: `main`
+
+### Summary
+
+Extracted reports poster lookup and fetch behavior into report_poster_fetcher_service with lazy providers for media_api, tmdb_client, network_client, HAS_PIL, and logger; kept legacy ReportGenerator private wrapper methods and added boundary tests covering Emby poster fetch, TV series poster priority, legacy method monkeypatch compatibility, TMDB fallback, and PIL-disabled fallback.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `05cc9e8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
