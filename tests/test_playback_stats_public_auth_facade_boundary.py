@@ -252,6 +252,202 @@ def test_chart_stats_allows_non_admin_through_stats_monkeypatches(monkeypatch):
     ]
 
 
+def test_playback_stats_includes_poster_child_route_and_compat_export():
+    from app.domains.playback import poster_router
+    from app.domains.playback import stats
+
+    routes = [
+        (route.path, route.methods)
+        for route in stats.router.routes
+        if hasattr(route, "methods")
+    ]
+
+    assert any(path == "/api/stats/poster_data" and "GET" in methods for path, methods in routes)
+    assert stats.api_poster_data is poster_router.api_poster_data
+
+    chart_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/chart" and "GET" in methods
+    )
+    trend_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/trend" and "GET" in methods
+    )
+    poster_data_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/poster_data" and "GET" in methods
+    )
+    top_users_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/top_users_list" and "GET" in methods
+    )
+    assert chart_index < trend_index < poster_data_index < top_users_index
+
+
+def test_poster_data_denies_unauthenticated_before_query_or_media_side_effects(monkeypatch):
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"Id": "u1"}})
+    calls = []
+
+    def fake_check_login(seen_request):
+        calls.append(seen_request)
+        return False
+
+    def fail_build_stats_base_filter(*args, **kwargs):
+        raise AssertionError("poster data should not build stats filter without login")
+
+    def fail_query(*args, **kwargs):
+        raise AssertionError("poster data should not query playback stats without login")
+
+    def fail_media_get(*args, **kwargs):
+        raise AssertionError("poster data should not read media API without login")
+
+    def fail_resolve_poster_ids(*args, **kwargs):
+        raise AssertionError("poster data should not resolve posters without login")
+
+    monkeypatch.setattr(stats, "check_login", fake_check_login)
+    monkeypatch.setattr(stats, "build_stats_base_filter", fail_build_stats_base_filter)
+    monkeypatch.setattr(stats.playback_store, "query", fail_query)
+    monkeypatch.setattr(stats.media_api, "get", fail_media_get)
+    monkeypatch.setattr(stats, "resolve_poster_ids", fail_resolve_poster_ids)
+
+    response = stats.api_poster_data(request)
+
+    assert response == {"status": "error", "message": "请先登录"}
+    assert calls == [request]
+
+
+def test_poster_data_allows_non_admin_through_stats_monkeypatches(monkeypatch):
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"id": "local-u"}})
+    calls = []
+
+    class GenreResponse:
+        status_code = 200
+
+        def json(self):
+            calls.append(("genre_json",))
+            return {"Genres": ["Drama", "Sci-Fi"]}
+
+    def fake_check_login(seen_request):
+        calls.append(("check_login", seen_request))
+        return True
+
+    def fake_build_stats_base_filter(user_id):
+        calls.append(("build_stats_base_filter", user_id))
+        if user_id == "all":
+            return "WHERE 1=1", []
+        return "WHERE UserId = ?", [user_id]
+
+    def fake_query(sql, params, one=False):
+        normalized_sql = " ".join(sql.split())
+        calls.append(("query", normalized_sql, list(params), one))
+        if "COUNT(*) as Plays" in normalized_sql:
+            return [{"Plays": 99}]
+        if "COUNT(*) as plays" in normalized_sql:
+            return {"plays": 2, "duration": 7200}
+        if "GROUP BY day" in normalized_sql:
+            return [{"day": "2026-06-01", "duration": 7200}]
+        if "BETWEEN 1 AND 5" in normalized_sql:
+            return {"DateCreated": "2026-06-01T02:30:00", "ItemName": "Movie One", "ItemType": "Movie"}
+        return [
+            {
+                "ItemName": "Movie One",
+                "ItemId": "m1",
+                "ItemType": "Movie",
+                "Count": 2,
+                "Duration": 7200,
+            }
+        ]
+
+    def fake_media_get(path, params=None, timeout=None):
+        calls.append(("media_get", path, params, timeout))
+        return GenreResponse()
+
+    def fake_get_clean_name(name, item_type):
+        calls.append(("get_clean_name", name, item_type))
+        return name
+
+    def fake_resolve_poster_ids(items):
+        calls.append(("resolve_poster_ids", [(item["ItemName"], item["ItemId"]) for item in items]))
+        for item in items:
+            item["PosterResolved"] = True
+
+    monkeypatch.setattr(stats, "check_login", fake_check_login)
+    monkeypatch.setattr(stats, "build_stats_base_filter", fake_build_stats_base_filter)
+    monkeypatch.setattr(stats.playback_store, "query", fake_query)
+    monkeypatch.setattr(stats.media_api, "get", fake_media_get)
+    monkeypatch.setattr(stats, "get_clean_name", fake_get_clean_name)
+    monkeypatch.setattr(stats, "resolve_poster_ids", fake_resolve_poster_ids)
+
+    response = stats.api_poster_data(request, user_id="all", period="month")
+
+    assert response == {
+        "status": "success",
+        "data": {
+            "plays": 2,
+            "hours": 2,
+            "server_plays": 99,
+            "top_list": [
+                {
+                    "ItemName": "Movie One",
+                    "ItemId": "m1",
+                    "Count": 2,
+                    "Duration": 7200,
+                    "PosterResolved": True,
+                }
+            ],
+            "daily_stats": [{"date": "2026-06-01", "duration": 7200}],
+            "favorite_type": "Drama",
+            "streak_days": 0,
+            "mood_data": {
+                "late_night": {"time": "02:30", "date": "06月01日", "name": "Movie One"},
+                "binge_day": {"date": "06月01日", "hours": 2.0},
+                "genres": ["Drama", "Sci-Fi"],
+            },
+        },
+    }
+    assert calls == [
+        ("check_login", request),
+        ("build_stats_base_filter", "local-u"),
+        ("build_stats_base_filter", "all"),
+        ("build_stats_base_filter", "all"),
+        (
+            "query",
+            "SELECT COUNT(*) as Plays FROM PlaybackActivity WHERE 1=1 AND DateCreated > date('now', 'localtime', '-30 days')",
+            [],
+            False,
+        ),
+        (
+            "query",
+            "SELECT COUNT(*) as plays, COALESCE(SUM(PlayDuration), 0) as duration FROM PlaybackActivity WHERE UserId = ? AND DateCreated > date('now', 'localtime', '-30 days')",
+            ["local-u"],
+            True,
+        ),
+        (
+            "query",
+            "SELECT substr(replace(DateCreated, 'T', ' '), 1, 10) as day, COALESCE(SUM(PlayDuration), 0) as duration FROM PlaybackActivity WHERE UserId = ? AND DateCreated > date('now', 'localtime', '-30 days') GROUP BY day ORDER BY day DESC",
+            ["local-u"],
+            False,
+        ),
+        (
+            "query",
+            "SELECT DateCreated, ItemName, ItemType FROM PlaybackActivity WHERE UserId = ? AND DateCreated > date('now', 'localtime', '-30 days') AND CAST(substr(replace(DateCreated, 'T', ' '), 12, 2) AS INTEGER) BETWEEN 1 AND 5 ORDER BY substr(replace(DateCreated, 'T', ' '), 12, 8) DESC LIMIT 1",
+            ["local-u"],
+            True,
+        ),
+        ("get_clean_name", "Movie One", "Movie"),
+        (
+            "query",
+            "SELECT ItemName, ItemId, ItemType, COUNT(*) as Count, COALESCE(SUM(PlayDuration), 0) as Duration FROM PlaybackActivity WHERE UserId = ? AND DateCreated > date('now', 'localtime', '-30 days') GROUP BY ItemName ORDER BY Count DESC LIMIT 200",
+            ["local-u"],
+            False,
+        ),
+        ("get_clean_name", "Movie One", "Movie"),
+        ("media_get", "/Users/local-u/Items/m1", {"Fields": "Genres"}, 2),
+        ("genre_json",),
+        ("resolve_poster_ids", [("Movie One", "m1")]),
+    ]
+
+
 def test_user_details_denies_unauthenticated_before_query_or_media_side_effects(monkeypatch):
     from app.domains.playback import stats
 
