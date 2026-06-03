@@ -203,3 +203,36 @@ Extracted UserBot Telegram getUpdates polling into a domain-local polling servic
 ### Next Steps
 
 - None - task complete
+
+
+## Session 186: Extract notification user bot callback dispatcher
+
+**Date**: 2026-06-03
+**Task**: Extract notification user bot callback dispatcher
+**Branch**: `main`
+
+### Summary
+
+Extracted UserBot inline callback query dispatcher into a domain-local callback dispatcher service with lazy dependency providers; added boundary tests for unbound menu, bound checkin, request-season, and scratch callback branches.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e839e68` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

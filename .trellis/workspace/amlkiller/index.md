@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-4.md`
-- **Total Sessions**: 185
+- **Total Sessions**: 186
 - **Last Active**: 2026-06-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-4.md` | ~205 | Active |
+| `journal-4.md` | ~238 | Active |
 | `journal-3.md` | ~1987 | Archived |
 | `journal-2.md` | ~1993 | Archived |
 | `journal-1.md` | ~1973 | Archived |
@@ -32,6 +32,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 186 | 2026-06-03 | Extract notification user bot callback dispatcher | `e839e68` | `main` |
 | 185 | 2026-06-03 | Extract notification user bot polling service | `f981de7` | `main` |
 | 184 | 2026-06-03 | Extract notification user bot scheduler service | `f85ade5` | `main` |
 | 183 | 2026-06-03 | Refactor notification user bot open registration | `43f02cb` | `main` |
