@@ -566,3 +566,36 @@ Extracted the media request registration endpoint into app/domains/media_request
 ### Next Steps
 
 - None - task complete
+
+
+## Session 137: Refactor media requests user series router
+
+**Date**: 2026-06-03
+**Task**: Refactor media requests user series router
+**Branch**: `main`
+
+### Summary
+
+Extracted the media request user series endpoints into app/domains/media_requests/user_series_router.py, included the child router from media_requests/router.py at the original route position, and preserved media_requests.router compatibility exports for the moved helpers and route handlers. Verified compile/import route checks, git diff checks, focused media request boundary tests, and the full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `468acfa` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
