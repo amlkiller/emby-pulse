@@ -139,6 +139,7 @@ def test_users_router_includes_child_routes_and_compat_exports():
     from app.domains.users import delete_verification_router
     from app.domains.users import invitation_router
     from app.domains.users import libraries_router
+    from app.domains.users import library_update_router
     from app.domains.users import library_visibility_router
     from app.domains.users import manage_list_router
     from app.domains.users import new_user_router
@@ -172,6 +173,7 @@ def test_users_router_includes_child_routes_and_compat_exports():
     assert router.HiddenLibrariesModel is library_visibility_router.HiddenLibrariesModel
     assert router.api_get_user_libraries is library_visibility_router.api_get_user_libraries
     assert router.api_update_hidden_libraries is library_visibility_router.api_update_hidden_libraries
+    assert router.api_manage_user_library is library_update_router.api_manage_user_library
     assert router.api_manage_users is manage_list_router.api_manage_users
     assert router.check_expired_users is manage_list_router.check_expired_users
     assert router.UserUpdateModelEx is update_router.UserUpdateModelEx
@@ -458,6 +460,151 @@ def test_update_user_preserves_success_mapping_and_legacy_providers(monkeypatch)
             "ip_address": "127.0.0.1",
         },
     ) in calls
+
+
+def test_library_update_denies_non_admin_before_media_or_cache(monkeypatch):
+    from app.domains.users import router
+
+    request = SimpleNamespace(session={"user": {"id": "user-1", "role": "viewer"}})
+
+    class MediaApiMustNotRun:
+        def health_check(self):
+            raise AssertionError("media_api.health_check should not run before admin authorization")
+
+    monkeypatch.setattr(router, "is_admin_user", lambda _request: False)
+    monkeypatch.setattr(router, "media_api", MediaApiMustNotRun())
+    monkeypatch.setattr(
+        router.user_service,
+        "invalidate_emby_users_cache",
+        lambda: (_ for _ in ()).throw(AssertionError("cache invalidation should not run before admin authorization")),
+    )
+
+    result = router.api_manage_user_library(router.UserUpdateModelEx(user_id="u1"), request)
+
+    assert result == {"status": "error", "message": "需要管理员权限"}
+
+
+def test_library_update_rejects_unhealthy_media_before_cache_or_dao(monkeypatch):
+    from app.domains.users import router
+
+    request = SimpleNamespace(session={"user": {"id": "admin-1", "role": "admin"}})
+
+    class MediaApi:
+        def health_check(self):
+            return False
+
+        def get(self, *_args, **_kwargs):
+            raise AssertionError("media_api.get should not run when health check fails")
+
+    class UserDaoMustNotRun:
+        def sync_user_library_permissions(self, *_args, **_kwargs):
+            raise AssertionError("user_dao.sync_user_library_permissions should not run when health check fails")
+
+    monkeypatch.setattr(router, "is_admin_user", lambda _request: True)
+    monkeypatch.setattr(router, "media_api", MediaApi())
+    monkeypatch.setattr(router, "user_dao", UserDaoMustNotRun())
+    monkeypatch.setattr(
+        router.user_service,
+        "invalidate_emby_users_cache",
+        lambda: (_ for _ in ()).throw(AssertionError("cache invalidation should not run when health check fails")),
+    )
+
+    result = router.api_manage_user_library(router.UserUpdateModelEx(user_id="u1"), request)
+
+    assert result == {"status": "error", "message": "Emby 服务不可用，请稍后重试"}
+
+
+def test_library_update_preserves_success_mapping_and_legacy_providers(monkeypatch):
+    from app.domains.users import router
+
+    calls = []
+    request = SimpleNamespace(session={"user": {"id": "admin-1", "role": "admin"}})
+
+    class Response:
+        status_code = 200
+
+        def json(self):
+            return {"Policy": {"EnableAllFolders": True, "EnabledFolders": ["old-lib"]}}
+
+    class MediaApi:
+        def health_check(self):
+            calls.append(("health_check",))
+            return True
+
+        def get(self, path):
+            calls.append(("get", path))
+            return Response()
+
+        def post(self, path, **kwargs):
+            calls.append(("post", path, kwargs))
+
+    class UserDao:
+        def sync_user_library_permissions(self, *args):
+            calls.append(("sync_user_library_permissions", args))
+            return ["lib-a", "lib-b"]
+
+    monkeypatch.setattr(router, "is_admin_user", lambda _request: True)
+    monkeypatch.setattr(router, "media_api", MediaApi())
+    monkeypatch.setattr(router, "user_dao", UserDao())
+    monkeypatch.setattr(router.user_service, "invalidate_emby_users_cache", lambda: calls.append(("invalidate_cache",)))
+
+    result = router.api_manage_user_library(
+        router.UserUpdateModelEx(user_id="u1", enable_all_folders=False, enabled_folders=["lib-a"]),
+        request,
+    )
+
+    assert result == {"status": "success", "message": "媒体库权限已保存"}
+    assert calls == [
+        ("health_check",),
+        ("invalidate_cache",),
+        ("get", "/Users/u1"),
+        ("sync_user_library_permissions", ("u1", False, {"lib-a"})),
+        (
+            "post",
+            "/Users/u1/Policy",
+            {"json": {"EnableAllFolders": False, "EnabledFolders": ["lib-a", "lib-b"]}},
+        ),
+    ]
+
+
+def test_library_update_preserves_user_missing_and_safe_error_mapping(monkeypatch):
+    from app.domains.users import router
+
+    request = SimpleNamespace(session={"user": {"id": "admin-1", "role": "admin"}})
+
+    class MissingUserResponse:
+        status_code = 404
+
+    class MissingUserMediaApi:
+        def health_check(self):
+            return True
+
+        def get(self, _path):
+            return MissingUserResponse()
+
+    monkeypatch.setattr(router, "is_admin_user", lambda _request: True)
+    monkeypatch.setattr(router, "media_api", MissingUserMediaApi())
+    monkeypatch.setattr(router.user_service, "invalidate_emby_users_cache", lambda: None)
+
+    assert router.api_manage_user_library(router.UserUpdateModelEx(user_id="u1"), request) == {
+        "status": "error",
+        "message": "用户不存在",
+    }
+
+    class RaisingMediaApi:
+        def health_check(self):
+            return True
+
+        def get(self, _path):
+            raise RuntimeError("raw secret")
+
+    monkeypatch.setattr(router, "media_api", RaisingMediaApi())
+    monkeypatch.setattr(router, "safe_error_message", lambda exc: f"safe:{exc}")
+
+    assert router.api_manage_user_library(router.UserUpdateModelEx(user_id="u1"), request) == {
+        "status": "error",
+        "message": "safe:raw secret",
+    }
 
 
 def test_manage_users_denies_non_admin_before_expire_check_or_cache(monkeypatch):

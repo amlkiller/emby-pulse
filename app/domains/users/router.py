@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request, Depends, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import Optional
 from app.infra.db import audit_dao
@@ -59,6 +59,11 @@ from app.domains.users.library_visibility_router import (
     api_update_hidden_libraries,
     router as library_visibility_router,
     set_dependency_providers as set_library_visibility_dependency_providers,
+)
+from app.domains.users.library_update_router import (
+    api_manage_user_library,
+    router as library_update_router,
+    set_dependency_providers as set_library_update_dependency_providers,
 )
 from app.domains.users.libraries_router import (
     api_get_libraries,
@@ -155,6 +160,13 @@ set_library_visibility_dependency_providers(
     media_api_provider=lambda: media_api,
     user_dao_provider=lambda: user_dao,
     logger_provider=lambda: logging,
+)
+set_library_update_dependency_providers(
+    media_api_provider=lambda: media_api,
+    user_dao_provider=lambda: user_dao,
+    user_service_provider=lambda: user_service,
+    is_admin_user_provider=lambda: is_admin_user,
+    safe_error_message_provider=lambda: safe_error_message,
 )
 set_libraries_dependency_providers(
     media_api_provider=lambda: media_api,
@@ -331,51 +343,7 @@ router.include_router(self_password_router)
 router.include_router(library_visibility_router)
 router.include_router(invitation_router)
 
-@router.post("/api/manage/user/library")
-def api_manage_user_library(data: UserUpdateModelEx, request: Request):
-    """单独保存媒体库权限"""
-    # 🔒 安全检查：必须管理员
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    # 🔒 Emby 不可用时拒绝，避免本地/远端权限错位
-    if not media_api.health_check():
-        return {"status": "error", "message": "Emby 服务不可用，请稍后重试"}
-    user_service.invalidate_emby_users_cache()
-    try:
-        # 获取用户当前 Policy
-        p_res = media_api.get(f"/Users/{data.user_id}")
-        if p_res.status_code != 200:
-            return {"status": "error", "message": "用户不存在"}
-
-        p = p_res.json().get('Policy', {})
-
-        # 获取旧的媒体库权限用于对比
-        old_enable_all = p.get('EnableAllFolders', True)
-        old_enabled_folders = set(p.get('EnabledFolders', []))
-
-        # 设置新的媒体库权限
-        new_enable_all = bool(data.enable_all_folders)
-        new_enabled_folders = set([str(x) for x in data.enabled_folders]) if not new_enable_all and data.enabled_folders is not None else set()
-
-        # 检测是否有变化
-        library_changed = (old_enable_all != new_enable_all) or (old_enabled_folders != new_enabled_folders)
-
-        if library_changed:
-            p['EnableAllFolders'] = new_enable_all
-            p['EnabledFolders'] = list(new_enabled_folders) if not new_enable_all else []
-
-            # 同步更新 admin_enabled_folders，但保留用户的 hidden_libraries
-            try:
-                final_enabled = user_dao.sync_user_library_permissions(data.user_id, new_enable_all, new_enabled_folders)
-                if final_enabled is not None:
-                    p['EnabledFolders'] = final_enabled
-            except Exception: pass
-
-            # 更新 Emby Policy
-            media_api.post(f"/Users/{data.user_id}/Policy", json=p)
-
-        return {"status": "success", "message": "媒体库权限已保存"}
-    except Exception as e:
-        return {"status": "error", "message": safe_error_message(e)}
+router.include_router(library_update_router)
 
 router.include_router(update_router)
 
