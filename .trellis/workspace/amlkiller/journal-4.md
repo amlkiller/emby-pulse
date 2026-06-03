@@ -269,3 +269,36 @@ Extracted UserBot Telegram message dispatch into a domain-local service with laz
 ### Next Steps
 
 - None - task complete
+
+
+## Session 188: Extract notification user bot lottery draw
+
+**Date**: 2026-06-03
+**Task**: Extract notification user bot lottery draw
+**Branch**: `main`
+
+### Summary
+
+Extracted UserBot lottery draw orchestration into a domain-local service with lazy legacy providers; added boundary tests for successful draw notifications, already-drawn skip, and media-check fallback behavior.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4163faf` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
