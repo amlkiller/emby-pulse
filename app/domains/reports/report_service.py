@@ -3,10 +3,10 @@ import re
 import datetime
 import logging
 import math
-import random
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from app.core.config import THEMES
 from app.domains.reports.report_assets import HAS_PIL, POSTER_THEMES, _get_font, _load_font, get_theme_list
+from app.domains.reports import report_daily_poster_data_service
 from app.domains.reports import report_poster_fetcher_service
 from app.domains.reports.report_queries import (
     build_report_base_filter,
@@ -31,6 +31,13 @@ report_poster_fetcher_service.set_dependency_providers(
     network_client_provider=lambda: network_client,
     has_pil_provider=lambda: HAS_PIL,
     logger_provider=lambda: logger,
+)
+
+report_daily_poster_data_service.set_dependency_providers(
+    logger_provider=lambda: logger,
+    date_today_provider=lambda: datetime.date.today(),
+    get_report_top_query_limit_provider=lambda: get_report_top_query_limit,
+    list_report_ranked_items_provider=lambda: list_report_ranked_items,
 )
 
 def get_user_map_internal():
@@ -193,227 +200,13 @@ class ReportGenerator:
         
         self._init_fonts()
         
-        # 🔥 如果外部传入数据，直接使用，跳过查询逻辑
-        use_external_data = tv_list is not None or movie_list is not None
-        
-        # 多样化标语库 - 每次随机选择不重复
-        slogans = [
-            "精选全球佳作，每日不可错过",
-            "光影流转，记录每一刻精彩",
-            "好片不停歇，追剧不设限",
-            "你的观影足迹，我们的数据守护",
-            "每一次播放，都是一次心动",
-            "时光不老，影像长存",
-            "用数据丈量热爱，以光影铭记时光",
-            "影视剧集千千万，唯有热爱不可负",
-            "一部好片，一段故事，一份记忆",
-            "追剧有数据，热爱有依据",
-            "荧幕背后的故事，数据会说话",
-            "每个夜晚都有好剧相伴",
-            "让每一次观影都值得被记录",
-            "从数据中发现你的观影DNA",
-            "好剧如酒，越品越有味道"
-        ]
-        # 使用日期作为随机种子，确保同一天生成相同标语
-        random.seed(datetime.date.today().toordinal())
-        slogan = random.choice(slogans)
-        
-        # 🔥 使用统一的时间计算模块
-        from app.shared.time import get_period_range, get_weekday_cn
-        start_date, end_date, where_sql, title_text = get_period_range(period)
-        
-        # 构建海报显示配置
-        today = datetime.date.today()
-        yesterday = today - datetime.timedelta(days=1)
-        
-        # 根据时间范围类型生成显示文本
-        if period in ['yesterday', 'day', 'today', 'daily']:
-            date_for_display = start_date or yesterday
-            weekday = get_weekday_cn(date_for_display)
-            pc = {
-                "title": "观影日报",
-                "subtitle": "MOVIE & TV DAILY REPORT",
-                "date_label": date_for_display.strftime("%Y年%m月%d日"),
-                "sub_label": date_for_display.strftime("%m.%d"),
-                "weekday": weekday,
-                "where": where_sql
-            }
-        elif period in ['week', 'this_week']:
-            end_display = (end_date - datetime.timedelta(days=1)) if end_date else today
-            pc = {
-                "title": "观影周报",
-                "subtitle": "MOVIE & TV WEEKLY REPORT",
-                "date_label": f"{start_date.strftime('%m.%d')} - {end_display.strftime('%m.%d')}",
-                "sub_label": f"{start_date.strftime('%m.%d')}-{end_display.strftime('%m.%d')}",
-                "weekday": "",
-                "where": where_sql
-            }
-        elif period in ['last_week', 'weekly']:
-            end_display = (end_date - datetime.timedelta(days=1)) if end_date else today
-            pc = {
-                "title": "观影周报",
-                "subtitle": "MOVIE & TV WEEKLY REPORT",
-                "date_label": f"{start_date.strftime('%m.%d')} - {end_display.strftime('%m.%d')}",
-                "sub_label": f"{start_date.strftime('%m.%d')}-{end_display.strftime('%m.%d')}",
-                "weekday": "",
-                "where": where_sql
-            }
-        elif period in ['month', 'this_month']:
-            pc = {
-                "title": "观影月报",
-                "subtitle": "MOVIE & TV MONTHLY REPORT",
-                "date_label": today.strftime("%Y年%m月"),
-                "sub_label": today.strftime("%m月"),
-                "weekday": "",
-                "where": where_sql
-            }
-        elif period in ['last_month', 'monthly']:
-            pc = {
-                "title": "观影月报",
-                "subtitle": "MOVIE & TV MONTHLY REPORT",
-                "date_label": start_date.strftime("%Y年%m月"),
-                "sub_label": start_date.strftime("%m月"),
-                "weekday": "",
-                "where": where_sql
-            }
-        elif period in ['year', 'this_year', 'yearly']:
-            pc = {
-                "title": "观影年报",
-                "subtitle": "MOVIE & TV YEARLY REPORT",
-                "date_label": today.strftime("%Y年"),
-                "sub_label": today.strftime("%Y年"),
-                "weekday": "",
-                "where": where_sql
-            }
-        elif period == 'last_year':
-            pc = {
-                "title": "观影年报",
-                "subtitle": "MOVIE & TV YEARLY REPORT",
-                "date_label": start_date.strftime("%Y年"),
-                "sub_label": start_date.strftime("%Y年"),
-                "weekday": "",
-                "where": where_sql
-            }
-        else:
-            # 默认使用昨天
-            date_for_display = yesterday
-            weekday = get_weekday_cn(date_for_display)
-            pc = {
-                "title": "观影日报",
-                "subtitle": "MOVIE & TV DAILY REPORT",
-                "date_label": date_for_display.strftime("%Y年%m月%d日"),
-                "sub_label": date_for_display.strftime("%m.%d"),
-                "weekday": weekday,
-                "where": where_sql
-            }
-
-        # 🔥 如果外部传入数据，直接使用，不再查询数据库
-        if use_external_data:
-            # 使用外部传入的数据
-            tv_list = tv_list or []
-            movie_list = movie_list or []
-            logger.info(f"[海报生成] 使用外部数据: 剧集{len(tv_list)}部, 电影{len(movie_list)}部")
-        else:
-            # 向后兼容：自行查询数据库
-            # 读取观影报告插件的排除类型配置（默认不排除）
-            exclude_types = []
-            try:
-                from app.plugins import get_plugin_config
-                view_report_config = get_plugin_config("view_report")
-                if view_report_config:
-                    config_exclude = view_report_config.get('exclude_types', [])
-                    if isinstance(config_exclude, str):
-                        config_exclude = [t.strip() for t in config_exclude.split(',') if t.strip()]
-                    if config_exclude:
-                        exclude_types = config_exclude
-            except:
-                pass
-            
-            # 构建排除类型 SQL
-            exclude_sql = ""
-            if exclude_types:
-                exclude_placeholders = ', '.join(['?' for _ in exclude_types])
-                exclude_sql = f" AND ItemType NOT IN ({exclude_placeholders})"
-
-            # 🔥 从 pc 字典获取 where 条件
-            where = pc.get("where", "")
-
-            top_limit = get_report_top_query_limit()
-            all_tops = list_report_ranked_items(where, exclude_sql, exclude_types, top_limit)
-            if not all_tops:
-                return None
-            
-            # 调试日志：打印查询结果前10条
-            try:
-                debug_list = []
-                for t in all_tops[:10]:
-                    try:
-                        name = t['ItemName'] if 'ItemName' in t.keys() else (t[0] if len(t) > 0 else '未知')
-                        dur = t['Duration'] if 'Duration' in t.keys() else (t[3] if len(t) > 3 else 0)
-                        debug_list.append((name, dur))
-                    except:
-                        debug_list.append(('unknown', 0))
-                logger.info(f"[海报生成] 查询结果前10条: {debug_list}")
-            except Exception as e:
-                logger.error(f"[海报生成] 调试日志错误: {e}")
-
-            tv_pattern = re.compile(r' - [sS]\d|第.+[集期]|EP?\d', re.IGNORECASE)
-            tv_map = {}
-            movie_list = []
-            
-            for item in all_tops:
-                try:
-                    name = item['ItemName'] if 'ItemName' in item.keys() else ''
-                    item_id = item['ItemId'] if 'ItemId' in item.keys() else None
-                    count = item['C'] if 'C' in item.keys() else 0
-                    item_type = item['ItemType'] if 'ItemType' in item.keys() else ''
-                except (KeyError, TypeError):
-                    name = str(item[0]) if len(item) > 0 else ''
-                    item_id = item[1] if len(item) > 1 else None
-                    item_type = item[2] if len(item) > 2 else ''
-                    count = item[3] if len(item) > 3 else 0
-                
-                series_name = name
-                is_tv = str(item_type) == 'Episode' or tv_pattern.search(name)
-                if is_tv:
-                    parts = name.split(' - ')
-                    series_name = parts[0] if parts else name
-                
-                duration = item['Duration'] if 'Duration' in item.keys() else 0
-                if duration is None:
-                    duration = 0
-                item_dict = {'ItemName': name, 'SeriesName': series_name, 'ItemId': item_id, 'C': count, 'Duration': duration}
-                
-                if is_tv:
-                    existing = tv_map.get(series_name)
-                    if existing:
-                        existing['C'] += count
-                        existing['Duration'] += duration
-                        if duration > existing.get('_best_episode_duration', 0):
-                            existing['ItemName'] = name
-                            existing['ItemId'] = item_id
-                            existing['_best_episode_duration'] = duration
-                    else:
-                        item_dict['_best_episode_duration'] = duration
-                        tv_map[series_name] = item_dict
-                else:
-                    movie_list.append(item_dict)
-
-            # 先完整聚合同一剧集，再取 TOP，避免前 100 条单集数据导致剧集总榜被截断。
-            tv_list = list(tv_map.values())
-            tv_list.sort(key=lambda x: x['Duration'], reverse=True)
-            movie_list.sort(key=lambda x: x['Duration'], reverse=True)
-            tv_list = tv_list[:5]
-            movie_list = movie_list[:5]
-            for item in tv_list:
-                item.pop('_best_episode_duration', None)
-            
-            # 调试日志：打印排序后的列表
-            logger.info(f"[海报生成] 剧集列表排序后: {[(t['SeriesName'], t['Duration']) for t in tv_list]}")
-            logger.info(f"[海报生成] 电影列表排序后: {[(m['ItemName'], m['Duration']) for m in movie_list]}")
-
-        if not tv_list and not movie_list:
+        data = report_daily_poster_data_service.prepare_daily_poster_data(period, tv_list, movie_list)
+        if data is None:
             return None
+        tv_list = data.tv_list
+        movie_list = data.movie_list
+        pc = data.pc
+        slogan = data.slogan
 
         # ========== 根据布局类型生成海报 ==========
         layout = theme_config.get('layout', 'film_strip')
