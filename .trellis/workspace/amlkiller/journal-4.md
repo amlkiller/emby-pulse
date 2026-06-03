@@ -1853,3 +1853,36 @@ Extracted users avatar HTTP handlers into a users-domain child router with dynam
 ### Next Steps
 
 - None - task complete
+
+
+## Session 236: Extract users pin route
+
+**Date**: 2026-06-04
+**Task**: Extract users pin route
+**Branch**: `main`
+
+### Summary
+
+Extracted the users pin HTTP route into a users-domain child router with dynamic provider wiring for legacy monkeypatch compatibility. Preserved the POST /api/manage/user/pin route, compatibility exports, authorization behavior, DAO update, audit logging, and safe error handling. Added focused route inclusion, export, route order, and authorization short-circuit tests. Verification passed: compileall, focused users facade tests, import check, git diff --check, and full pytest suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a338f54` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
