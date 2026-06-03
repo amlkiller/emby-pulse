@@ -30,6 +30,7 @@ from app.domains.notifications import user_bot_open_reg_notify_service
 from app.domains.notifications import user_bot_password_commands_service
 from app.domains.notifications import user_bot_pk_callback_service
 from app.domains.notifications import user_bot_pk_invitation_commands_service
+from app.domains.notifications import user_bot_polling_service
 from app.domains.notifications import user_bot_points_commands_service
 from app.domains.notifications import user_bot_points_game_commands_service
 from app.domains.notifications import user_bot_registration_queue_service
@@ -563,6 +564,14 @@ user_bot_restriction_service.set_dependency_providers(
     check_user_in_chat_provider=lambda: _check_user_in_chat,
     logger_provider=lambda: logger,
     time_provider=lambda: time,
+)
+
+user_bot_polling_service.set_dependency_providers(
+    telegram_client_provider=lambda: telegram_client,
+    get_safe_proxies_provider=lambda: get_safe_proxies,
+    submit_task_provider=lambda: _submit_task,
+    send_provider=lambda: _send,
+    logger_provider=lambda: logger,
 )
 
 user_bot_scheduler_service.set_dependency_providers(
@@ -1150,36 +1159,15 @@ class UserBot:
         _tg_api("setMyCommands", {"commands": cmds})
 
     def _polling_loop(self):
-        token = get_user_bot_token()
-        while self.running and not self._stop_event.is_set():
-            try:
-                # 使用 long polling，timeout=30 秒
-                res = telegram_client.get_updates(token, params={"offset": self.offset, "timeout": 30}, proxies=get_safe_proxies(), timeout=35)
-                if res.status_code == 200:
-                    updates = res.json().get("result", [])
-                    for u in updates:
-                        self.offset = u["update_id"] + 1
-                        try:
-                            if "message" in u:
-                                # 使用线程池处理消息，支持排队
-                                if not _submit_task(self._on_message, u["message"]):
-                                    # 等待队列也满了，提示系统繁忙
-                                    chat_id = str(u["message"].get("chat", {}).get("id", ""))
-                                    if chat_id:
-                                        _send(chat_id, "⏳ 当前请求人数过多，请稍后再试...")
-                            elif "callback_query" in u:
-                                if not _submit_task(self._on_callback, u["callback_query"]):
-                                    # callback 队列满，静默忽略
-                                    pass
-                        except Exception as e:
-                            logger.error(f"[UserBot] 处理消息异常: {e}")
-                else:
-                    if self._stop_event.wait(3):
-                        return
-            except Exception as e:
-                logger.debug(f"[UserBot] polling 异常: {e}")
-                if self._stop_event.wait(5):
-                    return
+        return user_bot_polling_service.run_polling_loop(
+            get_user_bot_token(),
+            lambda: self.running,
+            self._stop_event,
+            lambda: self.offset,
+            lambda offset: setattr(self, "offset", offset),
+            lambda: self._on_message,
+            lambda: self._on_callback,
+        )
 
     def _scheduler_loop(self):
         return user_bot_scheduler_service.run_scheduler_loop(
