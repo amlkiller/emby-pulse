@@ -1589,3 +1589,36 @@ Extracted Telegram request approval menu callbacks req_reject_menu_* and req_bac
 ### Next Steps
 
 - None - task complete
+
+
+## Session 228: Extract notification bot request approval action service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot request approval action service
+**Branch**: `main`
+
+### Summary
+
+Extracted request approval action callback handling from notification bot service into a domain-local service with provider wiring and boundary tests. Verified compileall, focused tests, full tests, import check, and diff check before committing.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3eebc64` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
