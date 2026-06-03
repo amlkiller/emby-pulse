@@ -34,6 +34,7 @@ from app.domains.notifications import user_bot_registration_quota_service
 from app.domains.notifications import user_bot_request_commands_service
 from app.domains.notifications import user_bot_restriction_service
 from app.domains.notifications import user_bot_shop_commands_service
+from app.domains.notifications import user_bot_scratch_commands_service
 from app.domains.notifications import user_bot_service_info_commands_service
 from app.domains.notifications import user_bot_telegram_service
 from app.domains.notifications import user_bot_transfer_commands_service
@@ -352,6 +353,20 @@ user_bot_game_commands_service.set_dependency_providers(
     point_dao_provider=lambda: point_dao,
     datetime_provider=lambda: datetime,
     logger_provider=lambda: logger,
+)
+
+user_bot_scratch_commands_service.set_dependency_providers(
+    get_binding_provider=lambda: _get_binding,
+    send_provider=lambda: _send,
+    delete_messages_later_provider=lambda: _delete_messages_later,
+    tg_api_provider=lambda: _tg_api,
+    point_dao_provider=lambda: point_dao,
+    media_api_provider=lambda: media_api,
+    random_provider=lambda: random,
+    logger_provider=lambda: logger,
+    cmd_scratch_impl_provider=lambda: _cmd_scratch_impl,
+    update_scratch_message_provider=lambda: _update_scratch_message,
+    scratch_draw_result_provider=lambda: _scratch_draw_result,
 )
 
 user_bot_shop_commands_service.set_dependency_providers(
@@ -1546,269 +1561,37 @@ def cmd_lottery(chat_id, tg_user_id, text, is_group=False, user_msg_id=None):
     )
 
 def cmd_scratch(chat_id, tg_user_id, text, is_group=False, tg_name="", user_msg_id=None):
-    """刮刮乐"""
-    try:
-        return _cmd_scratch_impl(chat_id, tg_user_id, text, is_group, tg_name, user_msg_id)
-    except Exception as e:
-        logger.error(f"[刮刮乐] 命令执行失败: {e}")
-        _send(chat_id, f"❌ 刮刮乐出错：{str(e)}")
+    return user_bot_scratch_commands_service.cmd_scratch(
+        chat_id,
+        tg_user_id,
+        text,
+        is_group=is_group,
+        tg_name=tg_name,
+        user_msg_id=user_msg_id,
+    )
 
 
 def _cmd_scratch_impl(chat_id, tg_user_id, text, is_group=False, tg_name="", user_msg_id=None):
-    """刮刮乐(内部实现)"""
-    binding = _get_binding(tg_user_id)
-    if not binding:
-        return _send(chat_id, "❌ 请先私聊机器人绑定账号")
-    
-    config = point_dao.get_point_config()
-    
-    # 检查是否启用
-    if int(config.get('enable_scratch', 0)) == 0:
-        return _send(chat_id, "❌ 刮刮乐功能未开启")
-    
-    scratch_cost = int(config.get('scratch_cost', 100))
-    
-    parts = text.split()
-    
-    # 查看当前刮刮乐
-    if len(parts) == 1 or parts[1] in ['info', '当前']:
-        card = point_dao.get_active_scratch_card()
-        
-        if not card:
-            return _send(chat_id, "🎰 <b>刮刮乐</b>\n\n当前没有进行中的刮刮乐\n\n💡 发送 /scratch 开始 创建新刮刮乐")
-        
-        card_id = card["id"]
-        total_slots = card["total_slots"]
-        filled_slots = card["filled_slots"]
-        price = card["price"]
-        status = card["status"]
-        
-        # 获取格子状态
-        slots = point_dao.get_scratch_card_slots(card_id)
-        
-        # 🔥 显示可交互的按钮（已刮的显示✅，未刮的显示数字）
-        msg = f"🎰 <b>刮刮乐 #{card_id}</b>\n\n"
-        msg += f"💰 售价: {price} 积分/次\n"
-        msg += f"📊 进度: {filled_slots}/{total_slots} 已刮\n\n"
-        msg += f"⚠️ 点击下方按钮刮奖，每人只能刮一次！"
-        
-        # 构建按钮
-        buttons = []
-        for num, is_scratched, username in slots:
-            if is_scratched:
-                buttons.append({"text": f"{num}✅", "callback_data": f"scratch_done_{card_id}_{num}"})
-            else:
-                buttons.append({"text": str(num), "callback_data": f"scratch_{card_id}_{num}"})
-        
-        keyboard = []
-        for i in range(0, len(buttons), 3):
-            keyboard.append(buttons[i:i+3])
-        
-        return _send(chat_id, msg, reply_markup={"inline_keyboard": keyboard})
-    
-    # 创建刮刮乐
-    if parts[1] in ['start', '开始', 'create', '创建']:
-        # 检查仅管理员限制
-        if int(config.get('scratch_admin_only', 0)) == 1:
-            try:
-                user_info = media_api.get(f"/Users/{binding['emby_user_id']}", timeout=5).json()
-                is_admin = user_info.get('Policy', {}).get('IsAdministrator', False)
-            except:
-                is_admin = False
-            if not is_admin:
-                return _send(chat_id, "❌ 仅管理员可发起刮刮乐")
-        
-        total_slots = int(config.get('scratch_slots', 9))
-        price = scratch_cost
-        
-        # 获取大奖概率
-        big_prize_rate = float(config.get('scratch_big_prize_rate', 1)) / 100
-        medium_prize_rate = float(config.get('scratch_medium_prize_rate', 10)) / 100
-        
-        # 生成奖品池
-        prizes = []
-        for i in range(total_slots):
-            rand = random.random()
-            if rand < big_prize_rate:
-                prizes.append(random.choice([666, 888, 999]))
-            elif rand < big_prize_rate + medium_prize_rate:
-                prizes.append(random.randint(50, 200))
-            elif rand < big_prize_rate + medium_prize_rate + 0.3:
-                prizes.append(random.randint(10, 50))
-            else:
-                prizes.append(random.randint(1, 10))
-        
-        random.shuffle(prizes)
-        
-        display_name = tg_name or binding['emby_username']
-        create_result = point_dao.create_scratch_card(
-            total_slots=total_slots,
-            price=price,
-            created_by=display_name,
-            chat_id=chat_id,
-            prizes=prizes,
-        )
-        if create_result.get("status") != "success":
-            return _send(chat_id, f"❌ {create_result.get('message', '创建刮刮乐失败')}")
-        card_id = create_result["card_id"]
-        
-        # 构建消息
-        msg = f"🎰 <b>刮刮乐开始！</b>\n\n"
-        msg += f"👤 发起人: {display_name}\n"
-        msg += f"💰 售价: {price} 积分/次\n"
-        msg += f"🎯 共 {total_slots} 个格子\n\n"
-        msg += f"🏆 大奖: 666/888/999 积分\n"
-        msg += f"🎯 中奖: 50-200 积分\n"
-        msg += f"🎁 小奖: 10-50 积分\n"
-        msg += f"😅 保底: 1-10 积分\n\n"
-        msg += f"⚠️ 每人只能刮一次！"
-        
-        # 构建按钮
-        buttons = []
-        for i in range(1, total_slots + 1):
-            buttons.append({"text": str(i), "callback_data": f"scratch_{card_id}_{i}"})
-        
-        keyboard = []
-        for i in range(0, len(buttons), 3):
-            keyboard.append(buttons[i:i+3])
-        
-        result = _send(chat_id, msg, reply_markup={"inline_keyboard": keyboard})
-        
-        # 保存消息ID
-        if result and result.get('result', {}).get('message_id'):
-            point_dao.save_scratch_card_message_id(card_id, result['result']['message_id'])
-        
-        # 群聊中只删除用户命令消息（不删除刮刮乐消息，等刮完后再删）
-        if is_group and user_msg_id:
-            _delete_messages_later(chat_id, [user_msg_id], 15)
-        
-        return result
-    
-    return _send(chat_id, "💡 使用方法:\n/scratch - 查看当前刮刮乐\n/scratch 开始 - 创建新刮刮乐")
+    return user_bot_scratch_commands_service._cmd_scratch_impl(
+        chat_id,
+        tg_user_id,
+        text,
+        is_group=is_group,
+        tg_name=tg_name,
+        user_msg_id=user_msg_id,
+    )
 
 
 def _handle_scratch(chat_id, tg_user_id, card_id, slot_number, tg_name=""):
-    """处理刮刮乐点击"""
-    binding = _get_binding(tg_user_id)
-    if not binding:
-        return _send(chat_id, "❌ 请先私聊机器人绑定账号")
-    
-    try:
-        card = point_dao.get_scratch_card(card_id)
-        if not card:
-            return _send(chat_id, "❌ 刮刮乐不存在")
-        
-        if card["status"] != "active":
-            return _send(chat_id, "❌ 刮刮乐已结束")
-
-        display_name = tg_name or binding['emby_username']
-        update_result = point_dao.update_scratch_card_slot(
-            card_id,
-            slot_number,
-            binding['emby_user_id'],
-            binding['emby_username'],
-            card["price"],
-            display_name,
-        )
-        if update_result.get("status") != "success":
-            return _send(chat_id, f"❌ {update_result.get('message', '刮奖失败')}")
-
-        new_points = update_result["new_points"]
-        new_filled = update_result["new_filled"]
-        total_slots = update_result["total_slots"]
-        orig_chat_id = update_result["chat_id"]
-        orig_msg_id = update_result["message_id"]
-        is_last_one = new_filled >= total_slots
-        
-        # 编辑原消息，更新按钮状态
-        if orig_msg_id and orig_chat_id:
-            _update_scratch_message(orig_chat_id, orig_msg_id, card_id)
-        
-        if is_last_one:
-            # 全部刮完，开奖！
-            _scratch_draw_result(chat_id, card_id)
-        else:
-            # 未刮完，显示通知
-            _send(chat_id, f"✅ <b>{display_name} 刮开了格子 {slot_number}</b>\n\n📊 进度: {new_filled}/{total_slots} 已刮\n💳 余额: {new_points} 积分\n\n⏳ 等待其他 {total_slots - new_filled} 个格子被刮开...")
-        
-    except Exception as e:
-        logger.error(f"[刮刮乐] 刮奖失败: {e}")
-        _send(chat_id, f"❌ 刮奖失败：{str(e)}")
+    return user_bot_scratch_commands_service._handle_scratch(chat_id, tg_user_id, card_id, slot_number, tg_name=tg_name)
 
 
 def _update_scratch_message(chat_id, msg_id, card_id):
-    """更新刮刮乐消息的按钮状态"""
-    try:
-        card = point_dao.get_scratch_card(card_id)
-        status = card["status"] if card else "completed"
-        slots = point_dao.get_scratch_card_slots(card_id)
-        
-        # 构建按钮（已刮的显示 ✅，未刮的显示数字）
-        buttons = []
-        for num, is_scratched, username in slots:
-            if is_scratched or status == 'completed':
-                buttons.append({"text": f"{num}✅", "callback_data": f"scratch_done_{card_id}_{num}"})
-            else:
-                buttons.append({"text": str(num), "callback_data": f"scratch_{card_id}_{num}"})
-        
-        keyboard = []
-        for i in range(0, len(buttons), 3):
-            keyboard.append(buttons[i:i+3])
-        
-        _tg_api("editMessageReplyMarkup", {
-            "chat_id": chat_id,
-            "message_id": msg_id,
-            "reply_markup": {"inline_keyboard": keyboard}
-        })
-    except Exception as e:
-        logger.error(f"[刮刮乐] 更新消息失败: {e}")
+    return user_bot_scratch_commands_service._update_scratch_message(chat_id, msg_id, card_id)
 
 
 def _scratch_draw_result(chat_id, card_id):
-    """刮刮乐开奖"""
-    try:
-        slots = point_dao.complete_scratch_card(card_id)
-        if not slots:
-            logger.info(f"[刮刮乐] #{card_id} 已经开奖或不存在，跳过")
-            return
-        
-        summary = f"🎊 <b>刮刮乐 #{card_id} 开奖！</b>\n\n"
-        summary += f"📋 中奖明细:\n"
-        total_prize = 0
-        
-        for slot in slots:
-            num = slot["slot_number"]
-            prize = slot["prize_amount"]
-            user_id = slot["user_id"]
-            uname = slot["username"]
-            
-            if prize >= 666:
-                emoji = "🏆"
-            elif prize >= 50:
-                emoji = "🎉"
-            elif prize >= 10:
-                emoji = "🎁"
-            else:
-                emoji = "😅"
-            
-            summary += f"{num}. {emoji} {uname or '未知'}: {prize} 积分\n"
-            total_prize += prize
-        
-        summary += f"\n💰 总发放: {total_prize} 积分"
-        
-        # 🔥 刮刮乐结束，删除刮刮乐消息（群聊）
-        card_info = point_dao.get_scratch_card_origin(card_id)
-        if card_info:
-            orig_chat_id = card_info["chat_id"]
-            orig_msg_id = card_info["message_id"]
-            if orig_chat_id and orig_msg_id:
-                # 延迟15秒删除，让玩家看到结果
-                _delete_messages_later(int(orig_chat_id), [orig_msg_id], 15)
-        
-        _send(chat_id, summary)
-        
-    except Exception as e:
-        logger.error(f"[刮刮乐] 开奖失败: {e}")
+    return user_bot_scratch_commands_service._scratch_draw_result(chat_id, card_id)
 
 
 def cmd_shop(chat_id, tg_user_id, msg_id=None):
