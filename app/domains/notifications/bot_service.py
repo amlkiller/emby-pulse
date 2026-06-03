@@ -14,6 +14,7 @@ from app.domains.media_requests.public_service import remove_gap_from_scan_state
 from app.domains.users import user_bot_dao
 from app.domains.notifications import bot_service_dao, message_dao
 from app.domains.notifications import notification_bot_channel_service
+from app.domains.notifications import notification_bot_check_command_service
 from app.domains.notifications import notification_bot_delivery_service
 from app.domains.notifications import notification_bot_message_center_callback_service
 from app.domains.notifications import notification_bot_media_helper_service
@@ -140,6 +141,14 @@ notification_bot_whois_command_service.set_dependency_providers(
     user_bot_dao_provider=lambda: user_bot_dao,
     escape_html_provider=lambda: escape_html,
     logger_provider=lambda: logger,
+)
+
+notification_bot_check_command_service.set_dependency_providers(
+    media_api_provider=lambda: media_api,
+    network_client_provider=lambda: network_client,
+    media_server_public_url_provider=lambda: get_media_server_public_url,
+    logger_provider=lambda: logger,
+    time_provider=lambda: time,
 )
 
 def _submit_bot_task(fn, *args):
@@ -2166,66 +2175,7 @@ class NotificationBot:
             self.send_message(cid, f"❌ 查询失败", platform=platform)
 
     def _cmd_check(self, cid, platform):
-        start = time.time()
-        try:
-            res = media_api.get("/System/Info", timeout=5)
-            if res.status_code == 200:
-                info = res.json()
-                delay = int((time.time()-start)*1000)
-                version = info.get('Version', '未知')
-                os_name = info.get('OperatingSystem', '未知')
-                
-                movie_count = series_count = ep_count = 0
-                try:
-                    c_res = media_api.get("/Items/Counts", timeout=3).json()
-                    movie_count = c_res.get('MovieCount', 0)
-                    series_count = c_res.get('SeriesCount', 0)
-                    ep_count = c_res.get('EpisodeCount', 0)
-                except Exception: pass
-                
-                active_users = 0
-                try:
-                    s_res = media_api.get("/Sessions", timeout=3).json()
-                    active_users = len([s for s in s_res if s.get("NowPlayingItem")])
-                except Exception: pass
-
-                msg = (f"📡 <b>Emby 服务器状态探针</b>\n\n"
-                       f"🟢 <b>运行状态</b>：在线 (响应延迟: {delay}ms)\n"
-                       f"🏷️ <b>系统版本</b>：Emby Server {version}\n"
-                       f"💻 <b>宿主环境</b>：{os_name}\n\n"
-                       f"📊 <b>媒体库容量</b>\n"
-                       f"🎬 电影：{movie_count} 部\n"
-                       f"📺 剧集：{series_count} 部 (共 {ep_count} 集)\n\n"
-                       f"👥 <b>当前活跃</b>：{active_users} 人正在观看")
-
-                try:
-                    raw_url_str = get_media_server_public_url()
-                    routes = []
-                    try:
-                        parsed = json.loads(raw_url_str)
-                        if isinstance(parsed, list): routes = parsed
-                    except:
-                        if raw_url_str: routes = [{"name": "默认主线路", "url": raw_url_str}]
-
-                    if routes:
-                        msg += "\n\n🌐 <b>公网节点延迟测速</b>\n"
-                        for r in routes:
-                            r_name = r.get("name", "未命名线路")
-                            r_url = r.get("url", "").rstrip('/')
-                            if r_url:
-                                try:
-                                    r_start = time.time()
-                                    network_client.get(f"{r_url}/web/favicon.ico", timeout=3)
-                                    r_delay = int((time.time() - r_start) * 1000)
-                                    icon = "🟢" if r_delay < 100 else ("🟡" if r_delay < 300 else "🔴")
-                                    msg += f"{icon} {r_name}: {r_delay}ms\n"
-                                except:
-                                    msg += f"🔴 {r_name}: 超时/离线\n"
-                except Exception as e:
-                    logger.error(f"Route ping error in bot check: {e}")
-
-                self.send_message(cid, msg.strip(), platform=platform)
-        except: self.send_message(cid, "❌ 离线或无法连接到服务器", platform=platform)
+        return notification_bot_check_command_service.cmd_check(self, cid, platform)
 
     def _cmd_emby_restart(self, cid, text, platform):
         """Emby 服务器重启命令"""
