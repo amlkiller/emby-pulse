@@ -1490,3 +1490,36 @@ Extracted Telegram feed_* callback handling from notification bot into notificat
 ### Next Steps
 
 - None - task complete
+
+
+## Session 225: Extract notification bot risk ban callback service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot risk ban callback service
+**Branch**: `main`
+
+### Summary
+
+Extracted Telegram risk_ban_ callback handling from notification bot into notification_bot_risk_ban_callback_service, preserved lazy risk-service lookup, username lookup, Telegram edit behavior, and swallowed edit failures. Added focused boundary coverage and verified compile, import, diff check, focused test, and full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5ec1d75` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
