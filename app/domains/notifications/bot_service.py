@@ -20,6 +20,7 @@ from app.domains.notifications import notification_bot_delivery_service
 from app.domains.notifications import notification_bot_emby_restart_command_service
 from app.domains.notifications import notification_bot_info_command_service
 from app.domains.notifications import notification_bot_item_deleted_service
+from app.domains.notifications import notification_bot_library_new_item_service
 from app.domains.notifications import notification_bot_latest_command_service
 from app.domains.notifications import notification_bot_message_dispatch_service
 from app.domains.notifications import notification_bot_message_center_callback_service
@@ -246,6 +247,19 @@ notification_bot_item_deleted_service.set_dependency_providers(
     logger_provider=lambda: logger,
 )
 
+notification_bot_library_new_item_service.set_dependency_providers(
+    enable_library_notify_provider=lambda: get_enable_library_notify,
+    media_quality_info_provider=lambda: get_media_quality_info,
+    media_server_main_public_or_host_provider=lambda: get_media_server_main_public_or_host,
+    media_server_host_provider=lambda: get_media_server_host,
+    notify_channels_provider=lambda: get_notify_channels,
+    get_plugin_provider=lambda: get_plugin,
+    report_cover_url_provider=lambda: REPORT_COVER_URL,
+    datetime_provider=lambda: datetime,
+    re_provider=lambda: re,
+    logger_provider=lambda: logger,
+)
+
 def _submit_bot_task(fn, *args):
     if not _bot_executor_slots.acquire(blocking=False):
         logger.warning("[Bot] 后台任务队列已满，丢弃本次异步任务")
@@ -258,6 +272,11 @@ def get_notify_rule(rule_type):
     from app.domains.notifications.notify_admin import get_notify_rule as _get_notify_rule
 
     return _get_notify_rule(rule_type)
+
+def get_plugin(plugin_name):
+    from app.plugins import get_plugin as _get_plugin
+
+    return _get_plugin(plugin_name)
 
 def _ensure_request_admin_messages_table():
     return notification_bot_request_admin_message_sync_service.ensure_request_admin_messages_table()
@@ -932,76 +951,7 @@ class NotificationBot:
             self._notify_channels(tg_img, caption, keyboard, "episode", series_info)
 
     def on_library_new_item(self, item):
-        if not get_enable_library_notify():
-            return
-        
-        try:
-            name = item.get("Name", "未知")
-            year = item.get("ProductionYear", "")
-            rating = item.get("CommunityRating", "N/A")
-            
-            overview = str(item.get("Overview") or "")
-            overview = re.sub(r'<[^>]+>', '', overview).strip()
-            if not overview: overview = "暂无简介..."
-            if len(overview) > 150: overview = overview[:140] + "..."
-            
-            type_raw = item.get("Type")
-            type_cn = "电影"; type_icon = "🎬"
-            if type_raw in ["Series", "Episode"]: type_cn = "剧集"; type_icon = "📺"
-            
-            # 获取媒体质量信息
-            quality_info = get_media_quality_info(item.get('Id', ''))
-            
-            base_url = get_media_server_main_public_or_host() or get_media_server_host()
-            if base_url and not base_url.startswith(('http://', 'https://')):
-                base_url = 'https://' + base_url
-            play_url = f"{base_url}/web/index.html#!/item?id={item['Id']}&serverId={item.get('ServerId','')}"
-
-            # 尝试使用自定义通知模板
-            tpl_vars = {
-                "name": name, "type_icon": type_icon, "type_cn": type_cn,
-                "year": year, "rating": rating,
-                "time": datetime.datetime.now().strftime('%Y-%m-%d %H:%M'), "overview": overview,
-                # 🔥 新增质量字段
-                "quality": quality_info.get("quality", ""),
-                "quality_icon": quality_info.get("quality_icon", "🎬"),
-                "video_codec": quality_info.get("video_codec", ""),
-                "audio_codec": quality_info.get("audio_codec", ""),
-                "resolution": quality_info.get("resolution", ""),
-                "hdr": quality_info.get("hdr", "")
-            }
-            try:
-                from app.plugins import get_plugin
-                tpl_plugin = get_plugin("notify_template")
-                if tpl_plugin and tpl_plugin.enabled:
-                    caption = tpl_plugin.render("library_new_item", tpl_vars)
-                else:
-                    raise Exception("fallback")
-            except Exception as e:
-                logger.warning(f"[入库通知] 模板渲染失败，使用默认模板: {e}")
-                caption = (f"{type_icon} <b>新入库 {type_cn} {name}</b> ({year})\n\n⭐ 评分：{rating} / 10\n"
-                           f"🕒 时间：{datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n📝 <b>剧情简介：</b>\n{overview}")
-            
-            keyboard = None
-            if base_url and base_url.startswith(('http://', 'https://')):
-                keyboard = {"inline_keyboard": [[{"text": "▶️ 立即播放", "url": play_url}]]}
-            primary_io = self._download_emby_image(item['Id'], 'Primary')
-            backdrop_io = self._download_emby_image(item['Id'], 'Backdrop')
-            tg_img = backdrop_io or primary_io or REPORT_COVER_URL
-            wecom_img = backdrop_io or primary_io or REPORT_COVER_URL
-            
-            channels = get_notify_channels("library_new")
-            platform = "all" if "tg_bot" in channels and "wecom" in channels else \
-                       "tg" if "tg_bot" in channels else \
-                       "wecom" if "wecom" in channels else "none"
-            
-            if platform != "none":
-                self.send_photo("sys_notify", tg_img, caption, reply_markup=keyboard, platform=platform, wecom_photo_io=wecom_img)
-            
-            if "tg_channel" in channels:
-                self._notify_channels(tg_img, caption, keyboard, type_raw.lower() if type_raw else "movie", item)
-        except Exception as e:
-            logger.error(f"[入库通知] 处理失败: {e}")
+        return notification_bot_library_new_item_service.handle_library_new_item(self, item)
 
     def _notify_channels(self, photo_io, caption, keyboard, item_type, item_info):
         return notification_bot_channel_service.notify_channels(photo_io, caption, keyboard, item_type, item_info)
