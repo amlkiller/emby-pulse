@@ -1457,3 +1457,36 @@ Extracted optional plugin callback pre-dispatch from NotificationBot._handle_cal
 ### Next Steps
 
 - None - task complete
+
+
+## Session 224: Extract notification bot feedback callback service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot feedback callback service
+**Branch**: `main`
+
+### Summary
+
+Extracted Telegram feed_* callback handling from notification bot into notification_bot_feedback_callback_service, preserved legacy provider monkeypatch behavior, added boundary coverage for text/caption edits, unknown/no-op callbacks, and swallowed Telegram edit failures. Verified compile/import, focused test, full test suite, and diff check before commit.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6c97646` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
