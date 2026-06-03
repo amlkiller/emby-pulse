@@ -1952,3 +1952,36 @@ Extracted user bot scratch command and callback handling into a focused notifica
 ### Next Steps
 
 - None - task complete
+
+
+## Session 179: Refactor notification user bot PK invitation commands
+
+**Date**: 2026-06-03
+**Task**: Refactor notification user bot PK invitation commands
+**Branch**: `main`
+
+### Summary
+
+Extracted user bot PK invitation text command handling into a focused notification domain service while preserving legacy wrappers, late-bound dependency providers, target resolution, invite messages, and accept/reject behavior.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9505839` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
