@@ -236,3 +236,36 @@ Extracted the users audit log management endpoints into app/domains/users/audit_
 ### Next Steps
 
 - None - task complete
+
+
+## Session 127: Refactor users delete verification router
+
+**Date**: 2026-06-03
+**Task**: Refactor users delete verification router
+**Branch**: `main`
+
+### Summary
+
+Extracted users delete-verification/admin-password endpoints into app/domains/users/delete_verification_router.py, included child routers at the original route positions around the audit log routes, and preserved users.router compatibility exports including APP_START_TIME behavior. Verified compile/import route checks, focused users tests, git diff checks, and the full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7debb8d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
