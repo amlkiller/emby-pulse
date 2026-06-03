@@ -30,6 +30,7 @@ from app.domains.notifications import user_bot_points_commands_service
 from app.domains.notifications import user_bot_registration_queue_service
 from app.domains.notifications import user_bot_registration_quota_service
 from app.domains.notifications import user_bot_restriction_service
+from app.domains.notifications import user_bot_service_info_commands_service
 from app.domains.notifications import user_bot_telegram_service
 from app.domains.playback import stats_queries
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
@@ -364,6 +365,20 @@ user_bot_password_commands_service.set_dependency_providers(
     media_api_provider=lambda: media_api,
     user_bot_dao_provider=lambda: user_bot_dao,
     safe_error_message_provider=lambda: safe_error_message,
+    logger_provider=lambda: logger,
+)
+
+user_bot_service_info_commands_service.set_dependency_providers(
+    get_binding_provider=lambda: _get_binding,
+    check_emby_account_provider=lambda: _check_emby_account,
+    unbind_user_provider=lambda: _unbind_user,
+    reply_provider=lambda: _reply,
+    send_provider=lambda: _send,
+    main_menu_keyboard_provider=lambda: _main_menu_keyboard,
+    get_media_server_user_routes_provider=lambda: get_media_server_user_routes,
+    network_client_provider=lambda: network_client,
+    media_api_provider=lambda: media_api,
+    time_provider=lambda: time,
     logger_provider=lambda: logger,
 )
 
@@ -2642,89 +2657,14 @@ def cmd_password(chat_id, tg_user_id, args):
 
 
 def cmd_server(chat_id, tg_user_id, msg_id=None):
-    binding = _get_binding(tg_user_id)
-    
-    # 检查 Emby 账号是否仍然有效（如果有绑定）
-    if binding and not _check_emby_account(binding):
-        _unbind_user(tg_user_id)
-        _reply(chat_id, "⚠️ 你的 Emby 账号已被删除，绑定已自动解除。请联系管理员。", 
-               reply_markup=_main_menu_keyboard(None), msg_id=msg_id)
-        return
-    
-    emby_uid = binding.get("emby_user_id") if binding else None
-    try:
-        routes = get_media_server_user_routes(emby_uid)
-
-        if not routes:
-            _send(chat_id, "📡 管理员未配置公网地址")
-            return
-
-        msg = "📡 <b>服务器线路状态</b>\n\n"
-        for r in routes:
-            name = r.get("name", "未命名")
-            url = r.get("url", "").rstrip('/')
-            if url:
-                try:
-                    start = time.time()
-                    network_client.get(f"{url}/web/favicon.ico", timeout=3)
-                    delay = int((time.time() - start) * 1000)
-                    icon = "🟢" if delay < 100 else ("🟡" if delay < 300 else "🔴")
-                    msg += f"{icon} <b>{name}</b>：{delay}ms\n🔗 {url}\n\n"
-                except:
-                    msg += f"🔴 <b>{name}</b>：超时/离线\n🔗 {url}\n\n"
-        _reply(chat_id, msg.strip(), reply_markup={"inline_keyboard": [[{"text": "🔙 主菜单", "callback_data": "ub_back_menu"}]]}, msg_id=msg_id)
-    except:
-        _reply(chat_id, "❌ 查询失败", msg_id=msg_id)
+    return user_bot_service_info_commands_service.cmd_server(chat_id, tg_user_id, msg_id=msg_id)
 
 
 def cmd_library(chat_id, tg_user_id, msg_id=None):
-    binding = _get_binding(tg_user_id)
-    
-    # 未绑定用户也可以查看媒体库统计，不需要检查绑定状态
-    # 检查 Emby 账号是否仍然有效（如果有绑定）
-    if binding and not _check_emby_account(binding):
-        _unbind_user(tg_user_id)
-        _reply(chat_id, "⚠️ 你的 Emby 账号已被删除，绑定已自动解除。请联系管理员。", 
-               reply_markup=_main_menu_keyboard(None), msg_id=msg_id)
-        return
-    
-    try:
-        res = media_api.get("/Items/Counts", timeout=5)
-        if res.status_code == 200:
-            d = res.json()
-            _reply(chat_id, f"📊 <b>媒体库统计</b>\n\n"
-                  f"🎬 电影：<b>{d.get('MovieCount', 0)}</b> 部\n"
-                  f"📺 剧集：<b>{d.get('SeriesCount', 0)}</b> 部\n"
-                  f"🎞️ 总集数：<b>{d.get('EpisodeCount', 0)}</b> 集",
-                  reply_markup={"inline_keyboard": [[{"text": "🔙 主菜单", "callback_data": "ub_back_menu"}]]}, msg_id=msg_id)
-        else:
-            _send(chat_id, "❌ 无法获取媒体库信息")
-    except:
-        _send(chat_id, "❌ 连接服务器失败")
+    return user_bot_service_info_commands_service.cmd_library(chat_id, tg_user_id, msg_id=msg_id)
 
 def cmd_calendar(chat_id, tg_user_id, msg_id=None):
-    """今日剧集更新"""
-    binding = _get_binding(tg_user_id)
-    
-    # 检查 Emby 账号是否仍然有效（如果有绑定）
-    if binding and not _check_emby_account(binding):
-        _unbind_user(tg_user_id)
-        _reply(chat_id, "⚠️ 你的 Emby 账号已被删除，绑定已自动解除。请联系管理员。", 
-               reply_markup=_main_menu_keyboard(None), msg_id=msg_id)
-        return
-    
-    try:
-        from app.domains.notifications.calendar_notify import get_today_updates, format_notify_message
-        updates = get_today_updates()
-        message = format_notify_message(updates)
-        _reply(chat_id, message, 
-               reply_markup={"inline_keyboard": [[{"text": "🔙 主菜单", "callback_data": "ub_back_menu"}]]}, 
-               msg_id=msg_id)
-    except Exception as e:
-        logger.error(f"[calendar命令] 执行失败: {e}")
-        _reply(chat_id, "❌ 获取今日更新失败，请稍后重试", 
-               reply_markup={"inline_keyboard": [[{"text": "🔙 主菜单", "callback_data": "ub_back_menu"}]]}, 
-               msg_id=msg_id)
+    return user_bot_service_info_commands_service.cmd_calendar(chat_id, tg_user_id, msg_id=msg_id)
 
 
 def _is_pro():
