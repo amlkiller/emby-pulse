@@ -533,3 +533,36 @@ Extracted media request management and approval endpoints into app/domains/media
 ### Next Steps
 
 - None - task complete
+
+
+## Session 136: Refactor media requests registration router
+
+**Date**: 2026-06-03
+**Task**: Refactor media requests registration router
+**Branch**: `main`
+
+### Summary
+
+Extracted the media request registration endpoint into app/domains/media_requests/registration_router.py, included the child router from media_requests/router.py at the original route position, and preserved media_requests.router compatibility exports for the registration route, model, and helper. Verified compile/import route checks, git diff checks, focused media request boundary tests, and the full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `450fbc2` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
