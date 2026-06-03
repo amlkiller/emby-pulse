@@ -1,6 +1,5 @@
 import json
 import re
-from datetime import date
 from fastapi import APIRouter, Request, Depends, BackgroundTasks
 from app.domains.media_requests import community_cache_service
 from app.domains.media_requests.auth_router import (
@@ -19,6 +18,19 @@ from app.domains.media_requests.cache_control_router import (
     start_community_cache_refresh_loop,
     start_media_request_services,
     stop_community_cache_refresh_loop,
+)
+from app.domains.media_requests.discovery_router import (
+    check_emby_exists,
+    check_local_status,
+    get_emby_admin,
+    get_hub_data,
+    get_item_info,
+    get_tmdb_season_info,
+    get_tmdb_trending,
+    get_tv_details,
+    router as discovery_router,
+    search_tmdb,
+    set_dependency_providers as set_discovery_dependency_providers,
 )
 from app.domains.media_requests.feedback_router import (
     BulkFeedbackActionModel,
@@ -172,6 +184,23 @@ set_feedback_dependency_providers(
 )
 
 
+set_discovery_dependency_providers(
+    user_service_provider=lambda: user_service,
+    media_api_provider=lambda: media_api,
+    tmdb_client_provider=lambda: tmdb_client,
+    check_user_exists_provider=lambda: _check_user_exists,
+    get_emby_admin_provider=lambda: get_emby_admin,
+    check_emby_exists_provider=lambda: check_emby_exists,
+    get_cache_provider=lambda: _get_cache,
+    set_cache_provider=lambda: _set_cache,
+    cache_ttl_hub_provider=lambda: COMMUNITY_CACHE_TTL_HUB,
+    main_server_url_provider=lambda: get_media_server_main_public_or_host,
+    safe_proxies_provider=lambda: get_safe_proxies,
+    safe_error_message_provider=lambda: safe_error_message,
+    logger_provider=lambda: logger,
+)
+
+
 set_safe_media_dependency_providers(
     media_api_provider=lambda: media_api,
     playback_stats_provider=lambda: playback_stats,
@@ -194,61 +223,6 @@ set_cache_control_dependency_providers(
     user_service_provider=lambda: user_service,
 )
 
-def get_tmdb_season_info(tmdb_id: int, season: int) -> tuple:
-    """获取 TMDB 季信息（总集数、未播出集数）
-    
-    Returns:
-        (total_episodes, unaired_episodes)
-    """
-    if not tmdb_id or not season:
-        return 0, []
-    try:
-        if not tmdb_client.api_key:
-            return 0, []
-        proxies = get_safe_proxies()
-        season_data = tmdb_client.get_tv_season(tmdb_id, season, proxies=proxies, timeout=8).json()
-        episodes = season_data.get("episodes", [])
-        total = len(episodes)
-        
-        # 计算未播出的集数
-        today = date.today().strftime("%Y-%m-%d")
-        unaired_eps = []
-        for ep in episodes:
-            ep_num = ep.get("episode_number", 0)
-            air_date = ep.get("air_date", "")
-            if air_date and air_date > today:
-                unaired_eps.append(ep_num)
-        
-        return total, unaired_eps
-    except:
-        return 0, []
-
-def get_emby_admin():
-    try:
-        users = media_api.get("/Users", timeout=5).json()
-        for u in users:
-            if u.get("Policy", {}).get("IsAdministrator"): return u['Id']
-        return users[0]['Id'] if users else None
-    except: return None
-
-def check_emby_exists(tmdb_id, media_type, season=0):
-    if not media_api.host or not media_api.api_key: return False
-    try:
-        admin_id = get_emby_admin()
-        if not admin_id: return False
-        type_filter = "Movie" if media_type == "movie" else "Series"
-        res = media_api.get(f"/Users/{admin_id}/Items", params={
-            "AnyProviderIdEquals": f"tmdb.{tmdb_id}",
-            "IncludeItemTypes": type_filter,
-            "Recursive": "true",
-        }, timeout=5).json()
-        if not res.get("Items"): return False
-        if media_type == "movie": return True
-        sid = res["Items"][0]["Id"]
-        s_res = media_api.get(f"/Shows/{sid}/Seasons", params={"UserId": admin_id}, timeout=5).json()
-        local_seasons = [s.get("IndexNumber") for s in s_res.get("Items", [])]
-        return season in local_seasons
-    except: return False
 
 class MediaRequestSubmitModel(BaseSubmitModel):
     seasons: List[int] = [0] 
@@ -267,209 +241,7 @@ class BulkAdminActionModel(BaseModel):
 
 router.include_router(auth_router)
 
-@router.get("/api/requests/item_info")
-def get_item_info(item_id: str, request: Request):
-    # 🔒 安全检查：管理员或已绑定 Emby 的报片用户
-    if not (user_service.is_admin_user(request) or request.session.get("req_user")):
-        return {"status": "error", "message": "请先登录"}
-    try:
-        admin_id = get_emby_admin()
-        if not admin_id: return {"status": "error"}
-        
-        res = media_api.get(f"/Users/{admin_id}/Items/{item_id}", timeout=5)
-        if res.status_code == 200:
-            d = res.json()
-            return {"status": "success", "data": {
-                "Id": d.get("Id"),
-                "Name": d.get("Name", "未知"),
-                "Type": d.get("Type", ""),
-                "ProductionYear": d.get("ProductionYear", ""),
-                "CommunityRating": d.get("CommunityRating", "N/A"),
-                "Overview": d.get("Overview", ""),
-                "Genres": d.get("Genres", [])
-            }}
-        return {"status": "error"}
-    except Exception as e: 
-        return {"status": "error"}
-
-@router.get("/api/requests/hub_data")
-def get_hub_data(request: Request):
-    user = request.session.get("req_user")
-    if not user: return {"status": "error"}
-    
-    # 🔥 尝试从缓存获取（hub_data 是全局数据，不依赖用户）
-    cache_key = "hub_data"
-    cached = _get_cache(cache_key)
-    if cached:
-        return {"status": "success", "data": cached, "from_cache": True}
-    
-    host = get_media_server_main_public_or_host()
-    uid = user['Id']
-    
-    top_rated = []; genres_data = []
-    try:
-        import random 
-        # 🔥 使用 /Items API 而不是 /Users/{uid}/Items
-        tr_res = media_api.get("/Items", params={
-            "IncludeItemTypes": "Movie,Series",
-            "Recursive": "true",
-            "SortBy": "CommunityRating",
-            "SortOrder": "Descending",
-            "Limit": 100,
-            "Fields": "CommunityRating",
-        }, timeout=5).json()
-        logger.debug(f"[hub_data] 镇站之宝返回: {len(tr_res.get('Items', []))} 条")
-        
-        valid_items = []
-        for i in tr_res.get("Items", []):
-            rating = i.get("CommunityRating", 0)
-            if 8.0 <= rating <= 9.8:
-                valid_items.append({
-                    "Id": i.get("Id"), "Name": i.get("Name"), "Type": i.get("Type"),
-                    "CommunityRating": rating
-                })
-                
-        random.shuffle(valid_items)
-        top_rated = valid_items[:10]
-        logger.debug(f"[hub_data] 镇站之宝筛选后: {len(top_rated)} 条")
-                
-        # 🔥 使用 /Items API
-        g_res = media_api.get("/Items", params={
-            "IncludeItemTypes": "Movie,Series",
-            "Recursive": "true",
-            "SortBy": "DateCreated",
-            "SortOrder": "Descending",
-            "Limit": 200,
-            "Fields": "Genres",
-        }, timeout=5).json()
-        logger.debug(f"[hub_data] 流派分析返回: {len(g_res.get('Items', []))} 条")
-        genre_counts = {}
-        total_items = 0
-        for i in g_res.get("Items", []):
-            gs = i.get("Genres", [])
-            if gs:
-                total_items += 1
-                for g in gs: genre_counts[g] = genre_counts.get(g, 0) + 1
-        
-        if total_items > 0:
-            sorted_genres = sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:6] 
-            for k, v in sorted_genres:
-                genres_data.append({"name": k, "count": v, "pct": round(v / total_items * 100)})
-        logger.debug(f"[hub_data] 流派分析结果: {len(genres_data)} 种")
-    except Exception as e: 
-        logger.error(f"[hub_data] 获取失败: {e}")
-    
-    # 🔥 存入缓存
-    result_data = {"top_rated": top_rated, "genres": genres_data}
-    _set_cache(cache_key, result_data, COMMUNITY_CACHE_TTL_HUB)
-    
-    return {"status": "success", "data": result_data}
-
-@router.get("/api/requests/search")
-def search_tmdb(query: str, request: Request):
-    user = request.session.get("req_user")
-    if not user:
-        return {"status": "error", "message": "未登录"}
-    
-    # 检查 Emby 账号是否仍然存在
-    if not _check_user_exists(user.get("Id")):
-        request.session.pop("req_user", None)
-        return {"status": "error", "message": "账号已被删除", "account_deleted": True}
-    
-    proxies = get_safe_proxies()
-    try:
-        res = tmdb_client.search_multi(query, proxies=proxies, timeout=10).json()
-        results = []
-        for i in res.get("results", []):
-            if i.get("media_type") in ["movie", "tv"]:
-                results.append({"tmdb_id": i['id'], "media_type": i['media_type'], "title": i.get('title') or i.get('name'), "year": (i.get('release_date') or i.get('first_air_date') or "")[:4], "poster_path": f"https://image.tmdb.org/t/p/w500{i['poster_path']}" if i.get('poster_path') else "", "overview": i.get('overview', ''), "vote_average": round(i.get('vote_average', 0), 1), "local_status": -1})
-        return {"status": "success", "data": results}
-    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
-
-@router.get("/api/requests/trending")
-def get_tmdb_trending(request: Request):
-    user = request.session.get("req_user")
-    if not user:
-        return {"status": "error", "message": "未登录"}
-    
-    # 检查 Emby 账号是否仍然存在
-    if not _check_user_exists(user.get("Id")):
-        request.session.pop("req_user", None)
-        return {"status": "error", "message": "账号已被删除", "account_deleted": True}
-    
-    proxies = get_safe_proxies()
-    try:
-        results = []
-        for page in [1, 2]:
-            res = tmdb_client.get_trending(media_type="all", time_window="week", page=page, proxies=proxies, timeout=10).json()
-            for i in res.get("results", []):
-                if i.get("media_type") in ["movie", "tv"] and i.get("poster_path"):
-                    results.append({
-                        "tmdb_id": i['id'], 
-                        "media_type": i['media_type'], 
-                        "title": i.get('title') or i.get('name'), 
-                        "year": (i.get('release_date') or i.get('first_air_date') or "")[:4], 
-                        "poster_path": f"https://image.tmdb.org/t/p/w500{i['poster_path']}", 
-                        "overview": i.get('overview', ''), 
-                        "vote_average": round(i.get('vote_average', 0), 1), 
-                        "local_status": -1
-                    })
-        return {"status": "success", "data": results}
-    except Exception as e: 
-        return {"status": "error", "message": safe_error_message(e)}
-
-@router.get("/api/requests/tv/{tmdb_id}")
-def get_tv_details(tmdb_id: int, request: Request):
-    # 🔒 安全检查：管理员或已绑定 Emby 的报片用户
-    if not (user_service.is_admin_user(request) or request.session.get("req_user")):
-        return {"status": "error", "message": "请先登录"}
-    proxies = get_safe_proxies()
-    try:
-        local_seasons_map = {} 
-        
-        admin_id = get_emby_admin()
-        if admin_id:
-            s_res = media_api.get(f"/Users/{admin_id}/Items", params={
-                "AnyProviderIdEquals": f"tmdb.{tmdb_id}",
-                "IncludeItemTypes": "Series",
-                "Recursive": "true",
-            }, timeout=5).json()
-            if s_res.get("Items"):
-                sid = s_res["Items"][0]["Id"]
-                ep_res = media_api.get(f"/Users/{admin_id}/Items", params={
-                    "ParentId": sid,
-                    "IncludeItemTypes": "Episode",
-                    "Recursive": "true",
-                    "Fields": "ParentIndexNumber",
-                }, timeout=5).json()
-                for ep in ep_res.get("Items", []):
-                    sn = ep.get("ParentIndexNumber")
-                    if sn is not None:
-                        local_seasons_map[sn] = local_seasons_map.get(sn, 0) + 1
-
-        tmdb_res = tmdb_client.get_tv_details(tmdb_id, proxies=proxies, timeout=10).json()
-        seasons = []
-        for s in tmdb_res.get("seasons", []):
-            if s["season_number"] > 0: 
-                sn = s["season_number"]
-                seasons.append({
-                    "season_number": sn, 
-                    "name": s["name"], 
-                    "episode_count": s["episode_count"],
-                    "exists_locally": sn in local_seasons_map,
-                    "local_ep_count": local_seasons_map.get(sn, 0)
-                })
-        return {"status": "success", "seasons": seasons}
-    except Exception as e: 
-        return {"status": "error", "message": safe_error_message(e)}
-
-@router.get("/api/requests/check/{media_type}/{tmdb_id}")
-def check_local_status(media_type: str, tmdb_id: int, request: Request):
-    # 🔒 安全检查：管理员或已绑定 Emby 的报片用户
-    if not (user_service.is_admin_user(request) or request.session.get("req_user")):
-        return {"status": "error", "message": "请先登录"}
-    exists = check_emby_exists(tmdb_id, media_type)
-    return {"status": "success", "exists": exists}
+router.include_router(discovery_router)
 
 @router.post("/api/requests/submit")
 async def submit_media_request(request: Request):

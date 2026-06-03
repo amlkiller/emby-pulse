@@ -64,6 +64,65 @@ def test_media_requests_router_includes_auth_child_routes_and_compat_exports():
     assert auth_index < check_index < logout_index < item_info_index
 
 
+def test_media_requests_router_includes_discovery_child_routes_and_compat_exports():
+    from app.domains.media_requests import discovery_router
+    from app.domains.media_requests import router as media_requests_router
+
+    routes = [
+        (route.path, route.methods)
+        for route in media_requests_router.router.routes
+        if hasattr(route, "methods")
+    ]
+
+    assert any(path == "/api/requests/item_info" and "GET" in methods for path, methods in routes)
+    assert any(path == "/api/requests/hub_data" and "GET" in methods for path, methods in routes)
+    assert any(path == "/api/requests/search" and "GET" in methods for path, methods in routes)
+    assert any(path == "/api/requests/trending" and "GET" in methods for path, methods in routes)
+    assert any(path == "/api/requests/tv/{tmdb_id}" and "GET" in methods for path, methods in routes)
+    assert any(
+        path == "/api/requests/check/{media_type}/{tmdb_id}" and "GET" in methods
+        for path, methods in routes
+    )
+    assert media_requests_router.get_tmdb_season_info is discovery_router.get_tmdb_season_info
+    assert media_requests_router.get_emby_admin is discovery_router.get_emby_admin
+    assert media_requests_router.check_emby_exists is discovery_router.check_emby_exists
+    assert media_requests_router.get_item_info is discovery_router.get_item_info
+    assert media_requests_router.get_hub_data is discovery_router.get_hub_data
+    assert media_requests_router.search_tmdb is discovery_router.search_tmdb
+    assert media_requests_router.get_tmdb_trending is discovery_router.get_tmdb_trending
+    assert media_requests_router.get_tv_details is discovery_router.get_tv_details
+    assert media_requests_router.check_local_status is discovery_router.check_local_status
+
+    logout_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/requests/logout" and "POST" in methods
+    )
+    item_info_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/requests/item_info" and "GET" in methods
+    )
+    hub_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/requests/hub_data" and "GET" in methods
+    )
+    search_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/requests/search" and "GET" in methods
+    )
+    trending_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/requests/trending" and "GET" in methods
+    )
+    tv_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/requests/tv/{tmdb_id}" and "GET" in methods
+    )
+    check_index = next(
+        i
+        for i, (path, methods) in enumerate(routes)
+        if path == "/api/requests/check/{media_type}/{tmdb_id}" and "GET" in methods
+    )
+    submit_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/requests/submit" and "POST" in methods
+    )
+    assert logout_index < item_info_index < hub_index < search_index < trending_index
+    assert trending_index < tv_index < check_index < submit_index
+
+
 def test_media_requests_router_includes_feedback_child_routes_and_compat_exports():
     from app.domains.media_requests import feedback_router
     from app.domains.media_requests import router as media_requests_router
