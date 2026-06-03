@@ -71,3 +71,36 @@ Extracted the direct dice PK user bot command into a focused notification domain
 ### Next Steps
 
 - None - task complete
+
+
+## Session 182: Refactor notification user bot code registration
+
+**Date**: 2026-06-03
+**Task**: Refactor notification user bot code registration
+**Branch**: `main`
+
+### Summary
+
+Extracted invitation-code account creation from user_bot_service into the focused code command service while preserving the legacy _do_code_register wrapper, late-bound dependency providers, queue behavior, Emby side effects, invitation rollback/finalization, binding, notifications, and safe-error handling.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `41b3a3f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
