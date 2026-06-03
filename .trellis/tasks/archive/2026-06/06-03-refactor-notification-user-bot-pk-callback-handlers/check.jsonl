@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend spec entrypoint for verification."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Check that the extraction follows domain-local module guidance."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Check uv-based compile/import/test verification requirements."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Check error behavior was preserved."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Check logger behavior remains compatible."}
