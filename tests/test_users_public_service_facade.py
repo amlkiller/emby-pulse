@@ -125,6 +125,7 @@ def test_users_router_includes_child_routes_and_compat_exports():
     assert any(path == "/api/manage/user/pin" and "POST" in methods for path, methods in routes)
     assert any(path == "/api/manage/user/{user_id}" and "GET" in methods for path, methods in routes)
     assert any(path == "/api/manage/user/{user_id}" and "DELETE" in methods for path, methods in routes)
+    assert any(path == "/api/manage/user/new" and "POST" in methods for path, methods in routes)
 
     from app.domains.users import avatar_router
     from app.domains.users import audit_log_router
@@ -133,6 +134,7 @@ def test_users_router_includes_child_routes_and_compat_exports():
     from app.domains.users import invitation_router
     from app.domains.users import libraries_router
     from app.domains.users import library_visibility_router
+    from app.domains.users import new_user_router
     from app.domains.users import pin_router
     from app.domains.users import self_password_router
     from app.domains.users import single_user_router
@@ -162,6 +164,8 @@ def test_users_router_includes_child_routes_and_compat_exports():
     assert router.HiddenLibrariesModel is library_visibility_router.HiddenLibrariesModel
     assert router.api_get_user_libraries is library_visibility_router.api_get_user_libraries
     assert router.api_update_hidden_libraries is library_visibility_router.api_update_hidden_libraries
+    assert router.NewUserModelEx is new_user_router.NewUserModelEx
+    assert router.api_manage_user_new is new_user_router.api_manage_user_new
     assert router.api_manage_user_delete is delete_router.api_manage_user_delete
     assert router.PinUserModel is pin_router.PinUserModel
     assert router.api_pin_user is pin_router.api_pin_user
@@ -227,6 +231,9 @@ def test_users_router_includes_child_routes_and_compat_exports():
     library_index = next(
         i for i, (path, methods) in enumerate(routes) if path == "/api/manage/user/library" and "POST" in methods
     )
+    new_user_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/manage/user/new" and "POST" in methods
+    )
     batch_index = next(
         i for i, (path, methods) in enumerate(routes) if path == "/api/manage/users/batch" and "POST" in methods
     )
@@ -234,8 +241,167 @@ def test_users_router_includes_child_routes_and_compat_exports():
     assert avatar_image_index < avatar_update_index < self_avatar_index < password_index
     assert manage_libraries_index < manage_users_index < single_user_index
     assert verify_index < user_libraries_index < hidden_libraries_index < invitation_index < library_index
-    assert single_user_index < delete_user_index < batch_index
+    assert library_index < new_user_index < delete_user_index < batch_index
     assert template_index < pin_index < users_list_index
+
+
+def test_new_user_denies_non_admin_before_media_or_cache(monkeypatch):
+    from app.domains.users import router
+
+    request = SimpleNamespace(session={"user": {"id": "user-1", "role": "viewer"}})
+
+    class MediaApiMustNotRun:
+        def health_check(self):
+            raise AssertionError("media_api.health_check should not run before admin authorization")
+
+        def post(self, *_args, **_kwargs):
+            raise AssertionError("media_api.post should not run before admin authorization")
+
+    monkeypatch.setattr(router, "is_admin_user", lambda _request: False)
+    monkeypatch.setattr(router, "media_api", MediaApiMustNotRun())
+    monkeypatch.setattr(
+        router.user_service,
+        "invalidate_emby_users_cache",
+        lambda: (_ for _ in ()).throw(AssertionError("cache invalidation should not run before admin authorization")),
+    )
+
+    result = router.api_manage_user_new(router.NewUserModelEx(name="Alice"), request)
+
+    assert result == {"status": "error", "message": "需要管理员权限"}
+
+
+def test_new_user_rejects_unhealthy_media_before_cache_or_create(monkeypatch):
+    from app.domains.users import router
+
+    request = SimpleNamespace(session={"user": {"id": "admin-1", "role": "admin"}})
+
+    class MediaApi:
+        def health_check(self):
+            return False
+
+        def post(self, *_args, **_kwargs):
+            raise AssertionError("media_api.post should not run when health check fails")
+
+    monkeypatch.setattr(router, "is_admin_user", lambda _request: True)
+    monkeypatch.setattr(router, "media_api", MediaApi())
+    monkeypatch.setattr(
+        router.user_service,
+        "invalidate_emby_users_cache",
+        lambda: (_ for _ in ()).throw(AssertionError("cache invalidation should not run when health check fails")),
+    )
+
+    result = router.api_manage_user_new(router.NewUserModelEx(name="Alice"), request)
+
+    assert result == {"status": "error", "message": "Emby 服务不可用，请稍后重试"}
+
+
+def test_new_user_preserves_success_mapping_and_legacy_providers(monkeypatch):
+    from app.domains.users import router
+
+    calls = []
+    request = SimpleNamespace(session={"user": {"id": "admin-1", "name": "Admin User"}})
+
+    class Response:
+        def __init__(self, status_code=200, payload=None, text=""):
+            self.status_code = status_code
+            self._payload = payload or {}
+            self.text = text
+
+        def json(self):
+            return self._payload
+
+    class MediaApi:
+        def health_check(self):
+            calls.append(("health_check",))
+            return True
+
+        def post(self, path, **kwargs):
+            calls.append(("post", path, kwargs))
+            if path == "/Users/New":
+                return Response(200, {"Id": "new-1"})
+            return Response(204)
+
+        def get(self, path, timeout=None):
+            calls.append(("get", path, timeout))
+            if path == "/Users/new-1":
+                return Response(200, {"Policy": {"Existing": True}})
+            if path == "/Users/template-1":
+                return Response(200, {"Policy": {"Template": True}})
+            raise AssertionError(f"unexpected media_api.get path: {path}")
+
+    class UserDao:
+        def create_user_meta(self, *args):
+            calls.append(("create_user_meta", args))
+
+    def fake_clone_policy(target_policy, src_policy, copy_library, copy_policy, copy_parental):
+        calls.append(("clone_policy", target_policy.copy(), src_policy.copy(), copy_library, copy_policy, copy_parental))
+        merged = target_policy.copy()
+        merged.update(src_policy)
+        merged["cloned"] = True
+        return merged
+
+    monkeypatch.setattr(router, "is_admin_user", lambda _request: True)
+    monkeypatch.setattr(router, "media_api", MediaApi())
+    monkeypatch.setattr(router, "user_dao", UserDao())
+    monkeypatch.setattr(router.user_service, "invalidate_emby_users_cache", lambda: calls.append(("invalidate_cache",)))
+    monkeypatch.setattr(router, "get_default_user_template_id", lambda: "template-1")
+    monkeypatch.setattr(router, "clone_policy", fake_clone_policy)
+    monkeypatch.setattr(router, "get_client_ip", lambda _request: "127.0.0.1")
+    monkeypatch.setattr(router, "add_audit_log", lambda **kwargs: calls.append(("add_audit_log", kwargs)))
+    monkeypatch.setattr(
+        router,
+        "datetime",
+        SimpleNamespace(datetime=SimpleNamespace(now=lambda: SimpleNamespace(isoformat=lambda: "2026-06-04T00:00:00"))),
+    )
+
+    result = router.api_manage_user_new(
+        router.NewUserModelEx(
+            name="Alice",
+            password="secret",
+            expire_date="2026-12-31",
+            max_concurrent=2,
+            is_vip=True,
+            remark="note",
+            allow_routes="r1",
+            block_routes="r2",
+            req_free=1,
+            req_free_count=3,
+        ),
+        request,
+    )
+
+    assert result == {"status": "success", "message": "用户创建成功"}
+    assert ("invalidate_cache",) in calls
+    assert ("clone_policy", {"Existing": True}, {"Template": True}, True, True, True) in calls
+    assert (
+        "create_user_meta",
+        (
+            "new-1",
+            "2026-12-31",
+            2,
+            1,
+            "note",
+            "r1",
+            "r2",
+            1,
+            3,
+            "2026-06-04T00:00:00",
+        ),
+    ) in calls
+    assert (
+        "add_audit_log",
+        {
+            "admin_id": "admin-1",
+            "admin_name": "Admin User",
+            "action": "创建用户",
+            "target_user_id": "new-1",
+            "target_user_name": "Alice",
+            "ip_address": "127.0.0.1",
+        },
+    ) in calls
+
+    policy_posts = [call for call in calls if call[0] == "post" and call[1] == "/Users/new-1/Policy"]
+    assert policy_posts == [("post", "/Users/new-1/Policy", {"json": {"Existing": True, "Template": True, "cloned": True}})]
 
 
 def test_delete_user_denies_missing_login_before_side_effects(monkeypatch):
