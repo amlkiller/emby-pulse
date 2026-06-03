@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-3.md`
-- **Total Sessions**: 129
+- **Total Sessions**: 130
 - **Last Active**: 2026-06-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-3.md` | ~337 | Active |
+| `journal-3.md` | ~370 | Active |
 | `journal-2.md` | ~1993 | Archived |
 | `journal-1.md` | ~1973 | Archived |
 <!-- @@@/auto:active-documents -->
@@ -31,6 +31,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 130 | 2026-06-03 | Refactor media requests auth router | `b7491d7` | `main` |
 | 129 | 2026-06-03 | Refactor users library visibility router | `58e2c02` | `main` |
 | 128 | 2026-06-03 | Refactor users invitation router | `c8d8de2` | `main` |
 | 127 | 2026-06-03 | Refactor users delete verification router | `7debb8d` | `main` |

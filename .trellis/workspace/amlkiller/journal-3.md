@@ -335,3 +335,36 @@ Extracted C-side users library visibility endpoints into app/domains/users/libra
 ### Next Steps
 
 - None - task complete
+
+
+## Session 130: Refactor media requests auth router
+
+**Date**: 2026-06-03
+**Task**: Refactor media requests auth router
+**Branch**: `main`
+
+### Summary
+
+Extracted user community authentication endpoints into app/domains/media_requests/auth_router.py, included the child router from media_requests/router.py at the original route position, and preserved media_requests.router compatibility exports for direct callers and monkeypatch-based tests. Verified compile/import route checks, git diff checks, focused media request tests, and the full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b7491d7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
