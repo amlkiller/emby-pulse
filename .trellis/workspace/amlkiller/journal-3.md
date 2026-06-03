@@ -1160,3 +1160,36 @@ Extracted the playback stats preload_status endpoint into app/domains/playback/p
 ### Next Steps
 
 - None - task complete
+
+
+## Session 155: Refactor playback stats dashboard init router
+
+**Date**: 2026-06-03
+**Task**: Refactor playback stats dashboard init router
+**Branch**: `main`
+
+### Summary
+
+Extracted GET /api/dashboard/init from app/domains/playback/stats.py into app/domains/playback/dashboard_init_router.py, preserving route order, admin auth, cache hit/miss, timeout stale-cache fallback, UserId stripping, and stats.py compatibility provider monkeypatches. Verified with compileall, import check, focused facade tests, git diff --check, and full tests/ suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f14256f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
