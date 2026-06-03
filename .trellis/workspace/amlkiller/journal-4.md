@@ -566,3 +566,36 @@ Extracted NotificationBot /whois command validation, expire-date formatting, res
 ### Next Steps
 
 - None - task complete
+
+
+## Session 197: Extract notification bot check command service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot check command service
+**Branch**: `main`
+
+### Summary
+
+Extracted NotificationBot /check server status probe command into notification_bot_check_command_service with lazy legacy providers; kept the old _cmd_check wrapper and added boundary tests for online status formatting, JSON and plain public route latency parsing, route failures, route config logging, offline fallback, and legacy monkeypatch compatibility.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0843949` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
