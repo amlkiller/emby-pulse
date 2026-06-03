@@ -1523,3 +1523,36 @@ Extracted the active open-registration closed notification helper into a focused
 ### Next Steps
 
 - None - task complete
+
+
+## Session 166: Refactor notification user bot basic command service
+
+**Date**: 2026-06-03
+**Task**: Refactor notification user bot basic command service
+**Branch**: `main`
+
+### Summary
+
+Extracted the basic user bot command handlers for start, help, bind, and register into a focused notification service while preserving legacy wrappers, message text, media authentication behavior, user state mutation, safe error handling, and monkeypatch-compatible providers.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a40cabf` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
