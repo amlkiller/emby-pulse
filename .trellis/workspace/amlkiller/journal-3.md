@@ -170,3 +170,36 @@ Extracted users default-template management routes into app/domains/users/templa
 ### Next Steps
 
 - None - task complete
+
+
+## Session 125: Refactor users list router
+
+**Date**: 2026-06-03
+**Task**: Refactor users list router
+**Branch**: `main`
+
+### Summary
+
+Extracted the standalone users list route into app/domains/users/list_router.py, included the child router from users/router.py at the original route position, and preserved users.router compatibility export. Verified compile/import route checks, focused users router/public-service tests, and the full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `37d2d4b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
