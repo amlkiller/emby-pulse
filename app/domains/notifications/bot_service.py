@@ -13,6 +13,7 @@ from app.domains.media_requests import gap_dao, media_request_dao
 from app.domains.media_requests.public_service import remove_gap_from_scan_state
 from app.domains.users import user_bot_dao
 from app.domains.notifications import bot_service_dao, message_dao
+from app.domains.notifications import notification_bot_auto_finish_request_service
 from app.domains.notifications import notification_bot_channel_service
 from app.domains.notifications import notification_bot_check_command_service
 from app.domains.notifications import notification_bot_command_registration_service
@@ -303,6 +304,12 @@ notification_bot_user_expiration_service.set_dependency_providers(
     datetime_provider=lambda: datetime,
 )
 
+notification_bot_auto_finish_request_service.set_dependency_providers(
+    media_request_dao_provider=lambda: media_request_dao,
+    notify_rule_provider=lambda: get_notify_rule,
+    logger_provider=lambda: logger,
+)
+
 def _submit_bot_task(fn, *args):
     if not _bot_executor_slots.acquire(blocking=False):
         logger.warning("[Bot] 后台任务队列已满，丢弃本次异步任务")
@@ -475,95 +482,16 @@ class SystemDaemon:
         elif "delete" in event or "remove" in event: bus.publish("notify.item.deleted", data)
 
     def _auto_finish_request(self, tmdb_id, season=None):
-        """自动更新求片状态为已入库，并通知用户
-        
-        Args:
-            tmdb_id: TMDB ID
-            season: 季数（可选，电影不需要，电视剧需要精确匹配）
-        """
-        if not tmdb_id: return
-        try:
-            tid = int(tmdb_id)
-            requests_to_notify, users_to_notify = media_request_dao.finish_media_requests_for_item(tid, season)
-            
-            # 🔥 通知用户（入库完成）
-            if requests_to_notify and users_to_notify:
-                self._notify_request_status_change(tid, requests_to_notify, users_to_notify, "finish")
-                
-        except Exception as e:
-            logger.error(f"[自动入库] 更新工单状态失败: {e}")
+        return notification_bot_auto_finish_request_service.auto_finish_request(self, tmdb_id, season)
     
     def _notify_request_status_change(self, tmdb_id, requests_info, users_info, action, reject_reason=None):
-        """通知用户工单状态变更
-        
-        Args:
-            tmdb_id: TMDB ID
-            requests_info: 工单信息列表 [{title, year, media_type, season}]
-            users_info: 用户列表 [{user_id, username}]
-            action: 操作类型 (approve/finish/reject/manual/hdhive_done)
-            reject_reason: 拒绝原因（可选）
-        """
-        try:
-            from app.domains.notifications.notify_admin import get_notify_rule
-            rule = get_notify_rule('request_status')
-            
-            if not rule or not rule.get('enabled') or 'tg_bot' not in rule.get('channels', []):
-                logger.info(f"[状态变更通知] 规则未启用或渠道不含tg_bot")
-                return
-            
-            # 批量查询 TG 绑定
-            user_ids = [u['user_id'] for u in users_info]
-            tg_bindings = media_request_dao.list_tg_bindings(user_ids)
-            
-            from app.domains.notifications.user_bot_service import _send, _tg_api
-            
-            for req in requests_info:
-                title = req['title']
-                year = req['year'] or ''
-                media_type = req['media_type']
-                season = req['season']
-                
-                # 构建标题
-                if media_type == 'tv':
-                    title_text = f"{title} S{season}"
-                else:
-                    title_text = title
-                
-                # 状态文本和图标
-                if action == "approve":
-                    status_icon = "🚀"
-                    status_text = "审批通过，正在下载中"
-                elif action == "finish":
-                    status_icon = "✅"
-                    status_text = "已入库完成，可以观看啦！"
-                elif action == "reject":
-                    status_icon = "❌"
-                    status_text = f"已拒绝\n📝 原因: {reject_reason or '未说明'}"
-                elif action == "manual":
-                    status_icon = "✋"
-                    status_text = "已手动接单，正在处理中"
-                elif action == "hdhive_done":
-                    status_icon = "📥"
-                    status_text = "影巢转存成功，等待入库"
-                else:
-                    status_icon = "📢"
-                    status_text = "状态已更新"
-                
-                msg = f"{status_icon} <b>求片状态更新</b>\n\n📺 <b>内容：</b>{title_text} ({year})\n📢 <b>状态：</b>{status_text}"
-                
-                for u in users_info:
-                    user_id = u['user_id']
-                    tg_id = tg_bindings.get(user_id)
-                    
-                    if tg_id:
-                        logger.info(f"[自动入库通知] 发送给用户: tg_id={tg_id}, title={title_text}")
-                        try:
-                            _send(int(tg_id), msg)
-                        except Exception as e:
-                            logger.error(f"[自动入库通知] 发送失败: {e}")
-                            
-        except Exception as e:
-            logger.error(f"[状态变更通知] 通知失败: {e}")
+        return notification_bot_auto_finish_request_service.notify_request_status_change(
+            tmdb_id,
+            requests_info,
+            users_info,
+            action,
+            reject_reason,
+        )
 
     def _clear_gap_record_async(self, item: dict):
         try:
