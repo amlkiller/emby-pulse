@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend guideline entrypoint for quality review."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Verify extracted service stays in the correct domain boundary."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Verify callback exception behavior remains compatible."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verify project command and test expectations."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Verify the extraction follows existing callback service patterns."}
