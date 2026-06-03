@@ -18,6 +18,7 @@ from app.domains.system import invitation_dao
 from app.domains.users import user_dao
 from app.domains.users import user_bot_dao
 from app.domains.notifications import user_bot_binding_service
+from app.domains.notifications import user_bot_registration_queue_service
 from app.domains.notifications import user_bot_registration_quota_service
 from app.domains.playback import stats_queries
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
@@ -161,6 +162,26 @@ def _set_batch_flush_thread(value):
     _batch_flush_thread = value
 
 
+def _set_active_tasks(value):
+    global _active_tasks
+    _active_tasks = value
+
+
+def _set_waiting_count(value):
+    global _waiting_count
+    _waiting_count = value
+
+
+def _set_reg_waiters(value):
+    global _reg_waiters
+    _reg_waiters = value
+
+
+def _set_reg_active(value):
+    global _reg_active
+    _reg_active = value
+
+
 user_bot_binding_service.set_dependency_providers(
     user_bot_dao_provider=lambda: user_bot_dao,
     media_api_provider=lambda: media_api,
@@ -204,78 +225,43 @@ user_bot_registration_quota_service.set_dependency_providers(
     batch_flush_threshold_provider=lambda: BATCH_FLUSH_THRESHOLD,
 )
 
+user_bot_registration_queue_service.set_dependency_providers(
+    task_executor_provider=lambda: _task_executor,
+    active_tasks_lock_provider=lambda: _active_tasks_lock,
+    waiting_count_lock_provider=lambda: _waiting_count_lock,
+    get_active_tasks_provider=lambda: _active_tasks,
+    set_active_tasks_callback=_set_active_tasks,
+    get_waiting_count_provider=lambda: _waiting_count,
+    set_waiting_count_callback=_set_waiting_count,
+    max_concurrent_tasks_provider=lambda: MAX_CONCURRENT_TASKS,
+    max_waiting_tasks_provider=lambda: MAX_WAITING_TASKS,
+    reg_sema_provider=lambda: _reg_sema,
+    reg_waiters_lock_provider=lambda: _reg_waiters_lock,
+    get_reg_waiters_provider=lambda: _reg_waiters,
+    set_reg_waiters_callback=_set_reg_waiters,
+    get_reg_active_provider=lambda: _reg_active,
+    set_reg_active_callback=_set_reg_active,
+    max_concurrent_reg_provider=lambda: MAX_CONCURRENT_REG,
+    reg_queue_max_wait_provider=lambda: REG_QUEUE_MAX_WAIT,
+    send_provider=lambda: _send,
+    logger_provider=lambda: logger,
+)
+
 
 def _submit_task(func, *args, **kwargs):
-    """提交任务到线程池，支持排队"""
-    global _active_tasks, _waiting_count
-    
-    # 检查等待队列是否已满
-    with _waiting_count_lock:
-        if _waiting_count >= MAX_WAITING_TASKS:
-            return False  # 等待队列也满了，拒绝
-        _waiting_count += 1
-    
-    def wrapper():
-        global _active_tasks, _waiting_count
-        # 从等待队列移到活跃
-        with _waiting_count_lock:
-            _waiting_count -= 1
-        with _active_tasks_lock:
-            _active_tasks += 1
-        
-        try:
-            func(*args, **kwargs)
-        finally:
-            with _active_tasks_lock:
-                _active_tasks -= 1
-    
-    _task_executor.submit(wrapper)
-    return True
+    return user_bot_registration_queue_service.submit_task(func, *args, **kwargs)
 
 
 def _get_queue_status():
-    """获取当前队列状态"""
-    with _active_tasks_lock:
-        with _waiting_count_lock:
-            return {
-                "active": _active_tasks, 
-                "waiting": _waiting_count,
-                "max_active": MAX_CONCURRENT_TASKS,
-                "max_waiting": MAX_WAITING_TASKS
-            }
+    return user_bot_registration_queue_service.get_queue_status()
 
 
 def _enter_reg_queue(chat_id):
-    """进入注册队列。超出并发上限时阻塞排队并发送位置提示，超时返回 False。"""
-    global _reg_waiters, _reg_active
-    with _reg_waiters_lock:
-        _reg_waiters += 1
-        pos = _reg_waiters
-        active = _reg_active
-    if active >= MAX_CONCURRENT_REG:
-        # 已经满了，告诉用户大致位置（含自己）
-        _send(chat_id, f"⏳ 当前注册人数较多，你排在第 {pos} 位，请稍候（最长等待 {REG_QUEUE_MAX_WAIT // 60} 分钟）...")
-    got = _reg_sema.acquire(timeout=REG_QUEUE_MAX_WAIT)
-    with _reg_waiters_lock:
-        _reg_waiters -= 1
-        if got:
-            _reg_active += 1
-    if not got:
-        _send(chat_id, "⌛ 注册排队等待超时，请稍后重试")
-        return False
-    return True
+    return user_bot_registration_queue_service.enter_reg_queue(chat_id)
 
 
 def _leave_reg_queue():
-    """离开注册队列，释放信号量。"""
-    global _reg_active
-    with _reg_waiters_lock:
-        _reg_active = max(0, _reg_active - 1)
-    try:
-        _reg_sema.release()
-    except ValueError:
-        # BoundedSemaphore 释放次数超出上限，理论上不应发生
-        logger.exception("[UserBot] _reg_sema release 异常")
+    return user_bot_registration_queue_service.leave_reg_queue()
 
 
 def _send_open_reg_closed_notify(reason=""):
