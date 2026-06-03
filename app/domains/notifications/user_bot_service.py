@@ -30,6 +30,7 @@ from app.domains.notifications import user_bot_points_commands_service
 from app.domains.notifications import user_bot_points_game_commands_service
 from app.domains.notifications import user_bot_registration_queue_service
 from app.domains.notifications import user_bot_registration_quota_service
+from app.domains.notifications import user_bot_request_commands_service
 from app.domains.notifications import user_bot_restriction_service
 from app.domains.notifications import user_bot_shop_commands_service
 from app.domains.notifications import user_bot_service_info_commands_service
@@ -352,6 +353,24 @@ user_bot_shop_commands_service.set_dependency_providers(
     main_menu_keyboard_provider=lambda: _main_menu_keyboard,
     point_dao_provider=lambda: point_dao,
     media_api_provider=lambda: media_api,
+    safe_error_message_provider=lambda: safe_error_message,
+    logger_provider=lambda: logger,
+)
+
+user_bot_request_commands_service.set_dependency_providers(
+    get_binding_provider=lambda: _get_binding,
+    check_emby_account_provider=lambda: _check_emby_account,
+    unbind_user_provider=lambda: _unbind_user,
+    reply_provider=lambda: _reply,
+    send_provider=lambda: _send,
+    tg_api_provider=lambda: _tg_api,
+    main_menu_keyboard_provider=lambda: _main_menu_keyboard,
+    tmdb_client_provider=lambda: tmdb_client,
+    get_safe_proxies_provider=lambda: get_safe_proxies,
+    media_request_dao_provider=lambda: media_request_dao,
+    submit_request_provider=lambda: _submit_request,
+    portal_url_provider=lambda: get_user_bot_portal_url,
+    media_server_main_public_url_provider=lambda: get_media_server_main_public_url,
     safe_error_message_provider=lambda: safe_error_message,
     logger_provider=lambda: logger,
 )
@@ -2198,208 +2217,21 @@ def cmd_redeem_callback(chat_id, tg_user_id, item_id, cq_id):
 
 
 def cmd_request(chat_id, tg_user_id, args):
-    binding = _get_binding(tg_user_id)
-    if not binding:
-        _send(chat_id, "❌ 请先绑定账号：/bind 用户名")
-        return
-    
-    # 检查 Emby 账号是否仍然有效
-    if not _check_emby_account(binding):
-        _unbind_user(tg_user_id)
-        _send(chat_id, "⚠️ 你的 Emby 账号已被删除，绑定已自动解除。请联系管理员。", 
-              reply_markup=_main_menu_keyboard(None))
-        return
-    
-    if not args:
-        _send(chat_id, "🔍 请输入要搜索的影视名称：/request 剧名")
-        return
-    if not tmdb_client.api_key:
-        _send(chat_id, "❌ 服务器未配置 TMDB，求片功能不可用")
-        return
-    try:
-        proxies = get_safe_proxies()
-        res = tmdb_client.search_multi(args, proxies=proxies, timeout=10, page=1)
-        results = [r for r in res.json().get("results", []) if r.get("media_type") in ["movie", "tv"]][:5]
-        if not results:
-            _send(chat_id, f"📭 未找到与 <b>{args}</b> 相关的影视")
-            return
-        msg = f"🔍 <b>搜索结果：{args}</b>\n\n"
-        keyboard = {"inline_keyboard": []}
-        for r in results:
-            name = r.get("title") or r.get("name", "未知")
-            year = (r.get("release_date") or r.get("first_air_date") or "")[:4]
-            mtype = "🎬" if r["media_type"] == "movie" else "📺"
-            msg += f"{mtype} {name} ({year})\n"
-            keyboard["inline_keyboard"].append([{"text": f"{mtype} {name} ({year})", "callback_data": f"ub_req_{r['media_type']}_{r['id']}"}])
-        keyboard["inline_keyboard"].append([{"text": "🔙 主菜单", "callback_data": "ub_back_menu"}])
-        _send(chat_id, msg + "\n点击下方按钮提交求片：", reply_markup=keyboard)
-    except Exception as e:
-        logger.error(f"[搜索] 执行失败: {e}")
-        _send(chat_id, f"❌ 搜索失败：{safe_error_message(e, '搜索异常，请稍后重试')}")
+    return user_bot_request_commands_service.cmd_request(chat_id, tg_user_id, args)
 
 
 def cmd_request_callback(chat_id, tg_user_id, media_type, tmdb_id, cq_id):
-    _tg_api("answerCallbackQuery", {"callback_query_id": cq_id})
-    binding = _get_binding(tg_user_id)
-    if not binding:
-        _send(chat_id, "❌ 未绑定账号")
-        return
-
-    # 电视剧需要先选季
-    if media_type == "tv":
-        try:
-            proxies = get_safe_proxies()
-            detail = tmdb_client.get_tv_details(tmdb_id, proxies=proxies, timeout=10).json()
-            title = detail.get("name", "未知")
-            seasons = detail.get("seasons", [])
-            real_seasons = [s for s in seasons if s.get("season_number", 0) > 0]
-            if len(real_seasons) <= 1:
-                # 只有一季，直接提交第1季
-                _submit_request(chat_id, tg_user_id, "tv", tmdb_id, 1)
-            else:
-                msg = f"📺 <b>{title}</b>\n\n请选择要求片的季数："
-                keyboard = {"inline_keyboard": []}
-                row = []
-                for s in real_seasons:
-                    sn = s.get("season_number", 1)
-                    row.append({"text": f"第 {sn} 季", "callback_data": f"ub_reqsn_{tmdb_id}_{sn}"})
-                    if len(row) == 3:
-                        keyboard["inline_keyboard"].append(row)
-                        row = []
-                if row:
-                    keyboard["inline_keyboard"].append(row)
-                keyboard["inline_keyboard"].append([{"text": "🔙 返回", "callback_data": "ub_back_menu"}])
-                _send(chat_id, msg, reply_markup=keyboard)
-        except Exception as e:
-            logger.error(f"[求片] 获取季数失败: {e}")
-            _send(chat_id, f"❌ 获取季数失败：{safe_error_message(e, '获取季数异常，请稍后重试')}")
-        return
-
-    # 电影直接提交
-    _submit_request(chat_id, tg_user_id, "movie", tmdb_id, 0)
+    return user_bot_request_commands_service.cmd_request_callback(chat_id, tg_user_id, media_type, tmdb_id, cq_id)
 
 
 def _submit_request(chat_id, tg_user_id, media_type, tmdb_id, season):
-    """实际提交求片逻辑"""
-    binding = _get_binding(tg_user_id)
-    if not binding: return
-    
-    # 检查 Emby 账号是否仍然有效
-    if not _check_emby_account(binding):
-        _unbind_user(tg_user_id)
-        _send(chat_id, "⚠️ 你的 Emby 账号已被删除，绑定已自动解除。请联系管理员。", 
-              reply_markup=_main_menu_keyboard(None))
-        return
-    
-    uid = binding['emby_user_id']
-    uname = binding['emby_username']
-    try:
-        proxies = get_safe_proxies()
-        if media_type == "movie":
-            detail = tmdb_client.get_movie_details(tmdb_id, proxies=proxies, timeout=10).json()
-        else:
-            detail = tmdb_client.get_tv_details(tmdb_id, proxies=proxies, timeout=10).json()
-        title = detail.get("title") or detail.get("name", "未知")
-        year = (detail.get("release_date") or detail.get("first_air_date") or "")[:4]
-        poster_path = detail.get("poster_path", "")
-        poster = f"https://image.tmdb.org/t/p/w500{poster_path}" if poster_path else ""
-
-        submit_result = media_request_dao.submit_single_media_request(
-            uid,
-            uname,
-            int(tmdb_id),
-            media_type,
-            title,
-            year,
-            poster,
-            season,
-        )
-        if not submit_result.get("ok"):
-            _send(chat_id, f"❌ {submit_result.get('message', '求片提交失败')}")
-            return
-
-        season_str = f" 第 {season} 季" if media_type == "tv" and season > 0 else ""
-        # 🔥 显示扣费或免费信息
-        need_cost = submit_result.get("need_cost", False)
-        req_cost = submit_result.get("request_cost", 0)
-        user_req_free = submit_result.get("user_req_free", 0)
-        user_req_free_count = submit_result.get("user_req_free_count", -1)
-        if need_cost and req_cost > 0:
-            cost_msg = f"\n💰 消耗 {req_cost} 积分"
-        elif user_req_free == 1:
-            remaining = user_req_free_count - 1 if user_req_free_count > 0 else "无限"
-            cost_msg = f"\n🎁 免费求片（剩余 {remaining} 次）" if remaining != "无限" else "\n🎁 免费求片（无限次）"
-        else:
-            cost_msg = ""
-        _send(chat_id, f"✅ <b>求片已提交！</b>\n\n🎬 {title} ({year}){season_str}{cost_msg}\n📋 状态：等待管理员审批",
-              reply_markup={"inline_keyboard": [[{"text": "📋 我的求片", "callback_data": "ub_menu_myrequests"}, {"text": "🔙 主菜单", "callback_data": "ub_back_menu"}]]})
-
-        try:
-            from app.domains.notifications.bot_service import bot
-            from app.infra.db.notification_dao import add_system_notification
-            from app.core.config import REPORT_COVER_URL
-            from app.domains.notifications.notify_admin import get_notify_rule
-            msg = f"🎬 <b>收到新求片心愿</b>\n\n👤 <b>用户：</b>{uname}\n📺 <b>内容：</b>{title} ({year}){season_str}\n📱 <b>来源：</b>TG 用户机器人\n\n请及时前往后台审批处理。"
-            admin_url = get_user_bot_portal_url() or get_media_server_main_public_url() or "http://127.0.0.1:10307"
-            keyboard = {"inline_keyboard": [
-                [{"text": "🚀 推送 MP", "callback_data": f"req_approve_{tmdb_id}"}, {"text": "✋ 手动接单", "callback_data": f"req_manual_{tmdb_id}"}],
-                [{"text": "❌ 拒绝求片", "callback_data": f"req_reject_menu_{tmdb_id}"}, {"text": "💻 网页审批", "url": f"{admin_url.rstrip('/')}/requests_admin"}]
-            ]}
-            rule = get_notify_rule('request_new')
-            if rule and rule.get('enabled'):
-                channels = rule.get('channels', [])
-                platform = "none"
-                if 'tg_bot' in channels and 'wecom' in channels:
-                    platform = "all"
-                elif 'tg_bot' in channels:
-                    platform = "tg"
-                elif 'wecom' in channels:
-                    platform = "wecom"
-                if platform != "none":
-                    poster_url = f"https://image.tmdb.org/t/p/w500{poster_path}" if poster_path else REPORT_COVER_URL
-                    bot.notifier.send_photo("sys_notify", poster_url, msg, reply_markup=keyboard, platform=platform)
-                if 'web' in channels:
-                    add_system_notification("request", f"收到新求片: {title}", f"用户 {uname} 通过TG机器人求片", "/requests_admin")
-        except Exception as e:
-            logger.error(f"[求片通知] 发送失败: {e}")
-    except Exception as e:
-        logger.error(f"[求片] 提交失败: {e}")
-        _send(chat_id, f"❌ 求片提交失败：{safe_error_message(e, '求片提交异常，请稍后重试')}")
+    return user_bot_request_commands_service._submit_request(chat_id, tg_user_id, media_type, tmdb_id, season)
 
 
 # 🔥 追新功能已删除 - 请使用用户社区追新功能
 
 def cmd_myrequests(chat_id, tg_user_id, msg_id=None):
-    binding = _get_binding(tg_user_id)
-    if not binding:
-        _reply(chat_id, "❌ 请先绑定账号", msg_id=msg_id)
-        return
-    
-    # 检查 Emby 账号是否仍然有效
-    if not _check_emby_account(binding):
-        _unbind_user(tg_user_id)
-        _reply(chat_id, "⚠️ 你的 Emby 账号已被删除，绑定已自动解除。请联系管理员。", 
-               reply_markup=_main_menu_keyboard(None), msg_id=msg_id)
-        return
-    
-    uid = binding['emby_user_id']
-    try:
-        rows = media_request_dao.list_user_recent_requests(uid)
-        if not rows:
-            _reply(chat_id, "📋 <b>我的求片</b>\n\n暂无求片记录",
-                  reply_markup={"inline_keyboard": [[{"text": "🎬 去求片", "callback_data": "ub_menu_request"}, {"text": "🔙 主菜单", "callback_data": "ub_back_menu"}]]}, msg_id=msg_id)
-            return
-        status_map = {0: "⏳ 待审批", 1: "📥 下载中", 2: "✅ 已完成", 3: "❌ 已拒绝", 4: "🔧 手动处理中"}
-        msg = "📋 <b>我的求片</b>\n\n"
-        for r in rows:
-            s_str = f" 第{r['season']}季" if r['media_type'] == 'tv' and r['season'] > 0 else ""
-            icon = "🎬" if r['media_type'] == 'movie' else "📺"
-            msg += f"{icon} <b>{r['title']}</b> ({r['year']}){s_str}\n   {status_map.get(r['status'], '未知')}\n\n"
-        _reply(chat_id, msg.strip(),
-              reply_markup={"inline_keyboard": [[{"text": "🎬 继续求片", "callback_data": "ub_menu_request"}, {"text": "🔙 主菜单", "callback_data": "ub_back_menu"}]]}, msg_id=msg_id)
-    except Exception as e:
-        logger.error(f"[求片] 查询失败: {e}")
-        _reply(chat_id, f"❌ 查询失败：{safe_error_message(e, '查询异常，请稍后重试')}", msg_id=msg_id)
+    return user_bot_request_commands_service.cmd_myrequests(chat_id, tg_user_id, msg_id=msg_id)
 
 
 def cmd_profile(chat_id, tg_user_id, msg_id=None):
