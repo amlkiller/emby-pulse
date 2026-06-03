@@ -1,6 +1,11 @@
 from fastapi import APIRouter, Request
 from typing import Optional
 from app.domains.playback import dashboard_cache_service
+from app.domains.playback.libraries_router import (
+    api_get_libraries,
+    router as libraries_router,
+    set_dependency_providers as set_libraries_dependency_providers,
+)
 from app.domains.playback.stats_helpers import (
     STATS_CACHE_TTL,
     _stats_cache,
@@ -35,6 +40,14 @@ from app.core.security_utils import safe_error_message
 logger = logging.getLogger("uvicorn")
 
 router = APIRouter()
+
+set_libraries_dependency_providers(
+    user_service_provider=lambda: user_service,
+    media_api_provider=lambda: media_api,
+    get_admin_user_id_provider=lambda: get_admin_user_id,
+    safe_error_message_provider=lambda: safe_error_message,
+)
+
 
 @router.get("/api/stats/dashboard")
 def api_dashboard(request: Request, user_id: Optional[str] = None):
@@ -82,46 +95,7 @@ def api_dashboard(request: Request, user_id: Optional[str] = None):
         return result
     except: return {"status": "error", "data": {"total_plays":0, "library": {}}}
 
-@router.get("/api/stats/libraries")
-def api_get_libraries(request: Request):
-    """获取媒体库列表（管理员显示所有媒体库）"""
-    # 🔒 安全检查：必须管理员
-    if not user_service.is_admin_user(request):
-        return {"status": "error", "message": "需要管理员权限"}
-    try:
-        # 🔥 管理员登录后显示所有媒体库（使用 /Library/VirtualFolders）
-        lib_res = media_api.get("/Library/VirtualFolders", timeout=10)
-        if lib_res.status_code != 200:
-            return {"status": "error", "message": "获取媒体库失败"}
-        
-        libraries = []
-        for lib in lib_res.json():
-            item_id = lib.get("ItemId") or lib.get("Guid") or lib.get("Id")
-            
-            # 获取图片标签
-            image_tag = ""
-            if item_id:
-                try:
-                    admin_id = get_admin_user_id()
-                    if admin_id:
-                        item_res = media_api.get(f"/Users/{admin_id}/Items/{item_id}", timeout=3)
-                        if item_res.status_code == 200:
-                            item_data = item_res.json()
-                            image_tag = item_data.get("ImageTags", {}).get("Primary", "")[:8] if item_data.get("ImageTags", {}).get("Primary") else ""
-                except:
-                    pass
-            
-            lib_info = {
-                "Id": item_id,
-                "Name": lib.get("Name", "未命名"),
-                "CollectionType": lib.get("CollectionType", "unknown"),
-                "ImageTag": image_tag
-            }
-            libraries.append(lib_info)
-        
-        return {"status": "success", "data": libraries}
-    except Exception as e:
-        return {"status": "error", "message": safe_error_message(e)}
+router.include_router(libraries_router)
 
 @router.get("/api/stats/recent")
 def api_recent_activity(request: Request, user_id: Optional[str] = None):

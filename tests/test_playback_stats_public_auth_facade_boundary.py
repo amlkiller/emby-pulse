@@ -30,6 +30,31 @@ def test_playback_stats_does_not_import_private_users_auth():
     assert violations == []
 
 
+def test_playback_stats_includes_libraries_child_route_and_compat_export():
+    from app.domains.playback import libraries_router
+    from app.domains.playback import stats
+
+    routes = [
+        (route.path, route.methods)
+        for route in stats.router.routes
+        if hasattr(route, "methods")
+    ]
+
+    assert any(path == "/api/stats/libraries" and "GET" in methods for path, methods in routes)
+    assert stats.api_get_libraries is libraries_router.api_get_libraries
+
+    dashboard_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/dashboard" and "GET" in methods
+    )
+    libraries_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/libraries" and "GET" in methods
+    )
+    recent_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/recent" and "GET" in methods
+    )
+    assert dashboard_index < libraries_index < recent_index
+
+
 def test_get_libraries_denies_non_admin_before_query_or_media_side_effects(monkeypatch):
     from app.domains.playback import stats
 
