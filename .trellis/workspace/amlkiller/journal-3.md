@@ -104,3 +104,36 @@ Extracted users tag constants, models, and management routes into app/domains/us
 ### Next Steps
 
 - None - task complete
+
+
+## Session 123: Refactor users request permission router
+
+**Date**: 2026-06-03
+**Task**: Refactor users request permission router
+**Branch**: `main`
+
+### Summary
+
+Extracted users request-permission model and management routes into app/domains/users/request_permission_router.py, included the child router from users/router.py before the tag router, and preserved users.router compatibility exports. Verified compile/import route checks, focused users router/public-service tests, and the full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6ca7385` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
