@@ -37,6 +37,11 @@ from app.domains.playback.poster_router import (
     router as poster_router,
     set_dependency_providers as set_poster_dependency_providers,
 )
+from app.domains.playback.preload_status_router import (
+    api_preload_status,
+    router as preload_status_router,
+    set_dependency_providers as set_preload_status_dependency_providers,
+)
 from app.domains.playback.recent_added_router import (
     api_recent_added,
     router as recent_added_router,
@@ -210,6 +215,14 @@ set_dashboard_dependency_providers(
     media_api_provider=lambda: media_api,
 )
 
+set_preload_status_dependency_providers(
+    user_service_provider=lambda: user_service,
+    get_dashboard_cache_entry_provider=lambda: _get_dashboard_cache_entry,
+    dashboard_preload_key_provider=lambda: _DASHBOARD_PRELOAD_KEY,
+    dashboard_cache_ttl_provider=lambda: _DASHBOARD_CACHE_TTL,
+    time_provider=lambda: time,
+)
+
 router.include_router(dashboard_router)
 
 router.include_router(libraries_router)
@@ -283,29 +296,7 @@ def _get_dashboard_cached_data(cache_key: str, now: float = None):
         return entry["data"]
     return None
 
-@router.get("/api/dashboard/preload_status")
-async def api_preload_status(request: Request):
-    """
-    获取缓存预热状态
-    前端可以据此判断是否需要等待
-    """
-    # 🔒 管理后台聚合状态，仅管理员可访问
-    if not user_service.is_admin_user(request):
-        return {"status": "error", "message": "需要管理员权限"}
-    
-    entry = _get_dashboard_cache_entry(_DASHBOARD_PRELOAD_KEY)
-    data = entry.get("data")
-    ts = entry.get("ts", 0)
-    return {
-        "status": "success",
-        "data": {
-            "cached": data is not None,
-            "cache_age": round(time.time() - ts) if ts > 0 else 0,
-            "cache_ttl": _DASHBOARD_CACHE_TTL,
-            "libraries_count": len(data.get("libraries", [])) if data else 0,
-            "users_count": len(data.get("users", [])) if data else 0
-        }
-    }
+router.include_router(preload_status_router)
 
 
 def start_dashboard_cache_tasks() -> None:

@@ -1184,6 +1184,101 @@ def test_recent_added_authenticated_call_uses_stats_monkeypatches(monkeypatch):
     ]
 
 
+def test_playback_stats_includes_preload_status_child_route_and_compat_export():
+    from app.domains.playback import preload_status_router
+    from app.domains.playback import stats
+
+    routes = [
+        (route.path, route.methods)
+        for route in stats.router.routes
+        if hasattr(route, "methods")
+    ]
+
+    assert any(path == "/api/dashboard/preload_status" and "GET" in methods for path, methods in routes)
+    assert stats.api_preload_status is preload_status_router.api_preload_status
+
+    recent_added_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/recent_added" and "GET" in methods
+    )
+    preload_status_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/dashboard/preload_status" and "GET" in methods
+    )
+    dashboard_init_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/dashboard/init" and "GET" in methods
+    )
+    assert recent_added_index < preload_status_index < dashboard_init_index
+
+
+def test_preload_status_denies_non_admin_before_cache_side_effects(monkeypatch):
+    import asyncio
+
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"Id": "u1"}})
+    calls = []
+
+    def fake_is_admin_user(seen_request):
+        calls.append(seen_request)
+        return False
+
+    def fail_get_dashboard_cache_entry(*args, **kwargs):
+        raise AssertionError("preload status should not read cache without admin permission")
+
+    monkeypatch.setattr(stats.user_service, "is_admin_user", fake_is_admin_user)
+    monkeypatch.setattr(stats, "_get_dashboard_cache_entry", fail_get_dashboard_cache_entry)
+
+    response = asyncio.run(stats.api_preload_status(request))
+
+    assert response == {"status": "error", "message": "需要管理员权限"}
+    assert calls == [request]
+
+
+def test_preload_status_allows_admin_through_stats_monkeypatches(monkeypatch):
+    import asyncio
+
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"Id": "admin"}})
+    calls = []
+
+    def fake_is_admin_user(seen_request):
+        calls.append(("is_admin_user", seen_request))
+        return True
+
+    def fake_get_dashboard_cache_entry(cache_key):
+        calls.append(("get_dashboard_cache_entry", cache_key))
+        return {
+            "data": {
+                "libraries": [{"Id": "l1"}, {"Id": "l2"}],
+                "users": [{"Id": "u1"}],
+            },
+            "ts": 90.4,
+        }
+
+    monkeypatch.setattr(stats.user_service, "is_admin_user", fake_is_admin_user)
+    monkeypatch.setattr(stats, "_get_dashboard_cache_entry", fake_get_dashboard_cache_entry)
+    monkeypatch.setattr(stats, "_DASHBOARD_PRELOAD_KEY", "custom-preload")
+    monkeypatch.setattr(stats, "_DASHBOARD_CACHE_TTL", 321)
+    monkeypatch.setattr(stats, "time", SimpleNamespace(time=lambda: 100.9))
+
+    response = asyncio.run(stats.api_preload_status(request))
+
+    assert response == {
+        "status": "success",
+        "data": {
+            "cached": True,
+            "cache_age": 10,
+            "cache_ttl": 321,
+            "libraries_count": 2,
+            "users_count": 1,
+        },
+    }
+    assert calls == [
+        ("is_admin_user", request),
+        ("get_dashboard_cache_entry", "custom-preload"),
+    ]
+
+
 def test_playback_stats_includes_system_monitor_child_route_and_compat_export():
     from app.domains.playback import stats
     from app.domains.playback import system_monitor_router
