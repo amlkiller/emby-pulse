@@ -896,3 +896,36 @@ Extracted NotificationBot Telegram command registration into notification_bot_co
 ### Next Steps
 
 - None - task complete
+
+
+## Session 207: Extract notification bot polling service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot polling service
+**Branch**: `main`
+
+### Summary
+
+Extracted NotificationBot polling loop into a notification-domain polling service with lazy providers for legacy monkeypatch compatibility. Kept NotificationBot._polling_loop as a wrapper, added boundary tests for admin filtering, text_link URL appending, callback submission, offset updates, and retry waits. Verification passed: compileall, focused polling tests, import check, git diff --check, and full tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6ecce60` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
