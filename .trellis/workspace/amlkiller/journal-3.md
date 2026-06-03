@@ -203,3 +203,36 @@ Extracted the standalone users list route into app/domains/users/list_router.py,
 ### Next Steps
 
 - None - task complete
+
+
+## Session 126: Refactor users audit log router
+
+**Date**: 2026-06-03
+**Task**: Refactor users audit log router
+**Branch**: `main`
+
+### Summary
+
+Extracted the users audit log management endpoints into app/domains/users/audit_log_router.py, included the child router from users/router.py at the original route position, and preserved users.router compatibility exports. Verified compile/import route checks, focused users router tests, git diff checks, and the full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b1dd178` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
