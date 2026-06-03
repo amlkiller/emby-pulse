@@ -27,6 +27,7 @@ from app.domains.notifications import user_bot_menu_service
 from app.domains.notifications import user_bot_message_cleanup_service
 from app.domains.notifications import user_bot_open_reg_notify_service
 from app.domains.notifications import user_bot_password_commands_service
+from app.domains.notifications import user_bot_pk_callback_service
 from app.domains.notifications import user_bot_pk_invitation_commands_service
 from app.domains.notifications import user_bot_points_commands_service
 from app.domains.notifications import user_bot_points_game_commands_service
@@ -378,6 +379,17 @@ user_bot_pk_invitation_commands_service.set_dependency_providers(
     user_bot_dao_provider=lambda: user_bot_dao,
     media_api_provider=lambda: media_api,
     safe_error_message_provider=lambda: safe_error_message,
+    logger_provider=lambda: logger,
+)
+
+user_bot_pk_callback_service.set_dependency_providers(
+    get_binding_provider=lambda: _get_binding,
+    tg_api_provider=lambda: _tg_api,
+    edit_provider=lambda: _edit,
+    send_provider=lambda: _send,
+    point_dao_provider=lambda: point_dao,
+    datetime_provider=lambda: datetime,
+    sleep_provider=lambda: time.sleep,
     logger_provider=lambda: logger,
 )
 
@@ -1056,185 +1068,11 @@ def cmd_rob(chat_id, tg_user_id, text, is_group=False, entities=None):
 
 
 def _handle_pk_accept_callback(chat_id, tg_user_id, invite_id, cq_id, msg_id):
-    """处理PK接受回调"""
-    binding = _get_binding(tg_user_id)
-    if not binding:
-        _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": "请先绑定账号", "show_alert": True})
-        return
-    
-    try:
-        invite = point_dao.get_pending_pk_invitation(invite_id)
-        if not invite:
-            _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": "邀请不存在或已处理", "show_alert": True})
-            _edit(chat_id, msg_id, "❌ PK邀请已不存在或已处理")
-            return
-        
-        # 检查是否是目标用户
-        if invite["target_id"] != binding['emby_user_id']:
-            _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": "这不是发给你的PK邀请", "show_alert": True})
-            return
-        
-        # 检查是否过期
-        try:
-            expires_at = datetime.datetime.fromisoformat(invite["expires_at"])
-            if datetime.datetime.now() > expires_at:
-                point_dao.mark_pk_invitation_expired(invite_id)
-                _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": "PK邀请已过期", "show_alert": True})
-                _edit(chat_id, msg_id, "❌ PK邀请已过期")
-                return
-        except:
-            pass
-        
-        challenger_id = invite["challenger_id"]
-        challenger_name = invite["challenger_name"]
-        challenger_tg_name = invite["challenger_tg_name"] or challenger_name
-        target_id = invite["target_id"]
-        target_name = invite["target_name"]
-        target_tg_name = invite["target_tg_name"] or target_name
-        points = invite["points"]
-        invite_msg_id = invite["message_id"]  # 邀请消息ID
-        command_msg_id = invite["command_message_id"]  # 命令消息ID
-        
-        # 🔥 发送骰子动画
-        _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": "🎲 掷骰子中..."})
-        _edit(chat_id, msg_id, f"🎲 <b>PK开始！</b>\n\n{challenger_tg_name} vs {target_tg_name}\n💰 下注：{points} 积分\n\n🎲 正在掷骰子...")
-        
-        # 发送发起者的骰子
-        dice1_resp = _tg_api("sendDice", {"chat_id": chat_id})
-        import time
-        time.sleep(2)  # 等待动画完成
-        
-        # 发送被挑战者的骰子
-        dice2_resp = _tg_api("sendDice", {"chat_id": chat_id})
-        time.sleep(2)
-        
-        # 获取骰子消息ID
-        dice1_msg_id = dice1_resp.get("result", {}).get("message_id") if dice1_resp and dice1_resp.get("ok") else None
-        dice2_msg_id = dice2_resp.get("result", {}).get("message_id") if dice2_resp and dice2_resp.get("ok") else None
-        
-        # 获取骰子结果（1-6）
-        challenger_roll = dice1_resp.get("result", {}).get("dice", {}).get("value", 1) if dice1_resp and dice1_resp.get("ok") else 1
-        target_roll = dice2_resp.get("result", {}).get("dice", {}).get("value", 1) if dice2_resp and dice2_resp.get("ok") else 1
-
-        result = point_dao.accept_pk_invitation(
-            invite_id,
-            binding['emby_user_id'],
-            challenger_roll=challenger_roll,
-            target_roll=target_roll,
-            cancel_on_insufficient=True,
-        )
-        if result.get("status") != "success":
-            message = result.get("message", "PK处理失败")
-            _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": message, "show_alert": True})
-            _edit(chat_id, msg_id, f"❌ {message}")
-            return
-
-        if result.get("tie"):
-            _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": "平局！积分退还"})
-            result_msg = f"⚖️ <b>平局！</b>\n\n{challenger_tg_name}({challenger_roll}点) vs {target_tg_name}({target_roll}点)\n\n积分退还，不扣手续费"
-            _send(chat_id, result_msg)
-            # 5秒后删除消息
-            import time
-            time.sleep(5)
-            _tg_api("deleteMessage", {"chat_id": chat_id, "message_id": msg_id})
-            return
-
-        winner_name = result.get("winner_name") or ""
-        actual_win = result.get("win_amount", 0)
-        tax_rate = result.get("tax_rate", 0)
-        
-        # 发送结果
-        _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": f"{winner_name}获胜！"})
-        result_msg = f"🎲 <b>PK结果</b>\n\n{challenger_tg_name}({challenger_roll}点) vs {target_tg_name}({target_roll}点)\n\n🎉 <b>{winner_name}</b> 获胜！\n💰 获得 <b>{actual_win}</b> 积分（扣{tax_rate}%手续费）"
-        result_resp = _send(chat_id, result_msg)
-        
-        # 🔥 5秒后自动删除所有消息
-        import time
-        time.sleep(5)
-        
-        # 删除命令消息
-        if command_msg_id:
-            _tg_api("deleteMessage", {"chat_id": chat_id, "message_id": command_msg_id})
-        
-        # 删除邀请消息
-        if invite_msg_id:
-            _tg_api("deleteMessage", {"chat_id": chat_id, "message_id": invite_msg_id})
-        
-        # 删除骰子消息
-        if dice1_msg_id:
-            _tg_api("deleteMessage", {"chat_id": chat_id, "message_id": dice1_msg_id})
-        if dice2_msg_id:
-            _tg_api("deleteMessage", {"chat_id": chat_id, "message_id": dice2_msg_id})
-        
-        # 删除结果消息
-        if result_resp and result_resp.get('ok'):
-            result_msg_id = result_resp.get('result', {}).get('message_id')
-            _tg_api("deleteMessage", {"chat_id": chat_id, "message_id": result_msg_id})
-        
-    except Exception as e:
-        logger.error(f"[UserBot] PK接受回调失败: {e}")
-        _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": "处理失败，请稍后重试", "show_alert": True})
+    return user_bot_pk_callback_service._handle_pk_accept_callback(chat_id, tg_user_id, invite_id, cq_id, msg_id)
 
 
 def _handle_pk_reject_callback(chat_id, tg_user_id, invite_id, cq_id, msg_id):
-    """处理PK拒绝回调"""
-    binding = _get_binding(tg_user_id)
-    if not binding:
-        _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": "请先绑定账号", "show_alert": True})
-        return
-    
-    try:
-        invite = point_dao.get_pending_pk_invitation(invite_id)
-        if not invite:
-            _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": "邀请不存在或已处理", "show_alert": True})
-            _edit(chat_id, msg_id, "❌ PK邀请已不存在或已处理")
-            return
-        
-        # 检查是否是目标用户
-        if invite["target_id"] != binding['emby_user_id']:
-            _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": "这不是发给你的PK邀请", "show_alert": True})
-            return
-        
-        challenger_name = invite["challenger_name"]
-        challenger_tg_name = invite["challenger_tg_name"] or challenger_name
-        target_tg_name = invite["target_tg_name"] or invite["target_name"]
-        original_chat_id = invite["chat_id"]
-        invite_msg_id = invite["message_id"]
-        command_msg_id = invite["command_message_id"]
-        
-        point_dao.set_pk_invitation_status(invite_id, "rejected")
-        
-        # 发送结果
-        _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": "已拒绝PK邀请"})
-        
-        # 获取拒绝者的 TG 名称
-        rejecter_tg_name = binding.get('tg_name') or binding['emby_username']
-        
-        # 编辑邀请消息
-        _edit(chat_id, msg_id, f"❌ <b>{rejecter_tg_name}</b> 已拒绝 <b>{challenger_tg_name}</b> 的PK邀请")
-        
-        # 通知发起者
-        if original_chat_id and str(original_chat_id) != str(chat_id):
-            _send(original_chat_id, f"❌ <b>{rejecter_tg_name}</b> 拒绝了你的PK邀请")
-        
-        # 🔥 5秒后自动删除消息
-        import time
-        time.sleep(5)
-        
-        # 删除命令消息
-        if command_msg_id:
-            _tg_api("deleteMessage", {"chat_id": chat_id, "message_id": command_msg_id})
-        
-        # 删除邀请消息
-        if invite_msg_id:
-            _tg_api("deleteMessage", {"chat_id": chat_id, "message_id": invite_msg_id})
-        
-        # 删除拒绝消息（当前消息）
-        _tg_api("deleteMessage", {"chat_id": chat_id, "message_id": msg_id})
-        
-    except Exception as e:
-        logger.error(f"[UserBot] PK拒绝回调失败: {e}")
-        _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": "处理失败，请稍后重试", "show_alert": True})
+    return user_bot_pk_callback_service._handle_pk_reject_callback(chat_id, tg_user_id, invite_id, cq_id, msg_id)
 
 def cmd_pk_invite(chat_id, tg_user_id, text, is_group=False, entities=None, user_msg_id=None):
     return user_bot_pk_invitation_commands_service.cmd_pk_invite(
