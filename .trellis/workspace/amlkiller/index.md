@@ -7,8 +7,8 @@
 ## Current Status
 
 <!-- @@@auto:current-status -->
-- **Active File**: `journal-4.md`
-- **Total Sessions**: 239
+- **Active File**: `journal-5.md`
+- **Total Sessions**: 240
 - **Last Active**: 2026-06-04
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,8 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-4.md` | ~1987 | Active |
+| `journal-5.md` | ~40 | Active |
+| `journal-4.md` | ~1987 | Archived |
 | `journal-3.md` | ~1987 | Archived |
 | `journal-2.md` | ~1993 | Archived |
 | `journal-1.md` | ~1973 | Archived |
@@ -32,6 +33,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 240 | 2026-06-04 | Extract users delete route | `5edfc3c` | `main` |
 | 239 | 2026-06-04 | Extract users single user route | `79b20d1` | `main` |
 | 238 | 2026-06-04 | Extract users libraries route | `f6da299` | `main` |
 | 237 | 2026-06-04 | Extract users self password route | `7a0d282` | `main` |
