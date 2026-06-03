@@ -1226,3 +1226,36 @@ Extracted SystemDaemon auto-finish request handling and request-status notificat
 ### Next Steps
 
 - None - task complete
+
+
+## Session 217: Extract notification bot webhook event service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot webhook event service
+**Branch**: `main`
+
+### Summary
+
+Extracted SystemDaemon webhook event routing into a notification-domain service with lazy bus/logger/calendar providers, kept the daemon wrapper, and added focused boundary tests for unimportant events, library item enqueueing, episode calendar/gap side effects, playback start/stop publications, auth/login publication, and delete/remove publication. Verification passed: compileall changed files, focused pytest, import check, git diff --check, and full pytest tests/.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `597a922` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
