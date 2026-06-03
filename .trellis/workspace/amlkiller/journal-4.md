@@ -1391,3 +1391,36 @@ Extracted notification bot library episode-group and single-item push behavior f
 ### Next Steps
 
 - None - task complete
+
+
+## Session 222: Extract notification bot library group service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot library group service
+**Branch**: `main`
+
+### Summary
+
+Extracted notification bot library grouping and dispatch decision logic from bot_service.py into notification_bot_library_group_service. Preserved grouping keys, fresh-episode preference, series-item and episode-only fallbacks, non-TV dispatch, per-group error logging, and interruptible _stop_event.wait(2) behavior through the legacy SystemDaemon wrapper. Added focused boundary tests and verified compileall, focused tests including bootstrap stop-hook coverage, import check, diff check, and the full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0b532f8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
