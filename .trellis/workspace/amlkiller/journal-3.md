@@ -1820,3 +1820,36 @@ Extracted user bot shop and redeem command handling into a focused notification 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 175: Refactor notification user bot request commands
+
+**Date**: 2026-06-03
+**Task**: Refactor notification user bot request commands
+**Branch**: `main`
+
+### Summary
+
+Extracted user bot media request search, callback, submit, and history command handling into a focused notification domain service while preserving legacy wrappers and runtime dependency providers.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `32085f4` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
