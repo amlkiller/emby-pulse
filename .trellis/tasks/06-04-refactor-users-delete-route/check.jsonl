@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend guideline index for quality verification."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Verify the extracted route follows domain router organization conventions."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Verify response and exception behavior stayed compatible."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verify test commands, import boundaries, and quality gates."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared checklist index for final review."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Verify the implementation follows existing child-router patterns."}
