@@ -137,3 +137,36 @@ Extracted open-registration account creation from user_bot_service into a focuse
 ### Next Steps
 
 - None - task complete
+
+
+## Session 184: Extract notification user bot scheduler service
+
+**Date**: 2026-06-03
+**Task**: Extract notification user bot scheduler service
+**Branch**: `main`
+
+### Summary
+
+Extracted UserBot scheduled lottery/PK expiry loop into a domain-local scheduler service with lazy dependency providers; added boundary coverage and preserved lifecycle stop-event checks.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f85ade5` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
