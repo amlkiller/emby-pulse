@@ -26,6 +26,7 @@ from app.domains.notifications import notification_bot_message_dispatch_service
 from app.domains.notifications import notification_bot_message_center_callback_service
 from app.domains.notifications import notification_bot_media_helper_service
 from app.domains.notifications import notification_bot_media_quality_service
+from app.domains.notifications import notification_bot_playback_event_service
 from app.domains.notifications import notification_bot_playback_command_service
 from app.domains.notifications import notification_bot_polling_service
 from app.domains.notifications import notification_bot_request_admin_message_sync_service
@@ -253,6 +254,19 @@ notification_bot_library_new_item_service.set_dependency_providers(
     media_server_main_public_or_host_provider=lambda: get_media_server_main_public_or_host,
     media_server_host_provider=lambda: get_media_server_host,
     notify_channels_provider=lambda: get_notify_channels,
+    get_plugin_provider=lambda: get_plugin,
+    report_cover_url_provider=lambda: REPORT_COVER_URL,
+    datetime_provider=lambda: datetime,
+    re_provider=lambda: re,
+    logger_provider=lambda: logger,
+)
+
+notification_bot_playback_event_service.set_dependency_providers(
+    enable_notify_provider=lambda: get_enable_notify,
+    media_api_provider=lambda: media_api,
+    location_provider=lambda: get_location,
+    media_server_main_public_or_host_provider=lambda: get_media_server_main_public_or_host,
+    media_server_host_provider=lambda: get_media_server_host,
     get_plugin_provider=lambda: get_plugin,
     report_cover_url_provider=lambda: REPORT_COVER_URL,
     datetime_provider=lambda: datetime,
@@ -974,162 +988,7 @@ class NotificationBot:
             return "00:00:00"
 
     def on_playback_event(self, data, action):
-        if not get_enable_notify():
-            logger.info(f"🔇 [播放通知] 开关未开启，跳过")
-            return
-
-        # 添加详细日志排查问题
-        session = data.get("Session") or data
-        item = data.get("Item") or session.get("NowPlayingItem") or {}
-        user = data.get("User") or session
-        user_name = user.get("Name") or user.get("UserName") or "未知用户"
-        user_id = user.get("Id") or session.get("UserId")
-
-        logger.info(f"🔔 [播放通知] 收到 {action} 事件，用户: {user_name} (ID: {user_id})")
-
-        try:
-            if self._is_muted(user_id, "playback"):
-                logger.info(f"🔇 [播放通知] 用户 {user_name} 被静音，跳过")
-                return
-
-            play_state = session.get("PlayState", {})
-            playback_info = data.get("PlaybackInfo", {})
-            
-            pos_ticks = data.get("PlaybackPositionTicks") or data.get("PositionTicks") or playback_info.get("PositionTicks") or play_state.get("PositionTicks") or 0
-            run_ticks = item.get("RunTimeTicks") or session.get("NowPlayingItem", {}).get("RunTimeTicks") or data.get("RunTimeTicks") or 0
-            
-            try: pos_ticks = int(pos_ticks)
-            except: pos_ticks = 0
-            try: run_ticks = int(run_ticks)
-            except: run_ticks = 0
-
-            target_id = item.get("Id")
-            raw_type = item.get("Type", "")
-            
-            series_id = item.get("SeriesId") or session.get("NowPlayingItem", {}).get("SeriesId")
-            
-            detail_res = {}
-            if target_id and user_id:
-                try:
-                    resp = media_api.get(f"/Users/{user_id}/Items/{target_id}", timeout=2)
-                    if resp.status_code == 200:
-                        detail_res = resp.json()
-                        
-                    if pos_ticks <= 0 and session.get("Id"):
-                        sess_res = media_api.get("/Sessions", timeout=2).json()
-                        for s in sess_res:
-                            if s.get("Id") == session.get("Id"):
-                                pos_ticks = int(s.get("PlayState", {}).get("PositionTicks") or 0)
-                                break
-                except Exception: pass
-
-            if run_ticks <= 0:
-                run_ticks = int(detail_res.get("RunTimeTicks") or 0)
-
-            overview_raw = detail_res.get("Overview") or item.get("Overview") or ""
-            rating_raw = detail_res.get("CommunityRating") or item.get("CommunityRating")
-
-            if not series_id:
-                series_id = detail_res.get("SeriesId") or detail_res.get("ParentId")
-
-            if raw_type == "Episode" and series_id:
-                if not str(overview_raw).strip() or not rating_raw:
-                    try:
-                        series_res = media_api.get(f"/Users/{user_id}/Items/{series_id}", timeout=2).json()
-                        if not str(overview_raw).strip():
-                            overview_raw = series_res.get("Overview") or ""
-                        if not rating_raw:
-                            rating_raw = series_res.get("CommunityRating")
-                    except Exception: pass
-
-            overview = re.sub(r'<[^>]+>', '', str(overview_raw)).strip()
-            if not overview:
-                overview = "暂无简介..."
-            elif len(overview) > 150:
-                overview = overview[:140] + "..."
-
-            rating_str = f"{rating_raw}/10" if rating_raw else "无"
-
-            title = item.get("Name") or "未知内容"
-            ep_info = ""
-            type_map = {"Episode": "剧集", "Movie": "电影", "Audio": "音乐", "MusicVideo": "MV", "LiveTvProgram": "直播", "TvChannel": "频道"}
-            type_cn = type_map.get(raw_type, "媒体")
-            
-            if raw_type == "Episode" and item.get("SeriesName"): 
-                idx = item.get("IndexNumber", 0); parent_idx = item.get("ParentIndexNumber", 1)
-                ep_info = f" S{str(parent_idx).zfill(2)}E{str(idx).zfill(2)} {title}"
-                title = f"{item.get('SeriesName')}"
-            elif raw_type == "Audio" and item.get("Artists"):
-                artist_str = ", ".join(item.get("Artists"))
-                title = f"{title} - {artist_str}"
-            
-            emoji = "▶️" if action == "start" else "⏹️"; act = "开始播放" if action == "start" else "停止播放"
-            # IP 信息通过 webhook 保存，这里重新获取用于通知
-            ip = session.get("RemoteEndPoint") or data.get("RemoteEndPoint") or "127.0.0.1"
-            loc = get_location(ip)
-
-            if run_ticks <= 1:
-                progress_str = "🟢 实时流/未知总时长"
-            else:
-                pct = int((pos_ticks / run_ticks) * 100)
-                pct = min(max(pct, 0), 100)
-                pos_str = self._format_ticks(pos_ticks)
-                run_str = self._format_ticks(run_ticks)
-                progress_str = f"{pos_str} / {run_str} ({pct}%)"
-
-            client = session.get("Client") or data.get("Client") or "未知端"
-            device = session.get("DeviceName") or data.get("DeviceName") or "未知设备"
-
-            # 尝试使用自定义通知模板
-            template_key = "playback_start" if action == "start" else "playback_stop"
-            tpl_vars = {
-                "username": user_name, "title": title, "ep_info": ep_info,
-                "type_cn": type_cn, "rating": rating_str, "progress": progress_str,
-                "ip": ip, "location": loc, "client": client, "device": device,
-                "time": datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), "overview": overview
-            }
-            try:
-                from app.plugins import get_plugin
-                tpl_plugin = get_plugin("notify_template")
-                if tpl_plugin and tpl_plugin.enabled:
-                    msg = tpl_plugin.render(template_key, tpl_vars)
-                else:
-                    raise Exception("fallback")
-            except:
-                msg = (f"{emoji} <b>【{user_name}】{act} {type_cn} {title}</b>{ep_info}\n\n"
-                       f"⭐ <b>评分：</b>{rating_str} ｜ 📚 <b>类型：</b>{type_cn}\n"
-                       f"🔄 <b>进度：</b>{progress_str}\n"
-                       f"🌐 <b>IP地址：</b>{ip} {loc}\n"
-                       f"📱 <b>设备：</b>{client} {device}\n"
-                       f"🕒 <b>时间：</b>{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-                       f"📝 <b>剧情：</b>{overview}")
-            
-            target_jump_id = target_id
-            if raw_type == "Episode" and series_id: target_jump_id = series_id
-            elif raw_type == "Audio" and item.get("AlbumId"): target_jump_id = item.get("AlbumId")
-            
-            base_url = get_media_server_main_public_or_host() or get_media_server_host()
-            if base_url and not base_url.startswith(('http://', 'https://')):
-                base_url = 'https://' + base_url
-
-            # 只有有效的http/https URL才添加按钮
-            keyboard = None
-            if base_url and base_url.startswith(('http://', 'https://')):
-                play_url = f"{base_url}/web/index.html#!/item?id={target_jump_id}&serverId={item.get('ServerId','')}"
-                keyboard = {"inline_keyboard": [[{"text": "🔗 跳转详情", "url": play_url}]]}
-
-            primary_io = self._download_emby_image(target_jump_id, 'Primary') 
-            backdrop_io = self._download_emby_image(target_jump_id, 'Backdrop')
-            if not primary_io and not backdrop_io:
-                primary_io = self._download_emby_image(item.get("Id"), 'Primary')
-                backdrop_io = self._download_emby_image(item.get("Id"), 'Backdrop')
-
-            # TG 和企业微信都优先使用横版封面
-            tg_img = backdrop_io or primary_io or REPORT_COVER_URL
-            wecom_img = backdrop_io or primary_io or REPORT_COVER_URL
-            self.send_photo("sys_notify", tg_img, msg, reply_markup=keyboard, platform="all", wecom_photo_io=wecom_img)
-        except Exception as e: 
-            logger.error(f"[Bot] Playback event error: {e}")
+        return notification_bot_playback_event_service.handle_playback_event(self, data, action)
 
     def on_user_login(self, data):
         return notification_bot_user_login_service.handle_user_login(self, data)
