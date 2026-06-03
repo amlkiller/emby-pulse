@@ -20,6 +20,7 @@ from app.domains.notifications import notification_bot_media_helper_service
 from app.domains.notifications import notification_bot_media_quality_service
 from app.domains.notifications import notification_bot_request_admin_message_sync_service
 from app.domains.notifications import notification_bot_wecom_service
+from app.domains.notifications import notification_bot_whois_command_service
 from app.domains.notifications import notify_admin_dao, notify_rule_dao
 from app.infra.db.playback_filters import get_base_filter
 from app.domains.users import user_dao
@@ -132,6 +133,12 @@ notification_bot_message_center_callback_service.set_dependency_providers(
     message_dao_provider=lambda: message_dao,
     telegram_client_provider=lambda: telegram_client,
     media_api_provider=lambda: media_api,
+    logger_provider=lambda: logger,
+)
+
+notification_bot_whois_command_service.set_dependency_providers(
+    user_bot_dao_provider=lambda: user_bot_dao,
+    escape_html_provider=lambda: escape_html,
     logger_provider=lambda: logger,
 )
 
@@ -2283,69 +2290,13 @@ class NotificationBot:
             self.send_message(cid, "❌ 获取今日更新失败", platform=platform)
 
     def _format_expire_status(self, expire_date):
-        if not expire_date:
-            return "永久有效"
-        expire_text = str(expire_date).strip()
-        if not expire_text:
-            return "永久有效"
-
-        try:
-            exp_date = datetime.date.fromisoformat(expire_text[:10])
-            today = datetime.date.today()
-            days_left = (exp_date - today).days
-            if days_left < 0:
-                return f"{expire_text[:10]}（已过期 {abs(days_left)} 天）"
-            if days_left == 0:
-                return f"{expire_text[:10]}（今天到期）"
-            return f"{expire_text[:10]}（{days_left} 天后到期）"
-        except Exception:
-            return expire_text
+        return notification_bot_whois_command_service.format_expire_status(expire_date)
 
     def _format_whois_row(self, row, index=None):
-        prefix = f"<b>匹配 {index}</b>\n" if index else "<b>绑定信息</b>\n"
-        tg_username = row.get("tg_username") or ""
-        tg_display_name = row.get("tg_display_name") or ""
-        tg_username_text = f"@{tg_username}" if tg_username and not tg_username.startswith("@") else (tg_username or "未记录")
-        expire_status = self._format_expire_status(row.get("expire_date"))
-
-        return (
-            f"{prefix}"
-            f"👤 <b>Emby 用户：</b>{escape_html(row.get('emby_username') or '未记录')}\n"
-            f"🆔 <b>Emby ID：</b><code>{escape_html(row.get('emby_user_id') or '未记录')}</code>\n"
-            f"📅 <b>到期时间：</b>{escape_html(expire_status)}\n"
-            f"✈️ <b>TG ID：</b><code>{escape_html(row.get('tg_user_id') or '未记录')}</code>\n"
-            f"🔗 <b>TG 用户名：</b>{escape_html(tg_username_text)}\n"
-            f"🏷️ <b>TG 名称：</b>{escape_html(tg_display_name or '未记录')}\n"
-            f"⏱️ <b>绑定时间：</b>{escape_html(row.get('bound_at') or '未记录')}"
-        )
+        return notification_bot_whois_command_service.format_whois_row(row, index)
 
     def _cmd_whois(self, cid, text, platform):
-        parts = text.split(None, 1)
-        if len(parts) < 2 or not parts[1].strip():
-            return self.send_message(cid, "👤 请使用: /whois TG用户名/TG ID/Emby用户名", platform=platform)
-
-        keyword = parts[1].strip()
-        normalized = keyword.lstrip("@").strip()
-        if not normalized:
-            return self.send_message(cid, "👤 请使用: /whois TG用户名/TG ID/Emby用户名", platform=platform)
-
-        try:
-            rows = user_bot_dao.search_whois_bindings(normalized) or []
-
-            if not rows:
-                return self.send_message(cid, f"📭 未找到与 <b>{escape_html(keyword)}</b> 相关的绑定信息", platform=platform)
-
-            result_rows = [dict(r) for r in rows]
-            if len(result_rows) == 1:
-                msg = self._format_whois_row(result_rows[0])
-            else:
-                msg = f"🔎 <b>找到 {len(result_rows)} 条匹配结果</b>\n\n"
-                msg += "\n\n".join(self._format_whois_row(row, i + 1) for i, row in enumerate(result_rows))
-
-            self.send_message(cid, msg, platform=platform)
-        except Exception as e:
-            logger.error(f"[Bot] whois query error: {e}")
-            self.send_message(cid, "❌ 查询绑定信息失败", platform=platform)
+        return notification_bot_whois_command_service.cmd_whois(self, cid, text, platform)
 
     def _cmd_help(self, cid, platform):
         msg = ("🤖 <b>EmbyPulse 智能助理指南</b>\n\n"
