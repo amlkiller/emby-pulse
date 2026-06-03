@@ -467,3 +467,36 @@ Extracted NotificationBot send_photo, send_message, and edit_message delivery en
 ### Next Steps
 
 - None - task complete
+
+
+## Session 194: Extract notification bot media helper service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot media helper service
+**Branch**: `main`
+
+### Summary
+
+Extracted NotificationBot media and user helpers into notification_bot_media_helper_service with lazy legacy providers; kept old helper wrappers and added boundary tests for user/item image downloads, username cache behavior, subnet key parsing, and playback history persistence.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5bfbc3f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
