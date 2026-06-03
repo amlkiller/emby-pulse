@@ -269,3 +269,36 @@ Extracted users delete-verification/admin-password endpoints into app/domains/us
 ### Next Steps
 
 - None - task complete
+
+
+## Session 128: Refactor users invitation router
+
+**Date**: 2026-06-03
+**Task**: Refactor users invitation router
+**Branch**: `main`
+
+### Summary
+
+Extracted users invitation-code management endpoints into app/domains/users/invitation_router.py, included the child router from users/router.py at the original route position, and preserved users.router compatibility exports plus existing monkeypatch behavior through dependency providers. Verified compile/import route checks, focused users invitation tests, git diff checks, and the full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c8d8de2` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
