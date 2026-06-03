@@ -24,6 +24,7 @@ from app.domains.notifications import notification_bot_media_quality_service
 from app.domains.notifications import notification_bot_playback_command_service
 from app.domains.notifications import notification_bot_request_admin_message_sync_service
 from app.domains.notifications import notification_bot_search_command_service
+from app.domains.notifications import notification_bot_stats_command_service
 from app.domains.notifications import notification_bot_wecom_service
 from app.domains.notifications import notification_bot_whois_command_service
 from app.domains.notifications import notify_admin_dao, notify_rule_dao
@@ -176,6 +177,15 @@ notification_bot_search_command_service.set_dependency_providers(
     media_server_main_public_or_host_provider=lambda: get_media_server_main_public_or_host,
     media_server_host_provider=lambda: get_media_server_host,
     report_cover_url_provider=lambda: REPORT_COVER_URL,
+)
+
+notification_bot_stats_command_service.set_dependency_providers(
+    base_filter_provider=lambda: get_base_filter,
+    playback_store_provider=lambda: playback_store,
+    report_gen_provider=lambda: report_gen,
+    has_pil_provider=lambda: HAS_PIL,
+    report_cover_url_provider=lambda: REPORT_COVER_URL,
+    logger_provider=lambda: logger,
 )
 
 def _submit_bot_task(fn, *args):
@@ -1761,225 +1771,7 @@ class NotificationBot:
         return notification_bot_search_command_service.cmd_search(self, chat_id, text, platform)
 
     def _cmd_stats(self, chat_id, period='day', platform="tg"):
-        # 🔥 使用统一的时间计算模块
-        from app.shared.time import get_period_range, get_period_days, get_weekday_cn
-        
-        where, params = get_base_filter('all')
-        titles = {'day': '今日日报', 'yesterday': '昨日日报', 'week': '本周周报', 'month': '本月月报', 'year': '年度报告'}
-        title_cn = titles.get(period, '数据报表')
-        
-        # 🔥 使用统一的时间范围计算
-        start_date, end_date, period_where, _ = get_period_range(period)
-        if period_where:
-            where += " " + period_where.replace("WHERE", "AND")
-        
-        # 计算天数用于日均播放
-        days = get_period_days(period)
-        
-        # 日期显示
-        today = datetime.date.today()
-        if period == 'yesterday':
-            date_str = start_date.strftime("%m-%d")
-            weekday = get_weekday_cn(start_date)
-        elif period == 'day':
-            date_str = today.strftime("%m-%d")
-            weekday = get_weekday_cn(today)
-        elif period == 'week':
-            end_display = today  # 本周至今
-            date_str = f"{start_date.strftime('%m-%d')} ~ {end_display.strftime('%m-%d')}"
-            weekday = ""
-        elif period == 'month':
-            date_str = today.strftime("%Y年%m月")
-            weekday = ""
-        elif period == 'year':
-            date_str = today.strftime("%Y年")
-            weekday = ""
-        else:
-            date_str = ""
-            weekday = ""
-
-        # 🔥 读取观影报告插件的排除类型配置（默认不排除）
-        exclude_types = []
-        content_limit = 10  # 默认 Top 10
-        try:
-            from app.plugins import get_plugin_config
-            view_report_config = get_plugin_config("view_report")
-            if view_report_config:
-                # 排除类型
-                config_exclude = view_report_config.get('exclude_types', [])
-                if isinstance(config_exclude, str):
-                    config_exclude = [t.strip() for t in config_exclude.split(',') if t.strip()]
-                if config_exclude:
-                    exclude_types = config_exclude
-                # 内容排行数量
-                try:
-                    content_limit = int(view_report_config.get('top_content_limit') or 10)
-                except (ValueError, TypeError):
-                    content_limit = 10
-        except:
-            pass
-        
-        # 构建排除类型 SQL
-        exclude_sql = ""
-        if exclude_types:
-            exclude_placeholders = ', '.join(['?' for _ in exclude_types])
-            exclude_sql = f" AND ItemType NOT IN ({exclude_placeholders})"
-            # 🔥 修复：params 可能是 list 或 tuple，都要正确处理
-            if isinstance(params, (list, tuple)):
-                params = tuple(params) + tuple(exclude_types)
-            else:
-                params = tuple(exclude_types)
-
-        try:
-            plays_res = playback_store.query(f"SELECT COUNT(*) as c FROM PlaybackActivity {where}{exclude_sql}", params)
-            if not plays_res: raise Exception("DB Error")
-            plays = plays_res[0]['c']
-            dur_res = playback_store.query(f"SELECT SUM(PlayDuration) as c FROM PlaybackActivity {where}{exclude_sql}", params)
-            dur = dur_res[0]['c'] if dur_res and dur_res[0]['c'] else 0
-            # 🔥 使用格式化字符串，确保四舍五入一致
-            hours_str = f"{dur / 3600:.1f}"
-            users_res = playback_store.query(f"SELECT COUNT(DISTINCT UserId) as c FROM PlaybackActivity {where}{exclude_sql}", params)
-            users = users_res[0]['c'] if users_res else 0
-            
-            # 日均播放
-            avg_plays_str = f"{plays / days:.1f}" if days > 0 else str(plays)
-
-            # 用户排行
-            top_users = playback_store.query(f"SELECT UserId, SUM(PlayDuration) as t FROM PlaybackActivity {where}{exclude_sql} GROUP BY UserId ORDER BY t DESC LIMIT 5", params)
-            user_str = ""
-            if top_users:
-                for i, u in enumerate(top_users):
-                    name = self._get_username(u['UserId'])
-                    # 🔥 使用格式化字符串，确保四舍五入一致
-                    h = u['t'] / 3600
-                    h_str = f"{h:.1f}"
-                    prefix = ['🥇','🥈','🥉'][i] if i < 3 else f"{i+1}."
-                    user_str += f"{prefix} {name} ({h_str}h)\n"
-            else: user_str = "暂无数据\n"
-
-            # 🔥 内容排行 - 区分剧集和电影，按时长排序
-            all_content = playback_store.query(f"SELECT ItemName, ItemId, ItemType, COUNT(*) as C, COALESCE(SUM(PlayDuration), 0) as Duration FROM PlaybackActivity {where}{exclude_sql} GROUP BY ItemName ORDER BY Duration DESC LIMIT 100", params)
-            
-            # 分离剧集和电影
-            tv_pattern = re.compile(r' - [sS]\d|第.+[集期]|EP?\d', re.IGNORECASE)
-            tv_list = []
-            movie_list = []
-            
-            for item in all_content or []:
-                name = item['ItemName'] if item['ItemName'] else ''
-                series_name = name.split(' - ')[0] if ' - ' in name else name
-                duration = item['Duration'] if item['Duration'] else 0
-                count = item['C'] if item['C'] else 0
-                item_id = item['ItemId'] if item['ItemId'] else None
-                
-                if tv_pattern.search(name) or item['ItemType'] == 'Episode':
-                    existing = [t for t in tv_list if t['SeriesName'] == series_name]
-                    if not existing and len(tv_list) < content_limit:
-                        tv_list.append({'SeriesName': series_name, 'ItemName': name, 'ItemId': item_id, 'C': count, 'Duration': duration})
-                    elif existing:
-                        existing[0]['C'] += count
-                        existing[0]['Duration'] += duration
-                else:
-                    if len(movie_list) < content_limit:
-                        movie_list.append({'ItemName': name, 'ItemId': item_id, 'C': count, 'Duration': duration})
-            
-            # 重新按时长排序
-            tv_list.sort(key=lambda x: x['Duration'], reverse=True)
-            movie_list.sort(key=lambda x: x['Duration'], reverse=True)
-            
-            # 格式化剧集排行
-            tv_str = ""
-            for i, item in enumerate(tv_list):
-                d = item['Duration']
-                h = int(d // 3600)
-                m = int((d % 3600) // 60)
-                if h > 0:
-                    dur_str = f"{h} 小时 {m} 分钟"
-                else:
-                    dur_str = f"{m} 分钟"
-                tv_str += f"{i+1}. {item['SeriesName']}\n播放次数: {item['C']} 时长: {dur_str}\n"
-            
-            # 格式化电影排行
-            movie_str = ""
-            for i, item in enumerate(movie_list):
-                d = item['Duration']
-                h = int(d // 3600)
-                m = int((d % 3600) // 60)
-                if h > 0:
-                    dur_str = f"{h} 小时 {m} 分钟"
-                else:
-                    dur_str = f"{m} 分钟"
-                movie_str += f"{i+1}. {item['ItemName']}\n播放次数: {item['C']} 时长: {dur_str}\n"
-
-            # 构建标题
-            title_display = f"{title_cn}"
-            if date_str:
-                title_display = f"{title_cn}\n📅 {date_str}"
-                if weekday:
-                    title_display += f" {weekday}"
-
-            # 🔥 图文模式：所有周期都走海报+详细文字
-            if HAS_PIL:
-                # 日期行
-                date_line = f"📅 {date_str}" if date_str else ""
-                weekday_line = f" {weekday}" if weekday else ""
-                
-                caption_parts = [
-                    f"📊 <b>EmbyPulse {title_cn}</b>",
-                    f"{date_line}{weekday_line}",
-                    "",
-                    "📈 <b>数据大盘</b>",
-                    f"▶️ 总播放量：{plays} 次",
-                    f"⏱️ 活跃时长：{hours_str} 小时",
-                    f"👥 活跃人数：{users} 人",
-                ]
-                
-                # 周报/月报显示日均
-                if period in ['week', 'month']:
-                    caption_parts.append(f"📊 日均播放：{avg_plays_str} 次")
-                
-                caption_parts.extend([
-                    "",
-                    f"🏆 <b>活跃用户 Top {len(top_users) if top_users else 5}</b>",
-                    user_str.strip(),
-                ])
-                
-                if tv_str:
-                    caption_parts.extend([
-                        "",
-                        f"📺 <b>剧集排名</b>",
-                        tv_str.strip()
-                    ])
-                
-                if movie_str:
-                    caption_parts.extend([
-                        "",
-                        f"🎬 <b>电影排名</b>",
-                        movie_str.strip()
-                    ])
-                
-                caption = "\n".join(caption_parts)
-                poster = report_gen.generate_daily_poster(period, tv_list, movie_list)
-                if poster:
-                    self.send_photo(chat_id, poster, caption.strip(), platform=platform)
-                    return
-
-            # fallback：无 Pillow 时纯文字
-            caption = (f"📊 <b>EmbyPulse {title_display}</b>\n\n"
-                       f"📈 <b>数据大盘</b>\n"
-                       f"▶️ 总播放量：{plays} 次\n"
-                       f"⏱️ 活跃时长：{hours_str} 小时\n"
-                       f"👥 活跃人数：{users} 人\n\n"
-                       f"🏆 <b>活跃用户 Top 5</b>\n"
-                       f"{user_str}\n"
-                       f"🔥 <b>热门内容 Top 10</b>\n"
-                       f"{tv_str or movie_str or '暂无数据'}")
-            self.send_photo(chat_id, REPORT_COVER_URL, caption.strip(), platform=platform)
-        except Exception as e:
-            logger.error(f"[Bot] _cmd_stats error: {e}")
-            import traceback
-            traceback.print_exc()
-            self.send_message(chat_id, f"❌ 统计失败: {str(e)}", platform=platform)
+        return notification_bot_stats_command_service.cmd_stats(self, chat_id, period, platform)
 
     def _cmd_now(self, cid, platform):
         return notification_bot_playback_command_service.cmd_now(self, cid, platform)
