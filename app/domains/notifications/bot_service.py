@@ -15,6 +15,7 @@ from app.domains.users import user_bot_dao
 from app.domains.notifications import bot_service_dao, message_dao
 from app.domains.notifications import notification_bot_channel_service
 from app.domains.notifications import notification_bot_delivery_service
+from app.domains.notifications import notification_bot_message_center_callback_service
 from app.domains.notifications import notification_bot_media_helper_service
 from app.domains.notifications import notification_bot_media_quality_service
 from app.domains.notifications import notification_bot_request_admin_message_sync_service
@@ -124,6 +125,13 @@ notification_bot_media_helper_service.set_dependency_providers(
     media_api_provider=lambda: media_api,
     get_isp_provider=lambda: get_isp,
     insert_playback_history_provider=lambda: insert_bot_playback_history_record,
+    logger_provider=lambda: logger,
+)
+
+notification_bot_message_center_callback_service.set_dependency_providers(
+    message_dao_provider=lambda: message_dao,
+    telegram_client_provider=lambda: telegram_client,
+    media_api_provider=lambda: media_api,
     logger_provider=lambda: logger,
 )
 
@@ -2360,138 +2368,16 @@ class NotificationBot:
         self.send_message(cid, msg.strip(), platform=platform)
 
     def _handle_msg_reply_callback(self, cid, mid, user_id, token, proxies):
-        """处理回复消息的回调"""
-        self._msg_reply_mode[cid] = user_id
-        
-        # 获取用户信息
-        try:
-            row = message_dao.get_local_user_remark_by_emby_id(user_id)
-            user_display = row["remark"] if row and row["remark"] else user_id
-        except:
-            user_display = user_id
-        
-        text = f"💬 <b>回复模式</b>\n\n"
-        text += f"👤 目标用户：{user_display}\n"
-        text += f"🆔 用户ID：<code>{user_id}</code>\n\n"
-        text += f"📝 请直接发送消息内容，将转发给该用户\n"
-        text += f"⚠️ 发送任意消息即可回复，或点击下方取消"
-        
-        keyboard = {
-            "inline_keyboard": [[
-                {"text": "❌ 取消回复", "callback_data": f"msg_cancel:{user_id}"}
-            ]]
-        }
-        
-        try:
-            telegram_client.post_api(token, "editMessageText", json={
-                "chat_id": cid, "message_id": mid,
-                "text": text, "parse_mode": "HTML",
-                "reply_markup": keyboard
-            }, proxies=proxies, timeout=5)
-        except Exception: pass
+        return notification_bot_message_center_callback_service.handle_msg_reply_callback(self, cid, mid, user_id, token, proxies)
 
     def _handle_msg_block_callback(self, cid, mid, user_id, token, proxies, cq):
-        """处理屏蔽通知的回调"""
-        try:
-            message_dao.add_notify_block(user_id)
-            
-            operator = cq.get('from', {}).get('first_name', 'Admin')
-            msg_obj = cq["message"]
-            orig_text = msg_obj.get("text", "")
-            new_text = f"{orig_text}\n\n━━━━━━━━━━━━━━\n🔇 已屏蔽该用户的消息通知\n(操作人: {operator})"
-            
-            # 更新按钮，提供取消屏蔽选项
-            keyboard = {
-                "inline_keyboard": [[
-                    {"text": "🔊 取消屏蔽", "callback_data": f"msg_unblock:{user_id}"}
-                ]]
-            }
-            
-            try:
-                telegram_client.post_api(token, "editMessageText", json={
-                    "chat_id": cid, "message_id": mid,
-                    "text": new_text, "parse_mode": "HTML",
-                    "reply_markup": keyboard
-                }, proxies=proxies, timeout=5)
-            except Exception: pass
-        except Exception as e:
-            logger.error(f"[Bot] 屏蔽通知失败: {e}")
+        return notification_bot_message_center_callback_service.handle_msg_block_callback(cid, mid, user_id, token, proxies, cq)
 
     def _handle_msg_unblock_callback(self, cid, mid, user_id, token, proxies, cq):
-        """处理取消屏蔽通知的回调"""
-        try:
-            message_dao.remove_notify_block(user_id)
-            
-            operator = cq.get('from', {}).get('first_name', 'Admin')
-            msg_obj = cq["message"]
-            orig_text = msg_obj.get("text", "")
-            # 移除之前的屏蔽提示
-            if "━━━━━━━━━━━━━━" in orig_text:
-                orig_text = orig_text.split("━━━━━━━━━━━━━━")[0].strip()
-            
-            new_text = f"{orig_text}\n\n━━━━━━━━━━━━━━\n🔊 已取消屏蔽，将恢复消息通知\n(操作人: {operator})"
-            
-            # 恢复原始按钮
-            keyboard = {
-                "inline_keyboard": [
-                    [
-                        {"text": "💬 回复消息", "callback_data": f"msg_reply:{user_id}"}
-                    ],
-                    [
-                        {"text": "🚫 屏蔽通知", "callback_data": f"msg_block:{user_id}"}
-                    ]
-                ]
-            }
-            
-            try:
-                telegram_client.post_api(token, "editMessageText", json={
-                    "chat_id": cid, "message_id": mid,
-                    "text": new_text, "parse_mode": "HTML",
-                    "reply_markup": keyboard
-                }, proxies=proxies, timeout=5)
-            except Exception: pass
-        except Exception as e:
-            logger.error(f"[Bot] 取消屏蔽失败: {e}")
+        return notification_bot_message_center_callback_service.handle_msg_unblock_callback(cid, mid, user_id, token, proxies, cq)
 
     def _handle_msg_reply_message(self, text, cid):
-        """处理回复模式下的消息"""
-        if cid not in self._msg_reply_mode:
-            return False
-        
-        user_id = self._msg_reply_mode.pop(cid)
-        
-        try:
-            # 查找或创建会话
-            conversation = message_dao.get_conversation_by_user(user_id)
-            if not conversation:
-                # 获取用户名
-                username = user_id
-                try:
-                    if media_api:
-                        user_info = media_api.get(f"/Users/{user_id}")
-                        if user_info and user_info.status_code == 200:
-                            username = user_info.json().get("Name", user_id)
-                except Exception: pass
-                conv_id = message_dao.create_conversation(user_id, username)
-            else:
-                conv_id = conversation["id"]
-            
-            message_dao.insert_admin_message(conv_id, "bot", "管理员", text, text[:100])
-            
-            # 尝试通过用户机器人发送通知
-            try:
-                from app.domains.notifications.messages import _send_bot_reply_to_user
-                _send_bot_reply_to_user(user_id, text, "管理员")
-            except Exception: pass
-            
-            # 发送确认
-            self.send_message(cid, f"✅ 消息已发送给用户 {user_id}", platform="tg")
-            return True
-            
-        except Exception as e:
-            logger.error(f"[Bot] 回复消息失败: {e}")
-            self.send_message(cid, f"❌ 发送失败: {e}", platform="tg")
-            return True
+        return notification_bot_message_center_callback_service.handle_msg_reply_message(self, text, cid)
 
 class EmbyPulseOrchestrator:
     def __init__(self):
