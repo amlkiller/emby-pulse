@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend guideline index for review scope."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Verify route extraction follows domain structure guidance and preserves behavior."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Verify no new API error shape was introduced."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verify required uv-based compile/import/test commands were run."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Verify the extraction reuses established child-router wiring patterns."}
