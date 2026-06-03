@@ -23,6 +23,7 @@ from app.domains.notifications import user_bot_concurrency_service
 from app.domains.notifications import user_bot_menu_service
 from app.domains.notifications import user_bot_message_cleanup_service
 from app.domains.notifications import user_bot_open_reg_notify_service
+from app.domains.notifications import user_bot_points_commands_service
 from app.domains.notifications import user_bot_registration_queue_service
 from app.domains.notifications import user_bot_registration_quota_service
 from app.domains.notifications import user_bot_restriction_service
@@ -308,6 +309,19 @@ user_bot_code_commands_service.set_dependency_providers(
     get_binding_provider=lambda: _get_binding,
     invitation_dao_provider=lambda: invitation_dao,
     user_state_provider=lambda: _user_state,
+    safe_error_message_provider=lambda: safe_error_message,
+    logger_provider=lambda: logger,
+)
+
+user_bot_points_commands_service.set_dependency_providers(
+    get_binding_provider=lambda: _get_binding,
+    check_emby_account_provider=lambda: _check_emby_account,
+    unbind_user_provider=lambda: _unbind_user,
+    reply_provider=lambda: _reply,
+    send_provider=lambda: _send,
+    main_menu_keyboard_provider=lambda: _main_menu_keyboard,
+    delete_messages_later_provider=lambda: _delete_messages_later,
+    point_dao_provider=lambda: point_dao,
     safe_error_message_provider=lambda: safe_error_message,
     logger_provider=lambda: logger,
 )
@@ -854,79 +868,14 @@ def cmd_renew(chat_id, tg_user_id, args):
 
 
 def cmd_checkin(chat_id, tg_user_id, msg_id=None, is_group=False, group_name="", user_msg_id=None):
-    """签到功能
-    
-    Args:
-        chat_id: 聊天ID
-        tg_user_id: Telegram用户ID
-        msg_id: 机器人消息ID（用于编辑）
-        is_group: 是否群聊
-        group_name: 群名称
-        user_msg_id: 用户消息ID（群聊时用于删除用户命令）
-    """
-    binding = _get_binding(tg_user_id)
-    if not binding:
-        if is_group:
-            result = _reply(chat_id, "❌ 请先私聊机器人绑定账号后再签到", msg_id=msg_id)
-            # 30秒后删除消息
-            if result and user_msg_id:
-                _delete_messages_later(chat_id, [result.get("result", {}).get("message_id"), user_msg_id], 30)
-            return
-        else:
-            _reply(chat_id, "❌ 请先绑定账号", msg_id=msg_id)
-            return
-    
-    # 检查 Emby 账号是否仍然有效
-    if not _check_emby_account(binding):
-        _unbind_user(tg_user_id)
-        if is_group:
-            result = _reply(chat_id, "⚠️ 你的 Emby 账号已被删除，绑定已自动解除。请联系管理员。", msg_id=msg_id)
-            if result and user_msg_id:
-                _delete_messages_later(chat_id, [result.get("result", {}).get("message_id"), user_msg_id], 30)
-        else:
-            _reply(chat_id, "⚠️ 你的 Emby 账号已被删除，绑定已自动解除。请联系管理员。", 
-                   reply_markup=_main_menu_keyboard(None), msg_id=msg_id)
-        return
-    
-    uid = binding['emby_user_id']
-    uname = binding['emby_username']
-    try:
-        checkin_result = point_dao.perform_user_checkin(uid, uname)
-        if checkin_result.get("status") == "error":
-            result = _reply(chat_id, "😊 今天已经签到过了，明天再来吧！", reply_markup={"inline_keyboard": [[{"text": "🔙 主菜单", "callback_data": "ub_back_menu"}]]} if not is_group else None, msg_id=msg_id)
-            # 群聊30秒后删除消息
-            if is_group and result and user_msg_id:
-                bot_msg_id = result.get("result", {}).get("message_id")
-                if bot_msg_id:
-                    _delete_messages_later(chat_id, [bot_msg_id, user_msg_id], 30)
-            return
-
-        reward = checkin_result["reward"]
-        streak_bonus = checkin_result["streak_bonus"]
-        streak_count = checkin_result["streak_count"]
-        new_pts = checkin_result["balance"]
-        
-        # 构建签到消息
-        msg_lines = [f"🎉 签到成功！", f"", f"🎲 获得 <b>{reward}</b> 积分"]
-        if streak_bonus > 0:
-            msg_lines.append(f"🔥 连续签到 <b>{streak_count}</b> 天，额外奖励 <b>{streak_bonus}</b> 积分")
-        msg_lines.append(f"💰 当前余额：<b>{new_pts}</b> 积分")
-        
-        # 群聊签到显示群名
-        if is_group and group_name:
-            result = _reply(chat_id, f"🎉 <b>{uname}</b> 在 <b>{group_name}</b> 签到成功！\n\n" + "\n".join(msg_lines[1:]), msg_id=msg_id)
-        else:
-            result = _reply(chat_id, "\n".join(msg_lines),
-                  reply_markup={"inline_keyboard": [[{"text": "🏪 去商城逛逛", "callback_data": "ub_menu_shop"}, {"text": "🔙 主菜单", "callback_data": "ub_back_menu"}]]} if not is_group else None, msg_id=msg_id)
-        
-        # 群聊30秒后删除消息
-        if is_group and result and user_msg_id:
-            bot_msg_id = result.get("result", {}).get("message_id")
-            if bot_msg_id:
-                _delete_messages_later(chat_id, [bot_msg_id, user_msg_id], 30)
-    except Exception as e:
-        logger.error(f"[签到] 执行失败: {e}")
-        _send(chat_id, f"❌ 签到失败：{safe_error_message(e, '签到操作异常，请稍后重试')}")
+    return user_bot_points_commands_service.cmd_checkin(
+        chat_id,
+        tg_user_id,
+        msg_id=msg_id,
+        is_group=is_group,
+        group_name=group_name,
+        user_msg_id=user_msg_id,
+    )
 
 
 def _delete_messages_later(chat_id, message_ids, delay_seconds=30):
@@ -938,31 +887,7 @@ def _delete_messages_later(chat_id, message_ids, delay_seconds=30):
 
 
 def cmd_points(chat_id, tg_user_id, msg_id=None, is_group=False):
-    binding = _get_binding(tg_user_id)
-    if not binding:
-        if is_group:
-            return _reply(chat_id, "❌ 请先私聊机器人绑定账号", msg_id=msg_id)
-        else:
-            return _reply(chat_id, "❌ 请先绑定账号", msg_id=msg_id)
-    
-    # 检查 Emby 账号是否仍然有效
-    if not _check_emby_account(binding):
-        _unbind_user(tg_user_id)
-        if is_group:
-            return _reply(chat_id, "⚠️ 你的 Emby 账号已被删除，绑定已自动解除。请联系管理员。", msg_id=msg_id)
-        else:
-            return _reply(chat_id, "⚠️ 你的 Emby 账号已被删除，绑定已自动解除。请联系管理员。", 
-                          reply_markup=_main_menu_keyboard(None), msg_id=msg_id)
-    
-    try:
-        pts = point_dao.get_user_points_balance(binding['emby_user_id'])
-        if is_group:
-            return _reply(chat_id, f"💰 <b>{binding['emby_username']}</b> 的积分余额：<b>{pts}</b>", msg_id=msg_id)
-        else:
-            return _reply(chat_id, f"💰 <b>{binding['emby_username']}</b> 的积分余额\n\n🪙 当前积分：<b>{pts}</b>",
-                  reply_markup={"inline_keyboard": [[{"text": "✅ 签到", "callback_data": "ub_menu_checkin"}, {"text": "🏪 商城", "callback_data": "ub_menu_shop"}, {"text": "🔙 主菜单", "callback_data": "ub_back_menu"}]]}, msg_id=msg_id)
-    except:
-        return _reply(chat_id, "❌ 查询失败", msg_id=msg_id)
+    return user_bot_points_commands_service.cmd_points(chat_id, tg_user_id, msg_id=msg_id, is_group=is_group)
 
 # ==================== 🔥 新增群聊积分命令 ====================
 
