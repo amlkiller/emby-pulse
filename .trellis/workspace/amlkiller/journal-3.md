@@ -1094,3 +1094,36 @@ Extracted the playback stats system monitor endpoint into app/domains/playback/s
 ### Next Steps
 
 - None - task complete
+
+
+## Session 153: Refactor playback stats dashboard router
+
+**Date**: 2026-06-03
+**Task**: Refactor playback stats dashboard router
+**Branch**: `main`
+
+### Summary
+
+Extracted the playback stats dashboard endpoint into app/domains/playback/dashboard_router.py, included the child router from playback/stats.py at the original route position before libraries, preserved playback.stats compatibility export and runtime monkeypatch behavior for login, stats filter, playback store, stats cache, cache write, and media API dependencies, and verified compile checks, route/import compatibility, git diff checks, focused boundary tests, and the full pytest suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `59a6d1d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
