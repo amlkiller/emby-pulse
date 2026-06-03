@@ -698,3 +698,36 @@ Extracted NotificationBot /latest command handling into notification_bot_latest_
 ### Next Steps
 
 - None - task complete
+
+
+## Session 201: Extract notification bot search command service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot search command service
+**Branch**: `main`
+
+### Summary
+
+Extracted NotificationBot /search command handling and _extract_tech_info into notification_bot_search_command_service with lazy media API/admin ID/media URL/report cover providers; kept legacy wrappers and added boundary tests for keyword validation, admin lookup failure, search failures, empty results, movie and series formatting, image fallback, keyboard URL normalization, sample tech info, and exception fallback.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c2513bd` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
