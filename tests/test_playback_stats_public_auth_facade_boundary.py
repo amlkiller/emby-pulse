@@ -55,6 +55,147 @@ def test_playback_stats_includes_libraries_child_route_and_compat_export():
     assert dashboard_index < libraries_index < recent_index
 
 
+def test_playback_stats_includes_latest_child_route_and_compat_export():
+    from app.domains.playback import latest_router
+    from app.domains.playback import stats
+
+    routes = [
+        (route.path, route.methods)
+        for route in stats.router.routes
+        if hasattr(route, "methods")
+    ]
+
+    assert any(path == "/api/stats/latest" and "GET" in methods for path, methods in routes)
+    assert stats.api_latest_media is latest_router.api_latest_media
+
+    recent_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/recent" and "GET" in methods
+    )
+    latest_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/latest" and "GET" in methods
+    )
+    live_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/live" and "GET" in methods
+    )
+    assert recent_index < latest_index < live_index
+
+
+def test_latest_media_denies_unauthenticated_before_media_side_effects(monkeypatch):
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"Id": "u1"}})
+    calls = []
+
+    def fake_check_login(seen_request):
+        calls.append(seen_request)
+        return False
+
+    def fail_get_admin_user_id():
+        raise AssertionError("admin media user should not be queried without login")
+
+    def fail_media_get(*args, **kwargs):
+        raise AssertionError("latest media should not be read without login")
+
+    def fail_get_safe_proxies():
+        raise AssertionError("proxies should not be read without login")
+
+    monkeypatch.setattr(stats, "check_login", fake_check_login)
+    monkeypatch.setattr(stats, "get_admin_user_id", fail_get_admin_user_id)
+    monkeypatch.setattr(stats.media_api, "get", fail_media_get)
+    monkeypatch.setattr(stats, "get_safe_proxies", fail_get_safe_proxies)
+
+    response = stats.api_latest_media(request)
+
+    assert response == {"status": "error", "message": "请先登录"}
+    assert calls == [request]
+
+
+def test_latest_media_allows_internal_call_through_stats_monkeypatches(monkeypatch):
+    from app.domains.playback import stats
+
+    calls = []
+
+    class ItemsResponse:
+        status_code = 200
+
+        def json(self):
+            calls.append(("items_json",))
+            return {
+                "Items": [
+                    {
+                        "Id": "movie-1",
+                        "Name": "Movie One",
+                        "Type": "Movie",
+                        "ProductionYear": 2026,
+                        "ProviderIds": {"Tmdb": "tmdb-1"},
+                        "ImageTags": {"Primary": "abcdef123456"},
+                    }
+                ]
+            }
+
+    class TmdbResponse:
+        status_code = 200
+
+        def json(self):
+            calls.append(("tmdb_json",))
+            return {"poster_path": "/poster.jpg", "overview": "overview text"}
+
+    class FakeTmdbClient:
+        def get_movie_details(self, tmdb_id, proxies=None, timeout=None):
+            calls.append(("tmdb_movie", tmdb_id, proxies, timeout))
+            return TmdbResponse()
+
+        def get_tv_details(self, *args, **kwargs):
+            raise AssertionError("movie-only latest data should not fetch TV details")
+
+    def fake_get_admin_user_id():
+        calls.append(("get_admin_user_id",))
+        return "admin-id"
+
+    def fake_media_get(path, params=None, timeout=None):
+        calls.append(("media_get", path, params, timeout))
+        return ItemsResponse()
+
+    def fake_get_safe_proxies():
+        calls.append(("get_safe_proxies",))
+        return {"http": "http://proxy"}
+
+    monkeypatch.setattr(stats, "get_admin_user_id", fake_get_admin_user_id)
+    monkeypatch.setattr(stats.media_api, "get", fake_media_get)
+    monkeypatch.setattr(stats, "tmdb_client", FakeTmdbClient())
+    monkeypatch.setattr(stats, "get_safe_proxies", fake_get_safe_proxies)
+
+    response = stats.api_latest_media(request=None, limit=1)
+
+    assert response == {
+        "status": "success",
+        "data": [
+            {
+                "Id": "movie-1",
+                "Name": "Movie One",
+                "Year": 2026,
+                "Type": "Movie",
+                "Poster": "",
+                "Overview": "",
+                "TmdbId": "tmdb-1",
+                "ImageTag": "abcdef12",
+            }
+        ],
+    }
+    assert calls == [
+        ("get_admin_user_id",),
+        ("media_get", "/Users/admin-id/Items", {
+            "SortBy": "DateCreated", "SortOrder": "Descending",
+            "IncludeItemTypes": "Movie,Episode", "Recursive": "true",
+            "Limit": 500, "Fields": "ProductionYear,SeriesName,SeriesId,ParentIndexNumber,IndexNumber,DateCreated,Overview,ImageTags,ProviderIds"
+        }, 15),
+        ("items_json",),
+        ("get_safe_proxies",),
+        ("tmdb_movie", "tmdb-1", {"http": "http://proxy"}, 8),
+        ("tmdb_json",),
+    ]
+
+
 def test_get_libraries_denies_non_admin_before_query_or_media_side_effects(monkeypatch):
     from app.domains.playback import stats
 
