@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-3.md`
-- **Total Sessions**: 144
+- **Total Sessions**: 145
 - **Last Active**: 2026-06-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-3.md` | ~832 | Active |
+| `journal-3.md` | ~865 | Active |
 | `journal-2.md` | ~1993 | Archived |
 | `journal-1.md` | ~1973 | Archived |
 <!-- @@@/auto:active-documents -->
@@ -31,6 +31,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 145 | 2026-06-03 | Refactor playback stats chart router | `6043a58` | `main` |
 | 144 | 2026-06-03 | Refactor playback stats user details router | `1a3d560` | `main` |
 | 143 | 2026-06-03 | Refactor playback stats top movies router | `bb241a4` | `main` |
 | 142 | 2026-06-03 | Refactor playback stats live router | `1b5c560` | `main` |

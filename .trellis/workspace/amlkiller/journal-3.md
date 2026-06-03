@@ -830,3 +830,36 @@ Extracted the playback stats user-details endpoint into app/domains/playback/use
 ### Next Steps
 
 - None - task complete
+
+
+## Session 145: Refactor playback stats chart router
+
+**Date**: 2026-06-03
+**Task**: Refactor playback stats chart router
+**Branch**: `main`
+
+### Summary
+
+Extracted the playback stats chart/trend endpoint into app/domains/playback/chart_router.py, included the child router from playback/stats.py at the original route position, preserved playback.stats compatibility export and old-module monkeypatch behavior for login, stats filter, and playback store access, and verified compile checks, import/route compatibility, git diff checks, focused boundary tests, and the full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6043a58` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
