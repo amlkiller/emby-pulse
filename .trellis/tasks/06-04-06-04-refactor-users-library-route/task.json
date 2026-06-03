@@ -3,7 +3,7 @@
   "name": "06-04-refactor-users-library-route",
   "title": "refactor users library route",
   "description": "Extract the admin user library permission save route from app/domains/users/router.py into a dedicated users child router while preserving behavior and compatibility.",
-  "status": "planning",
+  "status": "in_progress",
   "dev_type": null,
   "scope": null,
   "package": null,
