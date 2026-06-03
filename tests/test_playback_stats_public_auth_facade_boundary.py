@@ -788,6 +788,100 @@ def test_monthly_stats_allows_non_admin_through_stats_monkeypatches(monkeypatch)
     ]
 
 
+def test_playback_stats_includes_recent_added_child_route_and_compat_export():
+    from app.domains.playback import recent_added_router
+    from app.domains.playback import stats
+
+    routes = [
+        (route.path, route.methods)
+        for route in stats.router.routes
+        if hasattr(route, "methods")
+    ]
+
+    assert any(path == "/api/stats/recent_added" and "GET" in methods for path, methods in routes)
+    assert stats.api_recent_added is recent_added_router.api_recent_added
+
+    monthly_stats_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/monthly_stats" and "GET" in methods
+    )
+    recent_added_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/recent_added" and "GET" in methods
+    )
+    preload_status_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/dashboard/preload_status" and "GET" in methods
+    )
+    assert monthly_stats_index < recent_added_index < preload_status_index
+
+
+def test_recent_added_denies_unauthenticated_before_stats_side_effects(monkeypatch):
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"Id": "u1"}})
+    calls = []
+
+    def fake_check_login(seen_request):
+        calls.append(seen_request)
+        return False
+
+    def fail_get_added_stats_sync():
+        raise AssertionError("recent added should not fetch stats without login")
+
+    monkeypatch.setattr(stats, "check_login", fake_check_login)
+    monkeypatch.setattr(stats, "_get_added_stats_sync", fail_get_added_stats_sync)
+
+    response = stats.api_recent_added(request)
+
+    assert response == {"status": "error", "message": "请先登录"}
+    assert calls == [request]
+
+
+def test_recent_added_internal_call_skips_login_and_uses_stats_monkeypatch(monkeypatch):
+    from app.domains.playback import stats
+
+    calls = []
+
+    def fail_check_login(*args, **kwargs):
+        raise AssertionError("internal recent added call should skip login")
+
+    def fake_get_added_stats_sync():
+        calls.append("get_added_stats_sync")
+        return {"total": 3, "week": [0, 1, 2]}
+
+    monkeypatch.setattr(stats, "check_login", fail_check_login)
+    monkeypatch.setattr(stats, "_get_added_stats_sync", fake_get_added_stats_sync)
+
+    response = stats.api_recent_added()
+
+    assert response == {"status": "success", "data": {"total": 3, "week": [0, 1, 2]}}
+    assert calls == ["get_added_stats_sync"]
+
+
+def test_recent_added_authenticated_call_uses_stats_monkeypatches(monkeypatch):
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"Id": "u1"}})
+    calls = []
+
+    def fake_check_login(seen_request):
+        calls.append(("check_login", seen_request))
+        return True
+
+    def fake_get_added_stats_sync():
+        calls.append(("get_added_stats_sync",))
+        return {"libraries": [{"Name": "Movies", "count": 2}]}
+
+    monkeypatch.setattr(stats, "check_login", fake_check_login)
+    monkeypatch.setattr(stats, "_get_added_stats_sync", fake_get_added_stats_sync)
+
+    response = stats.api_recent_added(request)
+
+    assert response == {"status": "success", "data": {"libraries": [{"Name": "Movies", "count": 2}]}}
+    assert calls == [
+        ("check_login", request),
+        ("get_added_stats_sync",),
+    ]
+
+
 def test_user_details_denies_unauthenticated_before_query_or_media_side_effects(monkeypatch):
     from app.domains.playback import stats
 

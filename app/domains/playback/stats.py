@@ -32,6 +32,11 @@ from app.domains.playback.poster_router import (
     router as poster_router,
     set_dependency_providers as set_poster_dependency_providers,
 )
+from app.domains.playback.recent_added_router import (
+    api_recent_added,
+    router as recent_added_router,
+    set_dependency_providers as set_recent_added_dependency_providers,
+)
 from app.domains.playback.top_users_router import (
     api_top_users_list,
     router as top_users_router,
@@ -162,6 +167,11 @@ set_monthly_dependency_providers(
     playback_store_provider=lambda: playback_store,
 )
 
+set_recent_added_dependency_providers(
+    check_login_provider=lambda: check_login,
+    get_added_stats_sync_provider=lambda: _get_added_stats_sync,
+)
+
 
 @router.get("/api/stats/dashboard")
 def api_dashboard(request: Request, user_id: Optional[str] = None):
@@ -283,18 +293,7 @@ router.include_router(badges_router)
 
 router.include_router(monthly_router)
 
-# ==========================================
-# ==========================================
-# 🔥 Pro 仪表盘：最近入库统计与趋势 (独立API，供charts.js调用)
-# ==========================================
-@router.get("/api/stats/recent_added")
-def api_recent_added(request: Request = None):
-    # 🔒 安全检查（内部调用时 request 为 None，跳过检查）
-    if request and not check_login(request):
-        return {"status": "error", "message": "请先登录"}
-    """独立API入口，复用 _get_added_stats_sync 的逻辑"""
-    result = _get_added_stats_sync()
-    return {"status": "success", "data": result}
+router.include_router(recent_added_router)
 
 # ==========================================
 # 🔥 仪表盘聚合 API - 核心数据快速返回
