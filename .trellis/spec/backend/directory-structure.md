@@ -13,7 +13,7 @@ with most HTTP and business modules now grouped under `app/domains/`:
 * `app/bootstrap/` owns application startup wiring: runtime preparation, middleware registration, route mounting, lifespan tasks, database initialization orchestration, logging setup, and the isolated user-portal ASGI wrapper.
 * `app/core/` owns reusable cross-cutting runtime helpers used by multiple backend areas, such as security, sessions, configuration, middleware implementations, and short-lived compatibility shims.
 * `app/infra/` owns infrastructure adapters such as database access, external service clients, and infrastructure-scoped configuration readers.
-* `app/bot/` owns bot-specific runtime and service implementation modules that are not HTTP domain routers. The notification bot lives under `app/bot/notification_bot/`, including its service singleton wiring, DAO, and `notification_bot_*` behavior slices.
+* `app/bot/` owns bot-specific runtime and service implementation modules. The admin bot HTTP router and its admin DAO live at `app/bot/bot.py` and `app/bot/bot_admin_dao.py`; register the router from `app.bot`, not from `app.domains.notifications`. The notification bot lives under `app/bot/notification_bot/`, including its service singleton wiring, DAO, and `notification_bot_*` behavior slices.
 * `app/domains/` owns domain-local HTTP route handlers, services, DAO/query modules, policy helpers, and background service entrypoints.
 * `app/plugins/` owns the plugin runtime plus built-in plugins.
 
@@ -94,12 +94,12 @@ cleaning them up, prefer small behavior-preserving slices:
 * `policy.py` for reusable decision rules.
 * `events.py` for cross-domain event publication or handling.
 
-Notification bot implementation modules are an exception to the domain-local
-service placement above: keep notification bot internals under
-`app/bot/notification_bot/`. Cross-domain callers should reach notification bot
-behavior through semantic facades such as `app/domains/notifications/public_service.py`
-or bootstrap/service wiring, not by importing the bot singleton from arbitrary
-domains.
+Bot implementation modules are an exception to the domain-local service and
+router placement above: keep the admin bot router/DAO in `app/bot/`, and keep
+notification bot internals under `app/bot/notification_bot/`. Cross-domain
+callers should reach notification bot behavior through semantic facades such as
+`app/domains/notifications/public_service.py` or bootstrap/service wiring, not
+by importing the bot singleton from arbitrary domains.
 
 Do not deepen cross-domain imports into private DAO/query modules. If one domain
 needs another domain's behavior, prefer a public service function, a narrow
