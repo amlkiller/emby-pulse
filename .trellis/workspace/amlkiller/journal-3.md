@@ -1688,3 +1688,36 @@ Extracted user bot channel bind and unbind command handling into a focused notif
 ### Next Steps
 
 - None - task complete
+
+
+## Session 171: Refactor notification user bot password command
+
+**Date**: 2026-06-03
+**Task**: Refactor notification user bot password command
+**Branch**: `main`
+
+### Summary
+
+Extracted user bot password command handling into a focused notification domain service while preserving the legacy wrapper, password state machine, and runtime dependency providers.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c29f9c2` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
