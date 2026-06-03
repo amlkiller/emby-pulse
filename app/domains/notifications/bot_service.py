@@ -16,6 +16,7 @@ from app.domains.notifications import bot_service_dao, message_dao
 from app.domains.notifications import notification_bot_channel_service
 from app.domains.notifications import notification_bot_check_command_service
 from app.domains.notifications import notification_bot_delivery_service
+from app.domains.notifications import notification_bot_emby_restart_command_service
 from app.domains.notifications import notification_bot_message_center_callback_service
 from app.domains.notifications import notification_bot_media_helper_service
 from app.domains.notifications import notification_bot_media_quality_service
@@ -155,6 +156,10 @@ notification_bot_check_command_service.set_dependency_providers(
 notification_bot_playback_command_service.set_dependency_providers(
     media_api_provider=lambda: media_api,
     playback_store_provider=lambda: playback_store,
+)
+
+notification_bot_emby_restart_command_service.set_dependency_providers(
+    logger_provider=lambda: logger,
 )
 
 def _submit_bot_task(fn, *args):
@@ -1480,48 +1485,10 @@ class NotificationBot:
 
         # Emby 重启回调: emby_restart:index 或 emby_restart:all
         if data.startswith("emby_restart:"):
-            try:
-                from app.plugins import get_plugin_config, get_plugin
-                plugin = get_plugin("emby_restart")
-                if not plugin or not plugin.enabled:
-                    self.send_message(cid, "❌ Emby 自动重启插件未启用", platform="tg")
-                    return
-                
-                config = get_plugin_config("emby_restart")
-                servers = config.get("servers", [])
-                
-                action = data.split(":")[1]
-                
-                if action == "all":
-                    # 重启全部
-                    self.send_message(cid, f"🔄 正在重启全部 {len(servers)} 台 Emby 服务器...", platform="tg")
-                    result = plugin.manual_restart()
-                    if result.get("success"):
-                        self.send_message(cid, f"✅ {result.get('message', '重启成功')}", platform="tg")
-                    else:
-                        self.send_message(cid, f"❌ {result.get('message', '重启失败')}", platform="tg")
-                else:
-                    # 重启单个服务器
-                    index = int(action)
-                    if index < 0 or index >= len(servers):
-                        self.send_message(cid, "❌ 服务器不存在", platform="tg")
-                        return
-                    
-                    server = servers[index]
-                    name = server.get('name', '未命名')
-                    self.send_message(cid, f"🔄 正在重启服务器 [{name}]...", platform="tg")
-                    
-                    result = plugin._restart_via_emby_api(server.get('host'), server.get('api_key'))
-                    if result.get("success"):
-                        self.send_message(cid, f"✅ 服务器 [{name}] 重启成功", platform="tg")
-                    else:
-                        self.send_message(cid, f"❌ 服务器 [{name}] 重启失败: {result.get('message', '未知错误')}", platform="tg")
-                return
-            except Exception as e:
-                logger.error(f"[Bot] emby_restart callback error: {e}")
-                self.send_message(cid, f"❌ 执行失败: {str(e)}", platform="tg")
-                return
-            except Exception: pass
+            notification_bot_emby_restart_command_service.handle_emby_restart_callback(
+                self, data, cid, cq, platform="tg"
+            )
+            return
 
         # 求片通知影巢搜索回调: req_hdhive_xxx
         if data.startswith("req_hdhive_"):
@@ -2144,55 +2111,7 @@ class NotificationBot:
         return notification_bot_check_command_service.cmd_check(self, cid, platform)
 
     def _cmd_emby_restart(self, cid, text, platform):
-        """Emby 服务器重启命令"""
-        try:
-            from app.plugins import get_plugin_config, get_plugin
-            
-            # 检查插件是否启用
-            plugin = get_plugin("emby_restart")
-            if not plugin or not plugin.enabled:
-                self.send_message(cid, "❌ Emby 自动重启插件未启用", platform=platform)
-                return
-            
-            config = get_plugin_config("emby_restart")
-            servers = config.get("servers", [])
-            
-            if not servers:
-                self.send_message(cid, "❌ 未配置 Emby 服务器，请先在插件面板中添加服务器", platform=platform)
-                return
-            
-            # 发送服务器列表卡片
-            msg = "🖥️ <b>Emby 服务器管理</b>\n\n请选择要重启的服务器：\n"
-            
-            # 发送每个服务器的按钮
-            for i, s in enumerate(servers):
-                name = s.get('name', '未命名')
-                msg += f"\n<b>{i+1}.</b> {name}"
-            
-            msg += f"\n\n💡 点击下方按钮重启对应服务器"
-            
-            # 构建按钮 (Telegram inline keyboard 格式)
-            inline_keyboard = []
-            row = []
-            for i, s in enumerate(servers):
-                name = s.get('name', '未命名')[:8]  # 限制按钮文字长度
-                row.append({"text": f"🔄 {name}", "callback_data": f"emby_restart:{i}"})
-                if len(row) == 2:  # 每行2个按钮
-                    inline_keyboard.append(row)
-                    row = []
-            if row:
-                inline_keyboard.append(row)
-            
-            # 添加重启全部按钮
-            inline_keyboard.append([{"text": "🔄 重启全部服务器", "callback_data": "emby_restart:all"}])
-            
-            reply_markup = {"inline_keyboard": inline_keyboard}
-            
-            self.send_message(cid, msg, platform=platform, reply_markup=reply_markup)
-                
-        except Exception as e:
-            logger.error(f"[Bot] emby_restart error: {e}")
-            self.send_message(cid, f"❌ 执行失败: {str(e)}", platform=platform)
+        return notification_bot_emby_restart_command_service.cmd_emby_restart(self, cid, text, platform)
 
     def _cmd_calendar(self, cid, platform):
         """今日剧集更新"""
