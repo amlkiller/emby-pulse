@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend guideline index for quality review."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Check that the new domain-local module follows layout guidance."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Project quality and uv command conventions for verification."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared thinking guide index for review."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Review that the extraction reduces duplication and preserves behavior."}

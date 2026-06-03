@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend guideline index for this domain refactor."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Module organization guidance for splitting domain-local files."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Project quality and uv command conventions for implementation checks."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared thinking guide index for small helper extraction."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Reuse guidance for extracting a helper without duplicating behavior."}
