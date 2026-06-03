@@ -18,6 +18,7 @@ from app.domains.users import user_dao
 from app.domains.users import user_bot_dao
 from app.domains.notifications import user_bot_binding_service
 from app.domains.notifications import user_bot_concurrency_service
+from app.domains.notifications import user_bot_menu_service
 from app.domains.notifications import user_bot_registration_queue_service
 from app.domains.notifications import user_bot_registration_quota_service
 from app.domains.notifications import user_bot_restriction_service
@@ -257,6 +258,10 @@ user_bot_concurrency_service.set_dependency_providers(
     threading_provider=lambda: threading,
     time_provider=lambda: time,
     logger_provider=lambda: logger,
+)
+
+user_bot_menu_service.set_dependency_providers(
+    portal_url_provider=lambda: get_user_bot_portal_url(),
 )
 
 user_bot_telegram_service.set_dependency_providers(
@@ -508,26 +513,7 @@ def _get_username_lock(username_lower):
 # ==========================================
 
 def _main_menu_keyboard(binding=None):
-    """生成主菜单 inline keyboard"""
-    if not binding:
-        return {"inline_keyboard": [
-            [{"text": "📝 绑定已有账号", "callback_data": "ub_menu_bind"}, {"text": "🆕 注册新账号", "callback_data": "ub_menu_register"}],
-            [{"text": "🎟️ 注册码激活", "callback_data": "ub_menu_code"}, {"text": "📊 媒体库统计", "callback_data": "ub_menu_library"}]
-        ]}
-    rows = [
-        [{"text": "✅ 每日签到", "callback_data": "ub_menu_checkin"}, {"text": "👤 个人中心", "callback_data": "ub_menu_profile"}],
-        [{"text": "🏪 积分商城", "callback_data": "ub_menu_shop"}, {"text": "🎬 我要求片", "callback_data": "ub_menu_request"}],
-        [{"text": "📋 我的求片", "callback_data": "ub_menu_myrequests"}],
-        [{"text": "📊 媒体库统计", "callback_data": "ub_menu_library"}],
-        [{"text": "🔐 修改密码", "callback_data": "ub_menu_password"}, {"text": "📡 服务器状态", "callback_data": "ub_menu_server"}],
-        [{"text": "🎟️ 续期码续期", "callback_data": "ub_menu_renew"}],
-        [{"text": "🔓 解绑账号", "callback_data": "ub_menu_unbind"}],
-    ]
-    # 用户中心网页链接
-    portal_url = get_user_bot_portal_url()
-    if portal_url:
-        rows.append([{"text": "🌐 网页版用户中心", "url": portal_url}])
-    return {"inline_keyboard": rows}
+    return user_bot_menu_service.main_menu_keyboard(binding)
 
 
 def cmd_start(chat_id, tg_user_id, tg_name):
