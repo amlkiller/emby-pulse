@@ -1457,3 +1457,36 @@ Extracted the user bot main menu keyboard builder into a focused notification me
 ### Next Steps
 
 - None - task complete
+
+
+## Session 164: Refactor notification user bot message cleanup service
+
+**Date**: 2026-06-03
+**Task**: Refactor notification user bot message cleanup service
+**Branch**: `main`
+
+### Summary
+
+Extracted delayed user bot Telegram message cleanup into a focused notification service while preserving the legacy user_bot_service wrapper, daemon thread behavior, runtime token/proxy/client providers, falsy message skip, and per-message error swallowing.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e2b3ee4` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
