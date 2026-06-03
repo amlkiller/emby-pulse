@@ -170,3 +170,36 @@ Extracted the users update route and request model into app/domains/users/update
 ### Next Steps
 
 - None - task complete
+
+
+## Session 245: Refactor users library route
+
+**Date**: 2026-06-04
+**Task**: Refactor users library route
+**Branch**: `main`
+
+### Summary
+
+Extracted the users library permission save route into app/domains/users/library_update_router.py, preserved router compatibility exports and route order, reused UserUpdateModelEx from update_router.py, and added focused authorization, health-check, success, missing-user, and safe-error mapping coverage. Verification: compileall changed files, import compatibility check, git diff --check, tests/test_users_public_service_facade.py -v (40 passed), and full tests/ -v (919 passed).
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e80d071` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
