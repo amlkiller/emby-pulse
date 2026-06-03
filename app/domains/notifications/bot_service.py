@@ -15,6 +15,7 @@ from app.domains.media_requests import gap_dao, media_request_dao
 from app.domains.media_requests.public_service import remove_gap_from_scan_state
 from app.domains.users import user_bot_dao
 from app.domains.notifications import bot_service_dao, message_dao
+from app.domains.notifications import notification_bot_channel_service
 from app.domains.notifications import notification_bot_media_quality_service
 from app.domains.notifications import notification_bot_request_admin_message_sync_service
 from app.domains.notifications import notify_admin_dao, notify_rule_dao
@@ -78,6 +79,14 @@ notification_bot_media_quality_service.set_dependency_providers(
     media_api_provider=lambda: media_api,
     logger_provider=lambda: logger,
     admin_id_provider=lambda: get_admin_id,
+)
+
+notification_bot_channel_service.set_dependency_providers(
+    notify_channels_provider=lambda: get_notify_channels,
+    tg_bot_token_provider=lambda: get_notify_tg_bot_token,
+    safe_proxies_provider=lambda: get_safe_proxies,
+    telegram_client_provider=lambda: telegram_client,
+    logger_provider=lambda: logger,
 )
 
 def _submit_bot_task(fn, *args):
@@ -874,134 +883,13 @@ class NotificationBot:
             logger.error(f"[入库通知] 处理失败: {e}")
 
     def _notify_channels(self, photo_io, caption, keyboard, item_type, item_info):
-        """推送入库通知到配置的频道"""
-        try:
-            notify_channels_str = get_notify_channels()
-            if not notify_channels_str:
-                return
-            
-            notify_channels = json.loads(notify_channels_str)
-            if not isinstance(notify_channels, list):
-                return
-            
-            # 类型映射
-            type_mapping = {
-                "movie": "movie",
-                "series": "series",
-                "season": "series",
-                "episode": "episode"
-            }
-            notify_type = type_mapping.get(item_type.lower(), "")
-            
-            for channel in notify_channels:
-                if not channel.get("enabled", True):
-                    continue
-                
-                # 检查类型过滤
-                notify_types = channel.get("notify_types", ["movie", "series", "episode"])
-                if notify_type and notify_type not in notify_types:
-                    continue
-                
-                chat_id = channel.get("chat_id")
-                if not chat_id:
-                    continue
-                
-                channel_name = channel.get("name", chat_id)
-                
-                try:
-                    # 发送到频道，不包含播放按钮（避免泄露公网地址）
-                    self._send_to_channel(chat_id, photo_io, caption, None)
-                    logger.info(f"📢 [频道通知] 已推送到频道: {channel_name}")
-                except Exception as e:
-                    logger.error(f"📢 [频道通知] 推送到频道 {channel_name} 失败: {e}")
-                    
-        except Exception as e:
-            logger.error(f"📢 [频道通知] 处理频道推送失败: {e}")
+        return notification_bot_channel_service.notify_channels(photo_io, caption, keyboard, item_type, item_info)
 
     def _send_to_channel(self, chat_id, photo_io, caption, keyboard):
-        """发送消息到指定频道"""
-        token = get_notify_tg_bot_token()
-        if not token:
-            return
-
-        proxies = get_safe_proxies()
-        
-        # 重置图片位置
-        if photo_io:
-            photo_io.seek(0)
-        
-        try:
-            # 发送图片
-            if photo_io:
-                data = {
-                    "chat_id": chat_id,
-                    "caption": caption,
-                    "parse_mode": "HTML"
-                }
-                if keyboard:
-                    data["reply_markup"] = json.dumps(keyboard)
-                
-                files = {"photo": ("photo.jpg", photo_io, "image/jpeg")}
-                res = telegram_client.send_photo(token, data=data, files=files, proxies=proxies, timeout=30)
-            else:
-                # 发送纯文本
-                data = {
-                    "chat_id": chat_id,
-                    "text": caption,
-                    "parse_mode": "HTML"
-                }
-                if keyboard:
-                    data["reply_markup"] = json.dumps(keyboard)
-                
-                res = telegram_client.send_message(token, data, proxies=proxies, timeout=30)
-            
-            if res.status_code != 200:
-                logger.error(f"📢 [频道通知] 发送失败: {res.text}")
-                
-        except Exception as e:
-            logger.error(f"📢 [频道通知] 发送异常: {e}")
+        return notification_bot_channel_service.send_to_channel(chat_id, photo_io, caption, keyboard)
 
     def send_to_channels(self, photo_io, caption, keyboard=None):
-        """发送消息到配置的频道（供插件调用）
-        
-        Args:
-            photo_io: 图片 IO 对象，None 则发送纯文本
-            caption: 消息内容
-            keyboard: 按钮配置，频道通知通常为 None
-        """
-        try:
-            notify_channels_str = get_notify_channels()
-            if not notify_channels_str:
-                logger.info(f"📢 [频道通知] 未配置频道，跳过推送")
-                return
-            
-            notify_channels = json.loads(notify_channels_str)
-            if not isinstance(notify_channels, list):
-                logger.warning(f"📢 [频道通知] 频道配置格式错误")
-                return
-            
-            enabled_channels = [c for c in notify_channels if c.get("enabled", True)]
-            if not enabled_channels:
-                logger.info(f"📢 [频道通知] 没有启用的频道，跳过推送")
-                return
-            
-            logger.info(f"📢 [频道通知] 准备推送到 {len(enabled_channels)} 个频道")
-            
-            for channel in enabled_channels:
-                chat_id = channel.get("chat_id")
-                if not chat_id:
-                    continue
-                
-                channel_name = channel.get("name", chat_id)
-                
-                try:
-                    self._send_to_channel(chat_id, photo_io, caption, keyboard)
-                    logger.info(f"📢 [频道通知] 已推送到频道: {channel_name}")
-                except Exception as e:
-                    logger.error(f"📢 [频道通知] 推送到频道 {channel_name} 失败: {e}")
-                    
-        except Exception as e:
-            logger.error(f"📢 [频道通知] 处理频道推送失败: {e}")
+        return notification_bot_channel_service.send_to_channels(photo_io, caption, keyboard)
 
     def _format_ticks(self, ticks):
         if not ticks: return "00:00:00"
