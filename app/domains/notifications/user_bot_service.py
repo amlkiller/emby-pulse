@@ -18,6 +18,7 @@ from app.domains.users import user_bot_dao
 from app.domains.notifications import user_bot_account_commands_service
 from app.domains.notifications import user_bot_basic_commands_service
 from app.domains.notifications import user_bot_binding_service
+from app.domains.notifications import user_bot_callback_dispatcher_service
 from app.domains.notifications import user_bot_channel_commands_service
 from app.domains.notifications import user_bot_code_commands_service
 from app.domains.notifications import user_bot_concurrency_service
@@ -572,6 +573,35 @@ user_bot_polling_service.set_dependency_providers(
     submit_task_provider=lambda: _submit_task,
     send_provider=lambda: _send,
     logger_provider=lambda: logger,
+)
+
+user_bot_callback_dispatcher_service.set_dependency_providers(
+    rate_check_provider=lambda: _rate_check,
+    tg_api_provider=lambda: _tg_api,
+    check_user_restrictions_provider=lambda: _check_user_restrictions,
+    format_restriction_message_provider=lambda: _format_restriction_message,
+    send_provider=lambda: _send,
+    edit_provider=lambda: _edit,
+    get_binding_provider=lambda: _get_binding,
+    check_emby_account_provider=lambda: _check_emby_account,
+    unbind_user_provider=lambda: _unbind_user,
+    add_to_blacklist_provider=lambda: _add_to_blacklist,
+    main_menu_keyboard_provider=lambda: _main_menu_keyboard,
+    user_state_provider=lambda: _user_state,
+    cmd_register_provider=lambda: cmd_register,
+    cmd_library_provider=lambda: cmd_library,
+    cmd_server_provider=lambda: cmd_server,
+    cmd_checkin_provider=lambda: cmd_checkin,
+    cmd_points_provider=lambda: cmd_points,
+    cmd_profile_provider=lambda: cmd_profile,
+    cmd_shop_provider=lambda: cmd_shop,
+    handle_pk_accept_callback_provider=lambda: _handle_pk_accept_callback,
+    handle_pk_reject_callback_provider=lambda: _handle_pk_reject_callback,
+    cmd_redeem_callback_provider=lambda: cmd_redeem_callback,
+    cmd_request_callback_provider=lambda: cmd_request_callback,
+    submit_request_provider=lambda: _submit_request,
+    cmd_myrequests_provider=lambda: cmd_myrequests,
+    handle_scratch_provider=lambda: _handle_scratch,
 )
 
 user_bot_scheduler_service.set_dependency_providers(
@@ -1408,169 +1438,7 @@ class UserBot:
             _send(chat_id, "💡 请从菜单中选择服务，或发送 /help 查看命令列表", reply_markup=_main_menu_keyboard(binding))
 
     def _on_callback(self, cq):
-        data = cq.get("data", "")
-        chat_id = str(cq["message"]["chat"]["id"])
-        msg_id = cq["message"]["message_id"]
-        tg_user_id = str(cq["from"]["id"])
-        tg_name = cq["from"].get("first_name", "用户")
-        cq_id = cq["id"]
-
-        if not _rate_check(tg_user_id, cooldown=1):
-            _tg_api("answerCallbackQuery", {"callback_query_id": cq_id})
-            return
-
-        # 🔥 所有按钮都需要检查使用限制
-        restriction_check = _check_user_restrictions(tg_user_id)
-        if not restriction_check["passed"]:
-            _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": "请先关注频道/加入群聊", "show_alert": True})
-            _send(chat_id, _format_restriction_message(restriction_check))
-            return
-
-        binding = _get_binding(tg_user_id)
-
-        # 未绑定用户的菜单按钮
-        if data == "ub_menu_bind":
-            _tg_api("answerCallbackQuery", {"callback_query_id": cq_id})
-            _edit(chat_id, msg_id, "📝 <b>绑定账号</b>\n\n请发送命令（用户名和密码用空格隔开）：\n<code>/bind 用户名 密码</code>\n\n⚠️ 密码仅用于验证身份，不会被存储",
-                  reply_markup={"inline_keyboard": [[{"text": "🔙 返回", "callback_data": "ub_back_menu"}]]})
-            return
-        if data == "ub_menu_register":
-            _tg_api("answerCallbackQuery", {"callback_query_id": cq_id})
-            cmd_register(chat_id, tg_user_id, tg_name)
-            return
-        if data == "ub_menu_code":
-            _tg_api("answerCallbackQuery", {"callback_query_id": cq_id})
-            _edit(chat_id, msg_id, "🎟️ <b>注册码激活</b>\n\n请发送命令：\n<code>/code 你的注册码</code>",
-                  reply_markup={"inline_keyboard": [[{"text": "🔙 返回", "callback_data": "ub_back_menu"}]]})
-            return
-        if data == "ub_back_menu":
-            _tg_api("answerCallbackQuery", {"callback_query_id": cq_id})
-            _user_state.pop(tg_user_id, None)
-            binding = _get_binding(tg_user_id)
-            if binding:
-                _edit(chat_id, msg_id, f"👋 欢迎回来，<b>{binding['emby_username']}</b>！\n\n🎬 EmbyPulse 用户自助服务\n请选择你需要的服务：", reply_markup=_main_menu_keyboard(binding))
-            else:
-                _edit(chat_id, msg_id, f"👋 你好 <b>{tg_name}</b>！\n\n🎬 这是 <b>EmbyPulse</b> 用户自助服务机器人\n\n请先完成绑定或注册：", reply_markup=_main_menu_keyboard(None))
-            return
-        if data == "ub_cancel_state":
-            _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": "已取消"})
-            _user_state.pop(tg_user_id, None)
-            binding = _get_binding(tg_user_id)
-            _edit(chat_id, msg_id, "❌ 已取消操作", reply_markup=_main_menu_keyboard(binding))
-            return
-
-        # 媒体库统计 - 不需要绑定即可访问
-        if data == "ub_menu_library":
-            _tg_api("answerCallbackQuery", {"callback_query_id": cq_id})
-            cmd_library(chat_id, tg_user_id, msg_id=msg_id)
-            return
-        
-        # 服务器状态 - 不需要绑定即可访问
-        if data == "ub_menu_server":
-            _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": "检测中..."})
-            cmd_server(chat_id, tg_user_id, msg_id=msg_id)
-            return
-
-        # 以下按钮需要绑定
-        if not binding:
-            _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": "请先绑定账号", "show_alert": True})
-            return
-
-        # 检查 Emby 账号是否还存在
-        if not _check_emby_account(binding):
-            _tg_api("answerCallbackQuery", {"callback_query_id": cq_id})
-            _unbind_user(tg_user_id)
-            _edit(chat_id, msg_id, "⚠️ 你的 Emby 账号已被管理员删除，绑定已自动解除。", reply_markup=_main_menu_keyboard(None))
-            return
-
-        if data == "ub_menu_checkin":
-            _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": "签到中..."})
-            cmd_checkin(chat_id, tg_user_id, msg_id=msg_id)
-        elif data == "ub_menu_points":
-            _tg_api("answerCallbackQuery", {"callback_query_id": cq_id})
-            cmd_points(chat_id, tg_user_id, msg_id=msg_id)
-        elif data == "ub_menu_profile":
-            _tg_api("answerCallbackQuery", {"callback_query_id": cq_id})
-            cmd_profile(chat_id, tg_user_id, msg_id=msg_id)
-        elif data == "ub_menu_shop":
-            _tg_api("answerCallbackQuery", {"callback_query_id": cq_id})
-            cmd_shop(chat_id, tg_user_id, msg_id=msg_id)
-        elif data == "ub_menu_request":
-            _tg_api("answerCallbackQuery", {"callback_query_id": cq_id})
-            _edit(chat_id, msg_id, "🎬 <b>求片功能</b>\n\n请发送命令：\n<code>/request 影视名称</code>\n\n例如：<code>/request 沙丘</code>",
-                  reply_markup={"inline_keyboard": [[{"text": "🔙 返回", "callback_data": "ub_back_menu"}]]})
-        elif data == "ub_menu_password":
-            _tg_api("answerCallbackQuery", {"callback_query_id": cq_id})
-            _edit(chat_id, msg_id, "🔐 <b>修改密码</b>\n\n请发送命令（当前密码和新密码用空格隔开）：\n<code>/password 当前密码 新密码</code>\n\n例如：<code>/password 当前密码 NewPass1</code>\n\n⚠️ 新密码至少 8 位，需包含小写字母 + 大写字母或数字",
-                  reply_markup={"inline_keyboard": [[{"text": "🔙 返回", "callback_data": "ub_back_menu"}]]})
-        elif data == "ub_menu_renew":
-            _tg_api("answerCallbackQuery", {"callback_query_id": cq_id})
-            _edit(chat_id, msg_id, "🎟️ <b>续期功能</b>\n\n请发送命令：\n<code>/renew 你的续期码</code>",
-                  reply_markup={"inline_keyboard": [[{"text": "🔙 返回", "callback_data": "ub_back_menu"}]]})
-        elif data == "ub_menu_unbind":
-            _tg_api("answerCallbackQuery", {"callback_query_id": cq_id})
-            _edit(chat_id, msg_id, f"🔓 <b>确认解绑？</b>\n\n当前绑定：<b>{binding['emby_username']}</b>\n\n解绑后将无法使用签到、商城等功能。",
-                  reply_markup={"inline_keyboard": [
-                      [{"text": "✅ 确认解绑", "callback_data": "ub_unbind_confirm"}, {"text": "❌ 取消", "callback_data": "ub_back_menu"}]
-                  ]})
-        elif data == "ub_unbind_confirm":
-            _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": "已解绑"})
-            _unbind_user(tg_user_id)
-            _add_to_blacklist(tg_user_id, "用户主动解绑")
-            _edit(chat_id, msg_id, "✅ 已成功解绑账号。\n\n如需重新使用，请联系管理员或使用注册码注册。", reply_markup=_main_menu_keyboard(None))
-        # 🔥 用户PK回调
-        elif data.startswith("pk_accept:"):
-            invite_id = data.split(":")[1]
-            _handle_pk_accept_callback(chat_id, tg_user_id, invite_id, cq_id, msg_id)
-        elif data.startswith("pk_reject:"):
-            invite_id = data.split(":")[1]
-            _handle_pk_reject_callback(chat_id, tg_user_id, invite_id, cq_id, msg_id)
-        # 商城兑换
-        elif data.startswith("ub_redeem_"):
-            item_id = data.replace("ub_redeem_", "")
-            cmd_redeem_callback(chat_id, tg_user_id, item_id, cq_id)
-        # 求片选择
-        elif data.startswith("ub_req_"):
-            parts = data.split("_")
-            if len(parts) >= 4:
-                media_type = parts[2]
-                tmdb_id = parts[3]
-                cmd_request_callback(chat_id, tg_user_id, media_type, tmdb_id, cq_id)
-        # 求片选季
-        elif data.startswith("ub_reqsn_"):
-            _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": "提交中..."})
-            parts = data.split("_")
-            # 格式: ub_reqsn_TMDBID_SEASON，需要4个部分
-            if len(parts) >= 4:
-                try:
-                    tmdb_id = parts[2]
-                    season = int(parts[3])
-                    # 验证季数必须大于0
-                    if season > 0:
-                        _submit_request(chat_id, tg_user_id, "tv", tmdb_id, season)
-                    else:
-                        _send(chat_id, "❌ 无效的季数选择")
-                except (ValueError, IndexError):
-                    _send(chat_id, "❌ 求片参数错误，请重新选择")
-        # 我的求片
-        elif data == "ub_menu_myrequests":
-            _tg_api("answerCallbackQuery", {"callback_query_id": cq_id})
-            cmd_myrequests(chat_id, tg_user_id, msg_id=msg_id)
-        # 🔥 刮刮乐
-        elif data.startswith("scratch_"):
-            _tg_api("answerCallbackQuery", {"callback_query_id": cq_id})
-            parts = data.split("_")
-            # scratch_{card_id}_{slot_number} 或 scratch_done_{card_id}_{slot_number}
-            if len(parts) >= 3:
-                if parts[1] == "done":
-                    # 已刮的格子，提示用户
-                    _send(chat_id, "❌ 这个格子已经被刮过了")
-                else:
-                    card_id = int(parts[1])
-                    slot_number = int(parts[2])
-                    _handle_scratch(chat_id, tg_user_id, card_id, slot_number, tg_name)
-        else:
-            _tg_api("answerCallbackQuery", {"callback_query_id": cq_id})
+        return user_bot_callback_dispatcher_service.handle_callback(cq)
 
     def _on_new_chat_members(self, chat_id, new_members, group_name):
         """处理新成员入群"""
