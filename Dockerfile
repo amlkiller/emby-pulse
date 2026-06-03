@@ -17,6 +17,7 @@ ENV UV_LINK_MODE=copy
 COPY --from=ghcr.io/astral-sh/uv:0.11.7 /uv /uvx /bin/
 COPY pyproject.toml uv.lock ./
 RUN uv sync --locked --no-dev --no-install-project
+RUN /workspace/.venv/bin/python -m uvicorn --version
 
 COPY --from=builder /build/app ./app
 COPY run.py ./run.py
@@ -28,4 +29,4 @@ COPY static ./static
 RUN mkdir -p /workspace/config /workspace/data
 
 EXPOSE 10307 10308
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "10307"]
+CMD ["/workspace/.venv/bin/python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "10307"]
