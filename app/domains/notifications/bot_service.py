@@ -13,6 +13,7 @@ from app.domains.media_requests.public_service import remove_gap_from_scan_state
 from app.domains.users import user_bot_dao
 from app.domains.notifications import bot_service_dao, message_dao
 from app.domains.notifications import notification_bot_auto_finish_request_service
+from app.domains.notifications import notification_bot_callback_dispatcher_service
 from app.domains.notifications import notification_bot_channel_service
 from app.domains.notifications import notification_bot_check_command_service
 from app.domains.notifications import notification_bot_command_registration_service
@@ -387,6 +388,20 @@ notification_bot_request_approval_action_callback_service.set_dependency_provide
 notification_bot_request_hdhive_search_callback_service.set_dependency_providers(
     logger_provider=lambda: logger,
     telegram_client_provider=lambda: telegram_client,
+)
+
+notification_bot_callback_dispatcher_service.set_dependency_providers(
+    notify_tg_bot_token_provider=lambda: get_notify_tg_bot_token(),
+    safe_proxies_provider=lambda: get_safe_proxies(),
+    telegram_client_provider=lambda: telegram_client,
+    plugin_callback_service_provider=lambda: notification_bot_plugin_callback_service,
+    emby_restart_command_service_provider=lambda: notification_bot_emby_restart_command_service,
+    message_center_callback_service_provider=lambda: notification_bot_message_center_callback_service,
+    risk_ban_callback_service_provider=lambda: notification_bot_risk_ban_callback_service,
+    feedback_callback_service_provider=lambda: notification_bot_feedback_callback_service,
+    request_hdhive_search_callback_service_provider=lambda: notification_bot_request_hdhive_search_callback_service,
+    request_approval_menu_callback_service_provider=lambda: notification_bot_request_approval_menu_callback_service,
+    request_approval_action_callback_service_provider=lambda: notification_bot_request_approval_action_callback_service,
 )
 
 def _submit_bot_task(fn, *args):
@@ -855,67 +870,7 @@ class NotificationBot:
         return notification_bot_polling_service.run_polling_loop(self)
 
     def _handle_callback(self, cq):
-        data = cq.get("data", ""); cid = str(cq["message"]["chat"]["id"])
-        mid = cq["message"]["message_id"]; cq_id = cq["id"]; token = get_notify_tg_bot_token()
-        proxies = get_safe_proxies()
-        
-        # 🔥 权限检查：对于管理类操作，检查用户是否有权限
-        if data.startswith("req_") or data.startswith("feed_"):
-            user_id = cq.get("from", {}).get("id")
-            if not self._check_admin_permission(cid, user_id):
-                # 回复无权限提示
-                try:
-                    telegram_client.post_api(
-                        token,
-                        "answerCallbackQuery",
-                        json={"callback_query_id": cq_id, "text": "⛔ 您没有权限执行此操作", "show_alert": True},
-                        proxies=proxies,
-                        timeout=5,
-                    )
-                except Exception: pass
-                return
-        
-        try: telegram_client.post_api(token, "answerCallbackQuery", json={"callback_query_id": cq_id}, proxies=proxies, timeout=5)
-        except Exception: pass
-
-        if notification_bot_plugin_callback_service.handle_plugin_callback(data, cid, cq_id, cq):
-            return
-
-        # Emby 重启回调: emby_restart:index 或 emby_restart:all
-        if data.startswith("emby_restart:"):
-            notification_bot_emby_restart_command_service.handle_emby_restart_callback(
-                self, data, cid, cq, platform="tg"
-            )
-            return
-
-        if notification_bot_plugin_callback_service.handle_request_hdhive_callback(data, cid, cq_id):
-            return
-
-        if notification_bot_message_center_callback_service.handle_message_center_callback(self, data, cid, mid, token, proxies, cq):
-            return
-
-        if notification_bot_risk_ban_callback_service.handle_risk_ban_callback(self, data, cq, cid, mid, token, proxies):
-            return
-
-        if notification_bot_feedback_callback_service.handle_feedback_callback(data, cq, cid, mid, token, proxies):
-            return
-
-        if data.startswith("req_"):
-            if notification_bot_request_hdhive_search_callback_service.handle_request_hdhive_search_callback(
-                data,
-                cid,
-                cq_id,
-                mid,
-                token,
-                proxies,
-            ):
-                return
-
-            if notification_bot_request_approval_menu_callback_service.handle_request_approval_menu_callback(data, cid, mid, token, proxies):
-                return
-
-            if notification_bot_request_approval_action_callback_service.handle_request_approval_action_callback(data, cq, cid, mid, token, proxies):
-                return
+        return notification_bot_callback_dispatcher_service.handle_callback(self, cq)
 
     def _set_commands(self):
         return notification_bot_command_registration_service.set_commands()
