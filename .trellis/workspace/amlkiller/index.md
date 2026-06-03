@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-3.md`
-- **Total Sessions**: 139
+- **Total Sessions**: 140
 - **Last Active**: 2026-06-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-3.md` | ~667 | Active |
+| `journal-3.md` | ~700 | Active |
 | `journal-2.md` | ~1993 | Archived |
 | `journal-1.md` | ~1973 | Archived |
 <!-- @@@/auto:active-documents -->
@@ -31,6 +31,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 140 | 2026-06-03 | Refactor playback stats libraries router | `f1c6f43` | `main` |
 | 139 | 2026-06-03 | Refactor media requests submit router | `e00dde2` | `main` |
 | 138 | 2026-06-03 | Refactor media requests update router | `fa3dcab` | `main` |
 | 137 | 2026-06-03 | Refactor media requests user series router | `468acfa` | `main` |

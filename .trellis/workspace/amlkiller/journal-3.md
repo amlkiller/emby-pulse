@@ -665,3 +665,36 @@ Extracted the media request submit endpoint into app/domains/media_requests/subm
 ### Next Steps
 
 - None - task complete
+
+
+## Session 140: Refactor playback stats libraries router
+
+**Date**: 2026-06-03
+**Task**: Refactor playback stats libraries router
+**Branch**: `main`
+
+### Summary
+
+Extracted the playback stats libraries endpoint into app/domains/playback/libraries_router.py, included the child router from playback/stats.py at the original route position, and preserved playback.stats compatibility export and monkeypatch behavior for the moved route. Verified compile/import route checks, git diff checks, focused playback stats boundary tests, and the full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f1c6f43` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
