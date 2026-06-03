@@ -236,3 +236,36 @@ Extracted UserBot inline callback query dispatcher into a domain-local callback 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 187: Extract notification user bot message dispatcher
+
+**Date**: 2026-06-03
+**Task**: Extract notification user bot message dispatcher
+**Branch**: `main`
+
+### Summary
+
+Extracted UserBot Telegram message dispatch into a domain-local service with lazy legacy providers; added boundary coverage for group command cleanup, private registration state, bound command dispatch, and unbound channel identity handling.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `bc84ee9` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
