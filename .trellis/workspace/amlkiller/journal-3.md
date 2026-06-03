@@ -1061,3 +1061,36 @@ Extracted the playback stats recent activity endpoint into app/domains/playback/
 ### Next Steps
 
 - None - task complete
+
+
+## Session 152: Refactor playback stats system monitor router
+
+**Date**: 2026-06-03
+**Task**: Refactor playback stats system monitor router
+**Branch**: `main`
+
+### Summary
+
+Extracted the playback stats system monitor endpoint into app/domains/playback/system_monitor_router.py, included the child router from playback/stats.py at the original route position, preserved playback.stats compatibility export and runtime monkeypatch behavior for user_service, psutil, and safe_error_message dependencies, and verified compile checks, route/import compatibility, git diff checks, focused boundary tests, and the full pytest suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `375af23` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
