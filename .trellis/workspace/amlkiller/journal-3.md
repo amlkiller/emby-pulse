@@ -1622,3 +1622,36 @@ Extracted user bot checkin and points command handling into a focused notificati
 ### Next Steps
 
 - None - task complete
+
+
+## Session 169: Refactor notification user bot account commands
+
+**Date**: 2026-06-03
+**Task**: Refactor notification user bot account commands
+**Branch**: `main`
+
+### Summary
+
+Extracted user bot profile and unbind command handling into a focused notification domain service while preserving legacy wrappers and monkeypatch-compatible providers.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8306dc4` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
