@@ -1721,3 +1721,36 @@ Extracted gap download and torrent interception behavior from media_requests/gap
 ### Next Steps
 
 - None - task complete
+
+
+## Session 232: Extract notification user bot welcome service
+
+**Date**: 2026-06-03
+**Task**: Extract notification user bot welcome service
+**Branch**: `main`
+
+### Summary
+
+Extracted new-chat-member welcome handling from user_bot_service into a domain-local service with provider injection and boundary tests. Preserved legacy wrapper behavior and verified focused, related, import, diff, and full test suite checks before committing.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `655eb21` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
