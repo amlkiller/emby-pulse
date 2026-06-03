@@ -23,6 +23,7 @@ from app.domains.notifications import notification_bot_media_helper_service
 from app.domains.notifications import notification_bot_media_quality_service
 from app.domains.notifications import notification_bot_playback_command_service
 from app.domains.notifications import notification_bot_request_admin_message_sync_service
+from app.domains.notifications import notification_bot_search_command_service
 from app.domains.notifications import notification_bot_wecom_service
 from app.domains.notifications import notification_bot_whois_command_service
 from app.domains.notifications import notify_admin_dao, notify_rule_dao
@@ -167,6 +168,14 @@ notification_bot_latest_command_service.set_dependency_providers(
     media_api_provider=lambda: media_api,
     admin_id_provider=lambda: get_admin_id,
     logger_provider=lambda: logger,
+)
+
+notification_bot_search_command_service.set_dependency_providers(
+    media_api_provider=lambda: media_api,
+    admin_id_provider=lambda: get_admin_id,
+    media_server_main_public_or_host_provider=lambda: get_media_server_main_public_or_host,
+    media_server_host_provider=lambda: get_media_server_host,
+    report_cover_url_provider=lambda: REPORT_COVER_URL,
 )
 
 def _submit_bot_task(fn, *args):
@@ -1746,113 +1755,10 @@ class NotificationBot:
         return notification_bot_latest_command_service.cmd_latest(self, cid, platform)
 
     def _extract_tech_info(self, item):
-        sources = item.get("MediaSources", [])
-        if not sources: return "📼 未知"
-        info_parts = []
-        video = next((s for s in sources[0].get("MediaStreams", []) if s.get("Type") == "Video"), None)
-        if video:
-            w = video.get("Width", 0)
-            if w >= 3800: res = "4K"
-            elif w >= 1900: res = "1080P"
-            elif w >= 1200: res = "720P"
-            else: res = "SD"
-            extra = []
-            v_range = video.get("VideoRange", "")
-            title = video.get("DisplayTitle", "").upper()
-            if "HDR" in v_range or "HDR" in title: extra.append("HDR")
-            if "DOVI" in title or "DOLBY VISION" in title: extra.append("DoVi")
-            res_str = f"{res} {' '.join(extra)}"
-            info_parts.append(res_str.strip())
-            bitrate = sources[0].get("Bitrate", 0)
-            if bitrate > 0: info_parts.append(f"{round(bitrate / 1000000, 1)}Mbps")
-        return " | ".join(info_parts) if info_parts else "📼 未知"
+        return notification_bot_search_command_service.extract_tech_info(item)
 
     def _cmd_search(self, chat_id, text, platform):
-        parts = text.split(' ', 1)
-        if len(parts) < 2: return self.send_message(chat_id, "🔍 请使用: /search 关键词", platform=platform)
-        keyword = parts[1].strip()
-        try:
-            user_id = get_admin_id()
-            if not user_id: return self.send_message(chat_id, "❌ 错误: 无法获取 Emby 用户身份", platform=platform)
-
-            fields = "ProductionYear,Type,Id" 
-            params = {"SearchTerm": keyword, "IncludeItemTypes": "Movie,Series", "Recursive": "true", "Fields": fields, "Limit": 5}
-            res = media_api.get(f"/Users/{user_id}/Items", params=params, timeout=10)
-            if res.status_code != 200: return self.send_message(chat_id, f"❌ 搜索失败", platform=platform)
-            items = res.json().get("Items", [])
-            if not items: return self.send_message(chat_id, f"📭 未找到与 <b>{keyword}</b> 相关的资源", platform=platform)
-            
-            top = items[0]
-            type_raw = top.get("Type")
-            tech_info_str = "查询中..."; ep_count_str = ""; details = {}
-
-            try:
-                if type_raw == "Series":
-                    details = media_api.get(
-                        f"/Users/{user_id}/Items/{top['Id']}",
-                        params={"Fields": "Overview,CommunityRating,Genres,RecursiveItemCount"},
-                        timeout=5,
-                    ).json()
-                    ep_count = details.get("RecursiveItemCount", 0)
-                    ep_count_str = f"📊 共 {ep_count} 集"
-                    sample_res = media_api.get(
-                        f"/Users/{user_id}/Items",
-                        params={"ParentId": top['Id'], "Recursive": "true", "IncludeItemTypes": "Episode", "Limit": 1, "Fields": "MediaSources"},
-                        timeout=5,
-                    )
-                    if sample_res.status_code == 200 and sample_res.json().get("Items"):
-                        tech_info_str = self._extract_tech_info(sample_res.json().get("Items")[0])
-                else:
-                    details = media_api.get(
-                        f"/Users/{user_id}/Items/{top['Id']}",
-                        params={"Fields": "Overview,CommunityRating,Genres,MediaSources"},
-                        timeout=8,
-                    ).json()
-                    tech_info_str = self._extract_tech_info(details)
-            except Exception: tech_info_str = "暂无技术信息"
-
-            name = details.get("Name", top.get("Name"))
-            year = details.get("ProductionYear", top.get("ProductionYear"))
-            year_str = f"({year})" if year else ""
-            rating = details.get("CommunityRating", "N/A")
-            genres = " / ".join(details.get("Genres", [])[:3]) or "未分类"
-            
-            overview = str(details.get("Overview") or "")
-            overview = re.sub(r'<[^>]+>', '', overview).strip()
-            if not overview: overview = "暂无简介"
-            if len(overview) > 120: overview = overview[:120] + "..."
-            
-            type_icon = "🎬" if type_raw == "Movie" else "📺"
-            info_line = f"{ep_count_str} | {tech_info_str}" if type_raw == "Series" else tech_info_str
-            
-            base_url = get_media_server_main_public_or_host() or get_media_server_host()
-            if base_url and not base_url.startswith(('http://', 'https://')):
-                base_url = 'https://' + base_url
-            play_url = f"{base_url}/web/index.html#!/item?id={top.get('Id')}&serverId={top.get('ServerId')}"
-
-            caption = (f"{type_icon} <b>{name}</b> {year_str}\n"
-                       f"⭐️ {rating}  |  🎭 {genres}\n"
-                       f"💿 {info_line}\n\n"
-                       f"📝 <b>剧情简介：</b>\n{overview}\n")
-            
-            if len(items) > 1:
-                caption += "\n🔎 <b>其他结果：</b>\n"
-                for i, sub in enumerate(items[1:]):
-                    sub_year = f"({sub.get('ProductionYear')})" if sub.get('ProductionYear') else ""
-                    sub_type = "📺" if sub.get("Type") == "Series" else "🎬"
-                    caption += f"{sub_type} {sub.get('Name')} {sub_year}\n"
-
-            keyboard = None
-            if base_url and base_url.startswith(('http://', 'https://')):
-                keyboard = {"inline_keyboard": [[{"text": "▶️ 立即播放", "url": play_url}]]}
-            primary_io = self._download_emby_image(top.get("Id"), 'Primary')
-            backdrop_io = self._download_emby_image(top.get("Id"), 'Backdrop')
-
-            tg_img = primary_io or backdrop_io or REPORT_COVER_URL
-            wecom_img = backdrop_io or primary_io or REPORT_COVER_URL
-            self.send_photo(chat_id, tg_img, caption.strip(), reply_markup=keyboard, platform=platform, wecom_photo_io=wecom_img)
-        except Exception as e:
-            self.send_message(chat_id, "❌ 搜索时发生错误", platform=platform)
+        return notification_bot_search_command_service.cmd_search(self, chat_id, text, platform)
 
     def _cmd_stats(self, chat_id, period='day', platform="tg"):
         # 🔥 使用统一的时间计算模块
