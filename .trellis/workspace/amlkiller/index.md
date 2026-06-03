@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-3.md`
-- **Total Sessions**: 160
+- **Total Sessions**: 161
 - **Last Active**: 2026-06-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-3.md` | ~1360 | Active |
+| `journal-3.md` | ~1393 | Active |
 | `journal-2.md` | ~1993 | Archived |
 | `journal-1.md` | ~1973 | Archived |
 <!-- @@@/auto:active-documents -->
@@ -31,6 +31,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 161 | 2026-06-03 | Refactor notification user bot telegram service | `054eefa` | `main` |
 | 160 | 2026-06-03 | Refactor notification user bot restriction service | `80534d0` | `main` |
 | 159 | 2026-06-03 | Refactor notification user bot registration queue service | `ec943f8` | `main` |
 | 158 | 2026-06-03 | Refactor notification user bot registration quota service | `87b7268` | `main` |

@@ -1358,3 +1358,36 @@ Extracted user bot restriction membership checks, restriction-cache helpers, and
 ### Next Steps
 
 - None - task complete
+
+
+## Session 161: Refactor notification user bot telegram service
+
+**Date**: 2026-06-03
+**Task**: Refactor notification user bot telegram service
+**Branch**: `main`
+
+### Summary
+
+Extracted user bot Telegram API, send, edit, and reply helpers into a focused notification service while preserving legacy user_bot_service wrappers, token/proxy behavior, edit fallback, and monkeypatch compatibility.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `054eefa` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
