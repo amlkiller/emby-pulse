@@ -53,6 +53,12 @@ from app.domains.users.list_router import (
     api_get_users,
     router as list_router,
 )
+from app.domains.users.pin_router import (
+    PinUserModel,
+    api_pin_user,
+    router as pin_router,
+    set_dependency_providers as set_pin_dependency_providers,
+)
 from app.domains.users.request_permission_router import (
     UserReqPermissionModel,
     api_get_user_req_permission,
@@ -113,6 +119,13 @@ set_avatar_dependency_providers(
     safe_error_message_provider=lambda: safe_error_message,
     client_ip_provider=lambda: get_client_ip,
     audit_log_provider=lambda: add_audit_log,
+)
+set_pin_dependency_providers(
+    user_dao_provider=lambda: user_dao,
+    safe_error_message_provider=lambda: safe_error_message,
+    client_ip_provider=lambda: get_client_ip,
+    audit_log_provider=lambda: add_audit_log,
+    now_provider=lambda: datetime.datetime.now().isoformat(),
 )
 
 # ==========================================
@@ -1070,37 +1083,7 @@ def api_manage_users_batch(data: BatchActionModelLocal, request: Request):
 router.include_router(template_router)
 
 # ==================== 置顶用户功能 ====================
-
-class PinUserModel(BaseModel):
-    user_id: str
-    pinned: bool
-
-
-@router.post("/api/manage/user/pin")
-def api_pin_user(data: PinUserModel, request: Request):
-    """置顶/取消置顶用户"""
-    if not request.session.get("user"):
-        return {"status": "error", "message": "未登录"}
-
-    user = request.session.get("user", {})
-    if user.get("auth_type") != "emby" and user.get("role") != "admin":
-        return {"status": "error", "message": "需要管理员权限"}
-
-    try:
-        user_dao.set_user_pinned(data.user_id, data.pinned, datetime.datetime.now().isoformat())
-
-        action = "置顶用户" if data.pinned else "取消置顶"
-        add_audit_log(
-            admin_id=user.get("id", ""),
-            admin_name=user.get("name", "管理员"),
-            action=action,
-            target_user_id=data.user_id,
-            ip_address=get_client_ip(request)
-        )
-
-        return {"status": "success", "message": f"已{'置顶' if data.pinned else '取消置顶'}用户"}
-    except Exception as e:
-        return {"status": "error", "message": safe_error_message(e)}
+router.include_router(pin_router)
 
 router.include_router(list_router)
 

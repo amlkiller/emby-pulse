@@ -120,12 +120,14 @@ def test_users_router_includes_child_routes_and_compat_exports():
     assert any(path == "/api/user/image/{user_id}" and "GET" in methods for path, methods in routes)
     assert any(path == "/api/manage/user/image" and "POST" in methods for path, methods in routes)
     assert any(path == "/api/user/avatar" and "POST" in methods for path, methods in routes)
+    assert any(path == "/api/manage/user/pin" and "POST" in methods for path, methods in routes)
 
     from app.domains.users import avatar_router
     from app.domains.users import audit_log_router
     from app.domains.users import delete_verification_router
     from app.domains.users import invitation_router
     from app.domains.users import library_visibility_router
+    from app.domains.users import pin_router
 
     assert router.get_user_avatar is avatar_router.get_user_avatar
     assert router.api_update_user_image is avatar_router.api_update_user_image
@@ -149,6 +151,8 @@ def test_users_router_includes_child_routes_and_compat_exports():
     assert router.HiddenLibrariesModel is library_visibility_router.HiddenLibrariesModel
     assert router.api_get_user_libraries is library_visibility_router.api_get_user_libraries
     assert router.api_update_hidden_libraries is library_visibility_router.api_update_hidden_libraries
+    assert router.PinUserModel is pin_router.PinUserModel
+    assert router.api_pin_user is pin_router.api_pin_user
 
     admin_index = next(
         i for i, (path, methods) in enumerate(routes) if path == "/api/manage/user/admin_list" and "GET" in methods
@@ -184,12 +188,22 @@ def test_users_router_includes_child_routes_and_compat_exports():
     password_index = next(
         i for i, (path, methods) in enumerate(routes) if path == "/api/user/password" and "POST" in methods
     )
+    template_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/manage/template/default" and "POST" in methods
+    )
+    pin_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/manage/user/pin" and "POST" in methods
+    )
+    users_list_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/users" and "GET" in methods
+    )
     library_index = next(
         i for i, (path, methods) in enumerate(routes) if path == "/api/manage/user/library" and "POST" in methods
     )
     assert admin_index < audit_index < verify_index
     assert avatar_image_index < avatar_update_index < self_avatar_index < password_index
     assert verify_index < user_libraries_index < hidden_libraries_index < invitation_index < library_index
+    assert template_index < pin_index < users_list_index
 
 
 def test_avatar_fetch_denies_non_admin_before_media_call(monkeypatch):
@@ -278,6 +292,66 @@ def test_self_avatar_denies_missing_req_user_before_file_read():
     result = asyncio.run(router.api_user_self_avatar(request, file=FileMustNotRead()))
 
     assert result == {"status": "error", "message": "请先登录"}
+
+
+def test_pin_route_denies_unauthenticated_before_side_effects(monkeypatch):
+    from app.domains.users import router
+
+    request = SimpleNamespace(session={})
+
+    class UserDaoMustNotRun:
+        def set_user_pinned(self, *_args, **_kwargs):
+            raise AssertionError("user_dao.set_user_pinned should not run before login authorization")
+
+    monkeypatch.setattr(router, "user_dao", UserDaoMustNotRun())
+    monkeypatch.setattr(
+        router,
+        "add_audit_log",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("audit log should not run before login authorization")
+        ),
+    )
+    monkeypatch.setattr(
+        router,
+        "get_client_ip",
+        lambda _request: (_ for _ in ()).throw(
+            AssertionError("client IP lookup should not run before login authorization")
+        ),
+    )
+
+    result = router.api_pin_user(router.PinUserModel(user_id="u1", pinned=True), request)
+
+    assert result == {"status": "error", "message": "未登录"}
+
+
+def test_pin_route_denies_non_admin_before_side_effects(monkeypatch):
+    from app.domains.users import router
+
+    request = SimpleNamespace(session={"user": {"id": "user-1", "role": "viewer"}})
+
+    class UserDaoMustNotRun:
+        def set_user_pinned(self, *_args, **_kwargs):
+            raise AssertionError("user_dao.set_user_pinned should not run before admin authorization")
+
+    monkeypatch.setattr(router, "user_dao", UserDaoMustNotRun())
+    monkeypatch.setattr(
+        router,
+        "add_audit_log",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("audit log should not run before admin authorization")
+        ),
+    )
+    monkeypatch.setattr(
+        router,
+        "get_client_ip",
+        lambda _request: (_ for _ in ()).throw(
+            AssertionError("client IP lookup should not run before admin authorization")
+        ),
+    )
+
+    result = router.api_pin_user(router.PinUserModel(user_id="u1", pinned=True), request)
+
+    assert result == {"status": "error", "message": "需要管理员权限"}
 
 
 def test_delete_verification_route_preserves_router_app_start_time_compat(monkeypatch):
