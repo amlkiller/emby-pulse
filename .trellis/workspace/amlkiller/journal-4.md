@@ -1259,3 +1259,36 @@ Extracted SystemDaemon webhook event routing into a notification-domain service 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 218: Extract notification bot gap clear service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot gap clear service
+**Branch**: `main`
+
+### Summary
+
+Extracted SystemDaemon gap record cleanup into a notification-domain service with lazy gap DAO and scan-state providers, kept the daemon wrapper, and added focused boundary tests for non-episode skips, missing/invalid episode values, valid DAO plus scan-state cleanup, scan-state failures, and outer DAO failures. Verification passed: compileall changed files, focused pytest, import check, git diff --check, and full pytest tests/.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3edfd9a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
