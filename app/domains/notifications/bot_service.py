@@ -25,6 +25,7 @@ from app.domains.notifications import notification_bot_message_center_callback_s
 from app.domains.notifications import notification_bot_media_helper_service
 from app.domains.notifications import notification_bot_media_quality_service
 from app.domains.notifications import notification_bot_playback_command_service
+from app.domains.notifications import notification_bot_polling_service
 from app.domains.notifications import notification_bot_request_admin_message_sync_service
 from app.domains.notifications import notification_bot_search_command_service
 from app.domains.notifications import notification_bot_stats_command_service
@@ -205,6 +206,14 @@ notification_bot_command_registration_service.set_dependency_providers(
     tg_bot_token_provider=lambda: get_notify_tg_bot_token,
     safe_proxies_provider=lambda: get_safe_proxies,
     telegram_client_provider=lambda: telegram_client,
+)
+
+notification_bot_polling_service.set_dependency_providers(
+    tg_bot_token_provider=lambda: get_notify_tg_bot_token,
+    tg_chat_id_provider=lambda: get_tg_chat_id,
+    safe_proxies_provider=lambda: get_safe_proxies,
+    telegram_client_provider=lambda: telegram_client,
+    submit_bot_task_provider=lambda: _submit_bot_task,
 )
 
 def _submit_bot_task(fn, *args):
@@ -1407,48 +1416,7 @@ class NotificationBot:
         return notification_bot_delivery_service.edit_message(self, chat_id, message_id, text, parse_mode, reply_markup, platform)
 
     def _polling_loop(self):
-        token = get_notify_tg_bot_token()
-        
-        while self.running and not self._stop_event.is_set():
-            raw_cids = str(get_tg_chat_id())
-            admin_ids = [c.strip() for c in raw_cids.replace('，', ',').split(',') if c.strip()]
-            
-            try:
-                res = telegram_client.get_updates(token, params={"offset": self.offset, "timeout": 30}, proxies=get_safe_proxies(), timeout=35)
-                if res.status_code == 200:
-                    for u in res.json().get("result", []):
-                        self.offset = u["update_id"] + 1
-                        if "message" in u:
-                            msg_obj = u["message"]
-                            cid = str(msg_obj["chat"]["id"])
-                            chat_type = msg_obj["chat"].get("type", "")
-                            
-                            # 🔥 静默跳过群组/频道消息，只处理管理员私聊
-                            if chat_type in ["group", "supergroup", "channel"]:
-                                continue
-                            
-                            # 🔥 安全检查：必须配置 tg_chat_id 且 chat_id 在白名单中
-                            if not admin_ids or cid not in admin_ids:
-                                continue
-                            
-                            # 提取文本：优先 text，其次 caption（图文消息）
-                            msg_text = msg_obj.get("text", "") or msg_obj.get("caption", "")
-                            # 从 entities/caption_entities 中提取 URL 类型的链接
-                            for ent in msg_obj.get("entities", []) + msg_obj.get("caption_entities", []):
-                                if ent.get("type") == "text_link" and ent.get("url"):
-                                    msg_text += " " + ent["url"]
-                            self._handle_message(msg_text, cid, platform="tg")
-                        elif "callback_query" in u:
-                            cq = u["callback_query"]
-                            cid = str(cq["message"]["chat"]["id"])
-                            # 🔥 安全检查：必须配置 tg_chat_id 且 chat_id 在白名单中
-                            if not admin_ids or cid not in admin_ids:
-                                continue
-                            _submit_bot_task(self._handle_callback, cq)
-                else:
-                    if self._stop_event.wait(5): return
-            except:
-                if self._stop_event.wait(5): return
+        return notification_bot_polling_service.run_polling_loop(self)
 
     def _handle_callback(self, cq):
         data = cq.get("data", ""); cid = str(cq["message"]["chat"]["id"])
