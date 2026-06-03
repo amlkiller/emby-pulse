@@ -632,3 +632,36 @@ Extracted the media request update endpoints into app/domains/media_requests/upd
 ### Next Steps
 
 - None - task complete
+
+
+## Session 139: Refactor media requests submit router
+
+**Date**: 2026-06-03
+**Task**: Refactor media requests submit router
+**Branch**: `main`
+
+### Summary
+
+Extracted the media request submit endpoint into app/domains/media_requests/submit_router.py, included the child router from media_requests/router.py at the original route position, and preserved media_requests.router compatibility exports for the moved submit model and route handler. Verified compile/import route checks, git diff checks, focused media request boundary tests, and the full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e00dde2` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
