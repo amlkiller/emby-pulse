@@ -35,6 +35,7 @@ from app.domains.notifications import notification_bot_request_admin_message_syn
 from app.domains.notifications import notification_bot_risk_alert_service
 from app.domains.notifications import notification_bot_search_command_service
 from app.domains.notifications import notification_bot_stats_command_service
+from app.domains.notifications import notification_bot_user_expiration_service
 from app.domains.notifications import notification_bot_user_login_service
 from app.domains.notifications import notification_bot_wecom_service
 from app.domains.notifications import notification_bot_whois_command_service
@@ -294,6 +295,12 @@ notification_bot_pending_sync_service.set_dependency_providers(
     media_api_provider=lambda: media_api,
     admin_id_provider=lambda: get_admin_id,
     logger_provider=lambda: logger,
+)
+
+notification_bot_user_expiration_service.set_dependency_providers(
+    user_dao_provider=lambda: user_dao,
+    media_api_provider=lambda: media_api,
+    datetime_provider=lambda: datetime,
 )
 
 def _submit_bot_task(fn, *args):
@@ -727,22 +734,7 @@ class SystemDaemon:
         return notification_bot_pending_sync_service.sync_pending_requests(self)
 
     def _check_user_expiration(self):
-        try:
-            users = user_dao.list_users_with_expire_date()
-            if not users: return
-            today = datetime.datetime.now().strftime("%Y-%m-%d")
-            for u in users:
-                if u['expire_date'] < today:
-                    try:
-                        # 🔥 修复：先获取完整 Policy，再修改 IsDisabled，避免重置其他权限
-                        user_res = media_api.get(f"/Users/{u['user_id']}", timeout=5)
-                        if user_res.status_code == 200:
-                            policy = user_res.json().get('Policy', {})
-                            if not policy.get('IsDisabled', False):
-                                policy['IsDisabled'] = True
-                                media_api.post(f"/Users/{u['user_id']}/Policy", json=policy, timeout=5)
-                    except Exception: pass
-        except Exception: pass
+        return notification_bot_user_expiration_service.check_user_expiration()
 
 
 class NotificationBot:
