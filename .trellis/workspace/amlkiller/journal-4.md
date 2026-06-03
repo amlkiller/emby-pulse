@@ -830,3 +830,36 @@ Extracted NotificationBot calendar and help command handling into notification_b
 ### Next Steps
 
 - None - task complete
+
+
+## Session 205: Extract notification bot message dispatch service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot message dispatch service
+**Branch**: `main`
+
+### Summary
+
+Extracted NotificationBot message dispatch and admin-check logic into notification_bot_message_dispatch_service; kept legacy _handle_message and _is_admin wrappers, preserved reply-mode precedence, command routing order, Telegram/WeCom admin semantics, non-admin warning behavior, and admin bot.admin_message publication; added boundary tests for admin parsing, command dispatch, reply-mode precedence, and non-command publish/log branches.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `84ff30a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
