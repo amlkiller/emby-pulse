@@ -10,22 +10,27 @@ if str(_REPO_ROOT) not in sys.path:
 
 
 def test_notification_messages_does_not_import_private_users_auth():
-    path = _REPO_ROOT / "app/domains/notifications/messages.py"
-    rel_path = path.relative_to(_REPO_ROOT).as_posix()
-    tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(rel_path))
+    paths = [
+        _REPO_ROOT / "app/domains/notifications/messages.py",
+        _REPO_ROOT / "app/domains/notifications/announcements_router.py",
+    ]
     violations = []
 
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom):
-            imported_names = {alias.name for alias in node.names}
-            if node.module == "app.domains.users.auth":
-                violations.append(f"{rel_path}:{node.lineno}")
-            if node.module == "app.domains.users" and ("auth" in imported_names or "*" in imported_names):
-                violations.append(f"{rel_path}:{node.lineno}")
-        elif isinstance(node, ast.Import):
-            imported_modules = {alias.name for alias in node.names}
-            if "app.domains.users.auth" in imported_modules:
-                violations.append(f"{rel_path}:{node.lineno}")
+    for path in paths:
+        rel_path = path.relative_to(_REPO_ROOT).as_posix()
+        tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(rel_path))
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                imported_names = {alias.name for alias in node.names}
+                if node.module == "app.domains.users.auth":
+                    violations.append(f"{rel_path}:{node.lineno}")
+                if node.module == "app.domains.users" and ("auth" in imported_names or "*" in imported_names):
+                    violations.append(f"{rel_path}:{node.lineno}")
+            elif isinstance(node, ast.Import):
+                imported_modules = {alias.name for alias in node.names}
+                if "app.domains.users.auth" in imported_modules:
+                    violations.append(f"{rel_path}:{node.lineno}")
 
     assert violations == []
 
@@ -176,3 +181,17 @@ def test_get_msg_bot_config_denies_non_admin_before_config_reads(monkeypatch):
 
     assert response == {"status": "error", "message": "需要管理员权限"}
     assert calls == [request]
+
+
+def test_messages_router_includes_announcement_routes():
+    from app.domains.notifications import messages as notification_messages
+
+    routes = [(route.path, route.methods) for route in notification_messages.router.routes if hasattr(route, "methods")]
+
+    assert any(path == "/api/announcements" and "GET" in methods for path, methods in routes)
+    assert any(path == "/api/announcements" and "POST" in methods for path, methods in routes)
+    assert any(path == "/api/announcements/{ann_id}" and "PUT" in methods for path, methods in routes)
+    assert any(path == "/api/announcements/{ann_id}" and "DELETE" in methods for path, methods in routes)
+    assert any(path == "/api/announcements/{ann_id}/view" and "POST" in methods for path, methods in routes)
+    assert any(path == "/api/user/announcements" and "GET" in methods for path, methods in routes)
+    assert any(path == "/api/user/announcements/{ann_id}/read" and "POST" in methods for path, methods in routes)
