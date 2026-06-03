@@ -27,6 +27,7 @@ from app.domains.notifications import user_bot_menu_service
 from app.domains.notifications import user_bot_message_cleanup_service
 from app.domains.notifications import user_bot_open_reg_notify_service
 from app.domains.notifications import user_bot_password_commands_service
+from app.domains.notifications import user_bot_pk_invitation_commands_service
 from app.domains.notifications import user_bot_points_commands_service
 from app.domains.notifications import user_bot_points_game_commands_service
 from app.domains.notifications import user_bot_registration_queue_service
@@ -367,6 +368,17 @@ user_bot_scratch_commands_service.set_dependency_providers(
     cmd_scratch_impl_provider=lambda: _cmd_scratch_impl,
     update_scratch_message_provider=lambda: _update_scratch_message,
     scratch_draw_result_provider=lambda: _scratch_draw_result,
+)
+
+user_bot_pk_invitation_commands_service.set_dependency_providers(
+    get_binding_provider=lambda: _get_binding,
+    get_binding_by_emby_id_provider=lambda: _get_binding_by_emby_id,
+    send_provider=lambda: _send,
+    point_dao_provider=lambda: point_dao,
+    user_bot_dao_provider=lambda: user_bot_dao,
+    media_api_provider=lambda: media_api,
+    safe_error_message_provider=lambda: safe_error_message,
+    logger_provider=lambda: logger,
 )
 
 user_bot_shop_commands_service.set_dependency_providers(
@@ -1225,190 +1237,20 @@ def _handle_pk_reject_callback(chat_id, tg_user_id, invite_id, cq_id, msg_id):
         _tg_api("answerCallbackQuery", {"callback_query_id": cq_id, "text": "处理失败，请稍后重试", "show_alert": True})
 
 def cmd_pk_invite(chat_id, tg_user_id, text, is_group=False, entities=None, user_msg_id=None):
-    """用户PK邀请"""
-    binding = _get_binding(tg_user_id)
-    if not binding:
-        return _send(chat_id, "❌ 请先私聊机器人绑定账号")
-    
-    # 解析参数: /pk @用户 积分
-    parts = text.split()
-    if len(parts) < 3:
-        return _send(chat_id, "💡 使用方法：/upk @用户 积分\n示例：/upk @张三 100\n\n💡 也可以直接使用 Emby 用户名")
-    
-    try:
-        # 最后一个参数是积分
-        try:
-            points = int(parts[-1])
-        except ValueError:
-            return _send(chat_id, "❌ 下注积分必须是数字")
-        
-        # 用户名可能是多个部分
-        target = ' '.join(parts[1:-1]).lstrip('@')
-        
-        if not target:
-            return _send(chat_id, "❌ 请指定要PK的用户")
-        
-        # 查找目标用户（参考打劫功能的实现）
-        mentioned_user_id = None
-        if entities:
-            for ent in entities:
-                if ent.get("type") == "mention" or ent.get("type") == "text_mention":
-                    if ent.get("type") == "text_mention" and ent.get("user"):
-                        mentioned_user_id = str(ent["user"].get("id", ""))
-                        break
-                    elif ent.get("type") == "mention":
-                        offset = ent.get("offset", 0)
-                        length = ent.get("length", 0)
-                        mentioned_username = text[offset:offset+length].lstrip('@')
-                        mentioned_user_id = user_bot_dao.get_tg_user_id_by_username(mentioned_username)
-                        break
-        
-        # 查找目标用户
-        to_user_id = None
-        to_user_name = None
-        
-        if mentioned_user_id:
-            row = user_bot_dao.get_binding_by_tg_user_or_username(mentioned_user_id)
-            if row:
-                to_user_id = row["emby_user_id"]
-                to_user_name = row["emby_username"]
-        
-        if not to_user_id:
-            row = user_bot_dao.get_binding_by_tg_user_or_username(target)
-            
-            if not row:
-                try:
-                    from app.infra.clients.media_server_client import media_api
-                    emby_users = media_api.get("/Users", timeout=5).json()
-                    user_map = {u['Name']: u['Id'] for u in emby_users}
-                    to_user_id = user_map.get(target)
-                    to_user_name = target
-                except:
-                    pass
-            else:
-                to_user_id = row["emby_user_id"]
-                to_user_name = row["emby_username"]
-        
-        if not to_user_id:
-            return _send(chat_id, f"❌ 未找到用户：{target}\n\n💡 请确认对方已绑定机器人，或直接使用 Emby 用户名")
-        
-        # 不能PK自己
-        if to_user_id == binding['emby_user_id']:
-            return _send(chat_id, "❌ 不能PK自己")
-
-        # 获取 TG 名称
-        target_binding = _get_binding_by_emby_id(to_user_id)
-        target_tg_name = target_binding.get('tg_name') if target_binding else None
-        challenger_tg_name = binding.get('tg_name') or binding['emby_username']
-
-        invite_result = point_dao.create_pk_invitation(
-            binding['emby_user_id'],
-            binding['emby_username'],
-            challenger_tg_name,
-            to_user_id,
-            to_user_name,
-            target_tg_name,
-            points,
-            chat_id,
-            command_message_id=user_msg_id,
-        )
-        if invite_result.get("status") != "success":
-            return _send(chat_id, f"❌ {invite_result.get('message', 'PK邀请失败')}")
-
-        invite_id = invite_result["invite_id"]
-        timeout_minutes = invite_result["timeout_minutes"]
-        
-        # 🔥 发送邀请通知（只在群聊发送，不私发）
-        # 创建 Inline Keyboard 按钮
-        keyboard = {
-            "inline_keyboard": [
-                [
-                    {"text": "✅ 接受PK", "callback_data": f"pk_accept:{invite_id}"},
-                    {"text": "❌ 拒绝PK", "callback_data": f"pk_reject:{invite_id}"}
-                ]
-            ]
-        }
-        
-        # 获取目标的 TG username 用于 @ 提及
-        target_tg_username = target_binding.get('tg_username') if target_binding else None
-        target_mention = f"@{target_tg_username}" if target_tg_username else (target_tg_name or to_user_name)
-        
-        # 在群聊中发送带按钮的消息
-        invite_msg = f"🎯 <b>{challenger_tg_name}</b> 向 {target_mention} 发起PK挑战！\n\n💰 下注：<b>{points}</b> 积分\n⏰ 请在 <b>{timeout_minutes}</b> 分钟内回应\n\n💡 点击下方按钮选择接受或拒绝"
-        send_result = _send(chat_id, invite_msg, reply_markup=keyboard)
-        
-        # 记录邀请消息 ID
-        if send_result and send_result.get('ok'):
-            invite_msg_id = send_result.get('result', {}).get('message_id')
-            point_dao.save_pk_invitation_message_id(invite_id, invite_msg_id)
-        
-    except Exception as e:
-        logger.error(f"[UserBot] PK邀请失败: {e}")
-        return _send(chat_id, f"❌ PK邀请失败：{safe_error_message(e, 'PK邀请异常，请稍后重试')}")
+    return user_bot_pk_invitation_commands_service.cmd_pk_invite(
+        chat_id,
+        tg_user_id,
+        text,
+        is_group=is_group,
+        entities=entities,
+        user_msg_id=user_msg_id,
+    )
 
 def cmd_pk_accept(chat_id, tg_user_id, text, is_group=False):
-    """接受PK邀请"""
-    binding = _get_binding(tg_user_id)
-    if not binding:
-        return _send(chat_id, "❌ 请先私聊机器人绑定账号")
-    
-    try:
-        invite = point_dao.get_latest_pending_pk_invitation_for_target(binding['emby_user_id'])
-        
-        if not invite:
-            return _send(chat_id, "❌ 没有待处理的PK邀请")
-        
-        result = point_dao.accept_pk_invitation(invite["id"], binding['emby_user_id'])
-        if result.get("status") != "success":
-            return _send(chat_id, f"❌ {result.get('message', '接受PK失败')}")
-        
-        # 通知双方
-        challenger_name = result["challenger_name"]
-        target_name = result["target_name"]
-        challenger_roll = result["challenger_roll"]
-        target_roll = result["target_roll"]
-        original_chat_id = result["chat_id"]
-        if result.get("tie"):
-            result_msg = f"⚖️ <b>平局！</b>\n\n{challenger_name}({challenger_roll}点) vs {target_name}({target_roll}点)\n\n积分退还，不扣手续费"
-        else:
-            result_msg = f"🎲 <b>PK结果</b>\n\n{challenger_name}({challenger_roll}点) vs {target_name}({target_roll}点)\n\n🎉 <b>{result['winner_name']}</b> 获胜！\n💰 获得 <b>{result['win_amount']}</b> 积分（扣{result['tax_rate']}%手续费）"
-        if original_chat_id:
-            _send(original_chat_id, result_msg)
-        return _send(chat_id, result_msg)
-        
-    except Exception as e:
-        logger.error(f"[UserBot] 接受PK失败: {e}")
-        return _send(chat_id, f"❌ 接受PK失败：{safe_error_message(e, '接受PK异常，请稍后重试')}")
+    return user_bot_pk_invitation_commands_service.cmd_pk_accept(chat_id, tg_user_id, text, is_group=is_group)
 
 def cmd_pk_reject(chat_id, tg_user_id, text, is_group=False):
-    """拒绝PK邀请"""
-    binding = _get_binding(tg_user_id)
-    if not binding:
-        return _send(chat_id, "❌ 请先私聊机器人绑定账号")
-    
-    try:
-        # 获取发给当前用户的最新待处理邀请
-        invite = point_dao.get_latest_pending_pk_invitation_for_target(binding['emby_user_id'])
-        
-        if not invite:
-            return _send(chat_id, "❌ 没有待处理的PK邀请")
-        
-        invite_id = invite["id"]
-        challenger_name = invite["challenger_name"]
-        original_chat_id = invite["chat_id"]
-        
-        # 更新状态
-        point_dao.set_pk_invitation_status(invite_id, "rejected")
-        
-        # 通知发起者
-        if original_chat_id:
-            _send(original_chat_id, f"❌ <b>{binding['emby_username']}</b> 拒绝了你的PK邀请")
-        
-        return _send(chat_id, f"✅ 已拒绝 <b>{challenger_name}</b> 的PK邀请")
-        
-    except Exception as e:
-        logger.error(f"[UserBot] 拒绝PK失败: {e}")
-        return _send(chat_id, f"❌ 拒绝PK失败：{safe_error_message(e, '拒绝PK异常，请稍后重试')}")
+    return user_bot_pk_invitation_commands_service.cmd_pk_reject(chat_id, tg_user_id, text, is_group=is_group)
 
 def cmd_transfer(chat_id, tg_user_id, text, is_group=False, entities=None):
     return user_bot_transfer_commands_service.cmd_transfer(
