@@ -309,6 +309,42 @@ def test_media_requests_router_includes_cache_control_child_routes_and_compat_ex
     assert safe_latest_index < refresh_index < clear_index < my_series_index
 
 
+def test_media_requests_router_includes_user_series_child_routes_and_compat_exports():
+    from app.domains.media_requests import router as media_requests_router
+    from app.domains.media_requests import user_series_router
+
+    routes = [
+        (route.path, route.methods)
+        for route in media_requests_router.router.routes
+        if hasattr(route, "methods")
+    ]
+
+    assert any(path == "/api/user/my_series" and "GET" in methods for path, methods in routes)
+    assert any(path == "/api/user/my_series/refresh" and "POST" in methods for path, methods in routes)
+    assert media_requests_router._get_local_episodes is user_series_router._get_local_episodes
+    assert media_requests_router._get_tmdb_season_episodes is user_series_router._get_tmdb_season_episodes
+    assert media_requests_router.get_user_series is user_series_router.get_user_series
+    assert media_requests_router.refresh_my_series_cache is user_series_router.refresh_my_series_cache
+
+    clear_index = next(
+        i
+        for i, (path, methods) in enumerate(routes)
+        if path == "/api/requests/clear_cache" and "POST" in methods
+    )
+    my_series_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/user/my_series" and "GET" in methods
+    )
+    refresh_index = next(
+        i
+        for i, (path, methods) in enumerate(routes)
+        if path == "/api/user/my_series/refresh" and "POST" in methods
+    )
+    update_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/user/request_update" and "POST" in methods
+    )
+    assert clear_index < my_series_index < refresh_index < update_index
+
+
 def test_media_requests_router_includes_registration_child_routes_and_compat_exports():
     from app.domains.media_requests import registration_router
     from app.domains.media_requests import router as media_requests_router

@@ -1,5 +1,5 @@
 import re
-from fastapi import APIRouter, Request, Depends, BackgroundTasks
+from fastapi import APIRouter, Request
 from app.domains.media_requests import community_cache_service
 from app.domains.media_requests.auth_router import (
     RequestLoginModel,
@@ -66,6 +66,14 @@ from app.domains.media_requests.safe_media_router import (
     get_safe_top_media,
     router as safe_media_router,
     set_dependency_providers as set_safe_media_dependency_providers,
+)
+from app.domains.media_requests.user_series_router import (
+    _get_local_episodes,
+    _get_tmdb_season_episodes,
+    get_user_series,
+    refresh_my_series_cache,
+    router as user_series_router,
+    set_dependency_providers as set_user_series_dependency_providers,
 )
 from app.domains.users import public_service as user_service
 from app.core.security import validate_password_strength  # 🔒 统一密码强度校验
@@ -281,6 +289,18 @@ set_cache_control_dependency_providers(
 )
 
 
+set_user_series_dependency_providers(
+    media_api_provider=lambda: media_api,
+    get_emby_admin_provider=lambda: get_emby_admin,
+    tmdb_client_provider=lambda: tmdb_client,
+    safe_proxies_provider=lambda: get_safe_proxies,
+    get_user_series_db_context_provider=lambda: get_user_series_db_context,
+    decode_gap_cache_provider=lambda: decode_gap_cache,
+    get_update_cost_config_provider=lambda: get_update_cost_config,
+    safe_error_message_provider=lambda: safe_error_message,
+)
+
+
 class MediaRequestSubmitModel(BaseSubmitModel):
     seasons: List[int] = [0] 
     overview: Optional[str] = ""
@@ -404,6 +424,8 @@ router.include_router(safe_media_router)
 
 router.include_router(cache_control_router)
 
+router.include_router(user_series_router)
+
 
 # ==================== 追新功能 API ====================
 
@@ -416,237 +438,6 @@ class UpdateRequestModel(BaseModel):
     poster_path: Optional[str] = ""
     season: int
     episodes: List[int]  # 请求的集数列表
-
-
-def _get_local_episodes(series_id: str, season: int) -> set:
-    """获取库里某剧集某季已有的集数"""
-    try:
-        from app.infra.clients.media_server_client import media_api
-        admin_id = get_emby_admin()
-        if not admin_id:
-            return set()
-        
-        eps_data = media_api.get(f"/Users/{admin_id}/Items", params={
-            "ParentId": series_id,
-            "IncludeItemTypes": "Episode",
-            "Recursive": "true",
-            "Fields": "IndexNumber,ParentIndexNumber"
-        }, timeout=10).json().get("Items", [])
-        
-        local_eps = set()
-        for ep in eps_data:
-            sn = ep.get("ParentIndexNumber")
-            en = ep.get("IndexNumber")
-            if sn == season and en is not None:
-                local_eps.add(en)
-        
-        return local_eps
-    except Exception as e:
-        print(f"[追新] 获取本地集数失败: {e}")
-        return set()
-
-
-def _get_tmdb_season_episodes(tmdb_id: int, season: int) -> dict:
-    """获取 TMDB 某季的集数信息"""
-    proxies = get_safe_proxies()
-    
-    try:
-        res = tmdb_client.get_tv_season(tmdb_id, season, proxies=proxies, timeout=10).json()
-        
-        episodes = []
-        for ep in res.get("episodes", []):
-            episodes.append({
-                "episode_number": ep.get("episode_number"),
-                "name": ep.get("name", ""),
-                "air_date": ep.get("air_date", "")
-            })
-        
-        return {
-            "total_episodes": len(episodes),
-            "episodes": episodes
-        }
-    except Exception as e:
-        print(f"[追新] 获取 TMDB 集数失败: {e}")
-        return {"total_episodes": 0, "episodes": []}
-
-
-@router.get("/api/user/my_series")
-def get_user_series(request: Request):
-    """获取用户观看过的剧集列表（用于追新）- 缓存优化版"""
-    user = request.session.get("req_user")
-    if not user:
-        return {"status": "error", "message": "未登录"}
-    
-    uid = user['Id']
-    proxies = get_safe_proxies()
-    
-    try:
-        # 🚀 优化：从缺集管理缓存读取数据，大幅提速
-        cache_row, cache_interval_hours, update_requests = get_user_series_db_context()
-        
-        # 3. 检查缓存是否过期
-        cache_expired = False
-        if cache_row:
-            updated_at = cache_row["updated_at"] or ""
-            try:
-                from datetime import datetime, timedelta
-                cache_time = datetime.strptime(updated_at, "%Y-%m-%d %H:%M:%S")
-                now = datetime.now()
-                cache_expired = (now - cache_time) > timedelta(hours=cache_interval_hours)
-            except:
-                cache_expired = True
-        
-        # 4. 获取用户最近播放的剧集（用于匹配缓存）
-        try:
-            eps_res = media_api.get(f"/Users/{uid}/Items", params={
-                "IncludeItemTypes": "Episode",
-                "Recursive": "true",
-                "SortBy": "DatePlayed",
-                "SortOrder": "Descending",
-                "Limit": 50,
-                "Fields": "SeriesId,SeriesName",
-            }, timeout=10).json()
-        except:
-            eps_res = {"Items": []}
-        
-        # 5. 按 series_id 分组用户观看的剧集
-        user_series_ids = set()
-        for ep in eps_res.get("Items", []):
-            series_id = ep.get("SeriesId")
-            if series_id:
-                user_series_ids.add(series_id)
-        
-        # 🚀 7. 从缓存匹配用户观看的剧集
-        results = []
-        gap_cache = decode_gap_cache(cache_row)
-        
-        # 如果缓存为空或过期，提示用户刷新
-        if not gap_cache:
-            # 获取追新积分配置
-            update_config = get_update_cost_config()
-            
-            return {
-                "status": "success",
-                "data": [],
-                "cache_info": {
-                    "exists": False,
-                    "expired": True,
-                    "updated_at": "",
-                    "interval_hours": cache_interval_hours
-                },
-                "update_cost_info": {
-                    "enabled": update_config["enabled"],
-                    "cost": update_config["cost"]
-                }
-            }
-        
-        # 8. 匹配用户观看的剧集
-        for series in gap_cache:
-            series_id = series.get("series_id")
-            tmdb_id = series.get("tmdb_id")  # 🔥 修复：用 tmdb_id 查询状态
-            if series_id not in user_series_ids:
-                continue
-            
-            # 过滤掉已完结的剧集
-            if series.get("tmdb_status") in ["Ended", "Canceled"]:
-                continue
-            
-            # 获取该剧的追新请求状态 - 🔥 修复：用 tmdb_id + season
-            gaps = series.get("gaps", [])
-            series_request_status = {}
-            for gap in gaps:
-                season = gap.get("season")
-                req_key = f"{tmdb_id}_{season}"  # tmdb_id + season
-                if req_key in update_requests:
-                    series_request_status[season] = update_requests[req_key]
-            
-            # 构建每季的缺集信息
-            seasons_info = []
-            grouped_gaps = {}
-            for gap in gaps:
-                sn = gap.get("season")
-                if sn not in grouped_gaps:
-                    grouped_gaps[sn] = []
-                grouped_gaps[sn].append(gap.get("episode"))
-            
-            # 🔥 按季排序显示
-            for sn in sorted(grouped_gaps.keys()):
-                missing_eps = sorted(grouped_gaps[sn]) if grouped_gaps[sn] else []
-                req_key = f"{tmdb_id}_{sn}"  # 🔥 修复：用 tmdb_id + season
-                req_status = update_requests.get(req_key)
-                
-                # 🔥 修复：从 gaps 数据推断总集数和本地集数
-                # gaps 里只有缺失的集数，无法准确知道总集数
-                # 使用缺失集数的最大值作为最小总集数估计
-                tmdb_total = max(missing_eps) if missing_eps else 10  # 默认假设10集
-                local_count = 0  # 缓存模式无法准确获取本地集数
-                
-                seasons_info.append({
-                    "season": int(sn),  # 🔥 确保是整数
-                    "local_count": local_count,
-                    "tmdb_total": tmdb_total,
-                    "local_eps": [],
-                    "missing_eps": missing_eps,
-                    "unaired_eps": [],
-                    "request_status": req_status
-                })
-            
-            if seasons_info:
-                results.append({
-                    "series_id": series_id,
-                    "series_name": series.get("series_name", "未知剧集"),
-                    "tmdb_id": series.get("tmdb_id"),
-                    "poster": series.get("poster", ""),
-                    "year": "",
-                    "total_seasons": len(seasons_info),
-                    "seasons": seasons_info
-                })
-        
-        # 9. 获取追新积分配置
-        update_config = get_update_cost_config()
-        
-        return {
-            "status": "success",
-            "data": results[:10],
-            "cache_info": {
-                "exists": bool(cache_row),
-                "expired": cache_expired,
-                "updated_at": cache_row["updated_at"] if cache_row else "",
-                "interval_hours": cache_interval_hours
-            },
-            "update_cost_info": {
-                "enabled": update_config["enabled"],
-                "cost": update_config["cost"],
-                "mode": update_config["mode"],
-                "base_cost": update_config["cost"]
-            }
-        }
-    
-    except Exception as e:
-        return {"status": "error", "message": safe_error_message(e)}
-
-
-@router.post("/api/user/my_series/refresh")
-def refresh_my_series_cache(request: Request, bg_tasks: BackgroundTasks):
-    """手动刷新追剧缓存（触发后台重新扫描）"""
-    user = request.session.get("req_user")
-    if not user:
-        return {"status": "error", "message": "未登录"}
-    
-    # 触发缺集管理重新扫描
-    try:
-        # 调用 gaps 模块的扫描功能
-        from app.domains.media_requests.gaps import scan_state, state_lock, run_scan_task
-        
-        with state_lock:
-            if scan_state["is_scanning"]:
-                return {"status": "success", "message": "正在扫描中，请稍后再查看"}
-            scan_state.update({"is_scanning": True, "progress": 0, "total": 0, "results": [], "error": None, "current_item": "系统准备中..."})
-        
-        bg_tasks.add_task(run_scan_task)
-        return {"status": "success", "message": "已触发后台扫描，请稍后刷新查看"}
-    except Exception as e:
-        return {"status": "error", "message": safe_error_message(e)}
 
 
 # 🔥 辅助函数：获取请求状态文本（同步版本）
