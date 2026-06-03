@@ -26,6 +26,7 @@ from app.domains.notifications import notification_bot_item_deleted_service
 from app.domains.notifications import notification_bot_library_queue_service
 from app.domains.notifications import notification_bot_library_new_episode_service
 from app.domains.notifications import notification_bot_library_new_item_service
+from app.domains.notifications import notification_bot_library_push_service
 from app.domains.notifications import notification_bot_latest_command_service
 from app.domains.notifications import notification_bot_message_dispatch_service
 from app.domains.notifications import notification_bot_message_center_callback_service
@@ -335,6 +336,13 @@ notification_bot_library_queue_service.set_dependency_providers(
     logger_provider=lambda: logger,
 )
 
+notification_bot_library_push_service.set_dependency_providers(
+    admin_id_provider=lambda: get_admin_id,
+    bus_provider=lambda: bus,
+    gap_dao_provider=lambda: gap_dao,
+    media_api_provider=lambda: media_api,
+)
+
 def _submit_bot_task(fn, *args):
     if not _bot_executor_slots.acquire(blocking=False):
         logger.warning("[Bot] 后台任务队列已满，丢弃本次异步任务")
@@ -563,46 +571,10 @@ class SystemDaemon:
         return notification_bot_fresh_episode_service.parse_emby_time(date_str)
 
     def _push_episode_group(self, series_id, episodes):
-        admin_id = get_admin_id()
-        series_info = {}
-        
-        try:
-            res = media_api.get(f"/Users/{admin_id}/Items/{series_id}", timeout=10)
-            if res.status_code == 200: series_info = res.json()
-        except Exception: pass
-        if not series_info: series_info = episodes[0]
-
-        series_name = series_info.get('Name', '未知剧集')
-
-        try:
-            for ep in episodes:
-                s_idx = ep.get('ParentIndexNumber'); e_idx = ep.get('IndexNumber')
-                if s_idx is None or e_idx is None: continue
-                if gap_dao.delete_cleared_gap_record(series_id, s_idx, e_idx):
-                    bus.publish("notify.gap_cleared", {"s_idx": s_idx, "e_idx": e_idx, "series_name": series_name})
-        except Exception as e: pass
-
-        st_tmdb = series_info.get("ProviderIds", {}).get("Tmdb")
-        if st_tmdb:
-            # Extract seasons from added episodes, only update those actually added (avoid affecting other seasons)
-            added_seasons = set()
-            for ep in episodes:
-                s_idx = ep.get('ParentIndexNumber')
-                if s_idx is not None:
-                    added_seasons.add(s_idx)
-            # Update each added season separately
-            for s in added_seasons:
-                self._auto_finish_request(st_tmdb, season=s)
-        bus.publish("notify.library.new_episode", { "series_id": series_id, "episodes": episodes, "series_info": series_info })
+        return notification_bot_library_push_service.push_episode_group(self, series_id, episodes)
 
     def _push_single_item(self, item):
-        try:
-            res = media_api.get(f"/Items/{item['Id']}", timeout=10)
-            if res.status_code == 200: item = res.json()
-        except Exception: pass
-        tmdb_id = item.get("ProviderIds", {}).get("Tmdb")
-        if tmdb_id: self._auto_finish_request(tmdb_id)
-        bus.publish("notify.library.new_item", item)
+        return notification_bot_library_push_service.push_single_item(self, item)
 
     def _scheduler_loop(self):
         while self.running:
