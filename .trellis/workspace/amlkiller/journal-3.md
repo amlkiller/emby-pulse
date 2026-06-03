@@ -1556,3 +1556,36 @@ Extracted the basic user bot command handlers for start, help, bind, and registe
 ### Next Steps
 
 - None - task complete
+
+
+## Session 167: Refactor notification user bot code command service
+
+**Date**: 2026-06-03
+**Task**: Refactor notification user bot code command service
+**Branch**: `main`
+
+### Summary
+
+Extracted user bot check, registration-code verification, invitation restore, and renewal command handlers into a focused notification service while preserving legacy wrappers, user state payloads, restriction formatting, invitation DAO behavior, safe error handling, and monkeypatch-compatible providers.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `65adc9f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
