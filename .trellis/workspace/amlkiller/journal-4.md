@@ -1160,3 +1160,36 @@ Extracted SystemDaemon pending request sync logic into a notification-domain pen
 ### Next Steps
 
 - None - task complete
+
+
+## Session 215: Extract notification bot user expiration service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot user expiration service
+**Branch**: `main`
+
+### Summary
+
+Extracted SystemDaemon user-expiration disable logic into a notification-domain service with lazy legacy providers, kept the daemon wrapper, and added focused boundary tests for empty users, active dates, expired policy updates, already-disabled/non-200 skips, per-user errors, and outer DAO errors. Verification passed: compileall changed files, focused pytest, import check, git diff --check, and full pytest tests/.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `703a93a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
