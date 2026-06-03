@@ -1622,3 +1622,36 @@ Extracted request approval action callback handling from notification bot servic
 ### Next Steps
 
 - None - task complete
+
+
+## Session 229: Extract notification bot HDHive search fallback service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot HDHive search fallback service
+**Branch**: `main`
+
+### Summary
+
+Extracted the notification bot req_hdhive search action fallback from bot_service into a domain-local callback service with provider wiring and focused boundary tests. Verified compileall, focused callback tests, related callback tests, import check, diff check, and full tests before committing.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4e6e093` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
