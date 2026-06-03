@@ -665,3 +665,36 @@ Extracted NotificationBot /emby_restart command and emby_restart callback handli
 ### Next Steps
 
 - None - task complete
+
+
+## Session 200: Extract notification bot latest command service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot latest command service
+**Branch**: `main`
+
+### Summary
+
+Extracted NotificationBot /latest command handling into notification_bot_latest_command_service with lazy media_api/admin_id/logger providers; kept the legacy _cmd_latest wrapper and added boundary tests for missing admin ID, non-200 responses, empty latest items, movie/episode formatting, unknown dates, exception logging, and legacy monkeypatch compatibility.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1e9d514` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
