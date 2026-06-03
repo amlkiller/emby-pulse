@@ -100,6 +100,10 @@ def test_users_router_includes_child_routes_and_compat_exports():
     assert any(path == "/api/manage/audit_logs/clear" and "POST" in methods for path, methods in routes)
     assert any(path == "/api/manage/user/verify_password" and "POST" in methods for path, methods in routes)
     assert any(path == "/api/manage/user/check_delete_verified" and "POST" in methods for path, methods in routes)
+    assert any(path == "/api/manage/invite/gen" and "POST" in methods for path, methods in routes)
+    assert any(path == "/api/manage/invites" and "GET" in methods for path, methods in routes)
+    assert any(path == "/api/manage/invites/export" and "GET" in methods for path, methods in routes)
+    assert any(path == "/api/manage/invites/batch" and "POST" in methods for path, methods in routes)
     assert any(path == "/api/manage/template/default" and "POST" in methods for path, methods in routes)
     assert any(path == "/api/manage/template/default" and "GET" in methods for path, methods in routes)
     assert any(path == "/api/manage/user/req_permission" and "POST" in methods for path, methods in routes)
@@ -113,6 +117,7 @@ def test_users_router_includes_child_routes_and_compat_exports():
 
     from app.domains.users import audit_log_router
     from app.domains.users import delete_verification_router
+    from app.domains.users import invitation_router
 
     assert router.api_get_audit_logs is audit_log_router.api_get_audit_logs
     assert router.api_get_audit_stats is audit_log_router.api_get_audit_stats
@@ -124,6 +129,12 @@ def test_users_router_includes_child_routes_and_compat_exports():
     assert router.api_get_admin_list is delete_verification_router.api_get_admin_list
     assert router.api_verify_delete_password is delete_verification_router.api_verify_delete_password
     assert router.api_check_delete_verified is delete_verification_router.api_check_delete_verified
+    assert router.InviteGenModelLocal is invitation_router.InviteGenModelLocal
+    assert router.InviteBatchModelLocal is invitation_router.InviteBatchModelLocal
+    assert router.api_gen_invite is invitation_router.api_gen_invite
+    assert router.api_get_invites is invitation_router.api_get_invites
+    assert router.api_export_invites is invitation_router.api_export_invites
+    assert router.api_manage_invites_batch is invitation_router.api_manage_invites_batch
 
     admin_index = next(
         i for i, (path, methods) in enumerate(routes) if path == "/api/manage/user/admin_list" and "GET" in methods
@@ -136,7 +147,19 @@ def test_users_router_includes_child_routes_and_compat_exports():
         for i, (path, methods) in enumerate(routes)
         if path == "/api/manage/user/verify_password" and "POST" in methods
     )
+    hidden_libraries_index = next(
+        i
+        for i, (path, methods) in enumerate(routes)
+        if path == "/api/user/hidden_libraries" and "POST" in methods
+    )
+    invitation_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/manage/invite/gen" and "POST" in methods
+    )
+    library_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/manage/user/library" and "POST" in methods
+    )
     assert admin_index < audit_index < verify_index
+    assert hidden_libraries_index < invitation_index < library_index
 
 
 def test_delete_verification_route_preserves_router_app_start_time_compat(monkeypatch):
