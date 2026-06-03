@@ -1292,3 +1292,36 @@ Extracted SystemDaemon gap record cleanup into a notification-domain service wit
 ### Next Steps
 
 - None - task complete
+
+
+## Session 219: Extract notification bot library queue service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot library queue service
+**Branch**: `main`
+
+### Summary
+
+Extracted NotificationBot.add_library_task queue capacity, dedupe, locking, and warning behavior into a domain-local notification_bot_library_queue_service while preserving the legacy wrapper and monkeypatch-compatible dependency providers. Added boundary tests for append, duplicate skip, capacity drop logging, Id fallback, missing Id semantics, and lock usage. Verified import, diff check, focused boundary tests, compileall, and full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e82432d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
