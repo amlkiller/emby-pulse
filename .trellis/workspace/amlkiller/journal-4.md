@@ -929,3 +929,36 @@ Extracted NotificationBot polling loop into a notification-domain polling servic
 ### Next Steps
 
 - None - task complete
+
+
+## Session 208: Extract notification bot risk alert service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot risk alert service
+**Branch**: `main`
+
+### Summary
+
+Extracted NotificationBot risk alert handling into a notification-domain service with lazy providers for legacy monkeypatch compatibility. Kept NotificationBot.on_risk_alert as a wrapper and added boundary tests for message formatting, action keyboard behavior, URL fallback, system notification persistence, default payload values, and persistence error logging. Verification passed: compileall, focused risk alert tests, import check, git diff --check, and full tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4d2414f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
