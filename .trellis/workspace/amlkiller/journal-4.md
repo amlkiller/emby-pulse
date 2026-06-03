@@ -104,3 +104,36 @@ Extracted invitation-code account creation from user_bot_service into the focuse
 ### Next Steps
 
 - None - task complete
+
+
+## Session 183: Refactor notification user bot open registration
+
+**Date**: 2026-06-03
+**Task**: Refactor notification user bot open registration
+**Branch**: `main`
+
+### Summary
+
+Extracted open-registration account creation from user_bot_service into a focused notification domain service while preserving the legacy _do_register wrapper, late-bound dependency providers, queue/quota behavior, duplicate checks, Emby side effects, route expiry persistence, binding, registration logs, and safe-error handling.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `43f02cb` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
