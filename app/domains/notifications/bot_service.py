@@ -18,6 +18,7 @@ from app.domains.notifications import bot_service_dao, message_dao
 from app.domains.notifications import notification_bot_channel_service
 from app.domains.notifications import notification_bot_media_quality_service
 from app.domains.notifications import notification_bot_request_admin_message_sync_service
+from app.domains.notifications import notification_bot_wecom_service
 from app.domains.notifications import notify_admin_dao, notify_rule_dao
 from app.infra.db.playback_filters import get_base_filter
 from app.domains.users import user_dao
@@ -87,6 +88,22 @@ notification_bot_channel_service.set_dependency_providers(
     safe_proxies_provider=lambda: get_safe_proxies,
     telegram_client_provider=lambda: telegram_client,
     logger_provider=lambda: logger,
+)
+
+notification_bot_wecom_service.set_dependency_providers(
+    wecom_corpid_provider=lambda: get_wecom_corpid,
+    wecom_corpsecret_provider=lambda: get_wecom_corpsecret,
+    wecom_agentid_provider=lambda: get_wecom_agentid,
+    safe_wecom_base_provider=lambda: get_safe_wecom_base,
+    pulse_url_provider=lambda: get_pulse_url,
+    media_server_main_public_or_host_provider=lambda: get_media_server_main_public_or_host,
+    media_server_host_provider=lambda: get_media_server_host,
+    media_server_api_key_provider=lambda: get_media_server_api_key,
+    wecom_client_provider=lambda: wecom_client,
+    media_api_provider=lambda: media_api,
+    report_cover_url_provider=lambda: REPORT_COVER_URL,
+    logger_provider=lambda: logger,
+    time_provider=lambda: time,
 )
 
 def _submit_bot_task(fn, *args):
@@ -1295,289 +1312,19 @@ class NotificationBot:
         return None
 
     def _get_wecom_token(self):
-        corpid = get_wecom_corpid()
-        corpsecret = get_wecom_corpsecret()
-        proxy_url = get_safe_wecom_base()
-        if not corpid or not corpsecret:
-            return None
-        if self.wecom_token and time.time() < self.wecom_token_expires:
-            return self.wecom_token
-        try:
-            res = wecom_client.get_access_token(proxy_url, corpid, corpsecret, timeout=5).json()
-            if res.get("errcode") == 0:
-                self.wecom_token = res["access_token"]
-                self.wecom_token_expires = time.time() + res["expires_in"] - 60
-                logger.info(f"[企业微信] 获取 access_token 成功，有效期 {res['expires_in']} 秒")
-                return self.wecom_token
-            else:
-                logger.error(f"[企业微信] 获取 access_token 失败: errcode={res.get('errcode')}, errmsg={res.get('errmsg')}")
-        except Exception as e:
-            logger.error(f"[企业微信] 获取 access_token 异常: {e}")
-        return None
+        return notification_bot_wecom_service.get_wecom_token(self)
 
     def _html_to_wecom_text(self, html_text, inline_keyboard=None):
-        text = html_text.replace("<b>", "【").replace("</b>", "】").replace("<i>", "").replace("</i>", "").replace("<code>", "").replace("</code>", "")
-        text = re.sub(r"<a\s+href=['\"](.*?)['\"]>(.*?)</a>", r"\2: \1", text)
-        if inline_keyboard and "inline_keyboard" in inline_keyboard:
-            text += "\n\n"
-            for row in inline_keyboard["inline_keyboard"]:
-                for btn in row:
-                    if "text" in btn and "url" in btn: text += f"🔗 {btn['text']}: {btn['url']}\n"
-        return text.strip()
+        return notification_bot_wecom_service.html_to_wecom_text(html_text, inline_keyboard)
 
     def _set_wecom_menu(self):
-        token = self._get_wecom_token(); agentid = get_wecom_agentid()
-        proxy_url = get_safe_wecom_base()
-        if not token or not agentid: return
-        
-        menu_data = {
-            "button": [
-                {
-                    "name": "数据大盘",
-                    "sub_button": [
-                        {"type": "click", "name": "📈 今日日报", "key": "/stats"},
-                        {"type": "click", "name": "📅 本周周报", "key": "/weekly"},
-                        {"type": "click", "name": "🗓️ 本月月报", "key": "/monthly"}
-                    ]
-                },
-                {
-                    "name": "媒体大厅",
-                    "sub_button": [
-                        {"type": "click", "name": "🟢 正在播放", "key": "/now"},
-                        {"type": "click", "name": "🆕 最近入库", "key": "/latest"},
-                        {"type": "click", "name": "📜 播放记录", "key": "/recent"}
-                    ]
-                },
-                {
-                    "name": "系统运维",
-                    "sub_button": [
-                        {"type": "click", "name": "🔍 资源搜索", "key": "/search"},
-                        {"type": "click", "name": "📡 系统探针", "key": "/check"},
-                        {"type": "click", "name": "🤖 帮助菜单", "key": "/help"}
-                    ]
-                }
-            ]
-        }
-        
-        try: 
-            res = wecom_client.create_menu(proxy_url, token, agentid, menu_data, timeout=5)
-            res_data = res.json()
-            if res_data.get("errcode") == 0:
-                logger.info("✅ [企微助手] 底部三栏菜单推送成功！")
-            else:
-                logger.error(f"❌ [企微助手] 菜单推送失败！错误码: {res_data.get('errcode')}, 详情: {res_data.get('errmsg')}")
-        except Exception as e: 
-            logger.error(f"❌ [企微助手] 菜单请求发生网络异常: {e}")
+        return notification_bot_wecom_service.set_wecom_menu(self)
 
     def _send_wecom_message(self, text, inline_keyboard=None, touser="@all"):
-        token = self._get_wecom_token()
-        agentid = get_wecom_agentid()
-        proxy_url = get_safe_wecom_base()
-
-        if not token:
-            logger.warning("[企业微信] 获取 access_token 失败，请检查 wecom_corpid 和 wecom_corpsecret 配置")
-            return
-        if not agentid:
-            logger.warning("[企业微信] 未配置 wecom_agentid")
-            return
-
-        logger.info(f"[企业微信] 准备发送消息: touser={touser}, agentid={agentid}")
-
-        try:
-            content = self._html_to_wecom_text(text, inline_keyboard)
-            if len(content.encode('utf-8')) > 2048:
-                suffix = "\n\n[字数超限已被截断...]"
-                max_bytes = 2048 - len(suffix.encode('utf-8')) - 5
-                content = content.encode('utf-8')[:max_bytes].decode('utf-8', 'ignore') + suffix
-
-            res = wecom_client.send_message(proxy_url, token, {"touser": touser, "msgtype": "text", "agentid": int(agentid), "text": {"content": content}}, timeout=10)
-            res_json = res.json() if res.text else {}
-            if res_json.get("errcode") == 0:
-                logger.info(f"[企业微信] 消息发送成功: touser={touser}")
-            else:
-                errcode = res_json.get("errcode")
-                errmsg = res_json.get("errmsg", "")
-                logger.error(f"[企业微信] 消息发送失败: errcode={errcode}, errmsg={errmsg}")
-                # 81013: 用户/部门/标签无效，需要配置 wecom_touser 或给应用添加全员权限
-                if errcode == 81013:
-                    logger.error(f"[企业微信] 错误81013: touser '{touser}' 无效。请配置 wecom_touser 为具体用户ID，或在企业微信后台给应用添加'发送到所有人'权限")
-        except Exception as e:
-            logger.error(f"[企业微信] 消息发送异常: {e}")
+        return notification_bot_wecom_service.send_wecom_message(self, text, inline_keyboard, touser)
 
     def _send_wecom_photo(self, photo_bytes, html_text, inline_keyboard=None, touser="@all"):
-        token = self._get_wecom_token(); agentid = get_wecom_agentid()
-        proxy_url = get_safe_wecom_base()
-        if not token or not agentid: return
-        
-        pic_url = REPORT_COVER_URL  # 默认封面
-        upload_success = False
-        
-        # 尝试上传图片到企业微信 (通过代理)
-        try:
-            if photo_bytes and len(photo_bytes) > 0:
-                # 企微要求图片 < 2MB，如果太大则压缩
-                if len(photo_bytes) > 2 * 1024 * 1024:
-                    logger.debug(f"[企业微信] 图片过大 ({len(photo_bytes)} bytes)，尝试压缩")
-                    try:
-                        from PIL import Image
-                        import io
-                        img = Image.open(io.BytesIO(photo_bytes))
-                        output = io.BytesIO()
-                        # 降低质量到 70%
-                        img.save(output, format='JPEG', quality=70, optimize=True)
-                        photo_bytes = output.getvalue()
-                        logger.debug(f"[企业微信] 压缩后大小: {len(photo_bytes)} bytes")
-                    except Exception as e:
-                        logger.debug(f"[企业微信] 图片压缩失败: {e}")
-                
-                logger.info(f"[企业微信] 开始上传图片，大小: {len(photo_bytes)} bytes")
-                logger.info(f"[企业微信] 上传URL: {proxy_url.rstrip('/')}/cgi-bin/media/uploadimg?access_token=***")
-                upload_res = wecom_client.upload_image(proxy_url, token, {"media": ("image.jpg", photo_bytes, "image/jpeg")}, timeout=15)
-                if upload_res.status_code == 200 and upload_res.text.strip():
-                    resp_json = upload_res.json()
-                    # uploadimg 成功返回 {"url": "https://..."}
-                    if "url" in resp_json:
-                        pic_url = resp_json["url"]
-                        upload_success = True
-                        logger.info(f"[企业微信] 图片上传成功: {pic_url[:60]}...")
-                    else:
-                        errcode = resp_json.get('errcode')
-                        errmsg = resp_json.get('errmsg', '')
-                        logger.warning(f"[企业微信] 图片上传失败: errcode={errcode}, errmsg={errmsg}")
-                else:
-                    logger.warning(f"[企业微信] 图片上传请求失败: status={upload_res.status_code}")
-        except Exception as e:
-            logger.warning(f"[企业微信] 图片上传异常: {e}")
-        
-        # 如果上传失败，尝试使用网络图片 URL 作为封面
-        if not upload_success:
-            # 尝试从 inline_keyboard 中提取 Emby 图片 URL
-            if inline_keyboard and "inline_keyboard" in inline_keyboard:
-                try:
-                    play_url = inline_keyboard["inline_keyboard"][0][0].get("url", "")
-                    match = re.search(r'id=([a-zA-Z0-9]+)', play_url)
-                    if match:
-                        item_id = match.group(1)
-                        base_emby = (get_media_server_main_public_or_host() or get_media_server_host() or "").rstrip('/')
-                        api_key = get_media_server_api_key() or ""
-                        if base_emby and api_key:
-                            # 优先使用横版封面 Backdrop
-                            pic_url = f"{base_emby}/emby/Items/{item_id}/Images/Backdrop?maxWidth=800&api_key={api_key}"
-                            logger.info(f"[企业微信] 使用 Emby 横版图片作为封面")
-                except Exception as e:
-                    logger.debug(f"[企业微信] 提取图片URL失败: {e}")
-            
-            # 如果还是没有有效图片URL，尝试保存图片到本地并生成外部URL
-            if pic_url == REPORT_COVER_URL and photo_bytes:
-                try:
-                    import time
-                    import os
-                    import glob
-                    
-                    # 使用 /app/public 或当前目录
-                    public_dir = '/app/public'
-                    if not os.path.exists(public_dir):
-                        public_dir = '/public'
-                    if not os.path.exists(public_dir):
-                        public_dir = os.path.join(os.getcwd(), 'public')
-                        os.makedirs(public_dir, exist_ok=True)
-                    
-                    # 自动清理：删除超过7天的旧图片
-                    try:
-                        max_age_seconds = 7 * 24 * 3600  # 7天
-                        current_time = time.time()
-                        for old_file in glob.glob(os.path.join(public_dir, 'report_*.jpg')):
-                            if current_time - os.path.getmtime(old_file) > max_age_seconds:
-                                os.remove(old_file)
-                                logger.debug(f"[企业微信] 清理旧图片: {old_file}")
-                    except Exception as e:
-                        logger.debug(f"[企业微信] 清理旧图片失败: {e}")
-                    
-                    report_filename = f"report_{int(time.time())}.jpg"
-                    report_path = os.path.join(public_dir, report_filename)
-                    with open(report_path, 'wb') as f:
-                        f.write(photo_bytes)
-                    
-                    # 生成外部可访问的URL
-                    pulse_url = get_pulse_url()
-                    if pulse_url:
-                        pic_url = f"{pulse_url.rstrip('/')}/public/{report_filename}"
-                        logger.info(f"[企业微信] 使用本地图片URL: {pic_url}")
-                except Exception as e:
-                    logger.warning(f"[企业微信] 保存本地图片失败: {e}")
-            
-            logger.info(f"[企业微信] 使用网络图片作为封面: {pic_url[:60]}...")
-            upload_success = True
-
-        try:
-            plain_text = re.sub(r'<[^>]+>', '', html_text).strip()
-            lines = [line.strip() for line in plain_text.split('\n')]
-            
-            title = lines[0] if lines else "EmbyPulse 通知"
-            if len(title.encode('utf-8')) > 128:
-                title = title.encode('utf-8')[:120].decode('utf-8', 'ignore') + "..."
-
-            desc = re.sub(r'\n{3,}', '\n\n', '\n'.join(lines[1:]).strip()) if len(lines) > 1 else ""
-            if len(desc.encode('utf-8')) > 512:
-                suffix = "...\n[字数超限，点击卡片阅读完整详情]"
-                max_bytes = 512 - len(suffix.encode('utf-8')) - 5
-                desc = desc.encode('utf-8')[:max_bytes].decode('utf-8', 'ignore') + suffix
-
-            jump_url = get_media_server_main_public_or_host() or get_media_server_host() or "https://emby.media"
-            if inline_keyboard and "inline_keyboard" in inline_keyboard:
-                try: jump_url = inline_keyboard["inline_keyboard"][0][0]["url"]
-                except Exception: pass
-            else:
-                links = re.findall(r"href=['\"](.*?)['\"]", html_text)
-                if links: jump_url = links[0]
-
-            item_id_match = re.search(r'id=([a-zA-Z0-9]+)', jump_url)
-            if item_id_match and pic_url == REPORT_COVER_URL:
-                item_id = item_id_match.group(1)
-                base_emby = (get_media_server_main_public_or_host() or get_media_server_host()).rstrip('/')
-                api_key = get_media_server_api_key()
-                
-                # 优先使用横版封面 Backdrop
-                img_type = "Backdrop"
-                try:
-                    if media_api.request("HEAD", f"/Items/{item_id}/Images/Backdrop", timeout=2).status_code != 200:
-                        img_type = "Primary"
-                except Exception: pass
-                pic_url = f"{base_emby}/emby/Items/{item_id}/Images/{img_type}?maxWidth=800&api_key={api_key}"
-
-            pulse_url = get_pulse_url()
-            if pulse_url and any(kw in title for kw in ["求片", "心愿", "报错", "工单", "风控", "系统告警", "安全告警"]):
-                base_pulse = pulse_url.rstrip('/')
-                if "求片" in title or "心愿" in title: jump_url = f"{base_pulse}/requests_admin"
-                elif "报错" in title or "工单" in title: jump_url = f"{base_pulse}/requests_admin"
-                elif "风控" in title: jump_url = f"{base_pulse}/risk"
-                elif "用户" in title: jump_url = f"{base_pulse}/users"
-                else: jump_url = base_pulse
-
-            # 发送图文消息
-            news_payload = {
-                "touser": touser, 
-                "msgtype": "news", 
-                "agentid": int(agentid), 
-                "news": {
-                    "articles": [{
-                        "title": title, 
-                        "description": desc, 
-                        "url": jump_url, 
-                        "picurl": pic_url
-                    }]
-                }
-            }
-            logger.debug(f"[企业微信] 发送图文消息: title={title[:30]}..., pic_url={pic_url[:50]}...")
-            res = wecom_client.send_message(proxy_url, token, news_payload, timeout=10)
-            res_json = res.json() if res.text else {}
-            if res_json.get("errcode") == 0:
-                logger.debug(f"[企业微信] 图文消息发送成功: touser={touser}")
-            else:
-                logger.error(f"[企业微信] 图文消息发送失败: errcode={res_json.get('errcode')}, errmsg={res_json.get('errmsg')}")
-        except Exception as e:
-            logger.error(f"[企业微信] 发送图文消息异常: {e}")
-            self._send_wecom_message(html_text, inline_keyboard, touser)
+        return notification_bot_wecom_service.send_wecom_photo(self, photo_bytes, html_text, inline_keyboard, touser)
 
     def send_photo(self, chat_id, photo_io, caption, parse_mode="HTML", reply_markup=None, platform="all", wecom_photo_io=None):
         logger.debug(f"[Bot] send_photo called: chat_id={chat_id}, platform={platform}, caption_len={len(caption)}")
