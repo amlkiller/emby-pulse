@@ -42,6 +42,11 @@ from app.domains.playback.recent_activity_router import (
     router as recent_activity_router,
     set_dependency_providers as set_recent_activity_dependency_providers,
 )
+from app.domains.playback.system_monitor_router import (
+    api_system_monitor,
+    router as system_monitor_router,
+    set_dependency_providers as set_system_monitor_dependency_providers,
+)
 from app.domains.playback.top_users_router import (
     api_top_users_list,
     router as top_users_router,
@@ -183,6 +188,12 @@ set_recent_activity_dependency_providers(
     playback_store_provider=lambda: playback_store,
     get_user_map_local_provider=lambda: get_user_map_local,
     media_api_provider=lambda: media_api,
+)
+
+set_system_monitor_dependency_providers(
+    user_service_provider=lambda: user_service,
+    psutil_provider=lambda: psutil,
+    safe_error_message_provider=lambda: safe_error_message,
 )
 
 
@@ -526,33 +537,7 @@ def _get_added_stats_sync():
         return {"total_this_week": 0, "trend": [0]*7}
 
 
-@router.get("/api/system/monitor")
-def api_system_monitor(request: Request):
-    # 🔒 管理员专用：只检查后台登录
-    if not user_service.is_admin_user(request):
-        return {"status": "error", "message": "需要管理员权限"}
-    try:
-        # 🔥 interval=0 立即返回（非阻塞），使用上次采样值
-        cpu_usage = psutil.cpu_percent(interval=0)
-
-        # 内存使用率
-        memory_info = psutil.virtual_memory()
-        memory_usage = memory_info.percent
-
-        # 根目录磁盘使用率
-        disk_info = psutil.disk_usage('/')
-        disk_usage = disk_info.percent
-
-        return {
-            "status": "success",
-            "data": {
-                "cpu": cpu_usage,
-                "memory": memory_usage,
-                "disk": disk_usage
-            }
-        }
-    except Exception as e:
-        return {"status": "error", "message": safe_error_message(e, "探针读取失败")}
+router.include_router(system_monitor_router)
 
 
 # ==================== 🔥 内容风云榜详情 API ====================

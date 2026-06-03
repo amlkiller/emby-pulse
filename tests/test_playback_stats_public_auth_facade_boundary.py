@@ -1010,6 +1010,138 @@ def test_recent_added_authenticated_call_uses_stats_monkeypatches(monkeypatch):
     ]
 
 
+def test_playback_stats_includes_system_monitor_child_route_and_compat_export():
+    from app.domains.playback import stats
+    from app.domains.playback import system_monitor_router
+
+    routes = [
+        (route.path, route.methods)
+        for route in stats.router.routes
+        if hasattr(route, "methods")
+    ]
+
+    assert any(path == "/api/system/monitor" and "GET" in methods for path, methods in routes)
+    assert stats.api_system_monitor is system_monitor_router.api_system_monitor
+
+    dashboard_init_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/dashboard/init" and "GET" in methods
+    )
+    system_monitor_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/system/monitor" and "GET" in methods
+    )
+    item_detail_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/item_detail" and "GET" in methods
+    )
+    assert dashboard_init_index < system_monitor_index < item_detail_index
+
+
+def test_system_monitor_denies_non_admin_before_psutil_side_effects(monkeypatch):
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"Id": "u1"}})
+    calls = []
+
+    def fake_is_admin_user(seen_request):
+        calls.append(seen_request)
+        return False
+
+    def fail_cpu_percent(*args, **kwargs):
+        raise AssertionError("system monitor should not read cpu without admin permission")
+
+    def fail_virtual_memory(*args, **kwargs):
+        raise AssertionError("system monitor should not read memory without admin permission")
+
+    def fail_disk_usage(*args, **kwargs):
+        raise AssertionError("system monitor should not read disk without admin permission")
+
+    monkeypatch.setattr(stats.user_service, "is_admin_user", fake_is_admin_user)
+    monkeypatch.setattr(stats.psutil, "cpu_percent", fail_cpu_percent)
+    monkeypatch.setattr(stats.psutil, "virtual_memory", fail_virtual_memory)
+    monkeypatch.setattr(stats.psutil, "disk_usage", fail_disk_usage)
+
+    response = stats.api_system_monitor(request)
+
+    assert response == {"status": "error", "message": "需要管理员权限"}
+    assert calls == [request]
+
+
+def test_system_monitor_allows_admin_through_stats_monkeypatches(monkeypatch):
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"Id": "admin"}})
+    calls = []
+
+    def fake_is_admin_user(seen_request):
+        calls.append(("is_admin_user", seen_request))
+        return True
+
+    def fake_cpu_percent(interval=0):
+        calls.append(("cpu_percent", interval))
+        return 12.5
+
+    def fake_virtual_memory():
+        calls.append(("virtual_memory",))
+        return SimpleNamespace(percent=34.5)
+
+    def fake_disk_usage(path):
+        calls.append(("disk_usage", path))
+        return SimpleNamespace(percent=56.5)
+
+    monkeypatch.setattr(stats.user_service, "is_admin_user", fake_is_admin_user)
+    monkeypatch.setattr(stats.psutil, "cpu_percent", fake_cpu_percent)
+    monkeypatch.setattr(stats.psutil, "virtual_memory", fake_virtual_memory)
+    monkeypatch.setattr(stats.psutil, "disk_usage", fake_disk_usage)
+
+    response = stats.api_system_monitor(request)
+
+    assert response == {
+        "status": "success",
+        "data": {
+            "cpu": 12.5,
+            "memory": 34.5,
+            "disk": 56.5,
+        },
+    }
+    assert calls == [
+        ("is_admin_user", request),
+        ("cpu_percent", 0),
+        ("virtual_memory",),
+        ("disk_usage", "/"),
+    ]
+
+
+def test_system_monitor_uses_stats_safe_error_message_monkeypatch(monkeypatch):
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"Id": "admin"}})
+    calls = []
+
+    def fake_is_admin_user(seen_request):
+        calls.append(("is_admin_user", seen_request))
+        return True
+
+    def fail_cpu_percent(interval=0):
+        calls.append(("cpu_percent", interval))
+        raise RuntimeError("raw sensor failure")
+
+    def fake_safe_error_message(error, fallback=None):
+        calls.append(("safe_error_message", str(error), fallback))
+        return "safe monitor error"
+
+    monkeypatch.setattr(stats.user_service, "is_admin_user", fake_is_admin_user)
+    monkeypatch.setattr(stats.psutil, "cpu_percent", fail_cpu_percent)
+    monkeypatch.setattr(stats, "safe_error_message", fake_safe_error_message)
+
+    response = stats.api_system_monitor(request)
+
+    assert response == {"status": "error", "message": "safe monitor error"}
+    assert calls == [
+        ("is_admin_user", request),
+        ("cpu_percent", 0),
+        ("safe_error_message", "raw sensor failure", "探针读取失败"),
+    ]
+
+
 def test_user_details_denies_unauthenticated_before_query_or_media_side_effects(monkeypatch):
     from app.domains.playback import stats
 
