@@ -24,6 +24,7 @@ from app.domains.notifications import user_bot_code_commands_service
 from app.domains.notifications import user_bot_concurrency_service
 from app.domains.notifications import user_bot_dice_pk_commands_service
 from app.domains.notifications import user_bot_game_commands_service
+from app.domains.notifications import user_bot_lottery_draw_service
 from app.domains.notifications import user_bot_menu_service
 from app.domains.notifications import user_bot_message_cleanup_service
 from app.domains.notifications import user_bot_message_dispatcher_service
@@ -655,6 +656,18 @@ user_bot_message_dispatcher_service.set_dependency_providers(
     cmd_password_provider=lambda: cmd_password,
     cmd_pk_accept_provider=lambda: cmd_pk_accept,
     cmd_pk_reject_provider=lambda: cmd_pk_reject,
+)
+
+user_bot_lottery_draw_service.set_dependency_providers(
+    datetime_provider=lambda: datetime,
+    random_provider=lambda: random,
+    point_dao_provider=lambda: point_dao,
+    media_api_provider=lambda: media_api,
+    allowed_groups_provider=lambda: get_user_bot_allowed_groups(),
+    get_binding_by_emby_id_provider=lambda: _get_binding_by_emby_id,
+    user_bot_dao_provider=lambda: user_bot_dao,
+    send_provider=lambda: _send,
+    logger_provider=lambda: logger,
 )
 
 user_bot_scheduler_service.set_dependency_providers(
@@ -1290,207 +1303,4 @@ def start_user_bot_services():
         user_bot.start()
 
 def do_lottery_draw():
-    """执行彩票开奖（由定时任务调用）"""
-    try:
-        today = datetime.datetime.now().strftime('%Y-%m-%d')
-        draw_context = point_dao.get_lottery_draw_context(today)
-        if draw_context["already_drawn"]:
-            logger.info(f"[彩票] 今天已开奖: {draw_context['winning_numbers']}")
-            return
-        
-        # 生成中奖号码
-        winning_numbers = ''.join([str(random.randint(0, 9)) for _ in range(4)])
-
-        total_pool = draw_context["total_pool"]
-        raw_tickets = draw_context["tickets"]
-
-        # 过滤已删除的账号
-        tickets = []
-        for ticket in raw_tickets:
-            ticket_id = ticket["id"]
-            user_id = ticket["user_id"]
-            username = ticket["username"]
-            numbers = ticket["numbers"]
-            try:
-                user_info = media_api.get(f"/Users/{user_id}", timeout=3)
-                if user_info.status_code == 200:
-                    tickets.append((ticket_id, user_id, username, numbers))
-                else:
-                    logger.warning(f"[彩票] 用户 {user_id}({username}) 已被删除，跳过")
-            except:
-                tickets.append((ticket_id, user_id, username, numbers))  # 检查失败时保留
-        
-        if not tickets:
-            logger.info(f"[彩票] 今天没有彩票，跳过开奖")
-            return
-        
-        # 计算中奖
-        winners = {1: [], 2: [], 3: [], 4: []}  # 一等奖、二等奖、三等奖、安慰奖
-        
-        for ticket_id, user_id, username, numbers in tickets:
-            # 计算匹配位数
-            match_count = sum(1 for i in range(4) if numbers[i] == winning_numbers[i])
-            
-            if match_count == 4:
-                winners[1].append((ticket_id, user_id, username))
-            elif match_count == 3:
-                winners[2].append((ticket_id, user_id, username))
-            elif match_count == 2:
-                # 检查是否连续
-                if numbers[0:2] == winning_numbers[0:2] or numbers[1:3] == winning_numbers[1:3] or numbers[2:4] == winning_numbers[2:4]:
-                    winners[3].append((ticket_id, user_id, username))
-                else:
-                    winners[4].append((ticket_id, user_id, username))
-        
-        # 🔥 奖池分配比例（从配置读取）
-        config = point_dao.get_point_config()
-        prize_pool_ratios = {
-            1: int(config.get('lottery_pool_ratio_1', 50)) / 100,  # 一等奖
-            2: int(config.get('lottery_pool_ratio_2', 20)) / 100,  # 二等奖
-            3: int(config.get('lottery_pool_ratio_3', 10)) / 100,  # 三等奖
-            4: int(config.get('lottery_pool_ratio_4', 5)) / 100,   # 安慰奖
-        }
-        
-        # 🔥 幸运奖配置
-        lucky_count = int(config.get('lottery_lucky_count', 0))  # 幸运奖人数
-        lucky_ratio = int(config.get('lottery_lucky_ratio', 5)) / 100  # 幸运奖奖池比例
-        
-        # 计算每个奖项的总奖金池
-        prize_pools = {}
-        for level, ratio in prize_pool_ratios.items():
-            prize_pools[level] = int(total_pool * ratio)
-        
-        # 🔥 幸运奖奖池
-        if lucky_count > 0:
-            prize_pools[5] = int(total_pool * lucky_ratio)  # 幸运奖用 key=5
-        
-        winners_by_level = {
-            level: [
-                {"ticket_id": ticket_id, "user_id": user_id, "username": username, "prize_amount": prize_pools[level] // len(winner_list) if prize_pools[level] > 0 else 0}
-                for ticket_id, user_id, username in winner_list
-            ]
-            for level, winner_list in winners.items()
-        }
-
-        for level, winner_list in winners.items():
-            if not winner_list or prize_pools[level] <= 0:
-                continue
-            
-            # 每人奖金 = 该奖项奖池 / 中奖人数
-            prize_per_person = prize_pools[level] // len(winner_list)
-            if prize_per_person <= 0:
-                prize_per_person = 1  # 最低1积分
-            for winner in winners_by_level[level]:
-                winner["prize_amount"] = prize_per_person
-        
-        # 🔥 幸运奖抽取（从所有购买彩票的人中随机抽取）
-        lucky_winners = []
-        if lucky_count > 0 and len(tickets) > 0 and prize_pools.get(5, 0) > 0:
-            # 去重：每个用户只能中一次幸运奖
-            unique_users = {}
-            for ticket_id, user_id, username, numbers in tickets:
-                if user_id not in unique_users:
-                    unique_users[user_id] = (ticket_id, username)
-            
-            # 随机抽取
-            user_list = list(unique_users.items())
-            actual_lucky_count = min(lucky_count, len(user_list))
-            if actual_lucky_count > 0:
-                lucky_selected = random.sample(user_list, actual_lucky_count)
-                prize_per_lucky = prize_pools[5] // actual_lucky_count
-                if prize_per_lucky <= 0:
-                    prize_per_lucky = 1
-                
-                for user_id, (ticket_id, username) in lucky_selected:
-                    lucky_winners.append({"ticket_id": ticket_id, "user_id": user_id, "username": username, "prize_amount": prize_per_lucky})
-                    logger.info(f"[彩票] 幸运奖: {username} 获得 {prize_per_lucky} 积分")
-
-        # 计算剩余奖池并累积到下期
-        total_distributed = 0
-        for level, winner_list in winners.items():
-            if winner_list and level in prize_pools and prize_pools[level] > 0:
-                total_distributed += prize_pools[level]
-        if lucky_winners and prize_pools.get(5, 0) > 0:
-            total_distributed += prize_pools[5]
-
-        remaining_pool = total_pool - total_distributed
-        if remaining_pool < 0:
-            remaining_pool = 0
-
-        save_result = point_dao.save_lottery_draw_result(today, winning_numbers, winners_by_level, lucky_winners, remaining_pool)
-        if save_result.get("status") != "success":
-            logger.info(f"[彩票] 开奖已跳过: {save_result}")
-            return
-
-        logger.info(f"[彩票] 开奖完成: {winning_numbers}, 奖池: {total_pool}, 中奖人数: {sum(len(w) for w in winners_by_level.values())}")
-        
-        # 🔥 发送开奖结果到群
-        # 获取允许彩票的群
-        allowed_groups = get_user_bot_allowed_groups()
-        logger.info(f"[彩票] 允许的群: {allowed_groups}")
-        if allowed_groups:
-            group_list = [g.strip() for g in allowed_groups.split("\n") if g.strip()]
-            logger.info(f"[彩票] 群列表: {group_list}")
-            
-            # 构建开奖消息
-            msg = f"🎰 <b>彩票开奖结果</b> ({today})\n\n"
-            msg += f"🎲 中奖号码: <b>{winning_numbers}</b>\n"
-            msg += f"💰 奖池: {total_pool} 积分\n\n"
-            
-            total_winners = sum(len(w) for w in winners_by_level.values()) + len(lucky_winners)
-            if total_winners > 0:
-                msg += "🏆 中奖名单:\n"
-                level_names = {1: "一等奖", 2: "二等奖", 3: "三等奖", 4: "安慰奖"}
-                for level, winner_list in winners_by_level.items():
-                    if winner_list:
-                        # 计算每人奖金
-                        prize_per_person = prize_pools[level] // len(winner_list) if prize_pools[level] > 0 else 0
-                        for winner in winner_list:
-                            user_id = winner["user_id"]
-                            emby_username = winner["username"]
-                            # 获取TG名称
-                            binding = _get_binding_by_emby_id(user_id)
-                            display = ''
-                            if binding and binding.get('tg_user_id'):
-                                tg_name = user_bot_dao.get_bot_user_name(binding['tg_user_id'])
-                                if tg_name:
-                                    display = f"<a href='tg://user?id={binding['tg_user_id']}'>{tg_name}</a>"
-                            # fallback: 显示 emby 用户名
-                            if not display:
-                                display = emby_username or f"用户{user_id}"
-                            msg += f"• {display} - {level_names[level]} (+{winner['prize_amount']}积分)\n"
-                if lucky_winners:
-                    for winner in lucky_winners:
-                        user_id = winner["user_id"]
-                        emby_username = winner["username"]
-                        amount = winner["prize_amount"]
-                        binding = _get_binding_by_emby_id(user_id)
-                        display = ''
-                        if binding and binding.get('tg_user_id'):
-                            tg_name = user_bot_dao.get_bot_user_name(binding['tg_user_id'])
-                            if tg_name:
-                                display = f"<a href='tg://user?id={binding['tg_user_id']}'>{tg_name}</a>"
-                        # fallback: 显示 emby 用户名
-                        if not display:
-                            display = emby_username or f"用户{user_id}"
-                        msg += f"• {display} - 幸运奖 (+{amount}积分)\n"
-            else:
-                msg += "😢 本期无人中奖，奖池累积到下期\n"
-            
-            msg += f"\n💡 发送 /彩票 奖池 查看当前奖池"
-            msg += f"\n📊 剩余奖池: {remaining_pool} 积分已累积到下期"
-            
-            # 发送到所有允许的群
-            for group_id in group_list:
-                try:
-                    logger.info(f"[彩票] 尝试发送到群: {group_id}")
-                    result = _send(group_id, msg)
-                    logger.info(f"[彩票] 发送结果: {result}")
-                except Exception as e:
-                    logger.error(f"[彩票] 发送开奖结果到群 {group_id} 失败: {e}")
-        
-        return {"status": "success", "winning_numbers": winning_numbers, "total_pool": total_pool}
-        
-    except Exception as e:
-        logger.error(f"[彩票] 开奖失败: {e}")
-        return {"status": "error", "message": str(e)}
+    return user_bot_lottery_draw_service.do_lottery_draw()
