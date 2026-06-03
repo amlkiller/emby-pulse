@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-5.md`
-- **Total Sessions**: 240
+- **Total Sessions**: 241
 - **Last Active**: 2026-06-04
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-5.md` | ~40 | Active |
+| `journal-5.md` | ~73 | Active |
 | `journal-4.md` | ~1987 | Archived |
 | `journal-3.md` | ~1987 | Archived |
 | `journal-2.md` | ~1993 | Archived |
@@ -33,6 +33,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 241 | 2026-06-04 | Extract users new route | `2833907` | `main` |
 | 240 | 2026-06-04 | Extract users delete route | `5edfc3c` | `main` |
 | 239 | 2026-06-04 | Extract users single user route | `79b20d1` | `main` |
 | 238 | 2026-06-04 | Extract users libraries route | `f6da299` | `main` |
