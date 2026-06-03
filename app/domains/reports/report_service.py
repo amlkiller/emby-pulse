@@ -7,6 +7,7 @@ import random
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from app.core.config import THEMES
 from app.domains.reports.report_assets import HAS_PIL, POSTER_THEMES, _get_font, _load_font, get_theme_list
+from app.domains.reports import report_poster_fetcher_service
 from app.domains.reports.report_queries import (
     build_report_base_filter,
     count_report_plays,
@@ -23,6 +24,14 @@ logger = logging.getLogger("uvicorn")
 
 if HAS_PIL:
     from PIL import Image, ImageDraw, ImageFont
+
+report_poster_fetcher_service.set_dependency_providers(
+    media_api_provider=lambda: media_api,
+    tmdb_client_provider=lambda: tmdb_client,
+    network_client_provider=lambda: network_client,
+    has_pil_provider=lambda: HAS_PIL,
+    logger_provider=lambda: logger,
+)
 
 def get_user_map_internal():
     user_map = {}
@@ -143,84 +152,13 @@ class ReportGenerator:
         return output
 
     def _get_series_id(self, item_id, item_name):
-        if not item_id:
-            return None
-        try:
-            res = media_api.get("/Users", timeout=3)
-            if res.status_code != 200:
-                return None
-            users = res.json()
-            if not users:
-                return None
-            user_id = users[0]['Id']
-            detail_res = media_api.get(f"/Users/{user_id}/Items/{item_id}", timeout=3)
-            if detail_res.status_code == 200:
-                detail = detail_res.json()
-                series_id = detail.get('SeriesId')
-                if series_id:
-                    return series_id
-        except:
-            pass
-        return None
+        return report_poster_fetcher_service.report_poster_fetcher.get_series_id(item_id, item_name)
 
     def _fetch_emby_poster(self, item_id, width=120, height=160):
-        if not item_id or not HAS_PIL:
-            return None
-        try:
-            params = {"maxHeight": height * 2, "maxWidth": width * 2, "quality": 85}
-            res = media_api.get(f"/Items/{item_id}/Images/Primary", params=params, timeout=5)
-            if res.status_code == 200:
-                poster = Image.open(io.BytesIO(res.content)).convert('RGB')
-                poster = poster.resize((width, height), Image.LANCZOS)
-                return poster
-        except:
-            pass
-        return None
+        return report_poster_fetcher_service.report_poster_fetcher.fetch_emby_poster(item_id, width, height)
 
     def _fetch_tmdb_poster(self, item_name, width=120, height=160, is_tv=False):
-        if not item_name or not HAS_PIL:
-            return None
-        if not tmdb_client.api_key:
-            return None
-
-        clean_name = str(item_name).split(' - ')[0].strip()
-        if not clean_name:
-            return None
-
-        try:
-            proxies = None
-            try:
-                from app.utils.proxy_helper import get_safe_proxies
-                proxies = get_safe_proxies()
-            except Exception:
-                pass
-
-            media_type = "tv" if is_tv else "movie"
-            if media_type == "tv":
-                res = tmdb_client.search_tv(clean_name, proxies=proxies, timeout=5)
-            else:
-                res = tmdb_client.search_movie(clean_name, proxies=proxies, timeout=5)
-            if res.status_code != 200:
-                return None
-            results = res.json().get("results", [])
-            poster_path = next((r.get("poster_path") for r in results if r.get("poster_path")), None)
-            if not poster_path and not is_tv:
-                tv_res = tmdb_client.search_tv(clean_name, proxies=proxies, timeout=5)
-                if tv_res.status_code == 200:
-                    poster_path = next((r.get("poster_path") for r in tv_res.json().get("results", []) if r.get("poster_path")), None)
-            if not poster_path:
-                return None
-
-            img_url = f"https://image.tmdb.org/t/p/w500{poster_path}"
-            img_res = network_client.get(img_url, proxies=proxies, timeout=8)
-            if img_res.status_code == 200:
-                poster = Image.open(io.BytesIO(img_res.content)).convert('RGB')
-                poster = poster.resize((width, height), Image.LANCZOS)
-                logger.info(f"[海报生成] TMDB 封面兜底成功: {clean_name}")
-                return poster
-        except Exception as e:
-            logger.debug(f"[海报生成] TMDB 封面兜底失败: {item_name}, {e}")
-        return None
+        return report_poster_fetcher_service.report_poster_fetcher.fetch_tmdb_poster(item_name, width, height, is_tv=is_tv)
 
     def _get_best_poster(self, item_id, item_name, width=120, height=160, is_tv=False):
         poster = None
