@@ -16,6 +16,7 @@ from app.domains.points import point_dao
 from app.domains.system import invitation_dao
 from app.domains.users import user_dao
 from app.domains.users import user_bot_dao
+from app.domains.notifications import user_bot_account_commands_service
 from app.domains.notifications import user_bot_basic_commands_service
 from app.domains.notifications import user_bot_binding_service
 from app.domains.notifications import user_bot_code_commands_service
@@ -322,6 +323,21 @@ user_bot_points_commands_service.set_dependency_providers(
     main_menu_keyboard_provider=lambda: _main_menu_keyboard,
     delete_messages_later_provider=lambda: _delete_messages_later,
     point_dao_provider=lambda: point_dao,
+    safe_error_message_provider=lambda: safe_error_message,
+    logger_provider=lambda: logger,
+)
+
+user_bot_account_commands_service.set_dependency_providers(
+    get_binding_provider=lambda: _get_binding,
+    check_emby_account_provider=lambda: _check_emby_account,
+    unbind_user_provider=lambda: _unbind_user,
+    send_provider=lambda: _send,
+    reply_provider=lambda: _reply,
+    main_menu_keyboard_provider=lambda: _main_menu_keyboard,
+    user_dao_provider=lambda: user_dao,
+    stats_queries_provider=lambda: stats_queries,
+    media_api_provider=lambda: media_api,
+    datetime_provider=lambda: datetime,
     safe_error_message_provider=lambda: safe_error_message,
     logger_provider=lambda: logger,
 )
@@ -2577,110 +2593,15 @@ def cmd_myrequests(chat_id, tg_user_id, msg_id=None):
 
 
 def cmd_profile(chat_id, tg_user_id, msg_id=None):
-    binding = _get_binding(tg_user_id)
-    if not binding:
-        _send(chat_id, "❌ 请先绑定账号")
-        return
-    
-    # 检查 Emby 账号是否仍然有效
-    if not _check_emby_account(binding):
-        _unbind_user(tg_user_id)
-        _send(chat_id, "⚠️ 你的 Emby 账号已被删除，绑定已自动解除。请联系管理员。", 
-              reply_markup=_main_menu_keyboard(None))
-        return
-    
-    uid = binding['emby_user_id']
-    uname = binding['emby_username']
-    try:
-        meta = user_dao.get_user_points_expire(uid)
-
-        # 获取最后一次播放记录（从播放数据库查询）
-        last_play_display = "暂无播放记录"
-        try:
-            last_play = stats_queries.get_user_last_play(uid)
-            if last_play:
-                item_name = last_play.get('ItemName') or last_play[0]
-                play_duration = last_play.get('PlayDuration') or last_play[1]
-                play_date = last_play.get('DateCreated') or last_play[2]
-                minutes = int(play_duration / 60) if play_duration else 0
-                # 格式化日期时间
-                play_time = play_date[:16].replace("T", " ") if play_date else "未知"
-                last_play_display = f"🎬 {item_name[:20]}{'...' if len(item_name) > 20 else ''}\n   📊 播放 {minutes} 分钟 • {play_time}"
-        except Exception as e:
-            logger.warning(f"获取播放记录失败: {e}")
-            last_play_display = "暂无播放记录"
-        pts = meta["points"] if meta and meta["points"] else 0
-        expire = meta["expire_date"] if meta and meta["expire_date"] else "未设置"
-
-        # 从 Emby 获取账号状态
-        status_str = "正常"
-        created_str = "未知"
-        try:
-            u_res = media_api.get(f"/Users/{uid}", timeout=5)
-            if u_res.status_code == 200:
-                u_data = u_res.json()
-                if u_data.get("Policy", {}).get("IsDisabled"):
-                    status_str = "⛔ 已禁用"
-                else:
-                    status_str = "✅ 正常"
-                dc = u_data.get("DateCreated", "")
-                if dc:
-                    created_str = dc[:10]
-        except:
-            pass
-
-        # 到期状态判断
-        expire_display = expire
-        if expire and expire != "未设置":
-            try:
-                exp_date = datetime.datetime.strptime(expire, "%Y-%m-%d").date()
-                days_left = (exp_date - datetime.date.today()).days
-                if "2099" in expire or "3000" in expire:
-                    expire_display = "♾️ 永久有效"
-                elif days_left < 0:
-                    expire_display = f"❌ 已过期 ({expire})"
-                elif days_left <= 7:
-                    expire_display = f"⚠️ {expire}（剩余 {days_left} 天）"
-                else:
-                    expire_display = f"{expire}（剩余 {days_left} 天）"
-            except:
-                pass
-
-        pwd_display = f"<tg-spoiler>{binding['init_password']}</tg-spoiler>" if binding.get('init_password') else "（手动绑定，未记录）"
-
-        msg = (f"👤 <b>个人中心</b>\n\n"
-               f"━━━━━━━━━━━━━━━━\n"
-               f"📛 <b>用户名：</b><code>{uname}</code>\n"
-               f"🔑 <b>密码：</b>{pwd_display}\n"
-               f"🆔 <b>用户 ID：</b><code>{uid[:8]}...</code>\n"
-               f"📅 <b>注册时间：</b>{created_str}\n"
-               f"🔰 <b>账号状态：</b>{status_str}\n"
-               f"━━━━━━━━━━━━━━━━\n"
-               f"💰 <b>积分余额：</b>{pts}\n"
-               f"⏳ <b>有效期至：</b>{expire_display}\n"
-               f"🎬 <b>最后播放：</b>{last_play_display}\n"
-               f"━━━━━━━━━━━━━━━━")
-
-        _reply(chat_id, msg, reply_markup={"inline_keyboard": [
-            [{"text": "✅ 签到领积分", "callback_data": "ub_menu_checkin"}, {"text": "🎟️ 续期", "callback_data": "ub_menu_renew"}],
-            [{"text": "🔙 主菜单", "callback_data": "ub_back_menu"}]
-        ]}, msg_id=msg_id)
-    except Exception as e:
-        logger.error(f"[个人信息] 获取失败: {e}")
-        _reply(chat_id, f"❌ 获取信息失败：{safe_error_message(e, '获取信息异常，请稍后重试')}", msg_id=msg_id)
+    return user_bot_account_commands_service.cmd_profile(chat_id, tg_user_id, msg_id=msg_id)
 
 
 def cmd_unbind(chat_id, tg_user_id):
-    binding = _get_binding(tg_user_id)
-    if not binding:
-        _send(chat_id, "❌ 你还没有绑定账号")
-        return
-    _send(chat_id, f"🔓 <b>确认解绑？</b>\n\n当前绑定：<b>{binding['emby_username']}</b>\n\n解绑后将无法使用签到、商城等功能。\n\n发送 /unbind_confirm 确认解绑")
+    return user_bot_account_commands_service.cmd_unbind(chat_id, tg_user_id)
 
 
 def cmd_unbind_confirm(chat_id, tg_user_id):
-    _unbind_user(tg_user_id)
-    _send(chat_id, "✅ 已成功解绑账号。", reply_markup=_main_menu_keyboard(None))
+    return user_bot_account_commands_service.cmd_unbind_confirm(chat_id, tg_user_id)
 
 
 def cmd_bind_channel(chat_id, tg_user_id, args):
