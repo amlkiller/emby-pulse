@@ -302,3 +302,36 @@ Extracted users invitation-code management endpoints into app/domains/users/invi
 ### Next Steps
 
 - None - task complete
+
+
+## Session 129: Refactor users library visibility router
+
+**Date**: 2026-06-03
+**Task**: Refactor users library visibility router
+**Branch**: `main`
+
+### Summary
+
+Extracted C-side users library visibility endpoints into app/domains/users/library_visibility_router.py, included the child router from users/router.py at the original route position, and preserved users.router compatibility exports. Verified compile/import route checks, focused users tests, git diff checks, and the full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `58e2c02` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
