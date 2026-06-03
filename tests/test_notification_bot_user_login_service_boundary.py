@@ -31,7 +31,7 @@ class FakeDateTimeModule:
 
 
 def test_user_login_sends_photo_and_web_notification_through_legacy_entry(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     sent = []
     notifications = []
@@ -75,7 +75,7 @@ def test_user_login_sends_photo_and_web_notification_through_legacy_entry(monkey
 
 
 def test_user_login_disabled_rule_skips_without_legacy_fallback(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     sent = []
     bot = bot_service.NotificationBot()
@@ -90,7 +90,7 @@ def test_user_login_disabled_rule_skips_without_legacy_fallback(monkeypatch):
 
 
 def test_user_login_rule_lookup_failure_uses_legacy_switch_and_fallback_avatar(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     sent = []
     bot = bot_service.NotificationBot()
@@ -118,7 +118,7 @@ def test_user_login_rule_lookup_failure_uses_legacy_switch_and_fallback_avatar(m
 
 
 def test_user_login_rule_lookup_failure_respects_legacy_disabled_switch(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     sent = []
     bot = bot_service.NotificationBot()
@@ -133,7 +133,7 @@ def test_user_login_rule_lookup_failure_respects_legacy_disabled_switch(monkeypa
 
 
 def test_user_login_mute_check_logs_and_skips_send(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     sent = []
     logger = FakeLogger()
@@ -152,7 +152,7 @@ def test_user_login_mute_check_logs_and_skips_send(monkeypatch):
 
 
 def test_user_login_send_failure_logs_and_falls_back_to_all_platform(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     sent = []
     logger = FakeLogger()

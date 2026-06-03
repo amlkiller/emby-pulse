@@ -59,13 +59,13 @@ class FakeUserDao:
 
 
 def _make_daemon():
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     return bot_service.SystemDaemon()
 
 
 def _patch_dependencies(monkeypatch, *, rows, responses=None, error_users=None, dao_error=None):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     user_dao = FakeUserDao(rows, error=dao_error)
     media_api = FakeMediaApi(responses=responses, error_users=error_users)

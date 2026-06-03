@@ -32,7 +32,7 @@ class FakeCalendarService:
 
 
 def _make_daemon():
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     daemon = bot_service.SystemDaemon()
     daemon.library_tasks = []
@@ -43,7 +43,8 @@ def _make_daemon():
 
 
 def _patch_dependencies(monkeypatch):
-    from app.domains.notifications import bot_service, notification_bot_webhook_event_service
+    from app.bot.notification_bot import notification_bot_webhook_event_service
+    from app.bot.notification_bot import bot_service
 
     logger = FakeLogger()
     bus = FakeBus()

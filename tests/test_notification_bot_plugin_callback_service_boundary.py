@@ -21,7 +21,7 @@ class FakeLogger:
 
 
 def _patch_logger(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     logger = FakeLogger()
     monkeypatch.setattr(bot_service, "logger", logger)
@@ -46,7 +46,7 @@ def _cq(message_id=77):
 
 
 def test_plugin_callback_dispatches_cloud115_transfer_and_offline(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     logger = _patch_logger(monkeypatch)
     calls = []
@@ -64,7 +64,7 @@ def test_plugin_callback_dispatches_cloud115_transfer_and_offline(monkeypatch):
 
 
 def test_plugin_callback_dispatches_hdhive_search_tmdb_and_page(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     _patch_logger(monkeypatch)
     calls = []
@@ -96,7 +96,7 @@ def test_plugin_callback_dispatches_hdhive_search_tmdb_and_page(monkeypatch):
 
 
 def test_plugin_callback_preserves_tmdb_page_logging_and_false_result(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     logger = _patch_logger(monkeypatch)
     _install_module(
@@ -122,7 +122,7 @@ def test_plugin_callback_preserves_tmdb_page_logging_and_false_result(monkeypatc
 
 
 def test_plugin_callback_logs_tmdb_page_exceptions(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     logger = _patch_logger(monkeypatch)
 
@@ -138,7 +138,7 @@ def test_plugin_callback_logs_tmdb_page_exceptions(monkeypatch):
 
 
 def test_request_hdhive_callback_dispatches_and_logs_errors(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     logger = _patch_logger(monkeypatch)
     calls = []
@@ -162,7 +162,7 @@ def test_request_hdhive_callback_dispatches_and_logs_errors(monkeypatch):
 
 
 def test_handle_callback_delegates_plugin_callback_after_answer(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     bot = bot_service.NotificationBot()
     calls = []

@@ -32,7 +32,7 @@ class FakeLock:
 
 
 def _make_daemon():
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     daemon = bot_service.SystemDaemon()
     daemon.library_lock = FakeLock()
@@ -41,7 +41,7 @@ def _make_daemon():
 
 
 def _patch_dependencies(monkeypatch, *, max_queue=300):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     logger = FakeLogger()
     monkeypatch.setattr(bot_service, "get_library_notify_queue_max", lambda: max_queue)

@@ -44,7 +44,7 @@ class FakeTelegramClient:
 
 
 def _patch_dependencies(monkeypatch, *, mp_url="http://mp.local", mp_token="mp-token", moviepilot_error=None, telegram_error=None):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     dao = FakeMediaRequestDao()
     moviepilot = FakeMoviePilotClient(error=moviepilot_error)
@@ -63,7 +63,7 @@ def _patch_dependencies(monkeypatch, *, mp_url="http://mp.local", mp_token="mp-t
 
 
 def test_request_approval_action_approve_subscribes_and_updates_rows(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     dao, moviepilot, telegram, recorded, synced = _patch_dependencies(monkeypatch)
     dao.rows_by_tmdb["123"] = [
@@ -94,7 +94,7 @@ def test_request_approval_action_approve_subscribes_and_updates_rows(monkeypatch
 
 
 def test_request_approval_action_manual_updates_without_moviepilot(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     dao, moviepilot, _telegram, recorded, synced = _patch_dependencies(monkeypatch)
     dao.rows_by_tmdb["456"] = [{"title": "Movie", "year": 2025, "media_type": "movie", "season": 1}]
@@ -116,7 +116,7 @@ def test_request_approval_action_manual_updates_without_moviepilot(monkeypatch):
 
 
 def test_request_approval_action_reject_maps_reason_and_syncs_caption(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     dao, moviepilot, _telegram, recorded, synced = _patch_dependencies(monkeypatch)
     dao.rows_by_tmdb["789"] = [{"title": "Movie", "year": 2025, "media_type": "movie", "season": 3}]
@@ -138,7 +138,7 @@ def test_request_approval_action_reject_maps_reason_and_syncs_caption(monkeypatc
 
 
 def test_request_approval_action_empty_rows_clears_reply_markup(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     dao, moviepilot, telegram, recorded, synced = _patch_dependencies(monkeypatch)
 
@@ -171,7 +171,7 @@ def test_request_approval_action_empty_rows_clears_reply_markup(monkeypatch):
 
 
 def test_request_approval_action_non_action_data_is_not_handled(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     dao, moviepilot, telegram, recorded, synced = _patch_dependencies(monkeypatch)
 
@@ -193,7 +193,7 @@ def test_request_approval_action_non_action_data_is_not_handled(monkeypatch):
 
 
 def test_request_approval_action_swallows_subscribe_and_clear_failures(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     dao, moviepilot, telegram, _recorded, _synced = _patch_dependencies(
         monkeypatch,

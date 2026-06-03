@@ -46,7 +46,7 @@ class FakeStopEvent:
 
 
 def test_polling_loop_filters_messages_appends_links_and_submits_callbacks_via_legacy_entry(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     updates = [
         {
@@ -148,7 +148,7 @@ def test_polling_loop_filters_messages_appends_links_and_submits_callbacks_via_l
 
 
 def test_polling_loop_retries_non_200_with_five_second_stop_wait(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     stop_event = FakeStopEvent()
     bot = bot_service.NotificationBot()
@@ -168,7 +168,7 @@ def test_polling_loop_retries_non_200_with_five_second_stop_wait(monkeypatch):
 
 
 def test_polling_loop_retries_exceptions_with_five_second_stop_wait(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     stop_event = FakeStopEvent()
     bot = bot_service.NotificationBot()

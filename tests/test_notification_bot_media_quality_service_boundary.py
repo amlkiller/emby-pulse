@@ -1,4 +1,4 @@
-from app.domains.notifications import bot_service
+from app.bot.notification_bot import bot_service
 
 
 class FakeResponse:

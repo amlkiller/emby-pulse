@@ -81,7 +81,7 @@ def test_remove_gap_from_scan_state_updates_results_and_cache(monkeypatch):
 
 def test_selected_notification_callers_do_not_use_media_request_public_service_for_dao_calls():
     checked_paths = [
-        _REPO_ROOT / "app/domains/notifications/bot_service.py",
+        _REPO_ROOT / "app/bot/notification_bot/bot_service.py",
         _REPO_ROOT / "app/domains/notifications/user_bot_service.py",
     ]
     violations = []

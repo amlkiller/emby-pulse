@@ -172,7 +172,7 @@ def test_external_callers_do_not_import_notification_bot_singleton():
             for node in ast.walk(tree):
                 if not isinstance(node, ast.ImportFrom):
                     continue
-                if node.module != "app.domains.notifications.bot_service":
+                if node.module != "app.bot.notification_bot.bot_service":
                     continue
                 imported_names = {alias.name for alias in node.names}
                 if "bot" in imported_names or "*" in imported_names:

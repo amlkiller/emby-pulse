@@ -31,7 +31,7 @@ class FakeMediaApi:
 
 
 def _patch_dependencies(monkeypatch, *, admin_id="admin-1", response=None, error=None):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     media_api = FakeMediaApi(response=response, error=error)
     monkeypatch.setattr(bot_service, "get_admin_id", lambda: admin_id)
@@ -40,7 +40,7 @@ def _patch_dependencies(monkeypatch, *, admin_id="admin-1", response=None, error
 
 
 def test_parse_emby_time_preserves_fractional_plain_and_invalid_inputs():
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     daemon = bot_service.SystemDaemon()
 
@@ -54,7 +54,7 @@ def test_parse_emby_time_preserves_fractional_plain_and_invalid_inputs():
 
 
 def test_check_fresh_episodes_skips_media_call_without_admin(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     media_api = _patch_dependencies(monkeypatch, admin_id=None)
     daemon = bot_service.SystemDaemon()
@@ -64,7 +64,7 @@ def test_check_fresh_episodes_skips_media_call_without_admin(monkeypatch):
 
 
 def test_check_fresh_episodes_requests_recent_episodes_and_groups_within_two_minutes(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     first = {"Id": "e-1", "DateCreated": "2026-06-03T12:00:00Z"}
     second = {"Id": "e-2", "DateCreated": "2026-06-03T11:58:30Z"}
@@ -94,7 +94,7 @@ def test_check_fresh_episodes_requests_recent_episodes_and_groups_within_two_min
 
 
 def test_check_fresh_episodes_preserves_status_empty_invalid_and_exception_branches(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     daemon = bot_service.SystemDaemon()
 
@@ -119,7 +119,7 @@ def test_check_fresh_episodes_preserves_status_empty_invalid_and_exception_branc
 
 
 def test_check_fresh_episodes_wrapper_uses_instance_parse_method(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     first = {"Id": "e-1", "DateCreated": "first"}
     second = {"Id": "e-2", "DateCreated": "second"}

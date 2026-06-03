@@ -44,13 +44,13 @@ class FakeMediaRequestDao:
 
 
 def _make_daemon():
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     return bot_service.SystemDaemon()
 
 
 def _patch_dependencies(monkeypatch, *, rule=None):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     logger = FakeLogger()
     media_request_dao = FakeMediaRequestDao()

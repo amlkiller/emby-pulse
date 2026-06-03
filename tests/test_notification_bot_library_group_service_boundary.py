@@ -37,7 +37,7 @@ class FakeDaemon:
 
 
 def _patch_logger(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     logger = FakeLogger()
     monkeypatch.setattr(bot_service, "logger", logger)
@@ -45,7 +45,7 @@ def _patch_logger(monkeypatch):
 
 
 def test_library_group_groups_tv_items_by_series_and_prefers_fresh_episodes(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     logger = _patch_logger(monkeypatch)
     fresh = [{"Id": "fresh-1", "Type": "Episode"}]
@@ -69,7 +69,7 @@ def test_library_group_groups_tv_items_by_series_and_prefers_fresh_episodes(monk
 
 
 def test_library_group_falls_back_to_series_item_when_no_fresh_episodes(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     logger = _patch_logger(monkeypatch)
     daemon = FakeDaemon()
@@ -87,7 +87,7 @@ def test_library_group_falls_back_to_series_item_when_no_fresh_episodes(monkeypa
 
 
 def test_library_group_falls_back_to_episode_only_items(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     logger = _patch_logger(monkeypatch)
     daemon = FakeDaemon()
@@ -106,7 +106,7 @@ def test_library_group_falls_back_to_episode_only_items(monkeypatch):
 
 
 def test_library_group_dispatches_non_tv_item_by_id(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     logger = _patch_logger(monkeypatch)
     daemon = FakeDaemon()
@@ -124,7 +124,7 @@ def test_library_group_dispatches_non_tv_item_by_id(monkeypatch):
 
 
 def test_library_group_stop_event_wait_can_end_after_first_group(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     logger = _patch_logger(monkeypatch)
     daemon = FakeDaemon()
@@ -145,7 +145,7 @@ def test_library_group_stop_event_wait_can_end_after_first_group(monkeypatch):
 
 
 def test_library_group_logs_group_errors_and_continues(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     logger = _patch_logger(monkeypatch)
     daemon = FakeDaemon(error_on_single="movie-1")

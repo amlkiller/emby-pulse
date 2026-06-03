@@ -27,7 +27,7 @@ class FakeTelegramClient:
 
 
 def _patch_dependencies(monkeypatch, *, telegram_error=None):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     dao = FakeMediaRequestDao()
     telegram = FakeTelegramClient(error=telegram_error)
@@ -37,7 +37,7 @@ def _patch_dependencies(monkeypatch, *, telegram_error=None):
 
 
 def test_feedback_callback_text_message_updates_status_and_edits_text(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     dao, telegram = _patch_dependencies(monkeypatch)
     cq = {"message": {"text": "资源报错工单", "message_id": 7}, "from": {"first_name": "Alice"}}
@@ -72,7 +72,7 @@ def test_feedback_callback_text_message_updates_status_and_edits_text(monkeypatc
 
 
 def test_feedback_callback_caption_message_updates_status_and_edits_caption(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     dao, telegram = _patch_dependencies(monkeypatch)
     cq = {"message": {"caption": "带图报错", "message_id": 8}, "from": {"first_name": "Bob"}}
@@ -107,7 +107,7 @@ def test_feedback_callback_caption_message_updates_status_and_edits_caption(monk
 
 
 def test_feedback_callback_reject_uses_default_text_and_admin_operator(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     dao, telegram = _patch_dependencies(monkeypatch)
     cq = {"message": {"message_id": 9}, "from": {}}
@@ -127,7 +127,7 @@ def test_feedback_callback_reject_uses_default_text_and_admin_operator(monkeypat
 
 
 def test_feedback_callback_unknown_action_is_handled_without_side_effects(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     dao, telegram = _patch_dependencies(monkeypatch)
 
@@ -146,7 +146,7 @@ def test_feedback_callback_unknown_action_is_handled_without_side_effects(monkey
 
 
 def test_feedback_callback_non_feed_data_is_not_handled(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     dao, telegram = _patch_dependencies(monkeypatch)
 
@@ -165,7 +165,7 @@ def test_feedback_callback_non_feed_data_is_not_handled(monkeypatch):
 
 
 def test_feedback_callback_swallows_telegram_edit_failures_after_status_update(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     dao, telegram = _patch_dependencies(monkeypatch, telegram_error=RuntimeError("telegram down"))
 

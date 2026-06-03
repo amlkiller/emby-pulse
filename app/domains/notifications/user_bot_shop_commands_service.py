@@ -78,7 +78,7 @@ def set_dependency_providers(
 
 
 def _send_redeem_notification(uname, target_name, target_type, cost, actual_days):
-    from app.domains.notifications.bot_service import bot
+    from app.bot.notification_bot.bot_service import bot
     from app.infra.db.notification_dao import add_system_notification
 
     notify_msg = f"🎁 <b>积分商城兑换</b>\n\n👤 {uname}\n🛒 {target_name}\n💰 {cost} 积分\n📱 来源：TG 用户机器人"

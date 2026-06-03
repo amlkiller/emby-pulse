@@ -199,7 +199,8 @@ def test_dashboard_cache_stop_cancels_tasks_and_allows_restart(monkeypatch):
 def test_notification_bot_event_subscriptions_are_reversible(monkeypatch):
     import inspect
 
-    from app.domains.notifications import bot_service, notification_bot_pending_sync_service
+    from app.bot.notification_bot import notification_bot_pending_sync_service
+    from app.bot.notification_bot import bot_service
 
     subscriptions = []
 
@@ -429,7 +430,7 @@ def test_user_bot_worker_threads_stop_and_restart(monkeypatch):
 
 
 def test_notification_media_quality_uses_color_transfer_hdr_fallback(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     class FakeResponse:
         status_code = 200

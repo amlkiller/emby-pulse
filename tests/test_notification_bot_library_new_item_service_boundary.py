@@ -42,7 +42,7 @@ class FakePlugin:
 
 
 def _make_bot(image_resolver=None):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     bot = bot_service.NotificationBot()
     sent = []
@@ -67,7 +67,7 @@ def _make_bot(image_resolver=None):
 
 
 def test_library_new_item_disabled_skips_all_side_effects(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     bot, sent, channel_calls, image_calls = _make_bot()
 
@@ -81,7 +81,7 @@ def test_library_new_item_disabled_skips_all_side_effects(monkeypatch):
 
 
 def test_library_new_item_default_caption_sends_all_and_fans_out_to_channel(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     logger = FakeLogger()
     bot, sent, channel_calls, image_calls = _make_bot(
@@ -150,7 +150,7 @@ def test_library_new_item_default_caption_sends_all_and_fans_out_to_channel(monk
 
 
 def test_library_new_item_plugin_caption_receives_quality_vars_and_sends_tg(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     plugin = FakePlugin()
     bot, sent, channel_calls, image_calls = _make_bot(image_resolver=lambda *_args: "image-bytes")
@@ -204,7 +204,7 @@ def test_library_new_item_plugin_caption_receives_quality_vars_and_sends_tg(monk
 
 
 def test_library_new_item_tg_channel_only_skips_bot_send(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     bot, sent, channel_calls, _image_calls = _make_bot(image_resolver=lambda *_args: "image-bytes")
 
@@ -227,7 +227,7 @@ def test_library_new_item_tg_channel_only_skips_bot_send(monkeypatch):
 
 
 def test_library_new_item_uses_cover_fallback_and_movie_item_type_default(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     bot, sent, channel_calls, image_calls = _make_bot()
 
@@ -252,7 +252,7 @@ def test_library_new_item_uses_cover_fallback_and_movie_item_type_default(monkey
 
 
 def test_library_new_item_outer_errors_are_logged(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     logger = FakeLogger()
     bot, sent, channel_calls, image_calls = _make_bot()

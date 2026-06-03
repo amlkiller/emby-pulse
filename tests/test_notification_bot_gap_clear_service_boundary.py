@@ -19,13 +19,13 @@ class FakeGapDao:
 
 
 def _make_daemon():
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     return bot_service.SystemDaemon()
 
 
 def _patch_dependencies(monkeypatch, *, dao_error=None, scan_error=None):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     gap_dao = FakeGapDao(error=dao_error)
     scan_calls = []

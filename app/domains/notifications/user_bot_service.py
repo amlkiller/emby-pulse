@@ -936,7 +936,7 @@ def _invalidate_users_cache_after_code_registration():
 
 def _send_code_registration_notifications(safe_name, days, code, tg_user_id):
     try:
-        from app.domains.notifications.bot_service import bot
+        from app.bot.notification_bot.bot_service import bot
         from app.infra.db.notification_dao import add_system_notification
         days_display = "永久" if (days == -1 or days == 0 or days >= 36500) else f"{days} 天"
         msg = f"🎟️ <b>新用户注册</b>\n\n👤 {safe_name}\n📅 有效期：{days_display}\n🔗 邀请码：{code}\n📱 注册渠道：TG机器人\n🆔 TG：{tg_user_id}"

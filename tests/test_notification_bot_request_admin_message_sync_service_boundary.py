@@ -49,8 +49,8 @@ class FakeLogger:
 
 
 def _reset_request_admin_sync_state(monkeypatch):
-    from app.domains.notifications import bot_service
-    from app.domains.notifications import notification_bot_request_admin_message_sync_service
+    from app.bot.notification_bot import bot_service
+    from app.bot.notification_bot import notification_bot_request_admin_message_sync_service
 
     dao = FakeBotServiceDao()
     telegram = FakeTelegramClient()

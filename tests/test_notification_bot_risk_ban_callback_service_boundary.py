@@ -28,7 +28,7 @@ class FakeBot:
 
 
 def _patch_dependencies(monkeypatch, *, ban_result=True, telegram_error=None):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     ban_calls = []
     log_calls = []
@@ -56,7 +56,7 @@ def _patch_dependencies(monkeypatch, *, ban_result=True, telegram_error=None):
 
 
 def test_risk_ban_callback_success_bans_logs_and_edits_message(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     ban_calls, log_calls, telegram = _patch_dependencies(monkeypatch, ban_result=True)
     bot = FakeBot()
@@ -95,7 +95,7 @@ def test_risk_ban_callback_success_bans_logs_and_edits_message(monkeypatch):
 
 
 def test_risk_ban_callback_failure_edits_failure_without_log(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     ban_calls, log_calls, telegram = _patch_dependencies(monkeypatch, ban_result=False)
     bot = FakeBot()
@@ -119,7 +119,7 @@ def test_risk_ban_callback_failure_edits_failure_without_log(monkeypatch):
 
 
 def test_risk_ban_callback_uses_default_operator_and_message_text(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     _ban_calls, log_calls, telegram = _patch_dependencies(monkeypatch, ban_result=True)
     bot = FakeBot()
@@ -141,7 +141,7 @@ def test_risk_ban_callback_uses_default_operator_and_message_text(monkeypatch):
 
 
 def test_risk_ban_callback_non_risk_data_is_not_handled(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     ban_calls, log_calls, telegram = _patch_dependencies(monkeypatch)
     bot = FakeBot()
@@ -164,7 +164,7 @@ def test_risk_ban_callback_non_risk_data_is_not_handled(monkeypatch):
 
 
 def test_risk_ban_callback_swallows_telegram_edit_failures_after_ban(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     ban_calls, log_calls, telegram = _patch_dependencies(monkeypatch, ban_result=True, telegram_error=RuntimeError("telegram down"))
     bot = FakeBot()

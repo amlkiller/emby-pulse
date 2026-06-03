@@ -38,7 +38,7 @@ class FakePlugin:
 
 
 def _make_bot(image_resolver=None):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     bot = bot_service.NotificationBot()
     sent = []
@@ -63,7 +63,7 @@ def _make_bot(image_resolver=None):
 
 
 def test_library_new_episode_disabled_skips_all_side_effects(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     bot, sent, channel_calls, image_calls = _make_bot()
 
@@ -83,7 +83,7 @@ def test_library_new_episode_disabled_skips_all_side_effects(monkeypatch):
 
 
 def test_library_new_episode_default_caption_groups_ranges_and_sends_all(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     logger = FakeLogger()
     bot, sent, channel_calls, image_calls = _make_bot(
@@ -160,7 +160,7 @@ def test_library_new_episode_default_caption_groups_ranges_and_sends_all(monkeyp
 
 
 def test_library_new_episode_plugin_caption_receives_quality_vars_and_single_episode_title(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     plugin = FakePlugin()
     bot, sent, channel_calls, image_calls = _make_bot(image_resolver=lambda *_args: "image-bytes")
@@ -207,7 +207,7 @@ def test_library_new_episode_plugin_caption_receives_quality_vars_and_single_epi
 
 
 def test_library_new_episode_tg_channel_only_skips_bot_send(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     bot, sent, channel_calls, _image_calls = _make_bot(image_resolver=lambda *_args: "image-bytes")
     series_info = {"Name": "Show"}
@@ -236,7 +236,7 @@ def test_library_new_episode_tg_channel_only_skips_bot_send(monkeypatch):
 
 
 def test_library_new_episode_uses_cover_fallback_and_wecom_platform(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     bot, sent, channel_calls, image_calls = _make_bot()
 

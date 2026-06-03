@@ -8,7 +8,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from app.domains.notifications import bot_service
+from app.bot.notification_bot import bot_service
 
 
 class FakeResponse:

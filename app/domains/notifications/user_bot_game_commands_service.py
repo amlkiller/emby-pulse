@@ -15,7 +15,7 @@ _logger_provider = lambda: logger
 
 
 def _notify_sys_all(message):
-    from app.domains.notifications.bot_service import bot
+    from app.bot.notification_bot.bot_service import bot
 
     return bot.notifier.send_message("sys_notify", message, platform="all")
 

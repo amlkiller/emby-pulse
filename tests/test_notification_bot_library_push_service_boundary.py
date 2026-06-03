@@ -51,7 +51,7 @@ class FakeBus:
 
 
 def _make_daemon():
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     daemon = bot_service.SystemDaemon()
     auto_finish_calls = []
@@ -60,7 +60,7 @@ def _make_daemon():
 
 
 def _patch_dependencies(monkeypatch, *, admin_id="admin-1", media_response=None, media_error=None, gap_cleared=None, gap_error=None):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     media_api = FakeMediaApi(response=media_response, error=media_error)
     gap_dao = FakeGapDao(cleared=gap_cleared, error=gap_error)
@@ -75,7 +75,7 @@ def _patch_dependencies(monkeypatch, *, admin_id="admin-1", media_response=None,
 
 
 def test_push_episode_group_fetches_series_info_clears_gaps_finishes_each_added_season_and_publishes(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     series_info = {"Id": "series-1", "Name": "Show", "ProviderIds": {"Tmdb": "123"}}
     episodes = [

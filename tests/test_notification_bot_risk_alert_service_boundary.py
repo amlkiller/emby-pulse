@@ -16,7 +16,7 @@ class FakeLogger:
 
 
 def test_risk_alert_uses_legacy_providers_and_sends_actionable_keyboard(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     sent = []
     notifications = []
@@ -70,7 +70,7 @@ def test_risk_alert_uses_legacy_providers_and_sends_actionable_keyboard(monkeypa
 
 
 def test_risk_alert_omits_ban_for_auto_ban_and_uses_admin_url_fallback(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     sent = []
     bot = bot_service.NotificationBot()
@@ -95,7 +95,7 @@ def test_risk_alert_omits_ban_for_auto_ban_and_uses_admin_url_fallback(monkeypat
 
 
 def test_risk_alert_preserves_defaults_no_keyboard_and_logs_persistence_errors(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     sent = []
     logger = FakeLogger()

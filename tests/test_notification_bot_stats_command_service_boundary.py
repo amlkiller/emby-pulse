@@ -7,7 +7,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 import app.plugins as app_plugins
-from app.domains.notifications import bot_service
+from app.bot.notification_bot import bot_service
 
 
 class FakePlaybackStore:

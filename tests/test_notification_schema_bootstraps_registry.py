@@ -21,7 +21,8 @@ def _columns(conn, table_name):
 
 
 def test_notification_bootstraps_create_registry_tables_and_index(monkeypatch, tmp_path):
-    from app.domains.notifications import bot_service_dao, notify_admin_dao, notify_rule_dao
+    from app.bot.notification_bot import bot_service_dao
+    from app.domains.notifications import notify_admin_dao, notify_rule_dao
     from app.infra.db.schema_registry import TABLE_SCHEMAS
 
     db_path = _use_temp_system_db(monkeypatch, tmp_path)
@@ -170,7 +171,7 @@ def test_announcement_dao_paths_work_after_registry_bootstrap(monkeypatch, tmp_p
 
 def test_selected_notification_bootstraps_use_schema_registry_instead_of_local_ddl():
     sources = {
-        "bot_service_dao": (_REPO_ROOT / "app/domains/notifications/bot_service_dao.py").read_text(
+        "bot_service_dao": (_REPO_ROOT / "app/bot/notification_bot/bot_service_dao.py").read_text(
             encoding="utf-8"
         ),
         "notify_rule_dao": (_REPO_ROOT / "app/domains/notifications/notify_rule_dao.py").read_text(

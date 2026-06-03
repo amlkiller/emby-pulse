@@ -143,7 +143,7 @@ def _invalidate_users_cache():
 
 def _send_registration_notifications(safe_name, days, code, tg_user_id):
     try:
-        from app.domains.notifications.bot_service import bot
+        from app.bot.notification_bot.bot_service import bot
         from app.infra.db.notification_dao import add_system_notification
 
         days_display = "永久" if (days == -1 or days == 0 or days >= 36500) else f"{days} 天"

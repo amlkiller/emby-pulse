@@ -66,7 +66,7 @@ class FakeMediaRequestDao:
 
 
 def _make_daemon(stop_after=None):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     daemon = bot_service.SystemDaemon()
     daemon._stop_event = FakeStopEvent(stop_after=stop_after)
@@ -74,7 +74,7 @@ def _make_daemon(stop_after=None):
 
 
 def _patch_dependencies(monkeypatch, *, rows, admin_id="admin-1", responses=None, media_error=None, dao_error=None):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     logger = FakeLogger()
     media_api = FakeMediaApi(responses=responses, error=media_error)

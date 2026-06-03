@@ -1,6 +1,6 @@
 import logging
 
-from app.domains.notifications import bot_service_dao
+from app.bot.notification_bot import bot_service_dao
 from app.infra.clients.telegram_client import telegram_client
 
 

@@ -190,7 +190,7 @@ def cmd_request_callback(chat_id, tg_user_id, media_type, tmdb_id, cq_id):
 
 def _send_request_notification(uname, title, year, season_str, tmdb_id, poster_path):
     from app.core.config import REPORT_COVER_URL
-    from app.domains.notifications.bot_service import bot
+    from app.bot.notification_bot.bot_service import bot
     from app.domains.notifications.notify_admin import get_notify_rule
     from app.infra.db.notification_dao import add_system_notification
 

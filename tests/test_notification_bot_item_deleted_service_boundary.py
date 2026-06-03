@@ -67,7 +67,7 @@ class FakeTmdbClient:
 
 
 def _make_bot(send_target=None, image_resolver=None):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     bot = bot_service.NotificationBot()
     sent = send_target if send_target is not None else []
@@ -87,7 +87,7 @@ def _make_bot(send_target=None, image_resolver=None):
 
 
 def test_item_deleted_disabled_and_user_deletion_skip_all_side_effects(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     bot, sent, image_calls = _make_bot()
 
@@ -108,7 +108,7 @@ def test_item_deleted_disabled_and_user_deletion_skip_all_side_effects(monkeypat
 
 
 def test_item_deleted_movie_uses_primary_image_and_preserves_cache_dedupe(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     bot, sent, image_calls = _make_bot(
         image_resolver=lambda item_id, image_type, _image_tag: "primary-image"
@@ -141,7 +141,7 @@ def test_item_deleted_movie_uses_primary_image_and_preserves_cache_dedupe(monkey
 
 
 def test_item_deleted_episode_uses_tmdb_tv_fallback_and_safe_proxies(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     bot, sent, image_calls = _make_bot()
     tmdb = FakeTmdbClient(response=FakeTmdbResponse(200, "/series-poster.jpg"))
@@ -179,7 +179,7 @@ def test_item_deleted_episode_uses_tmdb_tv_fallback_and_safe_proxies(monkeypatch
 
 
 def test_item_deleted_uses_series_primary_before_tmdb_and_formats_season(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     bot, sent, image_calls = _make_bot(
         image_resolver=lambda item_id, image_type, _image_tag: "series-primary"
@@ -220,7 +220,7 @@ def test_item_deleted_uses_series_primary_before_tmdb_and_formats_season(monkeyp
 
 
 def test_item_deleted_tmdb_exception_falls_back_to_report_cover(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     bot, sent, _image_calls = _make_bot()
     tmdb = FakeTmdbClient(error=RuntimeError("tmdb down"))
@@ -241,7 +241,7 @@ def test_item_deleted_tmdb_exception_falls_back_to_report_cover(monkeypatch):
 
 
 def test_item_deleted_outer_assembly_errors_are_logged(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     logger = FakeLogger()
     bot = bot_service.NotificationBot()

@@ -1,5 +1,5 @@
 from app.infra.config.bot_settings import ensure_strong_webhook_token
-from app.domains.notifications.bot_service import (
+from app.bot.notification_bot.bot_service import (
     is_user_bot_running,
     start_notification_services,
     stop_notification_services,

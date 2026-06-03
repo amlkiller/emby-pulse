@@ -41,7 +41,7 @@ def _install_module(monkeypatch, module_name, **attrs):
 
 
 def _patch_dependencies(monkeypatch, *, telegram_error=None):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     logger = FakeLogger()
     telegram = FakeTelegramClient(error=telegram_error)
@@ -51,7 +51,7 @@ def _patch_dependencies(monkeypatch, *, telegram_error=None):
 
 
 def test_request_hdhive_search_non_matching_data_is_not_handled(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     logger, telegram = _patch_dependencies(monkeypatch)
 
@@ -70,7 +70,7 @@ def test_request_hdhive_search_non_matching_data_is_not_handled(monkeypatch):
 
 
 def test_request_hdhive_search_delegates_to_plugin(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     logger, telegram = _patch_dependencies(monkeypatch)
     calls = []
@@ -96,7 +96,7 @@ def test_request_hdhive_search_delegates_to_plugin(monkeypatch):
 
 
 def test_request_hdhive_search_plugin_failure_logs_and_clears_reply_markup(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     logger, telegram = _patch_dependencies(monkeypatch)
 
@@ -130,7 +130,7 @@ def test_request_hdhive_search_plugin_failure_logs_and_clears_reply_markup(monke
 
 
 def test_request_hdhive_search_swallows_reply_markup_cleanup_failure(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     logger, telegram = _patch_dependencies(monkeypatch, telegram_error=RuntimeError("telegram down"))
 

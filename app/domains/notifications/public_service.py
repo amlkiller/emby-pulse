@@ -2,7 +2,7 @@
 
 
 def _get_bot():
-    from app.domains.notifications.bot_service import bot
+    from app.bot.notification_bot.bot_service import bot
 
     return bot
 

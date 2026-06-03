@@ -44,7 +44,7 @@ from app.domains.notifications.bot_admin_dao import (
     reset_lottery_draw,
     update_tg_binding_names,
 )
-from app.domains.notifications.bot_service import bot
+from app.bot.notification_bot.bot_service import bot
 from app.domains.points import point_dao
 from app.domains.users import public_service as user_service
 import threading

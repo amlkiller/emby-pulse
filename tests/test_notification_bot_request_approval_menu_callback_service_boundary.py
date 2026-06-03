@@ -34,7 +34,7 @@ class FakePlugin:
 
 
 def _patch_dependencies(monkeypatch, *, pulse_url="https://pulse.example", plugin=None, telegram_error=None):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     dao = FakeMediaRequestDao()
     telegram = FakeTelegramClient(error=telegram_error)
@@ -54,7 +54,7 @@ def _patch_dependencies(monkeypatch, *, pulse_url="https://pulse.example", plugi
 
 
 def test_request_approval_menu_reject_menu_edits_legacy_keyboard(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     dao, telegram, plugin_calls = _patch_dependencies(monkeypatch)
 
@@ -93,7 +93,7 @@ def test_request_approval_menu_reject_menu_edits_legacy_keyboard(monkeypatch):
 
 
 def test_request_approval_menu_back_includes_hdhive_when_enabled_and_summary_exists(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     dao, telegram, plugin_calls = _patch_dependencies(monkeypatch, plugin=FakePlugin(enabled=True))
     dao.summary_by_tmdb["456"] = {"title": "Movie Title_HD", "media_type": "movie"}
@@ -119,7 +119,7 @@ def test_request_approval_menu_back_includes_hdhive_when_enabled_and_summary_exi
 
 
 def test_request_approval_menu_back_uses_fallback_keyboard_without_hdhive(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     dao, telegram, plugin_calls = _patch_dependencies(monkeypatch, pulse_url="", plugin=FakePlugin(enabled=False))
     dao.summary_by_tmdb["789"] = {"title": "Ignored", "media_type": "tv"}
@@ -144,7 +144,7 @@ def test_request_approval_menu_back_uses_fallback_keyboard_without_hdhive(monkey
 
 
 def test_request_approval_menu_non_menu_data_is_not_handled(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     dao, telegram, plugin_calls = _patch_dependencies(monkeypatch)
 
@@ -163,7 +163,7 @@ def test_request_approval_menu_non_menu_data_is_not_handled(monkeypatch):
 
 
 def test_request_approval_menu_swallows_telegram_edit_failures(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     dao, telegram, plugin_calls = _patch_dependencies(monkeypatch, telegram_error=RuntimeError("telegram down"))
 

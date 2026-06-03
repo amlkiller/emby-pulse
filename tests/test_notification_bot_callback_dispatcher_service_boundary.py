@@ -81,7 +81,7 @@ def _callback(data="noop", *, user_id=99):
 
 
 def _patch_dispatcher(monkeypatch, *, telegram_error=None, handled_by=None):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     calls = []
     telegram = FakeTelegramClient(error=telegram_error)
@@ -104,7 +104,7 @@ def _patch_dispatcher(monkeypatch, *, telegram_error=None, handled_by=None):
 
 
 def test_callback_dispatcher_rejects_management_callback_without_normal_ack(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     telegram, calls = _patch_dispatcher(monkeypatch)
     bot = FakeBot(allowed=False)
@@ -127,7 +127,7 @@ def test_callback_dispatcher_rejects_management_callback_without_normal_ack(monk
 
 
 def test_callback_dispatcher_answers_then_delegates_plugin_callback(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     telegram, calls = _patch_dispatcher(monkeypatch, handled_by="plugin")
     bot = FakeBot()
@@ -146,7 +146,7 @@ def test_callback_dispatcher_answers_then_delegates_plugin_callback(monkeypatch)
 
 
 def test_callback_dispatcher_swallows_normal_ack_failure_and_continues(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     telegram, calls = _patch_dispatcher(monkeypatch, telegram_error=RuntimeError("ack down"), handled_by="plugin")
     bot = FakeBot()
@@ -158,7 +158,7 @@ def test_callback_dispatcher_swallows_normal_ack_failure_and_continues(monkeypat
 
 
 def test_callback_dispatcher_preserves_request_sub_dispatch_order(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     telegram, calls = _patch_dispatcher(monkeypatch, handled_by="request_action")
     bot = FakeBot()

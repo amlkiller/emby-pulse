@@ -67,7 +67,7 @@ class FakePlugin:
 
 
 def _make_bot(image_resolver=None):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     bot = bot_service.NotificationBot()
     sent = []
@@ -88,7 +88,7 @@ def _make_bot(image_resolver=None):
 
 
 def test_playback_event_disabled_skips_side_effects(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     logger = FakeLogger()
     bot, sent, image_calls = _make_bot()
@@ -106,7 +106,7 @@ def test_playback_event_disabled_skips_side_effects(monkeypatch):
 
 
 def test_playback_event_muted_user_logs_and_skips_send(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     logger = FakeLogger()
     media_api = FakeMediaApi()
@@ -137,7 +137,7 @@ def test_playback_event_muted_user_logs_and_skips_send(monkeypatch):
 
 
 def test_playback_event_default_episode_message_enriches_details_and_uses_series_jump(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     logger = FakeLogger()
     media_api = FakeMediaApi(
@@ -238,7 +238,7 @@ def test_playback_event_default_episode_message_enriches_details_and_uses_series
 
 
 def test_playback_event_plugin_caption_receives_audio_vars_and_album_jump(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     plugin = FakePlugin()
     media_api = FakeMediaApi({"/Users/u-2/Items/a-1": FakeResponse(200, {})})
@@ -290,7 +290,7 @@ def test_playback_event_plugin_caption_receives_audio_vars_and_album_jump(monkey
 
 
 def test_playback_event_falls_back_to_item_image_then_report_cover(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     media_api = FakeMediaApi()
     bot, sent, image_calls = _make_bot(
@@ -343,7 +343,7 @@ def test_playback_event_falls_back_to_item_image_then_report_cover(monkeypatch):
 
 
 def test_playback_event_outer_errors_are_logged(monkeypatch):
-    from app.domains.notifications import bot_service
+    from app.bot.notification_bot import bot_service
 
     logger = FakeLogger()
     bot, sent, image_calls = _make_bot()
