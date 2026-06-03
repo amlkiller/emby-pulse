@@ -15,6 +15,7 @@ from app.domains.users import user_bot_dao
 from app.domains.notifications import bot_service_dao, message_dao
 from app.domains.notifications import notification_bot_channel_service
 from app.domains.notifications import notification_bot_check_command_service
+from app.domains.notifications import notification_bot_command_registration_service
 from app.domains.notifications import notification_bot_delivery_service
 from app.domains.notifications import notification_bot_emby_restart_command_service
 from app.domains.notifications import notification_bot_info_command_service
@@ -198,6 +199,12 @@ notification_bot_message_dispatch_service.set_dependency_providers(
     tg_chat_id_provider=lambda: get_tg_chat_id,
     bus_provider=lambda: bus,
     logger_provider=lambda: logger,
+)
+
+notification_bot_command_registration_service.set_dependency_providers(
+    tg_bot_token_provider=lambda: get_notify_tg_bot_token,
+    safe_proxies_provider=lambda: get_safe_proxies,
+    telegram_client_provider=lambda: telegram_client,
 )
 
 def _submit_bot_task(fn, *args):
@@ -1712,25 +1719,7 @@ class NotificationBot:
                 _sync_request_admin_messages(tid, action_text, operator, token, proxies, orig_text, False)
 
     def _set_commands(self):
-        token = get_notify_tg_bot_token()
-        if not token: return
-        cmds = [
-            {"command": "search", "description": "🔍 搜索资源"}, 
-            {"command": "stats", "description": "📊 今日日报"}, 
-            {"command": "weekly", "description": "📅 本周周报"}, 
-            {"command": "monthly", "description": "🗓️ 本月月报"}, 
-            {"command": "yearly", "description": "📜 年度总结"}, 
-            {"command": "now", "description": "🟢 正在播放"}, 
-            {"command": "latest", "description": "🆕 最近入库"}, 
-            {"command": "recent", "description": "📜 最近播放记录"}, 
-            {"command": "check", "description": "📡 系统探针"}, 
-            {"command": "calendar", "description": "📺 今日更新"}, 
-            {"command": "emby_restart", "description": "🔄 重启Emby(Pro)"},
-            {"command": "whois", "description": "👤 查询绑定信息"},
-            {"command": "help", "description": "🤖 帮助菜单"}
-        ]
-        try: telegram_client.post_api(token, "setMyCommands", json={"commands": cmds}, proxies=get_safe_proxies(), timeout=10)
-        except Exception: pass
+        return notification_bot_command_registration_service.set_commands()
 
     def _is_admin(self, cid, platform="tg"):
         return notification_bot_message_dispatch_service.is_admin(cid, platform)
