@@ -1919,3 +1919,36 @@ Extracted the C-end users self password route into a users-domain child router w
 ### Next Steps
 
 - None - task complete
+
+
+## Session 238: Extract users libraries route
+
+**Date**: 2026-06-04
+**Task**: Extract users libraries route
+**Branch**: `main`
+
+### Summary
+
+Extracted the admin users libraries route into a users-domain child router with dynamic provider wiring for legacy monkeypatch compatibility. Preserved GET /api/manage/libraries, compatibility export, route order before /api/manage/users, admin authorization, media API library mapping, and safe error fallback. Added focused route inclusion, export, order, and non-admin short-circuit tests. Verification passed: compileall, focused users facade tests, import check, git diff --check, and full pytest suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f6da299` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
