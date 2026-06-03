@@ -448,6 +448,131 @@ def test_poster_data_allows_non_admin_through_stats_monkeypatches(monkeypatch):
     ]
 
 
+def test_playback_stats_includes_top_users_child_route_and_compat_export():
+    from app.domains.playback import stats
+    from app.domains.playback import top_users_router
+
+    routes = [
+        (route.path, route.methods)
+        for route in stats.router.routes
+        if hasattr(route, "methods")
+    ]
+
+    assert any(path == "/api/stats/top_users_list" and "GET" in methods for path, methods in routes)
+    assert stats.api_top_users_list is top_users_router.api_top_users_list
+
+    poster_data_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/poster_data" and "GET" in methods
+    )
+    top_users_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/top_users_list" and "GET" in methods
+    )
+    badges_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/badges" and "GET" in methods
+    )
+    assert poster_data_index < top_users_index < badges_index
+
+
+def test_top_users_list_denies_non_admin_before_query_side_effects(monkeypatch):
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"Id": "u1"}})
+    calls = []
+
+    def fake_is_admin_user(seen_request):
+        calls.append(seen_request)
+        return False
+
+    def fail_build_stats_base_filter(*args, **kwargs):
+        raise AssertionError("top users should not build stats filter without admin permission")
+
+    def fail_query(*args, **kwargs):
+        raise AssertionError("top users should not query playback stats without admin permission")
+
+    def fail_get_user_map_local():
+        raise AssertionError("top users should not read user map without admin permission")
+
+    def fail_get_hidden_users():
+        raise AssertionError("top users should not read hidden users without admin permission")
+
+    monkeypatch.setattr(stats.user_service, "is_admin_user", fake_is_admin_user)
+    monkeypatch.setattr(stats, "build_stats_base_filter", fail_build_stats_base_filter)
+    monkeypatch.setattr(stats.playback_store, "query", fail_query)
+    monkeypatch.setattr(stats, "get_user_map_local", fail_get_user_map_local)
+    monkeypatch.setattr(stats, "get_hidden_users", fail_get_hidden_users)
+
+    response = stats.api_top_users_list(request)
+
+    assert response == {"status": "error", "message": "需要管理员权限"}
+    assert calls == [request]
+
+
+def test_top_users_list_allows_admin_through_stats_monkeypatches(monkeypatch):
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"Id": "admin"}})
+    calls = []
+
+    def fake_is_admin_user(seen_request):
+        calls.append(("is_admin_user", seen_request))
+        return True
+
+    def fake_build_stats_base_filter(user_id):
+        calls.append(("build_stats_base_filter", user_id))
+        return "WHERE 1=1", []
+
+    def fake_query(sql, params):
+        normalized_sql = " ".join(sql.split())
+        calls.append(("query", normalized_sql, list(params)))
+        return [
+            {"UserId": "u1", "Plays": 7, "TotalTime": 700},
+            {"UserId": "u2", "Plays": 6, "TotalTime": 600},
+            {"UserId": "u3", "Plays": 5, "TotalTime": 500},
+            {"UserId": "u4", "Plays": 4, "TotalTime": 400},
+            {"UserId": "u5", "Plays": 3, "TotalTime": 300},
+            {"UserId": "u6", "Plays": 2, "TotalTime": 200},
+            {"UserId": "u7", "Plays": 1, "TotalTime": 100},
+        ]
+
+    def fake_get_user_map_local():
+        calls.append(("get_user_map_local",))
+        return {"u1": "Alice", "u3": "Carol", "u4": "Dave", "u5": "Eve", "u6": "Frank"}
+
+    def fake_get_hidden_users():
+        calls.append(("get_hidden_users",))
+        return [2, "u7"]
+
+    monkeypatch.setattr(stats.user_service, "is_admin_user", fake_is_admin_user)
+    monkeypatch.setattr(stats, "build_stats_base_filter", fake_build_stats_base_filter)
+    monkeypatch.setattr(stats.playback_store, "query", fake_query)
+    monkeypatch.setattr(stats, "get_user_map_local", fake_get_user_map_local)
+    monkeypatch.setattr(stats, "get_hidden_users", fake_get_hidden_users)
+
+    response = stats.api_top_users_list(request, period="all")
+
+    assert response == {
+        "status": "success",
+        "data": [
+            {"UserId": "u1", "Plays": 7, "TotalTime": 700, "UserName": "Alice"},
+            {"UserId": "u2", "Plays": 6, "TotalTime": 600, "UserName": "User u2"},
+            {"UserId": "u3", "Plays": 5, "TotalTime": 500, "UserName": "Carol"},
+            {"UserId": "u4", "Plays": 4, "TotalTime": 400, "UserName": "Dave"},
+            {"UserId": "u5", "Plays": 3, "TotalTime": 300, "UserName": "Eve"},
+        ],
+    }
+    assert calls == [
+        ("is_admin_user", request),
+        ("build_stats_base_filter", "all"),
+        (
+            "query",
+            "SELECT UserId, COUNT(*) as Plays, SUM(PlayDuration) as TotalTime FROM PlaybackActivity WHERE 1=1 GROUP BY UserId ORDER BY TotalTime DESC LIMIT 10",
+            [],
+        ),
+        ("get_user_map_local",),
+        ("get_hidden_users",),
+    ]
+
+
 def test_user_details_denies_unauthenticated_before_query_or_media_side_effects(monkeypatch):
     from app.domains.playback import stats
 

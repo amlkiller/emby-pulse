@@ -22,6 +22,11 @@ from app.domains.playback.poster_router import (
     router as poster_router,
     set_dependency_providers as set_poster_dependency_providers,
 )
+from app.domains.playback.top_users_router import (
+    api_top_users_list,
+    router as top_users_router,
+    set_dependency_providers as set_top_users_dependency_providers,
+)
 from app.domains.playback.top_movies_router import (
     api_top_movies,
     router as top_movies_router,
@@ -124,6 +129,14 @@ set_poster_dependency_providers(
     media_api_provider=lambda: media_api,
     get_clean_name_provider=lambda: get_clean_name,
     resolve_poster_ids_provider=lambda: resolve_poster_ids,
+)
+
+set_top_users_dependency_providers(
+    user_service_provider=lambda: user_service,
+    build_stats_base_filter_provider=lambda: build_stats_base_filter,
+    playback_store_provider=lambda: playback_store,
+    get_user_map_local_provider=lambda: get_user_map_local,
+    get_hidden_users_provider=lambda: get_hidden_users,
 )
 
 
@@ -241,54 +254,7 @@ router.include_router(chart_router)
 
 router.include_router(poster_router)
 
-@router.get("/api/stats/top_users_list")
-def api_top_users_list(request: Request, period: str = 'all'):
-    # 🔒 安全检查：仅管理员可查看全站用户排名
-    if not user_service.is_admin_user(request):
-        return {"status": "error", "message": "需要管理员权限"}
-    try:
-        where_base, params = build_stats_base_filter('all')
-        date_filter = ""
-        
-        # 🔥 使用统一的时间计算模块
-        from app.shared.time import get_period_range
-        start_date, end_date, where_sql, _ = get_period_range(period)
-        
-        # 如果有有效的 WHERE 条件，使用它
-        if where_sql:
-            # 将 WHERE 替换为 AND（因为已有 where_base）
-            date_filter = where_sql.replace("WHERE", "AND")
-        # 否则使用原有的 SQLite 方式（向后兼容）
-        elif period == 'day':
-            date_filter = " AND DateCreated >= date('now', 'localtime', 'start of day')"
-        elif period == 'week':
-            date_filter = " AND DateCreated >= date('now', 'localtime', '-7 days')"
-        elif period == 'month':
-            date_filter = " AND DateCreated >= date('now', 'localtime', 'start of month')"
-        elif period == 'year':
-            date_filter = " AND DateCreated >= date('now', 'localtime', 'start of year')"
-
-        sql = f"SELECT UserId, COUNT(*) as Plays, SUM(PlayDuration) as TotalTime FROM PlaybackActivity {where_base} {date_filter} GROUP BY UserId ORDER BY TotalTime DESC LIMIT 10"
-        res = playback_store.query(sql, params)
-        if not res: return {"status": "success", "data": []}
-        user_map = get_user_map_local()
-        hidden = get_hidden_users()
-        # 确保 hidden 中的值是字符串，以便比较
-        hidden_str = [str(h) for h in hidden]
-        data = []
-        for row in res:
-            # 统一转换为字符串比较
-            if str(row['UserId']) in hidden_str:
-                continue
-            u = dict(row)
-            u['UserName'] = user_map.get(u['UserId'], f"User {str(u['UserId'])[:5]}")
-            data.append(u)
-            if len(data) >= 5:
-                break
-        return {"status": "success", "data": data}
-    except Exception as e:
-        print(f"[Top Users List] Error: {e}")
-        return {"status": "error", "data": []}
+router.include_router(top_users_router)
 
 @router.get("/api/stats/badges")
 def api_badges(request: Request, user_id: Optional[str] = None):
