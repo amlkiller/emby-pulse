@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend guideline index for the media request gap download refactor."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Module organization rules for splitting large domain files into domain-local services."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Preserve safe-error and exception swallowing behavior in background download hooks."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verification and uv command conventions for implementation."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Preserve operational logging without adding sensitive payload logs."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared thinking guide index for reuse and boundary checks."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Use wrappers/provider wiring instead of duplicating gap download behavior."}
