@@ -32,6 +32,11 @@ from app.domains.users.delete_verification_router import (
     set_app_start_time_provider,
     verify_emby_admin_password,
 )
+from app.domains.users.delete_router import (
+    api_manage_user_delete,
+    router as delete_router,
+    set_dependency_providers as set_delete_dependency_providers,
+)
 from app.domains.users.invitation_router import (
     InviteBatchModelLocal,
     InviteGenModelLocal,
@@ -136,6 +141,18 @@ set_single_user_dependency_providers(
     media_api_provider=lambda: media_api,
     user_dao_provider=lambda: user_dao,
     is_admin_user_provider=lambda: is_admin_user,
+)
+set_delete_dependency_providers(
+    media_api_provider=lambda: media_api,
+    user_dao_provider=lambda: user_dao,
+    user_service_provider=lambda: user_service,
+    is_admin_user_provider=lambda: is_admin_user,
+    notify_admin_provider=lambda: notify_admin,
+    safe_error_message_provider=lambda: safe_error_message,
+    client_ip_provider=lambda: get_client_ip,
+    audit_log_provider=lambda: add_audit_log,
+    app_start_time_provider=lambda: APP_START_TIME,
+    now_provider=lambda: datetime.datetime.now(),
 )
 set_avatar_dependency_providers(
     media_api_provider=lambda: media_api,
@@ -733,100 +750,7 @@ def api_manage_user_new(data: NewUserModelEx, request: Request):
 class DeleteWithPasswordModel(BaseModel):
     password: Optional[str] = None  # 批量删除必须传密码
 
-@router.delete("/api/manage/user/{user_id}")
-def api_manage_user_delete(user_id: str, request: Request):
-    """删除单个用户 - 需要密码验证(首次验证后 30 分钟内有效,重启后失效)"""
-    if not request.session.get("user"):
-        return {"status": "error", "message": "未登录"}
-    if not is_admin_user(request):
-        return {"status": "error", "message": "需要管理员权限"}
-    # 🔒 Emby 不可用时拒绝删除，避免本地标记与远端失步
-    if not media_api.health_check():
-        return {"status": "error", "message": "Emby 服务不可用，请稍后重试"}
-
-    # 🔥 清除用户缓存
-    user_service.invalidate_emby_users_cache()
-
-    # 检查是否已验证
-    verified = request.session.get("delete_verified", False)
-    verified_time = request.session.get("delete_verified_time", "")
-
-    # 验证有效期检查(30分钟 + 重启后失效)
-    if verified and verified_time:
-        try:
-            verify_dt = datetime.datetime.fromisoformat(verified_time)
-            # 超过30分钟
-            if datetime.datetime.now() - verify_dt > datetime.timedelta(minutes=30):
-                verified = False
-                request.session["delete_verified"] = False
-            # 验证时间在容器启动之前(重启后失效)
-            elif verify_dt < datetime.datetime.fromisoformat(APP_START_TIME):
-                verified = False
-                request.session["delete_verified"] = False
-        except:
-            verified = False
-
-    if not verified:
-        return {"status": "error", "message": "需要验证密码", "need_password": True}
-
-    # 获取当前管理员账号
-    admin_user = request.session.get("user", {})
-    admin_name = admin_user.get("name", admin_user.get("username", "未知管理员"))
-
-    try:
-        # 获取用户名用于日志
-        user_name = ""
-        try:
-            user_res = media_api.get(f"/Users/{user_id}", timeout=5)
-            if user_res.status_code == 200:
-                user_name = user_res.json().get("Name", "")
-        except:
-            pass
-
-        if media_api.delete(f"/Users/{user_id}").status_code in [200, 204]:
-            user_dao.delete_user_meta(user_id)
-            # 同步删除临时账号记录
-            try:
-                user_dao.delete_temp_account_by_emby_user(user_id)
-            except:
-                pass
-
-            # 🔥 发送用户删除通知
-            try:
-                from app.infra.db.notification_dao import add_system_notification
-                from app.domains.notifications import public_service as notification_service
-
-                rule = notify_admin.get_notify_rule('user_delete')
-                if rule and rule.get('enabled'):
-                    channels = rule.get('channels', [])
-                    msg = f"🗑️ <b>用户删除通知</b>\n\n👤 <b>用户:</b>{user_name}\n👮 <b>操作人:</b>{admin_name}\n🕒 <b>时间:</b>{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-
-                    # TG机器人/企业微信
-                    if 'tg_bot' in channels or 'wecom' in channels:
-                        platform = "all" if ('tg_bot' in channels and 'wecom' in channels) else ("tg" if 'tg_bot' in channels else "wecom")
-                        notification_service.send_message("sys_notify", msg, platform=platform)
-
-                    # Web通知中心
-                    if 'web' in channels:
-                        add_system_notification("user", f"用户删除: {user_name}", f"操作人: {admin_name}", "/users_manage")
-            except Exception as e:
-                pass
-
-            # 记录审计日志
-            ip_address = get_client_ip(request)
-            add_audit_log(
-                admin_id=admin_user.get("id", ""),
-                admin_name=admin_name,
-                action="删除用户",
-                target_user_id=user_id,
-                target_user_name=user_name,
-                details="单个删除",
-                ip_address=ip_address
-            )
-            return {"status": "success", "message": f"用户 {user_name} 已删除"}
-        return {"status": "error", "message": "Emby 删除失败"}
-    except Exception as e:
-        return {"status": "error", "message": safe_error_message(e)}
+router.include_router(delete_router)
 
 @router.post("/api/manage/users/batch")
 def api_manage_users_batch(data: BatchActionModelLocal, request: Request):

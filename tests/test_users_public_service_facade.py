@@ -124,9 +124,11 @@ def test_users_router_includes_child_routes_and_compat_exports():
     assert any(path == "/api/user/password" and "POST" in methods for path, methods in routes)
     assert any(path == "/api/manage/user/pin" and "POST" in methods for path, methods in routes)
     assert any(path == "/api/manage/user/{user_id}" and "GET" in methods for path, methods in routes)
+    assert any(path == "/api/manage/user/{user_id}" and "DELETE" in methods for path, methods in routes)
 
     from app.domains.users import avatar_router
     from app.domains.users import audit_log_router
+    from app.domains.users import delete_router
     from app.domains.users import delete_verification_router
     from app.domains.users import invitation_router
     from app.domains.users import libraries_router
@@ -160,6 +162,7 @@ def test_users_router_includes_child_routes_and_compat_exports():
     assert router.HiddenLibrariesModel is library_visibility_router.HiddenLibrariesModel
     assert router.api_get_user_libraries is library_visibility_router.api_get_user_libraries
     assert router.api_update_hidden_libraries is library_visibility_router.api_update_hidden_libraries
+    assert router.api_manage_user_delete is delete_router.api_manage_user_delete
     assert router.PinUserModel is pin_router.PinUserModel
     assert router.api_pin_user is pin_router.api_pin_user
     assert router.api_get_single_user is single_user_router.api_get_single_user
@@ -195,6 +198,11 @@ def test_users_router_includes_child_routes_and_compat_exports():
     single_user_index = next(
         i for i, (path, methods) in enumerate(routes) if path == "/api/manage/user/{user_id}" and "GET" in methods
     )
+    delete_user_index = next(
+        i
+        for i, (path, methods) in enumerate(routes)
+        if path == "/api/manage/user/{user_id}" and "DELETE" in methods
+    )
     avatar_image_index = next(
         i for i, (path, methods) in enumerate(routes) if path == "/api/user/image/{user_id}" and "GET" in methods
     )
@@ -219,11 +227,128 @@ def test_users_router_includes_child_routes_and_compat_exports():
     library_index = next(
         i for i, (path, methods) in enumerate(routes) if path == "/api/manage/user/library" and "POST" in methods
     )
+    batch_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/manage/users/batch" and "POST" in methods
+    )
     assert admin_index < audit_index < verify_index
     assert avatar_image_index < avatar_update_index < self_avatar_index < password_index
     assert manage_libraries_index < manage_users_index < single_user_index
     assert verify_index < user_libraries_index < hidden_libraries_index < invitation_index < library_index
+    assert single_user_index < delete_user_index < batch_index
     assert template_index < pin_index < users_list_index
+
+
+def test_delete_user_denies_missing_login_before_side_effects(monkeypatch):
+    from app.domains.users import router
+
+    request = SimpleNamespace(session={})
+
+    class MediaApiMustNotRun:
+        def health_check(self):
+            raise AssertionError("media_api.health_check should not run before login authorization")
+
+        def delete(self, *_args, **_kwargs):
+            raise AssertionError("media_api.delete should not run before login authorization")
+
+    monkeypatch.setattr(router, "is_admin_user", lambda _request: True)
+    monkeypatch.setattr(router, "media_api", MediaApiMustNotRun())
+    monkeypatch.setattr(
+        router.user_service,
+        "invalidate_emby_users_cache",
+        lambda: (_ for _ in ()).throw(AssertionError("cache invalidation should not run before login authorization")),
+    )
+
+    result = router.api_manage_user_delete("u1", request)
+
+    assert result == {"status": "error", "message": "未登录"}
+
+
+def test_delete_user_denies_non_admin_before_media_or_cache(monkeypatch):
+    from app.domains.users import router
+
+    request = SimpleNamespace(session={"user": {"id": "user-1", "role": "viewer"}})
+
+    class MediaApiMustNotRun:
+        def health_check(self):
+            raise AssertionError("media_api.health_check should not run before admin authorization")
+
+        def delete(self, *_args, **_kwargs):
+            raise AssertionError("media_api.delete should not run before admin authorization")
+
+    monkeypatch.setattr(router, "is_admin_user", lambda _request: False)
+    monkeypatch.setattr(router, "media_api", MediaApiMustNotRun())
+    monkeypatch.setattr(
+        router.user_service,
+        "invalidate_emby_users_cache",
+        lambda: (_ for _ in ()).throw(AssertionError("cache invalidation should not run before admin authorization")),
+    )
+
+    result = router.api_manage_user_delete("u1", request)
+
+    assert result == {"status": "error", "message": "需要管理员权限"}
+
+
+def test_delete_user_rejects_unhealthy_media_before_cache_or_delete(monkeypatch):
+    from app.domains.users import router
+
+    request = SimpleNamespace(session={"user": {"id": "admin-1", "role": "admin"}})
+
+    class MediaApi:
+        def health_check(self):
+            return False
+
+        def delete(self, *_args, **_kwargs):
+            raise AssertionError("media_api.delete should not run when health check fails")
+
+    monkeypatch.setattr(router, "is_admin_user", lambda _request: True)
+    monkeypatch.setattr(router, "media_api", MediaApi())
+    monkeypatch.setattr(
+        router.user_service,
+        "invalidate_emby_users_cache",
+        lambda: (_ for _ in ()).throw(AssertionError("cache invalidation should not run when health check fails")),
+    )
+
+    result = router.api_manage_user_delete("u1", request)
+
+    assert result == {"status": "error", "message": "Emby 服务不可用，请稍后重试"}
+
+
+def test_delete_user_requires_verified_password_before_delete_side_effects(monkeypatch):
+    from app.domains.users import router
+
+    calls = []
+    request = SimpleNamespace(session={"user": {"id": "admin-1", "role": "admin"}})
+
+    class MediaApi:
+        def health_check(self):
+            return True
+
+        def get(self, *_args, **_kwargs):
+            raise AssertionError("media_api.get should not run before delete password verification")
+
+        def delete(self, *_args, **_kwargs):
+            raise AssertionError("media_api.delete should not run before delete password verification")
+
+    class UserDaoMustNotRun:
+        def delete_user_meta(self, *_args, **_kwargs):
+            raise AssertionError("user_dao.delete_user_meta should not run before delete password verification")
+
+    monkeypatch.setattr(router, "is_admin_user", lambda _request: True)
+    monkeypatch.setattr(router, "media_api", MediaApi())
+    monkeypatch.setattr(router, "user_dao", UserDaoMustNotRun())
+    monkeypatch.setattr(router.user_service, "invalidate_emby_users_cache", lambda: calls.append("invalidate"))
+    monkeypatch.setattr(
+        router,
+        "add_audit_log",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("audit log should not run before delete password verification")
+        ),
+    )
+
+    result = router.api_manage_user_delete("u1", request)
+
+    assert result == {"status": "error", "message": "需要验证密码", "need_password": True}
+    assert calls == ["invalidate"]
 
 
 def test_single_user_denies_non_admin_before_media_or_dao_call(monkeypatch):
