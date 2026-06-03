@@ -9,6 +9,7 @@ Update the main application version metadata from `1.4.6` to `1.5.0-beta` so run
 * Change the main application version constant to `1.5.0-beta`.
 * Change the Python project metadata version to `1.5.0-beta`.
 * Keep lockfile project metadata consistent if it records the local project version.
+* Add a concise user-facing changelog entry covering changes from `1.4.6` to `1.5.0-beta`.
 * Do not change plugin-specific version fields.
 * Do not change dependencies or runtime behavior.
 
@@ -17,6 +18,7 @@ Update the main application version metadata from `1.4.6` to `1.5.0-beta` so run
 * [x] `app.shared.version.APP_VERSION` is `1.5.0-beta`.
 * [x] `pyproject.toml` reports project version `1.5.0-beta`.
 * [x] `uv.lock` local project entry reports version `1.5.0-beta`.
+* [x] `CHANGELOG.md` includes a concise `1.5.0-beta` entry before `1.4.6`.
 * [x] No plugin version fields are modified.
 
 ## Definition of Done
@@ -39,7 +41,7 @@ Update only the version metadata files discovered by repository inspection: `app
 ## Out of Scope
 
 * Plugin version bumps.
-* Changelog content changes.
+* Detailed technical migration notes.
 * Dependency updates.
 
 ## Technical Notes
