@@ -16,6 +16,11 @@ from app.domains.playback.dashboard_router import (
     router as dashboard_router,
     set_dependency_providers as set_dashboard_dependency_providers,
 )
+from app.domains.playback.dashboard_init_router import (
+    api_dashboard_init,
+    router as dashboard_init_router,
+    set_dependency_providers as set_dashboard_init_dependency_providers,
+)
 from app.domains.playback.latest_router import (
     api_latest_media,
     router as latest_router,
@@ -223,6 +228,23 @@ set_preload_status_dependency_providers(
     time_provider=lambda: time,
 )
 
+set_dashboard_init_dependency_providers(
+    user_service_provider=lambda: user_service,
+    get_dashboard_context_provider=lambda: _get_dashboard_context,
+    mark_dashboard_access_provider=lambda: _mark_dashboard_access,
+    get_dashboard_cached_data_provider=lambda: _get_dashboard_cached_data,
+    fetch_dashboard_core_provider=lambda: _fetch_dashboard_core,
+    fetch_users_list_provider=lambda: _fetch_users_list,
+    fetch_libraries_provider=lambda: _fetch_libraries,
+    fetch_top_users_provider=lambda: _fetch_top_users,
+    fetch_trend_provider=lambda: _fetch_trend,
+    get_dashboard_cache_entry_provider=lambda: _get_dashboard_cache_entry,
+    set_dashboard_cache_provider=lambda: _set_dashboard_cache,
+    asyncio_provider=lambda: asyncio,
+    copy_provider=lambda: copy,
+    time_provider=lambda: time,
+)
+
 router.include_router(dashboard_router)
 
 router.include_router(libraries_router)
@@ -298,6 +320,8 @@ def _get_dashboard_cached_data(cache_key: str, now: float = None):
 
 router.include_router(preload_status_router)
 
+router.include_router(dashboard_init_router)
+
 
 def start_dashboard_cache_tasks() -> None:
     dashboard_cache_service.start_dashboard_cache_tasks(
@@ -310,78 +334,6 @@ def start_dashboard_cache_tasks() -> None:
 def stop_dashboard_cache_tasks() -> None:
     dashboard_cache_service.stop_dashboard_cache_tasks()
     _sync_dashboard_task_state()
-
-
-@router.get("/api/dashboard/init")
-async def api_dashboard_init(request: Request, user_id: Optional[str] = None):
-    # 🔒 管理后台首屏聚合接口，仅管理员可访问
-    if not user_service.is_admin_user(request):
-        return {"status": "error", "message": "需要管理员权限"}
-    """
-    仪表盘首屏聚合接口 - 核心数据快速返回
-    """
-    cache_key, effective_user_id, _is_admin = _get_dashboard_context(request, user_id)
-
-    def _strip_user_id(data: dict) -> dict:
-        """非管理员返回时剥离 top_users 中的原始 UserId"""
-        if _is_admin:
-            return data
-        d = copy.deepcopy(data)
-        for u in d.get("top_users", []):
-            u.pop("UserId", None)
-        return d
-
-    now = time.time()
-    _mark_dashboard_access(cache_key, now)
-    
-    # 🔥 检查内存缓存（30秒内直接返回）
-    cached_data = _get_dashboard_cached_data(cache_key, now)
-    if cached_data:
-        return {
-            "status": "success",
-            "data": _strip_user_id(cached_data),
-            "cached": True
-        }
-    
-    # 🔥 并发执行核心数据（快速）
-    try:
-        results = await asyncio.gather(
-            asyncio.wait_for(_fetch_dashboard_core(effective_user_id), timeout=5),
-            asyncio.wait_for(_fetch_users_list(), timeout=3),
-            asyncio.wait_for(_fetch_libraries(), timeout=5),
-            asyncio.wait_for(_fetch_top_users(), timeout=3),
-            asyncio.wait_for(_fetch_trend(effective_user_id), timeout=3),
-            return_exceptions=True
-        )
-        
-        dashboard, users, libraries, top_users, trend = results
-    except asyncio.TimeoutError as e:
-        print(f"[Dashboard Init] 请求超时: {e}")
-        stale_entry = _get_dashboard_cache_entry(cache_key)
-        if stale_entry.get("data"):
-            return {"status": "success", "data": _strip_user_id(stale_entry["data"]), "cached": True, "timeout": True}
-        dashboard = {"total_plays": 0, "active_users": 0, "total_duration": 0, "library": {}}
-        users = []
-        libraries = []
-        top_users = []
-        trend = {}
-    
-    result_data = {
-        "dashboard": dashboard if not isinstance(dashboard, Exception) else {"total_plays": 0, "active_users": 0, "total_duration": 0, "library": {}},
-        "users": users if not isinstance(users, Exception) else [],
-        "libraries": libraries if not isinstance(libraries, Exception) else [],
-        "top_users": top_users if not isinstance(top_users, Exception) else [],
-        "trend": trend if not isinstance(trend, Exception) else {}
-    }
-    
-    # 🔥 更新内存缓存
-    _set_dashboard_cache(cache_key, result_data, effective_user_id, now)
-    
-    return {
-        "status": "success",
-        "data": _strip_user_id(result_data),
-        "cached": False
-    }
 
 
 # 入库统计内存缓存

@@ -1279,6 +1279,293 @@ def test_preload_status_allows_admin_through_stats_monkeypatches(monkeypatch):
     ]
 
 
+def test_playback_stats_includes_dashboard_init_child_route_and_compat_export():
+    from app.domains.playback import dashboard_init_router
+    from app.domains.playback import stats
+
+    routes = [
+        (route.path, route.methods)
+        for route in stats.router.routes
+        if hasattr(route, "methods")
+    ]
+
+    assert any(path == "/api/dashboard/init" and "GET" in methods for path, methods in routes)
+    assert stats.api_dashboard_init is dashboard_init_router.api_dashboard_init
+
+    preload_status_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/dashboard/preload_status" and "GET" in methods
+    )
+    dashboard_init_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/dashboard/init" and "GET" in methods
+    )
+    system_monitor_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/system/monitor" and "GET" in methods
+    )
+    assert preload_status_index < dashboard_init_index < system_monitor_index
+
+
+def test_dashboard_init_denies_non_admin_before_cache_or_fetch_side_effects(monkeypatch):
+    import asyncio
+
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"Id": "u1"}})
+    calls = []
+
+    def fake_is_admin_user(seen_request):
+        calls.append(seen_request)
+        return False
+
+    def fail_get_dashboard_context(*args, **kwargs):
+        raise AssertionError("dashboard init should not resolve context without admin permission")
+
+    def fail_get_dashboard_cached_data(*args, **kwargs):
+        raise AssertionError("dashboard init should not read cache without admin permission")
+
+    def fail_fetch_dashboard_core(*args, **kwargs):
+        raise AssertionError("dashboard init should not fetch data without admin permission")
+
+    monkeypatch.setattr(stats.user_service, "is_admin_user", fake_is_admin_user)
+    monkeypatch.setattr(stats, "_get_dashboard_context", fail_get_dashboard_context)
+    monkeypatch.setattr(stats, "_get_dashboard_cached_data", fail_get_dashboard_cached_data)
+    monkeypatch.setattr(stats, "_fetch_dashboard_core", fail_fetch_dashboard_core)
+
+    response = asyncio.run(stats.api_dashboard_init(request))
+
+    assert response == {"status": "error", "message": "需要管理员权限"}
+    assert calls == [request]
+
+
+def test_dashboard_init_cache_hit_uses_stats_monkeypatches_and_strips_user_ids(monkeypatch):
+    import asyncio
+
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"Id": "admin"}})
+    cached_data = {
+        "dashboard": {"total_plays": 3},
+        "users": [],
+        "libraries": [],
+        "top_users": [{"UserId": "u1", "UserName": "Alice", "TotalTime": 90}],
+        "trend": {},
+    }
+    calls = []
+
+    def fake_is_admin_user(seen_request):
+        calls.append(("is_admin_user", seen_request))
+        return True
+
+    def fake_get_dashboard_context(seen_request, user_id):
+        calls.append(("get_dashboard_context", seen_request, user_id))
+        return "user:u1", "u1", False
+
+    def fake_mark_dashboard_access(cache_key, now):
+        calls.append(("mark_dashboard_access", cache_key, now))
+
+    def fake_get_dashboard_cached_data(cache_key, now):
+        calls.append(("get_dashboard_cached_data", cache_key, now))
+        return cached_data
+
+    def fail_fetch_dashboard_core(*args, **kwargs):
+        raise AssertionError("dashboard init cache hit should not fetch data")
+
+    monkeypatch.setattr(stats.user_service, "is_admin_user", fake_is_admin_user)
+    monkeypatch.setattr(stats, "_get_dashboard_context", fake_get_dashboard_context)
+    monkeypatch.setattr(stats, "_mark_dashboard_access", fake_mark_dashboard_access)
+    monkeypatch.setattr(stats, "_get_dashboard_cached_data", fake_get_dashboard_cached_data)
+    monkeypatch.setattr(stats, "_fetch_dashboard_core", fail_fetch_dashboard_core)
+    monkeypatch.setattr(stats, "time", SimpleNamespace(time=lambda: 123.4))
+
+    response = asyncio.run(stats.api_dashboard_init(request, user_id="all"))
+
+    assert response == {
+        "status": "success",
+        "data": {
+            "dashboard": {"total_plays": 3},
+            "users": [],
+            "libraries": [],
+            "top_users": [{"UserName": "Alice", "TotalTime": 90}],
+            "trend": {},
+        },
+        "cached": True,
+    }
+    assert cached_data["top_users"][0]["UserId"] == "u1"
+    assert calls == [
+        ("is_admin_user", request),
+        ("get_dashboard_context", request, "all"),
+        ("mark_dashboard_access", "user:u1", 123.4),
+        ("get_dashboard_cached_data", "user:u1", 123.4),
+    ]
+
+
+def test_dashboard_init_cache_miss_fetches_and_writes_cache_through_stats_monkeypatches(monkeypatch):
+    import asyncio
+
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"Id": "admin"}})
+    calls = []
+
+    def fake_is_admin_user(seen_request):
+        calls.append(("is_admin_user", seen_request))
+        return True
+
+    def fake_get_dashboard_context(seen_request, user_id):
+        calls.append(("get_dashboard_context", seen_request, user_id))
+        return "admin:all", None, True
+
+    def fake_mark_dashboard_access(cache_key, now):
+        calls.append(("mark_dashboard_access", cache_key, now))
+
+    def fake_get_dashboard_cached_data(cache_key, now):
+        calls.append(("get_dashboard_cached_data", cache_key, now))
+        return None
+
+    async def fake_fetch_dashboard_core(user_id):
+        calls.append(("fetch_dashboard_core", user_id))
+        return {"total_plays": 7, "active_users": 2, "total_duration": 300, "library": {"movie": 1}}
+
+    async def fake_fetch_users_list():
+        calls.append(("fetch_users_list",))
+        return [{"UserId": "u1", "UserName": "Alice"}]
+
+    async def fake_fetch_libraries():
+        calls.append(("fetch_libraries",))
+        return [{"Id": "lib1", "Name": "Movies"}]
+
+    async def fake_fetch_top_users():
+        calls.append(("fetch_top_users",))
+        return [{"UserId": "u1", "UserName": "Alice", "TotalTime": 300}]
+
+    async def fake_fetch_trend(user_id):
+        calls.append(("fetch_trend", user_id))
+        return {"2026-06-03": 300}
+
+    def fake_set_dashboard_cache(cache_key, data, user_id, now):
+        calls.append(("set_dashboard_cache", cache_key, data, user_id, now))
+
+    monkeypatch.setattr(stats.user_service, "is_admin_user", fake_is_admin_user)
+    monkeypatch.setattr(stats, "_get_dashboard_context", fake_get_dashboard_context)
+    monkeypatch.setattr(stats, "_mark_dashboard_access", fake_mark_dashboard_access)
+    monkeypatch.setattr(stats, "_get_dashboard_cached_data", fake_get_dashboard_cached_data)
+    monkeypatch.setattr(stats, "_fetch_dashboard_core", fake_fetch_dashboard_core)
+    monkeypatch.setattr(stats, "_fetch_users_list", fake_fetch_users_list)
+    monkeypatch.setattr(stats, "_fetch_libraries", fake_fetch_libraries)
+    monkeypatch.setattr(stats, "_fetch_top_users", fake_fetch_top_users)
+    monkeypatch.setattr(stats, "_fetch_trend", fake_fetch_trend)
+    monkeypatch.setattr(stats, "_set_dashboard_cache", fake_set_dashboard_cache)
+    monkeypatch.setattr(stats, "time", SimpleNamespace(time=lambda: 200.5))
+
+    response = asyncio.run(stats.api_dashboard_init(request))
+
+    result_data = {
+        "dashboard": {"total_plays": 7, "active_users": 2, "total_duration": 300, "library": {"movie": 1}},
+        "users": [{"UserId": "u1", "UserName": "Alice"}],
+        "libraries": [{"Id": "lib1", "Name": "Movies"}],
+        "top_users": [{"UserId": "u1", "UserName": "Alice", "TotalTime": 300}],
+        "trend": {"2026-06-03": 300},
+    }
+    assert response == {"status": "success", "data": result_data, "cached": False}
+    assert calls == [
+        ("is_admin_user", request),
+        ("get_dashboard_context", request, None),
+        ("mark_dashboard_access", "admin:all", 200.5),
+        ("get_dashboard_cached_data", "admin:all", 200.5),
+        ("fetch_dashboard_core", None),
+        ("fetch_users_list",),
+        ("fetch_libraries",),
+        ("fetch_top_users",),
+        ("fetch_trend", None),
+        ("set_dashboard_cache", "admin:all", result_data, None, 200.5),
+    ]
+
+
+def test_dashboard_init_timeout_returns_stale_cache_through_stats_monkeypatches(monkeypatch):
+    import asyncio
+
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"Id": "admin"}})
+    stale_data = {
+        "dashboard": {"total_plays": 9},
+        "users": [],
+        "libraries": [],
+        "top_users": [{"UserId": "u1", "UserName": "Alice"}],
+        "trend": {},
+    }
+    calls = []
+
+    async def slow_fetch_dashboard_core(user_id):
+        calls.append(("fetch_dashboard_core", user_id))
+        await asyncio.sleep(0)
+        return {"total_plays": 0}
+
+    def fake_is_admin_user(seen_request):
+        calls.append(("is_admin_user", seen_request))
+        return True
+
+    def fake_get_dashboard_context(seen_request, user_id):
+        calls.append(("get_dashboard_context", seen_request, user_id))
+        return "user:u1", "u1", False
+
+    def fake_mark_dashboard_access(cache_key, now):
+        calls.append(("mark_dashboard_access", cache_key, now))
+
+    def fake_get_dashboard_cached_data(cache_key, now):
+        calls.append(("get_dashboard_cached_data", cache_key, now))
+        return None
+
+    def fake_wait_for(awaitable, timeout):
+        calls.append(("wait_for", timeout))
+        awaitable.close()
+        raise asyncio.TimeoutError("too slow")
+
+    def fake_get_dashboard_cache_entry(cache_key):
+        calls.append(("get_dashboard_cache_entry", cache_key))
+        return {"data": stale_data, "ts": 100}
+
+    def fake_print(message):
+        calls.append(("print", message))
+
+    monkeypatch.setattr(stats.user_service, "is_admin_user", fake_is_admin_user)
+    monkeypatch.setattr(stats, "_get_dashboard_context", fake_get_dashboard_context)
+    monkeypatch.setattr(stats, "_mark_dashboard_access", fake_mark_dashboard_access)
+    monkeypatch.setattr(stats, "_get_dashboard_cached_data", fake_get_dashboard_cached_data)
+    monkeypatch.setattr(stats, "_fetch_dashboard_core", slow_fetch_dashboard_core)
+    monkeypatch.setattr(stats, "_get_dashboard_cache_entry", fake_get_dashboard_cache_entry)
+    monkeypatch.setattr(stats, "time", SimpleNamespace(time=lambda: 300.0))
+    monkeypatch.setattr(stats.asyncio, "wait_for", fake_wait_for)
+    from app.domains.playback import dashboard_init_router
+
+    dashboard_init_router.set_dependency_providers(print_provider=lambda: fake_print)
+    try:
+        response = asyncio.run(stats.api_dashboard_init(request))
+    finally:
+        dashboard_init_router.set_dependency_providers(print_provider=lambda: print)
+
+    assert response == {
+        "status": "success",
+        "data": {
+            "dashboard": {"total_plays": 9},
+            "users": [],
+            "libraries": [],
+            "top_users": [{"UserName": "Alice"}],
+            "trend": {},
+        },
+        "cached": True,
+        "timeout": True,
+    }
+    assert calls == [
+        ("is_admin_user", request),
+        ("get_dashboard_context", request, None),
+        ("mark_dashboard_access", "user:u1", 300.0),
+        ("get_dashboard_cached_data", "user:u1", 300.0),
+        ("wait_for", 5),
+        ("print", "[Dashboard Init] 请求超时: too slow"),
+        ("get_dashboard_cache_entry", "user:u1"),
+    ]
+
+
 def test_playback_stats_includes_system_monitor_child_route_and_compat_export():
     from app.domains.playback import stats
     from app.domains.playback import system_monitor_router
