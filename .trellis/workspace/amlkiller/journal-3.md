@@ -1886,3 +1886,36 @@ Extracted user bot point transfer and red packet command handling into a focused
 ### Next Steps
 
 - None - task complete
+
+
+## Session 177: Refactor notification user bot game commands
+
+**Date**: 2026-06-03
+**Task**: Refactor notification user bot game commands
+**Branch**: `main`
+
+### Summary
+
+Extracted user bot grab and lottery command handling into a focused notification domain service while preserving legacy wrappers, late-bound dependency providers, and group cleanup behavior.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `bfcb89f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
