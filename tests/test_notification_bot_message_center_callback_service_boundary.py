@@ -49,11 +49,14 @@ class FakeMessageDao:
 
 
 class FakeTelegramClient:
-    def __init__(self):
+    def __init__(self, error=None):
+        self.error = error
         self.calls = []
 
     def post_api(self, token, method, json=None, proxies=None, timeout=None):
         self.calls.append((token, method, json, proxies, timeout))
+        if self.error:
+            raise self.error
         return FakeResponse()
 
 
@@ -74,9 +77,9 @@ class FakeLogger:
         self.errors.append(message)
 
 
-def _patch_legacy_dependencies(monkeypatch):
+def _patch_legacy_dependencies(monkeypatch, *, telegram_error=None):
     dao = FakeMessageDao()
-    telegram = FakeTelegramClient()
+    telegram = FakeTelegramClient(error=telegram_error)
     media = FakeMediaApi()
     logger = FakeLogger()
 
@@ -206,4 +209,131 @@ def test_reply_message_pops_mode_creates_conversation_and_sends_confirmation(mon
     assert dao.inserted_admin_messages == [(42, "bot", "管理员", "hello user", "hello user")]
     assert forwarded == [("u4", "hello user", "管理员")]
     assert sent_messages == [("chat-1", "✅ 消息已发送给用户 u4", "HTML", None, "tg")]
+    assert logger.errors == []
+
+
+def test_message_center_dispatcher_routes_reply_block_and_unblock(monkeypatch):
+    dao, telegram, _media, logger = _patch_legacy_dependencies(monkeypatch)
+    dao.remark_rows["u1"] = {"remark": "Alice"}
+    bot = bot_service.NotificationBot()
+
+    assert bot_service.notification_bot_message_center_callback_service.handle_message_center_callback(
+        bot,
+        "msg_reply:u1",
+        "chat-1",
+        100,
+        "token-1",
+        {"https": "proxy"},
+        {"message": {"text": "ignored"}},
+    ) is True
+    assert bot._msg_reply_mode == {"chat-1": "u1"}
+
+    assert bot_service.notification_bot_message_center_callback_service.handle_message_center_callback(
+        bot,
+        "msg_block:u2",
+        "chat-1",
+        101,
+        "token-2",
+        None,
+        {"from": {"first_name": "Root"}, "message": {"text": "Original message"}},
+    ) is True
+
+    assert bot_service.notification_bot_message_center_callback_service.handle_message_center_callback(
+        bot,
+        "msg_unblock:u2",
+        "chat-1",
+        102,
+        "token-3",
+        None,
+        {"from": {"first_name": "Root"}, "message": {"text": "Original message\n\n━━━━━━━━━━━━━━\nold status"}},
+    ) is True
+
+    assert dao.added_blocks == ["u2"]
+    assert dao.removed_blocks == ["u2"]
+    assert [call[1] for call in telegram.calls] == ["editMessageText", "editMessageText", "editMessageText"]
+    assert telegram.calls[0][2]["reply_markup"] == {"inline_keyboard": [[{"text": "❌ 取消回复", "callback_data": "msg_cancel:u1"}]]}
+    assert telegram.calls[1][2]["reply_markup"] == {"inline_keyboard": [[{"text": "🔊 取消屏蔽", "callback_data": "msg_unblock:u2"}]]}
+    assert telegram.calls[2][2]["reply_markup"] == {
+        "inline_keyboard": [
+            [{"text": "💬 回复消息", "callback_data": "msg_reply:u2"}],
+            [{"text": "🚫 屏蔽通知", "callback_data": "msg_block:u2"}],
+        ]
+    }
+    assert logger.errors == []
+
+
+def test_message_center_dispatcher_cancel_discards_mode_and_edits_message(monkeypatch):
+    _dao, telegram, _media, logger = _patch_legacy_dependencies(monkeypatch)
+    bot = bot_service.NotificationBot()
+    bot._msg_reply_mode["chat-1"] = "u1"
+
+    handled = bot_service.notification_bot_message_center_callback_service.handle_message_center_callback(
+        bot,
+        "msg_cancel:u1",
+        "chat-1",
+        103,
+        "token-4",
+        {"https": "proxy"},
+        {"message": {"text": "ignored"}},
+    )
+
+    assert handled is True
+    assert bot._msg_reply_mode == {}
+    assert telegram.calls == [
+        (
+            "token-4",
+            "editMessageText",
+            {
+                "chat_id": "chat-1",
+                "message_id": 103,
+                "text": "❌ 已取消回复",
+                "reply_markup": {"inline_keyboard": []},
+            },
+            {"https": "proxy"},
+            5,
+        )
+    ]
+    assert logger.errors == []
+
+
+def test_message_center_dispatcher_non_message_data_is_not_handled(monkeypatch):
+    dao, telegram, _media, logger = _patch_legacy_dependencies(monkeypatch)
+    bot = bot_service.NotificationBot()
+
+    handled = bot_service.notification_bot_message_center_callback_service.handle_message_center_callback(
+        bot,
+        "risk_ban_u1",
+        "chat-1",
+        100,
+        "token",
+        None,
+        {"message": {"text": "ignored"}},
+    )
+
+    assert handled is False
+    assert bot._msg_reply_mode == {}
+    assert dao.added_blocks == []
+    assert dao.removed_blocks == []
+    assert telegram.calls == []
+    assert logger.errors == []
+
+
+def test_message_center_cancel_swallows_telegram_edit_failures(monkeypatch):
+    _dao, telegram, _media, logger = _patch_legacy_dependencies(monkeypatch, telegram_error=RuntimeError("telegram down"))
+    bot = bot_service.NotificationBot()
+    bot._msg_reply_mode["chat-1"] = "u1"
+
+    handled = bot_service.notification_bot_message_center_callback_service.handle_message_center_callback(
+        bot,
+        "msg_cancel:u1",
+        "chat-1",
+        104,
+        "token",
+        None,
+        {"message": {"text": "ignored"}},
+    )
+
+    assert handled is True
+    assert bot._msg_reply_mode == {}
+    assert len(telegram.calls) == 1
     assert logger.errors == []

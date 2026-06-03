@@ -866,32 +866,7 @@ class NotificationBot:
         if notification_bot_plugin_callback_service.handle_request_hdhive_callback(data, cid, cq_id):
             return
 
-        # 消息中心回调处理
-        if data.startswith("msg_reply:"):
-            user_id = data.replace("msg_reply:", "")
-            self._handle_msg_reply_callback(cid, mid, user_id, token, proxies)
-            return
-
-        if data.startswith("msg_block:"):
-            user_id = data.replace("msg_block:", "")
-            self._handle_msg_block_callback(cid, mid, user_id, token, proxies, cq)
-            return
-
-        if data.startswith("msg_cancel:"):
-            # 取消回复模式
-            self._msg_reply_mode.discard(cid)
-            try:
-                telegram_client.post_api(token, "editMessageText", json={
-                    "chat_id": cid, "message_id": mid,
-                    "text": "❌ 已取消回复",
-                    "reply_markup": {"inline_keyboard": []}
-                }, proxies=proxies, timeout=5)
-            except Exception: pass
-            return
-
-        if data.startswith("msg_unblock:"):
-            user_id = data.replace("msg_unblock:", "")
-            self._handle_msg_unblock_callback(cid, mid, user_id, token, proxies, cq)
+        if notification_bot_message_center_callback_service.handle_message_center_callback(self, data, cid, mid, token, proxies, cq):
             return
 
         if notification_bot_risk_ban_callback_service.handle_risk_ban_callback(self, data, cq, cid, mid, token, proxies):

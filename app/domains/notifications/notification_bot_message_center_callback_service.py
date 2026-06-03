@@ -131,6 +131,41 @@ def handle_msg_unblock_callback(cid, mid, user_id, token, proxies, cq):
         _logger_provider().error(f"[Bot] 取消屏蔽失败: {e}")
 
 
+def handle_msg_cancel_callback(bot, cid, mid, token, proxies):
+    bot._msg_reply_mode.pop(cid, None)
+    try:
+        _telegram_client_provider().post_api(token, "editMessageText", json={
+            "chat_id": cid, "message_id": mid,
+            "text": "❌ 已取消回复",
+            "reply_markup": {"inline_keyboard": []}
+        }, proxies=proxies, timeout=5)
+    except Exception:
+        pass
+
+
+def handle_message_center_callback(bot, data, cid, mid, token, proxies, cq):
+    if data.startswith("msg_reply:"):
+        user_id = data.replace("msg_reply:", "")
+        handle_msg_reply_callback(bot, cid, mid, user_id, token, proxies)
+        return True
+
+    if data.startswith("msg_block:"):
+        user_id = data.replace("msg_block:", "")
+        handle_msg_block_callback(cid, mid, user_id, token, proxies, cq)
+        return True
+
+    if data.startswith("msg_cancel:"):
+        handle_msg_cancel_callback(bot, cid, mid, token, proxies)
+        return True
+
+    if data.startswith("msg_unblock:"):
+        user_id = data.replace("msg_unblock:", "")
+        handle_msg_unblock_callback(cid, mid, user_id, token, proxies, cq)
+        return True
+
+    return False
+
+
 def handle_msg_reply_message(bot, text, cid):
     """处理回复模式下的消息"""
     if cid not in bot._msg_reply_mode:

@@ -66,6 +66,8 @@ Bootstrap code should stay behavior-preserving and orchestration-focused. Do not
 
 When splitting large files, move one responsibility at a time and keep route URLs, response shapes, middleware order, and startup side effects stable unless a task explicitly approves behavior changes.
 
+When extracting inline callback or background-task branches, verify the state container's actual type before preserving cleanup calls. For example, a chat-id reply-mode map should use dict semantics such as `pop(key, None)`, not set-only cleanup such as `discard(key)`. Add focused coverage for the migrated cleanup path, because these branches may have been untested inside the larger file.
+
 Infrastructure adapters should live under `app/infra/` rather than `app/core/` when they own transport/session/retry behavior for an external dependency. If a temporary compatibility import is needed during a migration, keep it in `app/core/` as a thin re-export only.
 
 Current migration pattern: if a caller only needs generic external transport for file/image downloads or simple reachability probes, route it through `app/infra/clients/network_client.py` instead of leaving direct `requests.get(...)` calls in domains or plugins. Keep domain parsing, cache decisions, and user-facing error mapping at the caller.
