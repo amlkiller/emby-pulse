@@ -71,3 +71,36 @@ Extracted POST /api/manage/user/new and NewUserModelEx into app/domains/users/ne
 ### Next Steps
 
 - None - task complete
+
+
+## Session 242: Refactor users batch route
+
+**Date**: 2026-06-04
+**Task**: Refactor users batch route
+**Branch**: `main`
+
+### Summary
+
+Extracted users batch management route into app/domains/users/batch_router.py, preserved router compatibility exports and route order, and added focused early-return regression coverage. Verification: compileall changed files, import compatibility check, tests/test_users_public_service_facade.py -v (30 passed), and full tests/ -v (909 passed).
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `28d05ae` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
