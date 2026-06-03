@@ -1292,3 +1292,36 @@ Extracted notification user bot registration quota, cached user count, batch-use
 ### Next Steps
 
 - None - task complete
+
+
+## Session 159: Refactor notification user bot registration queue service
+
+**Date**: 2026-06-03
+**Task**: Refactor notification user bot registration queue service
+**Branch**: `main`
+
+### Summary
+
+Extracted user bot task queue counters and FIFO registration queue helpers into a focused notification service while preserving legacy user_bot_service globals, semaphore behavior, send hooks, and logger monkeypatch compatibility.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ec943f8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
