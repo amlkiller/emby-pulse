@@ -1754,3 +1754,36 @@ Extracted new-chat-member welcome handling from user_bot_service into a domain-l
 ### Next Steps
 
 - None - task complete
+
+
+## Session 233: Extract reports daily poster data service
+
+**Date**: 2026-06-03
+**Task**: Extract reports daily poster data service
+**Branch**: `main`
+
+### Summary
+
+Extracted daily poster period context and ranked-item preparation from report_service into a reports-domain data service. Kept ReportGenerator rendering and public entrypoint behavior stable, preserved legacy monkeypatch providers, added focused boundary tests, and verified focused report tests plus the full suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `acb58a7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
