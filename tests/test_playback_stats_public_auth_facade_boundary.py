@@ -110,6 +110,134 @@ def test_playback_stats_includes_live_child_routes_and_compat_exports():
     assert latest_index < live_index < legacy_index < top_movies_index
 
 
+def test_playback_stats_includes_top_movies_child_route_and_compat_export():
+    from app.domains.playback import stats
+    from app.domains.playback import top_movies_router
+
+    routes = [
+        (route.path, route.methods)
+        for route in stats.router.routes
+        if hasattr(route, "methods")
+    ]
+
+    assert any(path == "/api/stats/top_movies" and "GET" in methods for path, methods in routes)
+    assert stats.api_top_movies is top_movies_router.api_top_movies
+
+    legacy_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/live" and "GET" in methods
+    )
+    top_movies_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/top_movies" and "GET" in methods
+    )
+    user_details_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/user_details" and "GET" in methods
+    )
+    assert legacy_index < top_movies_index < user_details_index
+
+
+def test_top_movies_denies_unauthenticated_before_query_or_poster_side_effects(monkeypatch):
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"Id": "u1"}})
+    calls = []
+
+    def fake_check_login(seen_request):
+        calls.append(seen_request)
+        return False
+
+    def fail_build_stats_base_filter(*args, **kwargs):
+        raise AssertionError("top movies should not build stats filter without login")
+
+    def fail_query(*args, **kwargs):
+        raise AssertionError("top movies should not query playback stats without login")
+
+    def fail_resolve_poster_ids(*args, **kwargs):
+        raise AssertionError("top movies should not resolve posters without login")
+
+    monkeypatch.setattr(stats, "check_login", fake_check_login)
+    monkeypatch.setattr(stats, "build_stats_base_filter", fail_build_stats_base_filter)
+    monkeypatch.setattr(stats.playback_store, "query", fail_query)
+    monkeypatch.setattr(stats, "resolve_poster_ids", fail_resolve_poster_ids)
+
+    response = stats.api_top_movies(request)
+
+    assert response == {"status": "error", "message": "请先登录"}
+    assert calls == [request]
+
+
+def test_top_movies_allows_internal_call_through_stats_monkeypatches(monkeypatch):
+    from app.domains.playback import stats
+
+    calls = []
+
+    def fake_build_stats_base_filter(user_id):
+        calls.append(("build_stats_base_filter", user_id))
+        return "WHERE 1=1", []
+
+    def fake_query(sql, params):
+        calls.append(("query", sql, list(params)))
+        return [
+            {"ItemName": "Movie One", "ItemId": "m1", "ItemType": "Movie", "PlayDuration": 120},
+            {"ItemName": "Movie One", "ItemId": "m1", "ItemType": "Movie", "PlayDuration": 30},
+            {"ItemName": "Movie Two", "ItemId": "m2", "ItemType": "Movie", "PlayDuration": 60},
+        ]
+
+    def fake_get_clean_name(name, item_type):
+        calls.append(("get_clean_name", name, item_type))
+        return name
+
+    def fake_resolve_poster_ids(items):
+        calls.append(("resolve_poster_ids", [(item["ItemName"], item["ItemId"]) for item in items]))
+        for item in items:
+            item["PosterResolved"] = True
+
+    monkeypatch.setattr(stats, "build_stats_base_filter", fake_build_stats_base_filter)
+    monkeypatch.setattr(stats.playback_store, "query", fake_query)
+    monkeypatch.setattr(stats, "get_clean_name", fake_get_clean_name)
+    monkeypatch.setattr(stats, "resolve_poster_ids", fake_resolve_poster_ids)
+
+    response = stats.api_top_movies(
+        request=None,
+        user_id="all",
+        category="Movie",
+        sort_by="time",
+        exclude_types="Audio, MusicVideo",
+        period="month",
+    )
+
+    assert response == {
+        "status": "success",
+        "data": [
+            {
+                "ItemName": "Movie One",
+                "ItemId": "m1",
+                "PlayCount": 2,
+                "TotalTime": 150,
+                "PosterResolved": True,
+            },
+            {
+                "ItemName": "Movie Two",
+                "ItemId": "m2",
+                "PlayCount": 1,
+                "TotalTime": 60,
+                "PosterResolved": True,
+            },
+        ],
+    }
+    assert calls == [
+        ("build_stats_base_filter", "all"),
+        (
+            "query",
+            "SELECT ItemName, ItemId, ItemType, PlayDuration FROM PlaybackActivity WHERE 1=1 AND DateCreated >= date('now', 'localtime', 'start of month') AND ItemType = 'Movie' AND ItemType NOT IN (?,?) LIMIT 5000",
+            ["Audio", "MusicVideo"],
+        ),
+        ("get_clean_name", "Movie One", "Movie"),
+        ("get_clean_name", "Movie One", "Movie"),
+        ("get_clean_name", "Movie Two", "Movie"),
+        ("resolve_poster_ids", [("Movie One", "m1"), ("Movie Two", "m2")]),
+    ]
+
+
 def test_live_sessions_denies_non_admin_before_media_side_effects(monkeypatch):
     from app.domains.playback import stats
 
