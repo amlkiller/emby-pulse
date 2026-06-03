@@ -1853,3 +1853,36 @@ Extracted user bot media request search, callback, submit, and history command h
 ### Next Steps
 
 - None - task complete
+
+
+## Session 176: Refactor notification user bot transfer commands
+
+**Date**: 2026-06-03
+**Task**: Refactor notification user bot transfer commands
+**Branch**: `main`
+
+### Summary
+
+Extracted user bot point transfer and red packet command handling into a focused notification domain service while preserving legacy wrappers and runtime dependency providers.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a47218d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
