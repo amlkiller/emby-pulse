@@ -434,3 +434,36 @@ Extracted NotificationBot WeCom token, menu, text conversion, text send, and new
 ### Next Steps
 
 - None - task complete
+
+
+## Session 193: Extract notification bot delivery service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot delivery service
+**Branch**: `main`
+
+### Summary
+
+Extracted NotificationBot send_photo, send_message, and edit_message delivery entrypoints into notification_bot_delivery_service with lazy legacy providers; kept old class method wrappers and added boundary tests for Telegram fan-out, photo download and fallback, WeCom task submission, request-message recording, and edit results.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `12a8bc2` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
