@@ -71,3 +71,36 @@ Extracted notification announcement management and user announcement routes into
 ### Next Steps
 
 - None - task complete
+
+
+## Session 122: Refactor users tag router
+
+**Date**: 2026-06-03
+**Task**: Refactor users tag router
+**Branch**: `main`
+
+### Summary
+
+Extracted users tag constants, models, and management routes into app/domains/users/tag_router.py, included the child router from users/router.py at the original route position, and preserved users.router compatibility exports. Verified compile/import route checks, focused users router/public-service tests, and the full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f3753d0` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
