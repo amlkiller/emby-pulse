@@ -863,3 +863,36 @@ Extracted NotificationBot message dispatch and admin-check logic into notificati
 ### Next Steps
 
 - None - task complete
+
+
+## Session 206: Extract notification bot command registration service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot command registration service
+**Branch**: `main`
+
+### Summary
+
+Extracted NotificationBot Telegram command registration into notification_bot_command_registration_service; kept the legacy _set_commands wrapper, preserved the exact command list/order/descriptions, token skip behavior, proxy usage, timeout, Telegram setMyCommands call shape, and silent registration failure behavior; added boundary tests for missing token, command registration payload, and swallowed Telegram errors.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0f71330` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
