@@ -92,6 +92,8 @@ def test_users_router_includes_tag_routes():
 
     routes = [(route.path, route.methods) for route in router.router.routes if hasattr(route, "methods")]
 
+    assert any(path == "/api/manage/user/req_permission" and "POST" in methods for path, methods in routes)
+    assert any(path == "/api/manage/user/req_permission" and "GET" in methods for path, methods in routes)
     assert any(path == "/api/manage/tags" and "GET" in methods for path, methods in routes)
     assert any(path == "/api/manage/tags" and "POST" in methods for path, methods in routes)
     assert any(path == "/api/manage/tags/{tag_id}" and "DELETE" in methods for path, methods in routes)
