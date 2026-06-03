@@ -302,3 +302,36 @@ Extracted UserBot lottery draw orchestration into a domain-local service with la
 ### Next Steps
 
 - None - task complete
+
+
+## Session 189: Extract notification bot request admin message sync
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot request admin message sync
+**Branch**: `main`
+
+### Summary
+
+Extracted request-admin Telegram message-copy synchronization helpers from notification bot_service into a domain-local service with lazy legacy providers; added boundary tests for TMDB extraction, recording, duplicate suppression, sync edits, cleanup, and no-row fallback logging.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b52d063` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
