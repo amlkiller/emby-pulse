@@ -20,6 +20,7 @@ from app.domains.notifications import user_bot_binding_service
 from app.domains.notifications import user_bot_concurrency_service
 from app.domains.notifications import user_bot_menu_service
 from app.domains.notifications import user_bot_message_cleanup_service
+from app.domains.notifications import user_bot_open_reg_notify_service
 from app.domains.notifications import user_bot_registration_queue_service
 from app.domains.notifications import user_bot_registration_quota_service
 from app.domains.notifications import user_bot_restriction_service
@@ -273,6 +274,16 @@ user_bot_message_cleanup_service.set_dependency_providers(
     safe_proxies_provider=lambda: get_safe_proxies(),
 )
 
+user_bot_open_reg_notify_service.set_dependency_providers(
+    notify_user_enabled_provider=lambda: is_user_bot_open_reg_notify_user_enabled(),
+    notify_group_enabled_provider=lambda: is_user_bot_open_reg_notify_group_enabled(),
+    allowed_groups_provider=lambda: get_user_bot_allowed_groups(),
+    get_all_bot_users_provider=lambda: _get_all_bot_users(),
+    send_provider=lambda: _send,
+    logger_provider=lambda: logger,
+    datetime_provider=lambda: datetime,
+)
+
 user_bot_telegram_service.set_dependency_providers(
     telegram_client_provider=lambda: telegram_client,
     get_token_provider=lambda: get_user_bot_token,
@@ -310,55 +321,6 @@ def _enter_reg_queue(chat_id):
 
 def _leave_reg_queue():
     return user_bot_registration_queue_service.leave_reg_queue()
-
-
-def _send_open_reg_closed_notify(reason=""):
-    """发送开放注册关闭通知"""
-    notify_user = is_user_bot_open_reg_notify_user_enabled()
-    notify_group = is_user_bot_open_reg_notify_group_enabled()
-    
-    if not notify_user and not notify_group:
-        return
-    
-    msg = """📢 <b>开放注册已结束</b>
-
-🙏 感谢大家的支持！
-📊 本次开放注册已圆满结束
-💌 如有疑问请联系管理员
-
-⏰ 结束时间：{}
-📝 原因：{}""".format(
-        datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
-        reason or "手动关闭"
-    )
-    
-    # 发送到用户机器人私聊
-    if notify_user:
-        try:
-            bindings = _get_all_bindings()
-            for b in bindings:
-                tg_id = b.get('tg_user_id') if isinstance(b, dict) else b[0]
-                try:
-                    _send(int(tg_id), msg)
-                except Exception as e:
-                    logger.error(f"[开放注册通知] 发送给用户 {tg_id} 失败: {e}")
-        except Exception as e:
-            logger.error(f"[开放注册通知] 用户私聊通知失败: {e}")
-    
-    # 发送到群聊
-    if notify_group:
-        try:
-            from app.domains.notifications.bot_service import bot
-            allowed_groups = get_user_bot_allowed_groups()
-            if allowed_groups:
-                group_ids = [g.strip() for g in allowed_groups.replace('，', ',').split('\n') if g.strip()]
-                for gid in group_ids:
-                    try:
-                        bot.notifier.send_message(gid, msg, platform="tg", parse_mode="HTML")
-                    except Exception as e:
-                        logger.error(f"[开放注册通知] 发送到群 {gid} 失败: {e}")
-        except Exception as e:
-            logger.error(f"[开放注册通知] 群聊通知失败: {e}")
 
 
 def _ensure_user_bot_tables():
@@ -405,50 +367,7 @@ _user_state = {}  # tg_user_id -> {"action": "register_name", ...}
 
 
 def _send_open_reg_closed_notify(reason=""):
-    """发送开放注册关闭通知（名额已满等场景）"""
-    notify_user = is_user_bot_open_reg_notify_user_enabled()
-    notify_group = is_user_bot_open_reg_notify_group_enabled()
-    
-    if not notify_user and not notify_group:
-        return
-    
-    reason_text = f"（{reason}）" if reason else ""
-    msg = f"""📢 <b>开放注册已结束</b>
-
-🙏 感谢大家的支持！
-📊 本次开放注册已圆满结束{reason_text}
-💌 如有疑问请联系管理员
-
-⏰ 结束时间：{datetime.datetime.now().strftime("%Y-%m-%d %H:%M")}"""
-    
-    # 发送到所有启动过机器人的用户私聊
-    if notify_user:
-        try:
-            users = _get_all_bot_users()
-            for u in users:
-                try:
-                    _send(int(u['tg_user_id']), msg)
-                except Exception as e:
-                    logger.error(f"[开放注册通知] 发送给用户 {u['tg_user_id']} 失败: {e}")
-        except Exception as e:
-            logger.error(f"[开放注册通知] 用户私聊通知失败: {e}")
-    
-    # 发送到群聊（使用用户机器人）
-    if notify_group:
-        try:
-            allowed_groups = get_user_bot_allowed_groups()
-            if allowed_groups:
-                group_ids = [g.strip() for g in allowed_groups.replace('，', ',').split('\n') if g.strip()]
-                for gid in group_ids:
-                    try:
-                        _send(int(gid), msg)  # 使用用户机器人发送
-                        logger.info(f"[开放注册通知] 已发送到群 {gid}")
-                    except Exception as e:
-                        logger.error(f"[开放注册通知] 发送到群 {gid} 失败: {e}")
-            else:
-                logger.warning("[开放注册通知] 未配置群 ID，跳过群聊通知")
-        except Exception as e:
-            logger.error(f"[开放注册通知] 群聊通知失败: {e}")
+    return user_bot_open_reg_notify_service.send_open_reg_closed_notify(reason)
 
 
 def _unbind_user(tg_user_id):
