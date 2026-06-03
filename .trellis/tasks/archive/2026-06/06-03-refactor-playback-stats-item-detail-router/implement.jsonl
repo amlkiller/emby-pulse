@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend spec entrypoint for this refactor slice."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Defines domain child-router split expectations and behavior-preserving slices."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Defines uv-based compile/import/test verification commands."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Confirms existing request-level error shape should be preserved."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Guides reuse of the established provider child-router pattern."}
