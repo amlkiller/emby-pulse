@@ -18,6 +18,7 @@ from app.domains.notifications import notification_bot_check_command_service
 from app.domains.notifications import notification_bot_command_registration_service
 from app.domains.notifications import notification_bot_delivery_service
 from app.domains.notifications import notification_bot_emby_restart_command_service
+from app.domains.notifications import notification_bot_feedback_callback_service
 from app.domains.notifications import notification_bot_fresh_episode_service
 from app.domains.notifications import notification_bot_gap_clear_service
 from app.domains.notifications import notification_bot_info_command_service
@@ -350,6 +351,11 @@ notification_bot_library_group_service.set_dependency_providers(
 
 notification_bot_plugin_callback_service.set_dependency_providers(
     logger_provider=lambda: logger,
+)
+
+notification_bot_feedback_callback_service.set_dependency_providers(
+    media_request_dao_provider=lambda: media_request_dao,
+    telegram_client_provider=lambda: telegram_client,
 )
 
 def _submit_bot_task(fn, *args):
@@ -902,26 +908,7 @@ class NotificationBot:
             except Exception: pass
             return
 
-        if data.startswith("feed_"):
-            parts = data.split("_")
-            action = parts[1]; feed_id = int(parts[2])
-            status_map = {"fix": 1, "done": 2, "reject": 3}
-            status_text = {"fix": "🛠️ 已标记：修复中", "done": "✅ 已标记：修复完成", "reject": "❌ 已标记：暂不处理(忽略)"}
-            
-            if action in status_map:
-                media_request_dao.update_feedback_status(feed_id, status_map[action])
-                msg_obj = cq["message"]
-                operator = cq.get('from', {}).get('first_name', 'Admin')
-                if "caption" in msg_obj:
-                    orig_text = msg_obj.get("caption", "资源报错工单")
-                    new_text = f"{orig_text}\n\n━━━━━━━━━━━━━━\n{status_text[action]}\n(操作人: {operator})"
-                    try: telegram_client.post_api(token, "editMessageCaption", json={"chat_id": cid, "message_id": mid, "caption": new_text, "reply_markup": {"inline_keyboard": []}}, proxies=proxies, timeout=5)
-                    except Exception: pass
-                else:
-                    orig_text = msg_obj.get("text", "资源报错工单")
-                    new_text = f"{orig_text}\n\n━━━━━━━━━━━━━━\n{status_text[action]}\n(操作人: {operator})"
-                    try: telegram_client.post_api(token, "editMessageText", json={"chat_id": cid, "message_id": mid, "text": new_text, "reply_markup": {"inline_keyboard": []}}, proxies=proxies, timeout=5)
-                    except Exception: pass
+        if notification_bot_feedback_callback_service.handle_feedback_callback(data, cq, cid, mid, token, proxies):
             return
 
         if data.startswith("req_"):
