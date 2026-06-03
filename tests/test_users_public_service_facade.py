@@ -129,6 +129,7 @@ def test_users_router_includes_child_routes_and_compat_exports():
 
     from app.domains.users import avatar_router
     from app.domains.users import audit_log_router
+    from app.domains.users import batch_router
     from app.domains.users import delete_router
     from app.domains.users import delete_verification_router
     from app.domains.users import invitation_router
@@ -166,6 +167,8 @@ def test_users_router_includes_child_routes_and_compat_exports():
     assert router.api_update_hidden_libraries is library_visibility_router.api_update_hidden_libraries
     assert router.NewUserModelEx is new_user_router.NewUserModelEx
     assert router.api_manage_user_new is new_user_router.api_manage_user_new
+    assert router.BatchActionModelLocal is batch_router.BatchActionModelLocal
+    assert router.api_manage_users_batch is batch_router.api_manage_users_batch
     assert router.api_manage_user_delete is delete_router.api_manage_user_delete
     assert router.PinUserModel is pin_router.PinUserModel
     assert router.api_pin_user is pin_router.api_pin_user
@@ -243,6 +246,99 @@ def test_users_router_includes_child_routes_and_compat_exports():
     assert verify_index < user_libraries_index < hidden_libraries_index < invitation_index < library_index
     assert library_index < new_user_index < delete_user_index < batch_index
     assert template_index < pin_index < users_list_index
+
+
+def test_batch_users_denies_missing_login_before_auth_or_media(monkeypatch):
+    from app.domains.users import router
+
+    request = SimpleNamespace(session={})
+
+    class MediaApiMustNotRun:
+        def health_check(self):
+            raise AssertionError("media_api.health_check should not run before login authorization")
+
+    monkeypatch.setattr(
+        router,
+        "is_admin_user",
+        lambda _request: (_ for _ in ()).throw(
+            AssertionError("admin authorization should not run before login authorization")
+        ),
+    )
+    monkeypatch.setattr(router, "media_api", MediaApiMustNotRun())
+
+    result = router.api_manage_users_batch(router.BatchActionModelLocal(user_ids=["u1"], action="enable"), request)
+
+    assert result == {"status": "error"}
+
+
+def test_batch_users_denies_non_admin_before_media(monkeypatch):
+    from app.domains.users import router
+
+    request = SimpleNamespace(session={"user": {"id": "user-1", "role": "viewer"}})
+
+    class MediaApiMustNotRun:
+        def health_check(self):
+            raise AssertionError("media_api.health_check should not run before admin authorization")
+
+    monkeypatch.setattr(router, "is_admin_user", lambda _request: False)
+    monkeypatch.setattr(router, "media_api", MediaApiMustNotRun())
+
+    result = router.api_manage_users_batch(router.BatchActionModelLocal(user_ids=["u1"], action="enable"), request)
+
+    assert result == {"status": "error", "message": "需要管理员权限"}
+
+
+def test_batch_users_rejects_more_than_100_before_media(monkeypatch):
+    from app.domains.users import router
+
+    request = SimpleNamespace(session={"user": {"id": "admin-1", "role": "admin"}})
+
+    class MediaApiMustNotRun:
+        def health_check(self):
+            raise AssertionError("media_api.health_check should not run before batch size validation")
+
+    monkeypatch.setattr(router, "is_admin_user", lambda _request: True)
+    monkeypatch.setattr(router, "media_api", MediaApiMustNotRun())
+
+    result = router.api_manage_users_batch(
+        router.BatchActionModelLocal(user_ids=[f"u{i}" for i in range(101)], action="enable"),
+        request,
+    )
+
+    assert result == {"status": "error", "message": "单次批量操作最多 100 个用户"}
+
+
+def test_batch_users_rejects_unhealthy_media_before_side_effects(monkeypatch):
+    from app.domains.users import router
+
+    request = SimpleNamespace(session={"user": {"id": "admin-1", "role": "admin"}})
+
+    class MediaApi:
+        def health_check(self):
+            return False
+
+        def get(self, *_args, **_kwargs):
+            raise AssertionError("media_api.get should not run when health check fails")
+
+        def post(self, *_args, **_kwargs):
+            raise AssertionError("media_api.post should not run when health check fails")
+
+    class UserDaoMustNotRun:
+        def save_user_admin_disabled(self, *_args, **_kwargs):
+            raise AssertionError("user_dao side effects should not run when health check fails")
+
+    monkeypatch.setattr(router, "is_admin_user", lambda _request: True)
+    monkeypatch.setattr(router, "media_api", MediaApi())
+    monkeypatch.setattr(router, "user_dao", UserDaoMustNotRun())
+    monkeypatch.setattr(
+        router,
+        "add_audit_log",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("audit log should not run when health check fails")),
+    )
+
+    result = router.api_manage_users_batch(router.BatchActionModelLocal(user_ids=["u1"], action="enable"), request)
+
+    assert result == {"status": "error", "message": "Emby 服务不可用，请稍后重试"}
 
 
 def test_new_user_denies_non_admin_before_media_or_cache(monkeypatch):
