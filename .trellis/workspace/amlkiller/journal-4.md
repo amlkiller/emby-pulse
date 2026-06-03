@@ -599,3 +599,36 @@ Extracted NotificationBot /check server status probe command into notification_b
 ### Next Steps
 
 - None - task complete
+
+
+## Session 198: Extract notification bot playback command service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot playback command service
+**Branch**: `main`
+
+### Summary
+
+Extracted NotificationBot /now and /recent playback query commands into notification_bot_playback_command_service with lazy legacy providers; kept old _cmd_now and _cmd_recent wrappers and added boundary tests for active playback formatting, empty and failure fallbacks, recent history formatting, query failure, username helper use, and legacy monkeypatch compatibility.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `65a9e30` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
