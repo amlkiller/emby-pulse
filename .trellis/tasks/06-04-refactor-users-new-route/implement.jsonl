@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend guideline index for selecting task-relevant implementation standards."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Domain router organization and compatibility boundary guidance for behavior-preserving extraction."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Preserve existing app-level error response conventions during route extraction."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Command, testing, and forbidden-pattern guidance for implementation."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Ensure no inappropriate logging changes are introduced while refactoring."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared thinking guide index for reuse and cross-layer checks."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Reuse existing child-router/provider pattern instead of inventing a new extraction shape."}
