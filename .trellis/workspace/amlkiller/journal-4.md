@@ -1061,3 +1061,36 @@ Extracted NotificationBot.on_library_new_item into a domain-local notification_b
 ### Next Steps
 
 - None - task complete
+
+
+## Session 212: Extract notification bot playback event service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot playback event service
+**Branch**: `main`
+
+### Summary
+
+Extracted NotificationBot.on_playback_event into a domain-local notification_bot_playback_event_service with lazy providers for legacy globals/plugin lookup, kept the legacy wrapper, and added boundary tests for enablement, mute handling, media enrichment, template rendering, jump targets, image fallback, and swallowed error logging.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `55bd195` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
