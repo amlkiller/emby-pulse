@@ -1655,3 +1655,36 @@ Extracted user bot profile and unbind command handling into a focused notificati
 ### Next Steps
 
 - None - task complete
+
+
+## Session 170: Refactor notification user bot channel commands
+
+**Date**: 2026-06-03
+**Task**: Refactor notification user bot channel commands
+**Branch**: `main`
+
+### Summary
+
+Extracted user bot channel bind and unbind command handling into a focused notification domain service while preserving legacy wrappers and runtime dependency providers.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `926d0e8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
