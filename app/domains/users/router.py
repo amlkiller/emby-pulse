@@ -6,6 +6,10 @@ from app.domains.system import invitation_dao
 from app.domains.users import user_dao
 from app.domains.users import user_bot_dao
 from app.domains.notifications import notify_admin
+from app.domains.users.list_router import (
+    api_get_users,
+    router as list_router,
+)
 from app.domains.users.request_permission_router import (
     UserReqPermissionModel,
     api_get_user_req_permission,
@@ -34,7 +38,6 @@ from app.infra.clients.network_client import network_client
 from app.infra.config.media_server_settings import get_media_server_public_host
 from app.infra.config.request_portal_settings import get_user_portal_url
 from app.infra.config.user_bot_settings import get_default_user_template_id
-from app.infra.config.user_visibility_settings import get_hidden_users
 from app.domains.users import public_service as user_service
 
 from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
@@ -1603,27 +1606,7 @@ def api_pin_user(data: PinUserModel, request: Request):
     except Exception as e:
         return {"status": "error", "message": safe_error_message(e)}
 
-@router.get("/api/users")
-def api_get_users(request: Request):
-    """获取用户列表 - 仅限管理员访问"""
-    # 🔒 安全检查:必须登录
-    if not request.session.get("user"):
-        return {"status": "error", "message": "未授权"}
-
-    # 🔒 安全检查:必须是管理员
-    user = request.session.get("user", {})
-    if user.get("auth_type") != "emby" and user.get("role") != "admin":
-        return {"status": "error", "message": "权限不足"}
-
-    try:
-        res = media_api.get("/Users", timeout=5)
-        if res.status_code == 200:
-            hidden = get_hidden_users()
-            data = [{"UserId": u['Id'], "UserName": u['Name'], "IsHidden": u['Id'] in hidden} for u in res.json()]
-            data.sort(key=lambda x: x['UserName'])
-            return {"status": "success", "data": data}
-        return {"status": "success", "data": []}
-    except: return {"status": "error"}
+router.include_router(list_router)
 
 # 审计日志页面路由已移除,改为用户管理页面弹窗
 
