@@ -41,6 +41,7 @@ from app.domains.notifications import notification_bot_polling_service
 from app.domains.notifications import notification_bot_request_admin_message_sync_service
 from app.domains.notifications import notification_bot_request_approval_action_callback_service
 from app.domains.notifications import notification_bot_request_approval_menu_callback_service
+from app.domains.notifications import notification_bot_request_hdhive_search_callback_service
 from app.domains.notifications import notification_bot_risk_alert_service
 from app.domains.notifications import notification_bot_risk_ban_callback_service
 from app.domains.notifications import notification_bot_search_command_service
@@ -381,6 +382,11 @@ notification_bot_request_approval_action_callback_service.set_dependency_provide
     telegram_client_provider=lambda: telegram_client,
     record_request_admin_message_provider=lambda: _record_request_admin_message,
     sync_request_admin_messages_provider=lambda: _sync_request_admin_messages,
+)
+
+notification_bot_request_hdhive_search_callback_service.set_dependency_providers(
+    logger_provider=lambda: logger,
+    telegram_client_provider=lambda: telegram_client,
 )
 
 def _submit_bot_task(fn, *args):
@@ -895,27 +901,16 @@ class NotificationBot:
             return
 
         if data.startswith("req_"):
-            parts = data.split("_")
-            action = parts[1]
-            
-            # 处理影巢搜索回调
-            if action == "hdhive":
-                try:
-                    from app.plugins.hdhive.plugin import handle_request_hdhive_search
-                    handle_request_hdhive_search(data, cid, cq_id, "tg")
-                except Exception as e:
-                    logger.error(f"[Bot] 影巢搜索回调处理失败: {e}")
-                    try:
-                        telegram_client.post_api(
-                            token,
-                            "editMessageReplyMarkup",
-                            json={"chat_id": cid, "message_id": mid, "reply_markup": {"inline_keyboard": []}},
-                            proxies=proxies,
-                            timeout=5,
-                        )
-                    except Exception: pass
+            if notification_bot_request_hdhive_search_callback_service.handle_request_hdhive_search_callback(
+                data,
+                cid,
+                cq_id,
+                mid,
+                token,
+                proxies,
+            ):
                 return
-            
+
             if notification_bot_request_approval_menu_callback_service.handle_request_approval_menu_callback(data, cid, mid, token, proxies):
                 return
 
