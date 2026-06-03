@@ -85,8 +85,8 @@ class FakeLogger:
 
 
 def _reset_request_state(monkeypatch):
-    from app.domains.notifications import user_bot_request_commands_service
-    from app.domains.notifications import user_bot_service
+    from app.bot.user_bot import user_bot_request_commands_service
+    from app.bot.user_bot import user_bot_service
 
     sent = []
     replies = []

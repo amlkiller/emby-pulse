@@ -965,7 +965,7 @@ def start_notification_services() -> None:
     bot.start()
 
     try:
-        from app.domains.notifications.user_bot_service import start_user_bot_services
+        from app.bot.user_bot.user_bot_service import start_user_bot_services
 
         start_user_bot_services()
     except Exception as e:
@@ -975,12 +975,12 @@ def start_notification_services() -> None:
 def stop_notification_services() -> None:
     bot.stop()
 
-    from app.domains.notifications.user_bot_service import user_bot
+    from app.bot.user_bot.user_bot_service import user_bot
 
     user_bot.stop()
 
 
 def is_user_bot_running() -> bool:
-    from app.domains.notifications.user_bot_service import user_bot
+    from app.bot.user_bot.user_bot_service import user_bot
 
     return user_bot.running

@@ -17,15 +17,15 @@ def test_risk_service_does_not_import_private_notification_user_bot_service():
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
             imported_names = {alias.name for alias in node.names}
-            if node.module == "app.domains.notifications.user_bot_service":
+            if node.module == "app.bot.user_bot.user_bot_service":
                 violations.append(f"{rel_path}:{node.lineno}")
-            if node.module == "app.domains.notifications" and (
+            if node.module == "app.bot.user_bot" and (
                 "user_bot_service" in imported_names or "*" in imported_names
             ):
                 violations.append(f"{rel_path}:{node.lineno}")
         elif isinstance(node, ast.Import):
             imported_modules = {alias.name for alias in node.names}
-            if "app.domains.notifications.user_bot_service" in imported_modules:
+            if "app.bot.user_bot.user_bot_service" in imported_modules:
                 violations.append(f"{rel_path}:{node.lineno}")
 
     assert violations == []

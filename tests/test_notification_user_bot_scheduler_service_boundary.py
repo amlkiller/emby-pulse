@@ -73,7 +73,7 @@ class FakeLogger:
 
 
 def test_scheduler_loop_preserves_lottery_draw_and_pk_expiry_via_legacy_providers(monkeypatch):
-    from app.domains.notifications import user_bot_scheduler_service, user_bot_service
+    from app.bot.user_bot import user_bot_scheduler_service, user_bot_service
 
     stop_event = FakeStopEvent()
     point_dao = FakePointDao()

@@ -220,7 +220,7 @@ def api_save_bot_settings(data: BotSettingsModel, request: Request):
     bot.stop()
     if data.enable_bot: threading.Timer(1.0, bot.start).start()
 
-    from app.domains.notifications.user_bot_service import user_bot
+    from app.bot.user_bot.user_bot_service import user_bot
     user_bot.stop()
     # 只有真正更新了 token 才重启用户机器人
     real_token = get_user_bot_token()
@@ -302,7 +302,7 @@ def api_send_open_reg_notify(request: Request, data: dict):
     # 发送到用户机器人私聊（所有启动过机器人的用户）
     if notify_user:
         try:
-            from app.domains.notifications.user_bot_service import _send, _get_all_bot_users
+            from app.bot.user_bot.user_bot_service import _send, _get_all_bot_users
             users = _get_all_bot_users()
             if users:
                 for u in users:
@@ -318,7 +318,7 @@ def api_send_open_reg_notify(request: Request, data: dict):
     # 发送到群聊（使用用户机器人）
     if notify_group:
         try:
-            from app.domains.notifications.user_bot_service import _send
+            from app.bot.user_bot.user_bot_service import _send
             allowed_groups = get_user_bot_allowed_groups()
             if allowed_groups:
                 group_ids = [g.strip() for g in allowed_groups.replace('，', ',').split('\n') if g.strip()]
@@ -600,7 +600,7 @@ async def api_add_user_blacklist(request: Request):
     tg_id = data.get("tg_user_id", "").strip()
     reason = data.get("reason", "管理员手动添加")
     if not tg_id: return {"status": "error", "message": "请输入 TG 用户 ID"}
-    from app.domains.notifications.user_bot_service import _add_to_blacklist
+    from app.bot.user_bot.user_bot_service import _add_to_blacklist
     _add_to_blacklist(tg_id, reason)
     return {"status": "success"}
 
@@ -659,7 +659,7 @@ async def api_reset_reg_batch(request: Request):
     set_user_bot_registration_batch_used(0)
     # 同步重置内存中的 batch_used，避免后台线程把旧值写回
     try:
-        from app.domains.notifications import user_bot_service
+        from app.bot.user_bot import user_bot_service
         with user_bot_service._batch_used_lock:
             user_bot_service._batch_used_mem = 0
             user_bot_service._batch_used_dirty = 0
@@ -672,7 +672,7 @@ async def api_reset_reg_batch(request: Request):
 async def api_get_reg_quota_status(request: Request):
     """获取名额状态（用于前端显示）"""
     if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    from app.domains.notifications import user_bot_service
+    from app.bot.user_bot import user_bot_service
 
     quota_mode = get_user_bot_reg_quota_mode()
     quota = get_user_bot_reg_quota()
@@ -810,7 +810,7 @@ def api_lottery_draw(request: Request):
     if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
     
     try:
-        from app.domains.notifications.user_bot_service import do_lottery_draw
+        from app.bot.user_bot.user_bot_service import do_lottery_draw
         do_lottery_draw()
 
         # 获取开奖结果

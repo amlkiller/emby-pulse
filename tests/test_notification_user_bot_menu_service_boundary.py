@@ -8,7 +8,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 
 def test_main_menu_keyboard_for_unbound_user_uses_legacy_wrapper(monkeypatch):
-    from app.domains.notifications import user_bot_service
+    from app.bot.user_bot import user_bot_service
 
     monkeypatch.setattr(user_bot_service, "get_user_bot_portal_url", lambda: "https://portal.example")
 
@@ -19,7 +19,7 @@ def test_main_menu_keyboard_for_unbound_user_uses_legacy_wrapper(monkeypatch):
 
 
 def test_main_menu_keyboard_for_bound_user_without_portal_url(monkeypatch):
-    from app.domains.notifications import user_bot_service
+    from app.bot.user_bot import user_bot_service
 
     monkeypatch.setattr(user_bot_service, "get_user_bot_portal_url", lambda: "")
 
@@ -35,7 +35,7 @@ def test_main_menu_keyboard_for_bound_user_without_portal_url(monkeypatch):
 
 
 def test_main_menu_keyboard_for_bound_user_uses_patched_legacy_portal_url(monkeypatch):
-    from app.domains.notifications import user_bot_service
+    from app.bot.user_bot import user_bot_service
 
     monkeypatch.setattr(user_bot_service, "get_user_bot_portal_url", lambda: "https://portal.example")
 

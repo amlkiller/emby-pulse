@@ -1,7 +1,7 @@
 import logging
 
 from app.core.security_utils import safe_error_message
-from app.domains.notifications import user_bot_binding_service
+from app.bot.user_bot import user_bot_binding_service
 from app.infra.clients.media_server_client import media_api
 from app.infra.config.user_bot_settings import is_user_bot_open_reg_enabled
 

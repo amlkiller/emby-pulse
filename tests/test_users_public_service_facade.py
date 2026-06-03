@@ -1472,7 +1472,7 @@ def test_selected_external_callers_use_real_user_dao_for_persistence_calls():
         _REPO_ROOT / "app/plugins/keep_alive/plugin.py",
         _REPO_ROOT / "app/plugins/user_backup/user_backup_dao.py",
         _REPO_ROOT / "app/domains/media_requests/router.py",
-        _REPO_ROOT / "app/domains/notifications/user_bot_service.py",
+        _REPO_ROOT / "app/bot/user_bot/user_bot_service.py",
         _REPO_ROOT / "app/domains/system/views.py",
     ]
     violations = []

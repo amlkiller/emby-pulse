@@ -42,7 +42,7 @@ class FakeSemaphore:
 
 
 def _reset_registration_queue_state(monkeypatch):
-    from app.domains.notifications import user_bot_service
+    from app.bot.user_bot import user_bot_service
 
     monkeypatch.setattr(user_bot_service, "_active_tasks_lock", threading.RLock())
     monkeypatch.setattr(user_bot_service, "_waiting_count_lock", threading.RLock())

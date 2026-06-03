@@ -940,7 +940,7 @@ def _send_bot_notify_for_user_message(user_id: str, username: str, content: str,
 def _send_bot_reply_to_user(user_id: str, content: str, admin_name: str = "管理员"):
     """管理员通过机器人回复用户"""
     try:
-        from app.domains.notifications.user_bot_service import user_bot
+        from app.bot.user_bot.user_bot_service import user_bot
         
         # 检查用户机器人是否启用
         if not is_user_bot_configured():

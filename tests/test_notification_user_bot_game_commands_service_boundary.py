@@ -96,7 +96,7 @@ class FakeLogger:
 
 
 def _reset_game_state(monkeypatch):
-    from app.domains.notifications import user_bot_service
+    from app.bot.user_bot import user_bot_service
 
     sent = []
     deleted = []

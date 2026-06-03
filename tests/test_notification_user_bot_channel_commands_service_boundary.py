@@ -16,7 +16,7 @@ class FakeLogger:
 
 
 def _reset_channel_command_state(monkeypatch):
-    from app.domains.notifications import user_bot_service
+    from app.bot.user_bot import user_bot_service
 
     sent = []
     bind_calls = []

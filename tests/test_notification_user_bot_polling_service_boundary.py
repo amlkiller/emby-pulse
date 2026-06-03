@@ -53,7 +53,7 @@ class FakeLogger:
 
 
 def test_polling_loop_preserves_update_submit_offset_and_busy_message_via_legacy_providers(monkeypatch):
-    from app.domains.notifications import user_bot_polling_service, user_bot_service
+    from app.bot.user_bot import user_bot_polling_service, user_bot_service
 
     updates = [
         {"update_id": 10, "message": {"chat": {"id": 123}, "text": "/start"}},
@@ -109,7 +109,7 @@ def test_polling_loop_preserves_update_submit_offset_and_busy_message_via_legacy
 
 
 def test_polling_loop_preserves_retry_waits_for_non_200_and_exceptions(monkeypatch):
-    from app.domains.notifications import user_bot_polling_service, user_bot_service
+    from app.bot.user_bot import user_bot_polling_service, user_bot_service
 
     logger = FakeLogger()
     stop_event = FakeStopEvent()

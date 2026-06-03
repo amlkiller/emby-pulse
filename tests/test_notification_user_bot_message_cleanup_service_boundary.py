@@ -40,7 +40,7 @@ class FakeTelegramClient:
 
 
 def _reset_message_cleanup_state(monkeypatch, thread_cls=FakeThread):
-    from app.domains.notifications import user_bot_service
+    from app.bot.user_bot import user_bot_service
 
     FakeThread.instances = []
     monkeypatch.setattr(user_bot_service, "threading", SimpleNamespace(Thread=thread_cls))

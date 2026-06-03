@@ -8,7 +8,7 @@ def _get_bot():
 
 
 def _get_user_bot_service():
-    from app.domains.notifications import user_bot_service
+    from app.bot.user_bot import user_bot_service
 
     return user_bot_service
 

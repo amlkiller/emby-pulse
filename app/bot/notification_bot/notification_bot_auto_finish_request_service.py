@@ -13,7 +13,7 @@ def _default_get_notify_rule(rule_type):
 
 
 def _default_user_bot_send():
-    from app.domains.notifications.user_bot_service import _send, _tg_api
+    from app.bot.user_bot.user_bot_service import _send, _tg_api
 
     return _send
 

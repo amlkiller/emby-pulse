@@ -17,7 +17,7 @@ def _callback(data):
 
 
 def _reset_dispatcher_state(monkeypatch, binding=None):
-    from app.domains.notifications import user_bot_service
+    from app.bot.user_bot import user_bot_service
 
     tg_calls = []
     edits = []
@@ -43,7 +43,7 @@ def _reset_dispatcher_state(monkeypatch, binding=None):
 
 
 def test_callback_dispatcher_preserves_unbound_back_menu_and_state_clear(monkeypatch):
-    from app.domains.notifications import user_bot_callback_dispatcher_service
+    from app.bot.user_bot import user_bot_callback_dispatcher_service
 
     _user_bot_service, tg_calls, edits, sent, command_calls, user_state = _reset_dispatcher_state(monkeypatch)
 
@@ -62,7 +62,7 @@ def test_callback_dispatcher_preserves_unbound_back_menu_and_state_clear(monkeyp
 
 
 def test_callback_dispatcher_preserves_bound_checkin_button(monkeypatch):
-    from app.domains.notifications import user_bot_callback_dispatcher_service
+    from app.bot.user_bot import user_bot_callback_dispatcher_service
 
     binding = {"emby_user_id": "u1", "emby_username": "Alice"}
     _user_bot_service, tg_calls, edits, sent, command_calls, _user_state = _reset_dispatcher_state(monkeypatch, binding=binding)
@@ -76,7 +76,7 @@ def test_callback_dispatcher_preserves_bound_checkin_button(monkeypatch):
 
 
 def test_callback_dispatcher_preserves_pattern_callbacks(monkeypatch):
-    from app.domains.notifications import user_bot_callback_dispatcher_service
+    from app.bot.user_bot import user_bot_callback_dispatcher_service
 
     binding = {"emby_user_id": "u1", "emby_username": "Alice"}
     _user_bot_service, tg_calls, _edits, sent, command_calls, _user_state = _reset_dispatcher_state(monkeypatch, binding=binding)

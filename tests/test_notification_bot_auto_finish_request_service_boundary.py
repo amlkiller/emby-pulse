@@ -63,7 +63,7 @@ def _patch_dependencies(monkeypatch, *, rule=None):
 
 
 def _patch_sender(monkeypatch, calls, error=None):
-    from app.domains.notifications import user_bot_service
+    from app.bot.user_bot import user_bot_service
 
     def fake_send(chat_id, message):
         calls.append((chat_id, message))

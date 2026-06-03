@@ -51,7 +51,7 @@ class FakeLogger:
 
 
 def _reset_password_command_state(monkeypatch):
-    from app.domains.notifications import user_bot_service
+    from app.bot.user_bot import user_bot_service
 
     sent = []
     unbound = []

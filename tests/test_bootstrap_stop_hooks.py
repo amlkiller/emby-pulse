@@ -318,7 +318,7 @@ def test_notification_bot_event_subscriptions_are_reversible(monkeypatch):
 def test_user_bot_worker_threads_stop_and_restart(monkeypatch):
     import inspect
 
-    from app.domains.notifications import user_bot_service
+    from app.bot.user_bot import user_bot_service
 
     monkeypatch.setattr(user_bot_service, "_is_pro", lambda: True)
     monkeypatch.setattr(user_bot_service, "get_user_bot_token", lambda: "token")
@@ -387,7 +387,7 @@ def test_user_bot_worker_threads_stop_and_restart(monkeypatch):
     assert user_bot.scheduler_thread is FakeThread.instances[4]
     assert user_bot_service._batch_flush_thread is FakeThread.instances[5]
 
-    from app.domains.notifications import user_bot_polling_service, user_bot_scheduler_service
+    from app.bot.user_bot import user_bot_polling_service, user_bot_scheduler_service
 
     polling_source = inspect.getsource(user_bot_polling_service.run_polling_loop)
     polling_wrapper_source = inspect.getsource(user_bot_service.UserBot._polling_loop)
