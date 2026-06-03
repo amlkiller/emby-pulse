@@ -39,6 +39,7 @@ from app.domains.notifications import notification_bot_playback_command_service
 from app.domains.notifications import notification_bot_plugin_callback_service
 from app.domains.notifications import notification_bot_polling_service
 from app.domains.notifications import notification_bot_request_admin_message_sync_service
+from app.domains.notifications import notification_bot_request_approval_action_callback_service
 from app.domains.notifications import notification_bot_request_approval_menu_callback_service
 from app.domains.notifications import notification_bot_risk_alert_service
 from app.domains.notifications import notification_bot_risk_ban_callback_service
@@ -370,6 +371,16 @@ notification_bot_request_approval_menu_callback_service.set_dependency_providers
     telegram_client_provider=lambda: telegram_client,
     pulse_url_provider=lambda: get_pulse_url,
     get_plugin_provider=lambda: get_plugin,
+)
+
+notification_bot_request_approval_action_callback_service.set_dependency_providers(
+    media_request_dao_provider=lambda: media_request_dao,
+    moviepilot_client_provider=lambda: moviepilot_client,
+    moviepilot_url_provider=lambda: get_moviepilot_url,
+    moviepilot_token_provider=lambda: get_moviepilot_token,
+    telegram_client_provider=lambda: telegram_client,
+    record_request_admin_message_provider=lambda: _record_request_admin_message,
+    sync_request_admin_messages_provider=lambda: _sync_request_admin_messages,
 )
 
 def _submit_bot_task(fn, *args):
@@ -908,47 +919,8 @@ class NotificationBot:
             if notification_bot_request_approval_menu_callback_service.handle_request_approval_menu_callback(data, cid, mid, token, proxies):
                 return
 
-            tid = parts[2]; reject_reason = None
-            if action == "reject" and len(parts) > 2 and parts[2] == "do":
-                tid = parts[3]; r_idx = int(parts[4])
-                reasons = ["影片未上映", "剧集未开播", "未找到可用资源", "质量太差等待洗版"]
-                reject_reason = reasons[r_idx]; action_db = "reject"
-            else:
-                action_db = action
-
-            rows = media_request_dao.list_pending_requests_by_tmdb(tid)
-            if not rows:
-                try: telegram_client.post_api(token, "editMessageReplyMarkup", json={"chat_id": cid, "message_id": mid, "reply_markup": {"inline_keyboard": []}}, proxies=proxies, timeout=5)
-                except Exception: pass
+            if notification_bot_request_approval_action_callback_service.handle_request_approval_action_callback(data, cq, cid, mid, token, proxies):
                 return
-                
-            if action_db == "approve":
-                mp_url = get_moviepilot_url(); mp_token = get_moviepilot_token()
-                for r in rows:
-                    if mp_url and mp_token:
-                        payload = { "name": r["title"], "tmdbid": int(tid), "year": str(r["year"]), "type": "电影" if r["media_type"]=="movie" else "电视剧" }
-                        if r["media_type"] == "tv": payload["season"] = r['season']
-                        try: moviepilot_client.subscribe(mp_url, mp_token, payload, timeout=10)
-                        except Exception: pass
-                    media_request_dao.update_media_request_status(tid, r['season'], 1)
-                action_text = "✅ 已审批：推送 MP 自动下载"
-            elif action_db == "manual":
-                for r in rows: media_request_dao.update_media_request_status(tid, r['season'], 4)
-                action_text = "✅ 已审批：管理员手动接单"
-            elif action_db == "reject":
-                for r in rows: media_request_dao.update_media_request_status(tid, r['season'], 3, reject_reason)
-                action_text = f"❌ 已拒绝 ({reject_reason})"
-                
-            msg_obj = cq["message"]
-            operator = cq.get('from', {}).get('first_name', 'Admin')
-            if "caption" in msg_obj:
-                orig_caption = msg_obj.get("caption", "求片请求")
-                _record_request_admin_message(tid, cid, mid, True, orig_caption)
-                _sync_request_admin_messages(tid, action_text, operator, token, proxies, orig_caption, True)
-            else:
-                orig_text = msg_obj.get("text", "求片请求")
-                _record_request_admin_message(tid, cid, mid, False, orig_text)
-                _sync_request_admin_messages(tid, action_text, operator, token, proxies, orig_text, False)
 
     def _set_commands(self):
         return notification_bot_command_registration_service.set_commands()
