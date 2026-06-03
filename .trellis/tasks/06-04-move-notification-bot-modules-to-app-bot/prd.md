@@ -2,12 +2,13 @@
 
 ## Goal
 
-Move `app/domains/notifications/bot.py` and `app/domains/notifications/bot_admin_dao.py` into the top-level `app/bot/` package and update Python imports so the application continues to load the same bot admin API and DAO behavior from the new package location.
+Move bot implementation modules out of `app/domains/notifications/` into the top-level `app/bot/` package and update Python imports so the application continues to load the same bot admin API, DAO behavior, and Telegram user bot behavior from the new package locations.
 
 ## Requirements
 
 * Move `bot.py` to `app/bot/bot.py`.
 * Move `bot_admin_dao.py` to `app/bot/bot_admin_dao.py`.
+* Move `user_bot_*.py` modules to `app/bot/user_bot/`.
 * Update all imports that reference the old `app.domains.notifications` module paths.
 * Preserve existing runtime behavior and public route definitions.
 * Do not refactor unrelated notification modules.
@@ -17,7 +18,10 @@ Move `app/domains/notifications/bot.py` and `app/domains/notifications/bot_admin
 * [x] `app/domains/notifications/bot.py` no longer exists.
 * [x] `app/domains/notifications/bot_admin_dao.py` no longer exists.
 * [x] New files exist under `app/bot/`.
+* [x] `app/domains/notifications/user_bot_*.py` no longer exists.
+* [x] User bot files exist under `app/bot/user_bot/`.
 * [x] No source import references remain for `app.domains.notifications.bot` or `app.domains.notifications.bot_admin_dao`.
+* [x] No source import references remain for `app.domains.notifications.user_bot_*`.
 * [x] Project import/type validation passes through the repo's configured Python command.
 
 ## Definition of Done
@@ -28,20 +32,19 @@ Move `app/domains/notifications/bot.py` and `app/domains/notifications/bot_admin
 
 ## Technical Approach
 
-Use a direct package move: preserve file contents, update intra-module imports from the old domain path to `app.bot`, then run search and Python validation to catch missed references.
+Use direct package moves: preserve file contents, update intra-module imports from the old domain path to `app.bot` / `app.bot.user_bot`, then run search and Python validation to catch missed references.
 
 ## Decision (ADR-lite)
 
-**Context**: The repo already has an `app/bot/` package containing bot-related services, while these two modules still live under `app/domains/notifications/`.
+**Context**: The repo already has an `app/bot/` package containing bot-related services, while bot admin and Telegram user bot implementation modules still lived under `app/domains/notifications/`.
 
-**Decision**: Move the two requested modules to `app/bot/` root rather than into `app/bot/notification_bot/`, matching the user's requested target path.
+**Decision**: Move the admin bot modules to `app/bot/` root and move Telegram user bot modules to `app/bot/user_bot/`, matching the user's requested target path.
 
-**Consequences**: Existing code should import admin bot API/DAO modules from `app.bot`. Notification-domain services remain untouched unless they directly reference the moved modules.
+**Consequences**: Existing code should import admin bot API/DAO modules from `app.bot` and Telegram user bot modules from `app.bot.user_bot`. Notification-domain services remain untouched unless they directly reference the moved modules.
 
 ## Out of Scope
 
 * Renaming functions, routes, services, or database tables.
-* Moving the larger `user_bot_*` notification-domain services.
 * Reorganizing `app/bot/notification_bot/`.
 
 ## Technical Notes
