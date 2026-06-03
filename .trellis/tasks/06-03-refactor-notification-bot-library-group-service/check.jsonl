@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend guideline index for quality review."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Project verification commands and quality expectations."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Ensure extracted service preserves existing per-group exception logging boundary behavior."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Confirm the new module follows existing extracted service patterns without unnecessary abstraction."}
