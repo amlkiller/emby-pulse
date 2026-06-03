@@ -37,6 +37,11 @@ from app.domains.playback.recent_added_router import (
     router as recent_added_router,
     set_dependency_providers as set_recent_added_dependency_providers,
 )
+from app.domains.playback.recent_activity_router import (
+    api_recent_activity,
+    router as recent_activity_router,
+    set_dependency_providers as set_recent_activity_dependency_providers,
+)
 from app.domains.playback.top_users_router import (
     api_top_users_list,
     router as top_users_router,
@@ -172,6 +177,14 @@ set_recent_added_dependency_providers(
     get_added_stats_sync_provider=lambda: _get_added_stats_sync,
 )
 
+set_recent_activity_dependency_providers(
+    check_login_provider=lambda: check_login,
+    build_stats_base_filter_provider=lambda: build_stats_base_filter,
+    playback_store_provider=lambda: playback_store,
+    get_user_map_local_provider=lambda: get_user_map_local,
+    media_api_provider=lambda: media_api,
+)
+
 
 @router.get("/api/stats/dashboard")
 def api_dashboard(request: Request, user_id: Optional[str] = None):
@@ -221,58 +234,7 @@ def api_dashboard(request: Request, user_id: Optional[str] = None):
 
 router.include_router(libraries_router)
 
-@router.get("/api/stats/recent")
-def api_recent_activity(request: Request, user_id: Optional[str] = None):
-    # 🔒 安全检查
-    if not check_login(request):
-        return {"status": "error", "message": "请先登录"}
-
-    # 🔒 权限检查：普通用户只能查看自己的数据
-    admin_user = request.session.get("user", {})
-    req_user = request.session.get("req_user", {})
-    is_admin = admin_user.get("auth_type") == "emby" or admin_user.get("role") == "admin"
-
-    if not is_admin:
-        if req_user:
-            user_id = req_user.get("Id")
-        elif admin_user:
-            user_id = admin_user.get("id")
-
-    try:
-        where, params = build_stats_base_filter(user_id)
-        results = playback_store.query(f"SELECT DateCreated, UserId, ItemId, ItemName, ItemType FROM PlaybackActivity {where} ORDER BY DateCreated DESC LIMIT 50", params)
-        if not results: return {"status": "success", "data": []}
-        user_map = get_user_map_local()
-        
-        # 🔥 批量获取 ImageTag（减少 API 调用）
-        item_ids = [row['ItemId'] for row in results]
-        image_tags = {}
-        if item_ids:
-            try:
-                # 批量查询 Emby 获取 ImageTags
-                res = media_api.get("/Items", params={
-                    "Ids": ",".join(item_ids[:50]),  # 最多50个
-                    "Fields": "ImageTags"
-                }, timeout=5)
-                if res.status_code == 200:
-                    for item in res.json().get("Items", []):
-                        tag = item.get("ImageTags", {}).get("Primary", "")
-                        if tag:
-                            image_tags[item.get("Id")] = tag[:8]
-            except:
-                pass
-        
-        data = []
-        for row in results:
-            item = dict(row)
-            item['UserName'] = user_map.get(item['UserId'], "User")
-            item['DisplayName'] = item.get('ItemName') or '未知记录'
-            item['ImageTag'] = image_tags.get(item['ItemId'], "")  # 🔥 添加 ImageTag
-            if not is_admin:
-                item.pop('UserId', None)  # 🔒 非管理员不暴露原始 UserId
-            data.append(item)
-        return {"status": "success", "data": data}
-    except: return {"status": "error", "data": []}
+router.include_router(recent_activity_router)
 
 router.include_router(latest_router)
 

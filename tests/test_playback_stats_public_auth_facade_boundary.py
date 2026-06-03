@@ -55,6 +55,134 @@ def test_playback_stats_includes_libraries_child_route_and_compat_export():
     assert dashboard_index < libraries_index < recent_index
 
 
+def test_playback_stats_includes_recent_activity_child_route_and_compat_export():
+    from app.domains.playback import recent_activity_router
+    from app.domains.playback import stats
+
+    routes = [
+        (route.path, route.methods)
+        for route in stats.router.routes
+        if hasattr(route, "methods")
+    ]
+
+    assert any(path == "/api/stats/recent" and "GET" in methods for path, methods in routes)
+    assert stats.api_recent_activity is recent_activity_router.api_recent_activity
+
+    libraries_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/libraries" and "GET" in methods
+    )
+    recent_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/recent" and "GET" in methods
+    )
+    latest_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/latest" and "GET" in methods
+    )
+    assert libraries_index < recent_index < latest_index
+
+
+def test_recent_activity_denies_unauthenticated_before_query_or_media_side_effects(monkeypatch):
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"Id": "u1"}})
+    calls = []
+
+    def fake_check_login(seen_request):
+        calls.append(seen_request)
+        return False
+
+    def fail_build_stats_base_filter(*args, **kwargs):
+        raise AssertionError("recent activity should not build stats filter without login")
+
+    def fail_query(*args, **kwargs):
+        raise AssertionError("recent activity should not query playback stats without login")
+
+    def fail_media_get(*args, **kwargs):
+        raise AssertionError("recent activity should not fetch media tags without login")
+
+    monkeypatch.setattr(stats, "check_login", fake_check_login)
+    monkeypatch.setattr(stats, "build_stats_base_filter", fail_build_stats_base_filter)
+    monkeypatch.setattr(stats.playback_store, "query", fail_query)
+    monkeypatch.setattr(stats.media_api, "get", fail_media_get)
+
+    response = stats.api_recent_activity(request)
+
+    assert response == {"status": "error", "message": "请先登录"}
+    assert calls == [request]
+
+
+def test_recent_activity_allows_non_admin_through_stats_monkeypatches(monkeypatch):
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"id": "local-u"}})
+    calls = []
+
+    def fake_check_login(seen_request):
+        calls.append(("check_login", seen_request))
+        return True
+
+    def fake_build_stats_base_filter(user_id):
+        calls.append(("build_stats_base_filter", user_id))
+        return "WHERE UserId = ?", [user_id]
+
+    def fake_query(sql, params):
+        normalized_sql = " ".join(sql.split())
+        calls.append(("query", normalized_sql, list(params)))
+        return [
+            {
+                "DateCreated": "2026-06-03T12:00:00",
+                "UserId": "local-u",
+                "ItemId": "item-1",
+                "ItemName": "",
+                "ItemType": "Movie",
+            }
+        ]
+
+    def fake_get_user_map_local():
+        calls.append(("get_user_map_local",))
+        return {"local-u": "Local User"}
+
+    def fake_media_get(path, params=None, timeout=None):
+        calls.append(("media_get", path, dict(params or {}), timeout))
+        return SimpleNamespace(
+            status_code=200,
+            json=lambda: {"Items": [{"Id": "item-1", "ImageTags": {"Primary": "abcdef123456"}}]},
+        )
+
+    monkeypatch.setattr(stats, "check_login", fake_check_login)
+    monkeypatch.setattr(stats, "build_stats_base_filter", fake_build_stats_base_filter)
+    monkeypatch.setattr(stats.playback_store, "query", fake_query)
+    monkeypatch.setattr(stats, "get_user_map_local", fake_get_user_map_local)
+    monkeypatch.setattr(stats.media_api, "get", fake_media_get)
+
+    response = stats.api_recent_activity(request, user_id="all")
+
+    assert response == {
+        "status": "success",
+        "data": [
+            {
+                "DateCreated": "2026-06-03T12:00:00",
+                "ItemId": "item-1",
+                "ItemName": "",
+                "ItemType": "Movie",
+                "UserName": "Local User",
+                "DisplayName": "未知记录",
+                "ImageTag": "abcdef12",
+            }
+        ],
+    }
+    assert calls == [
+        ("check_login", request),
+        ("build_stats_base_filter", "local-u"),
+        (
+            "query",
+            "SELECT DateCreated, UserId, ItemId, ItemName, ItemType FROM PlaybackActivity WHERE UserId = ? ORDER BY DateCreated DESC LIMIT 50",
+            ["local-u"],
+        ),
+        ("get_user_map_local",),
+        ("media_get", "/Items", {"Ids": "item-1", "Fields": "ImageTags"}, 5),
+    ]
+
+
 def test_playback_stats_includes_latest_child_route_and_compat_export():
     from app.domains.playback import latest_router
     from app.domains.playback import stats
