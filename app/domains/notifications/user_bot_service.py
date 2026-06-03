@@ -17,6 +17,7 @@ from app.domains.points import point_dao
 from app.domains.system import invitation_dao
 from app.domains.users import user_dao
 from app.domains.users import user_bot_dao
+from app.domains.notifications import user_bot_binding_service
 from app.domains.playback import stats_queries
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
 from app.infra.clients.media_server_client import media_api
@@ -137,6 +138,21 @@ _batch_used_mem = None              # 懒初始化，None 表示未加载
 _batch_used_dirty = 0               # 距上次 flush 的累计增量
 _batch_flush_stop = threading.Event()
 _batch_flush_thread = None
+
+user_bot_binding_service.set_dependency_providers(
+    user_bot_dao_provider=lambda: user_bot_dao,
+    media_api_provider=lambda: media_api,
+    logger_provider=lambda: logger,
+    time_provider=lambda: time,
+    binding_cache_provider=lambda: _binding_cache,
+    blacklist_cache_provider=lambda: _blacklist_cache,
+    emby_account_cache_provider=lambda: _emby_account_cache,
+    cache_lock_provider=lambda: _cache_lock,
+    binding_cache_ttl_provider=lambda: _BINDING_CACHE_TTL,
+    blacklist_cache_ttl_provider=lambda: _BLACKLIST_CACHE_TTL,
+    emby_account_cache_ttl_provider=lambda: _EMBY_ACCOUNT_CACHE_TTL,
+    get_binding_provider=lambda: _get_binding,
+)
 
 
 def _submit_task(func, *args, **kwargs):
@@ -522,126 +538,50 @@ def _send_open_reg_closed_notify(reason=""):
 
 
 def _unbind_user(tg_user_id):
-    try:
-        user_bot_dao.delete_user_binding(tg_user_id)
-        # 清除缓存（加锁）
-        with _cache_lock:
-            _binding_cache.pop(str(tg_user_id), None)
-    except:
-        pass
+    return user_bot_binding_service.unbind_user(tg_user_id)
 
 
 def _get_binding_by_emby_id(emby_user_id):
-    """通过 emby_user_id 获取绑定关系"""
-    try:
-        emby_id_str = str(emby_user_id).strip()
-        binding = user_bot_dao.get_binding_by_emby_id(emby_id_str)
-        if binding:
-            return binding
-        logger.warning(f"[绑定] 未找到 emby_user_id={emby_id_str} 的 TG 绑定")
-        return None
-    except Exception as e:
-        logger.error(f"[绑定] 查询 emby_user_id={emby_user_id} 失败: {e}")
-        return None
+    return user_bot_binding_service.get_binding_by_emby_id(emby_user_id)
 
 
 def _get_binding(tg_user_id):
-    """获取绑定关系（带缓存，线程安全）"""
-    cache_key = str(tg_user_id)
-    
-    # 检查缓存（加锁读取）
-    with _cache_lock:
-        cached = _binding_cache.get(cache_key)
-        if cached and (time.time() - cached["cached_at"] < _BINDING_CACHE_TTL):
-            return cached["binding"]
-    
-    # 缓存未命中，查询数据库
-    try:
-        result = user_bot_dao.get_binding(cache_key)
-        
-        # 更新缓存（加锁写入）
-        with _cache_lock:
-            _binding_cache[cache_key] = {"binding": result, "cached_at": time.time()}
-        return result
-    except:
-        return None
+    return user_bot_binding_service.get_binding(tg_user_id)
 
 
 def _get_channel_binding(channel_id):
-    """获取频道绑定关系（频道ID -> 用户ID -> Emby账号）"""
-    try:
-        row = user_bot_dao.get_channel_binding(channel_id)
-        if row:
-            tg_user_id = row["tg_user_id"]
-            channel_title = row["channel_title"]
-            # 获取该用户的绑定
-            user_binding = _get_binding(tg_user_id)
-            if user_binding:
-                return {**user_binding, "channel_title": channel_title, "bound_tg_user_id": tg_user_id}
-        return None
-    except:
-        return None
+    return user_bot_binding_service.get_channel_binding(channel_id)
 
 
 def _bind_channel(channel_id, tg_user_id, channel_title=""):
-    """绑定频道到用户"""
-    try:
-        user_bot_dao.bind_channel(channel_id, tg_user_id, channel_title)
-        return True
-    except Exception as e:
-        logger.error(f"绑定频道失败: {e}")
-        return False
+    return user_bot_binding_service.bind_channel(channel_id, tg_user_id, channel_title)
 
 
 def _unbind_channel(channel_id):
-    """解绑频道"""
-    try:
-        user_bot_dao.unbind_channel(channel_id)
-        return True
-    except:
-        return False
+    return user_bot_binding_service.unbind_channel(channel_id)
 
 
 def _get_all_bindings():
-    """获取所有绑定关系"""
-    try:
-        return user_bot_dao.list_bindings()
-    except:
-        return []
+    return user_bot_binding_service.get_all_bindings()
 
 
 def _record_bot_user(tg_user_id, tg_name=""):
-    """记录/更新机器人用户（所有 /start 过的用户）"""
-    try:
-        user_bot_dao.record_bot_user(tg_user_id, tg_name)
-    except Exception as e:
-        logger.error(f"记录机器人用户失败: {e}")
+    return user_bot_binding_service.record_bot_user(tg_user_id, tg_name)
 
 
 def _get_all_bot_users():
-    """获取所有启动过机器人的用户"""
-    try:
-        return user_bot_dao.list_bot_users()
-    except:
-        return []
+    return user_bot_binding_service.get_all_bot_users()
 
 
 def _bind_user(tg_user_id, emby_user_id, emby_username, init_password="", tg_username="", tg_display_name=""):
-    """
-    绑定 TG 用户与 Emby 账号
-    - 确保一个 Emby 账号只能被一个 TG 用户绑定
-    - 绑定前会清理该 Emby 账号的旧绑定关系
-    """
-    try:
-        user_bot_dao.bind_user(tg_user_id, emby_user_id, emby_username, init_password, tg_username, tg_display_name)
-        # 更新缓存（加锁）
-        with _cache_lock:
-            _binding_cache[str(tg_user_id)] = {
-                "binding": {"emby_user_id": emby_user_id, "emby_username": emby_username, "init_password": init_password},
-                "cached_at": time.time()
-            }
-    except:
-        pass
+    return user_bot_binding_service.bind_user(
+        tg_user_id,
+        emby_user_id,
+        emby_username,
+        init_password,
+        tg_username,
+        tg_display_name,
+    )
 
 
 def _rate_check(tg_user_id, cooldown=3):
@@ -653,51 +593,15 @@ def _rate_check(tg_user_id, cooldown=3):
 
 
 def _is_blacklisted(tg_user_id):
-    """检查是否在黑名单（带缓存，线程安全）"""
-    cache_key = str(tg_user_id)
-    
-    with _cache_lock:
-        cached = _blacklist_cache.get(cache_key)
-        if cached and (time.time() - cached["cached_at"] < _BLACKLIST_CACHE_TTL):
-            return cached["blacklisted"]
-    
-    try:
-        result = user_bot_dao.is_blacklisted(cache_key)
-        with _cache_lock:
-            _blacklist_cache[cache_key] = {"blacklisted": result, "cached_at": time.time()}
-        return result
-    except:
-        return False
+    return user_bot_binding_service.is_blacklisted(tg_user_id)
 
 
 def _add_to_blacklist(tg_user_id, reason=""):
-    try:
-        user_bot_dao.add_to_blacklist(tg_user_id, reason)
-    except Exception: pass
+    return user_bot_binding_service.add_to_blacklist(tg_user_id, reason)
 
 
 def _check_emby_account(binding):
-    """检查绑定的 Emby 账号是否还存在（带缓存，线程安全）"""
-    if not binding:
-        return False
-    
-    user_id = binding['emby_user_id']
-    
-    # 检查缓存
-    with _cache_lock:
-        cached = _emby_account_cache.get(user_id)
-        if cached and (time.time() - cached["cached_at"] < _EMBY_ACCOUNT_CACHE_TTL):
-            return cached["exists"]
-    
-    try:
-        res = media_api.get(f"/Users/{user_id}", timeout=5)
-        exists = res.status_code == 200
-        # 更新缓存
-        with _cache_lock:
-            _emby_account_cache[user_id] = {"exists": exists, "cached_at": time.time()}
-        return exists
-    except:
-        return True  # 网络异常时不误判，返回 True 表示账号可能还在
+    return user_bot_binding_service.check_emby_account(binding)
 
 
 def _get_username_lock(username_lower):
