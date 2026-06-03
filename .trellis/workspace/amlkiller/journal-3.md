@@ -1127,3 +1127,36 @@ Extracted the playback stats dashboard endpoint into app/domains/playback/dashbo
 ### Next Steps
 
 - None - task complete
+
+
+## Session 154: Refactor playback stats preload status router
+
+**Date**: 2026-06-03
+**Task**: Refactor playback stats preload status router
+**Branch**: `main`
+
+### Summary
+
+Extracted the playback stats preload_status endpoint into app/domains/playback/preload_status_router.py, included the child router from playback/stats.py at the original route position before dashboard init, preserved playback.stats compatibility export and runtime monkeypatch behavior for user_service, dashboard cache entry, preload key, cache TTL, and time dependencies, and verified compile checks, route/import compatibility, git diff checks, focused boundary tests, and the full pytest suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `bc1464a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
