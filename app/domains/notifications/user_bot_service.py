@@ -18,6 +18,7 @@ from app.domains.users import user_dao
 from app.domains.users import user_bot_dao
 from app.domains.notifications import user_bot_basic_commands_service
 from app.domains.notifications import user_bot_binding_service
+from app.domains.notifications import user_bot_code_commands_service
 from app.domains.notifications import user_bot_concurrency_service
 from app.domains.notifications import user_bot_menu_service
 from app.domains.notifications import user_bot_message_cleanup_service
@@ -294,6 +295,18 @@ user_bot_basic_commands_service.set_dependency_providers(
     main_menu_keyboard_provider=lambda: _main_menu_keyboard,
     media_api_provider=lambda: media_api,
     open_reg_enabled_provider=lambda: is_user_bot_open_reg_enabled(),
+    user_state_provider=lambda: _user_state,
+    safe_error_message_provider=lambda: safe_error_message,
+    logger_provider=lambda: logger,
+)
+
+user_bot_code_commands_service.set_dependency_providers(
+    clear_restriction_cache_provider=lambda: _clear_restriction_cache,
+    check_user_restrictions_provider=lambda: _check_user_restrictions,
+    format_restriction_message_provider=lambda: _format_restriction_message,
+    send_provider=lambda: _send,
+    get_binding_provider=lambda: _get_binding,
+    invitation_dao_provider=lambda: invitation_dao,
     user_state_provider=lambda: _user_state,
     safe_error_message_provider=lambda: safe_error_message,
     logger_provider=lambda: logger,
@@ -703,57 +716,15 @@ def _do_register(chat_id, tg_user_id, custom_name, tg_username="", tg_display_na
 
 
 def cmd_check(chat_id, tg_user_id):
-    """检查使用限制状态"""
-    # 清除缓存，强制重新检查
-    _clear_restriction_cache(tg_user_id)
-    
-    restriction_check = _check_user_restrictions(tg_user_id)
-    
-    if restriction_check["passed"]:
-        _send(chat_id, "✅ <b>验证通过</b>\n\n你已经满足使用条件，可以正常使用机器人功能。")
-    else:
-        _send(chat_id, _format_restriction_message(restriction_check))
+    return user_bot_code_commands_service.cmd_check(chat_id, tg_user_id)
 
 
 def cmd_code(chat_id, tg_user_id, args):
-    if not args:
-        _send(chat_id, "❌ 请输入注册码：/code 你的注册码")
-        return
-    code = args.strip()
-    if _get_binding(tg_user_id):
-        _send(chat_id, "❌ 你已经绑定了账号，如需续期请使用 /renew 续期码")
-        return
-
-    try:
-        # 🔥 只查询注册码（type = 'register' 或 type 为空），不能使用续期码注册
-        row = invitation_dao.get_available_registration_invitation(code)
-        if not row:
-            _send(chat_id, "❌ 注册码无效、已被使用或不是注册码")
-            return
-        days, used, max_uses, tpl_id, routes, route_mode = (
-            row["days"], row["used_count"], row["max_uses"], row["template_user_id"], row["routes"], row["route_mode"]
-        )
-        if used >= max_uses:
-            _send(chat_id, "❌ 该注册码已达使用上限")
-            return
-
-        # 验证注册码有效，进入等待用户输入用户名状态
-        _user_state[str(tg_user_id)] = {"action": "code_input_name", "code": code, "days": days, "tpl_id": tpl_id, "routes": routes, "route_mode": route_mode}
-        _send(chat_id, "🎟️ <b>注册码验证成功！</b>\n\n请输入你想要的用户名（支持字母、数字、中文、下划线(_)、连字符(-)、@、.）：",
-              reply_markup={"inline_keyboard": [[{"text": "❌ 取消", "callback_data": "ub_cancel_state"}]]})
-        return
-    except Exception as e:
-        logger.error(f"[注册码] 验证失败: {e}")
-        _send(chat_id, f"❌ 注册码验证失败：{safe_error_message(e, '注册码验证异常，请稍后重试')}")
-        return
+    return user_bot_code_commands_service.cmd_code(chat_id, tg_user_id, args)
 
 
 def _restore_invitation_code(code):
-    """Emby 用户创建失败时回滚邀请码消费计数"""
-    try:
-        invitation_dao.restore_invitation_code_usage(code)
-    except Exception:
-        pass
+    return user_bot_code_commands_service.restore_invitation_code(code)
 
 
 def _do_code_register(chat_id, tg_user_id, custom_name, code, days, tpl_id, routes=None, route_mode=None, tg_username="", tg_display_name=""):
@@ -879,41 +850,7 @@ def _do_code_register(chat_id, tg_user_id, custom_name, code, days, tpl_id, rout
 
 
 def cmd_renew(chat_id, tg_user_id, args):
-    if not args:
-        _send(chat_id, "❌ 请输入续期码：/renew 你的续期码")
-        return
-    binding = _get_binding(tg_user_id)
-    if not binding:
-        _send(chat_id, "❌ 请先绑定账号：/bind 用户名")
-        return
-    code = args.strip()
-    try:
-        renew_result, renew_error = invitation_dao.renew_user_with_invitation_code(
-            code,
-            binding['emby_username'],
-            binding['emby_user_id'],
-        )
-        if renew_error == "invalid":
-            _send(chat_id, "❌ 续期码无效、已被使用、不是续期码或已达使用上限")
-            return
-        if renew_error == "permanent":
-            _send(chat_id, "❌ 您的账号为永久有效，无需续费！")
-            return
-
-        days = renew_result["days"]
-        new_exp = renew_result["new_exp"]
-        # 处理永久续期码：days = -1 或 days = 0 或 days >= 36500
-        if days == -1 or days == 0 or days >= 36500:
-            days_display = "永久"
-        else:
-            days_display = f"{days} 天"
-
-        # 续期不自动解除禁用状态，保留管理员设置的禁用状态
-
-        _send(chat_id, f"✅ <b>续期成功！</b>\n\n📅 新到期日：{new_exp}\n⏳ 延长了 {days_display}")
-    except Exception as e:
-        logger.error(f"[续期] 执行失败: {e}")
-        _send(chat_id, f"❌ 续期失败：{safe_error_message(e, '续期操作异常，请联系管理员')}")
+    return user_bot_code_commands_service.cmd_renew(chat_id, tg_user_id, args)
 
 
 def cmd_checkin(chat_id, tg_user_id, msg_id=None, is_group=False, group_name="", user_msg_id=None):
