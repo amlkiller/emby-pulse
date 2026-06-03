@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend spec index for checking this domain refactor."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Verify the split stays domain-local and behavior-preserving."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verify compile/import/focused/full tests run through uv."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Verify logging/error behavior remains compatible."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Verify consistency with existing provider-based extraction pattern."}
