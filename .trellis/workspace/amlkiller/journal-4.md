@@ -797,3 +797,36 @@ Extracted reports poster lookup and fetch behavior into report_poster_fetcher_se
 ### Next Steps
 
 - None - task complete
+
+
+## Session 204: Extract notification bot info command service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot info command service
+**Branch**: `main`
+
+### Summary
+
+Extracted NotificationBot calendar and help command handling into notification_bot_info_command_service; kept legacy _cmd_calendar and _cmd_help wrappers, preserved calendar failure logging and user messages, retained lazy calendar_notify lookup, and added boundary tests for calendar success, calendar failure, and help menu output through the legacy NotificationBot methods.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a259bc5` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
