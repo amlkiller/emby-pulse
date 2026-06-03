@@ -38,3 +38,36 @@ Extracted user bot PK accept/reject callback handling into a focused notificatio
 ### Next Steps
 
 - None - task complete
+
+
+## Session 181: Refactor notification user bot dice PK command
+
+**Date**: 2026-06-03
+**Task**: Refactor notification user bot dice PK command
+**Branch**: `main`
+
+### Summary
+
+Extracted the direct dice PK user bot command into a focused notification domain service while preserving the legacy cmd_pk wrapper, late-bound dependency providers, dice side effects, group cleanup scheduling, and existing edge/error behavior.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0c13e8c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
