@@ -15,6 +15,7 @@ from app.domains.media_requests import gap_dao, media_request_dao
 from app.domains.media_requests.public_service import remove_gap_from_scan_state
 from app.domains.users import user_bot_dao
 from app.domains.notifications import bot_service_dao, message_dao
+from app.domains.notifications import notification_bot_request_admin_message_sync_service
 from app.domains.notifications import notify_admin_dao, notify_rule_dao
 from app.infra.db.playback_filters import get_base_filter
 from app.domains.users import user_dao
@@ -66,6 +67,12 @@ _BOT_WORKER_COUNT = get_bot_worker_count()
 _bot_executor = ThreadPoolExecutor(max_workers=_BOT_WORKER_COUNT, thread_name_prefix="notify-bot")
 _bot_executor_slots = threading.BoundedSemaphore(_BOT_WORKER_COUNT * 4)
 
+notification_bot_request_admin_message_sync_service.set_dependency_providers(
+    bot_service_dao_provider=lambda: bot_service_dao,
+    telegram_client_provider=lambda: telegram_client,
+    logger_provider=lambda: logger,
+)
+
 def _submit_bot_task(fn, *args):
     if not _bot_executor_slots.acquire(blocking=False):
         logger.warning("[Bot] 后台任务队列已满，丢弃本次异步任务")
@@ -75,65 +82,24 @@ def _submit_bot_task(fn, *args):
     return True
 
 def _ensure_request_admin_messages_table():
-    try:
-        bot_service_dao.ensure_request_admin_messages_table()
-    except Exception as e:
-        logger.error(f"[求片审核同步] 初始化消息表失败: {e}")
+    return notification_bot_request_admin_message_sync_service.ensure_request_admin_messages_table()
 
 def _extract_request_tmdb_id(reply_markup):
-    if not reply_markup:
-        return None
-    for row in reply_markup.get("inline_keyboard", []):
-        for button in row:
-            data = button.get("callback_data", "")
-            if data.startswith("req_approve_") or data.startswith("req_manual_") or data.startswith("req_reject_menu_"):
-                parts = data.split("_")
-                for part in parts:
-                    if part.isdigit():
-                        return int(part)
-    return None
+    return notification_bot_request_admin_message_sync_service.extract_request_tmdb_id(reply_markup)
 
 def _record_request_admin_message(tmdb_id, chat_id, message_id, is_caption, original_text):
-    if not tmdb_id or not chat_id or not message_id:
-        return
-    try:
-        _ensure_request_admin_messages_table()
-        bot_service_dao.save_request_admin_message(tmdb_id, chat_id, message_id, is_caption, original_text)
-    except Exception as e:
-        logger.error(f"[求片审核同步] 记录消息失败: {e}")
+    return notification_bot_request_admin_message_sync_service.record_request_admin_message(tmdb_id, chat_id, message_id, is_caption, original_text)
 
 def _sync_request_admin_messages(tmdb_id, action_text, operator, token, proxies, fallback_text="", fallback_is_caption=True):
-    if not tmdb_id:
-        return
-    try:
-        _ensure_request_admin_messages_table()
-        rows = bot_service_dao.list_request_admin_messages(tmdb_id)
-
-        seen = set()
-        for row in rows:
-            key = (str(row["chat_id"]), int(row["message_id"]))
-            if key in seen:
-                continue
-            seen.add(key)
-            base_text = row["original_text"] or fallback_text or "求片请求"
-            new_text = f"{base_text}\n\n━━━━━━━━━━━━━━\n{action_text}\n(操作人: {operator})"
-            method = "editMessageCaption" if row["is_caption"] else "editMessageText"
-            payload_key = "caption" if row["is_caption"] else "text"
-            try:
-                payload = {"chat_id": row["chat_id"], "message_id": row["message_id"], payload_key: new_text, "parse_mode": "HTML", "reply_markup": {"inline_keyboard": []}}
-                telegram_client.post_api(token, method, json=payload, proxies=proxies, timeout=5)
-            except Exception as e:
-                logger.error(f"[求片审核同步] 更新副本失败 chat_id={row['chat_id']} message_id={row['message_id']}: {e}")
-
-        if not rows and fallback_text:
-            logger.info(f"[求片审核同步] 未找到已记录副本 tmdb_id={tmdb_id}")
-        elif rows:
-            try:
-                bot_service_dao.delete_request_admin_messages(tmdb_id)
-            except Exception as e:
-                logger.error(f"[求片审核同步] 清理消息记录失败: {e}")
-    except Exception as e:
-        logger.error(f"[求片审核同步] 批量更新失败: {e}")
+    return notification_bot_request_admin_message_sync_service.sync_request_admin_messages(
+        tmdb_id,
+        action_text,
+        operator,
+        token,
+        proxies,
+        fallback_text,
+        fallback_is_caption,
+    )
 
 # 🔒 XSS 防护：HTML 转义函数（用于 Telegram 消息）
 def escape_html(text):
