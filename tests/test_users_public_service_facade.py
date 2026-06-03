@@ -87,12 +87,16 @@ def test_users_router_uses_public_service_cache_owner():
     assert "user_service.invalidate_emby_users_cache()" in source
 
 
-def test_users_router_includes_tag_routes():
+def test_users_router_includes_child_routes_and_compat_exports():
     from app.domains.users import router
 
     routes = [(route.path, route.methods) for route in router.router.routes if hasattr(route, "methods")]
 
     assert any(path == "/api/users" and "GET" in methods for path, methods in routes)
+    assert any(path == "/api/manage/audit_logs" and "GET" in methods for path, methods in routes)
+    assert any(path == "/api/manage/audit_logs/stats" and "GET" in methods for path, methods in routes)
+    assert any(path == "/api/manage/audit_logs/{log_id}" and "DELETE" in methods for path, methods in routes)
+    assert any(path == "/api/manage/audit_logs/clear" and "POST" in methods for path, methods in routes)
     assert any(path == "/api/manage/template/default" and "POST" in methods for path, methods in routes)
     assert any(path == "/api/manage/template/default" and "GET" in methods for path, methods in routes)
     assert any(path == "/api/manage/user/req_permission" and "POST" in methods for path, methods in routes)
@@ -103,6 +107,13 @@ def test_users_router_includes_tag_routes():
     assert any(path == "/api/manage/tags/name/{tag_name}" and "DELETE" in methods for path, methods in routes)
     assert any(path == "/api/manage/user/tags" and "POST" in methods for path, methods in routes)
     assert any(path == "/api/manage/user/tags" and "GET" in methods for path, methods in routes)
+
+    from app.domains.users import audit_log_router
+
+    assert router.api_get_audit_logs is audit_log_router.api_get_audit_logs
+    assert router.api_get_audit_stats is audit_log_router.api_get_audit_stats
+    assert router.api_delete_audit_log is audit_log_router.api_delete_audit_log
+    assert router.api_clear_audit_logs is audit_log_router.api_clear_audit_logs
 
 
 def test_selected_external_callers_use_real_user_dao_for_persistence_calls():
