@@ -1886,3 +1886,36 @@ Extracted the users pin HTTP route into a users-domain child router with dynamic
 ### Next Steps
 
 - None - task complete
+
+
+## Session 237: Extract users self password route
+
+**Date**: 2026-06-04
+**Task**: Extract users self password route
+**Branch**: `main`
+
+### Summary
+
+Extracted the C-end users self password route into a users-domain child router with dynamic provider wiring for legacy monkeypatch compatibility. Preserved POST /api/user/password, compatibility exports, session checks, password strength validation, old-password authentication, media password update payload, and safe error fallback. Added focused route inclusion, export, and authorization/validation short-circuit tests. Verification passed: compileall, focused users facade tests, import check, git diff --check, and full pytest suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7a0d282` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
