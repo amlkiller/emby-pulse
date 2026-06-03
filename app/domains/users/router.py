@@ -76,6 +76,11 @@ from app.domains.users.self_password_router import (
     router as self_password_router,
     set_dependency_providers as set_self_password_dependency_providers,
 )
+from app.domains.users.single_user_router import (
+    api_get_single_user,
+    router as single_user_router,
+    set_dependency_providers as set_single_user_dependency_providers,
+)
 from app.domains.users.tag_router import (
     TAG_COLORS,
     TagCreateModel,
@@ -126,6 +131,11 @@ set_libraries_dependency_providers(
     media_api_provider=lambda: media_api,
     is_admin_user_provider=lambda: is_admin_user,
     safe_error_message_provider=lambda: safe_error_message,
+)
+set_single_user_dependency_providers(
+    media_api_provider=lambda: media_api,
+    user_dao_provider=lambda: user_dao,
+    is_admin_user_provider=lambda: is_admin_user,
 )
 set_avatar_dependency_providers(
     media_api_provider=lambda: media_api,
@@ -370,36 +380,7 @@ def api_manage_users(request: Request, refresh: bool = False):
         return {"status": "success", "data": final_list, "emby_url": public_host}
     except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
-@router.get("/api/manage/user/{user_id}")
-def api_get_single_user(user_id: str, request: Request):
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    try:
-        res = media_api.get(f"/Users/{user_id}", timeout=5)
-        if res.status_code == 200:
-            user_data = res.json()
-            policy = user_data.get('Policy', {})
-            meta_row = user_dao.get_user_meta(user_id)
-
-            return {
-                "status": "success",
-                "data": {
-                    "Id": user_data['Id'], "Name": user_data['Name'],
-                    "EnableAllFolders": policy.get('EnableAllFolders', True), "EnabledFolders": policy.get('EnabledFolders', []),
-                    "ExcludedSubFolders": policy.get('ExcludedSubFolders', []), "EnableDownloading": policy.get('EnableContentDownloading', True),
-                    "EnableVideoTranscoding": policy.get('EnableVideoPlaybackTranscoding', True), "EnableAudioTranscoding": policy.get('EnableAudioPlaybackTranscoding', True),
-                    "MaxParentalRating": policy.get('MaxParentalRating'),
-                    "BlockUnratedItems": policy.get('BlockUnratedItems', False),
-                    "BlockedTags": ','.join(policy.get('BlockedTags', [])) if policy.get('BlockedTags') else "",
-                    "MaxConcurrent": meta_row['max_concurrent'] if meta_row else None,
-                    "IsVIP": bool(meta_row['is_vip']) if meta_row and meta_row['is_vip'] else False,
-                    "Remark": meta_row['remark'] if meta_row and 'remark' in meta_row.keys() else "",
-                    # 🔥 求片权限
-                    "req_free": meta_row['req_free'] if meta_row and 'req_free' in meta_row.keys() else 0,
-                    "req_free_count": meta_row['req_free_count'] if meta_row and 'req_free_count' in meta_row.keys() else -1
-                }
-            }
-        return {"status": "error"}
-    except: return {"status": "error"}
+router.include_router(single_user_router)
 
 # ==========================================
 # C 端用户自助 API(修改头像 / 修改密码)

@@ -123,6 +123,7 @@ def test_users_router_includes_child_routes_and_compat_exports():
     assert any(path == "/api/user/avatar" and "POST" in methods for path, methods in routes)
     assert any(path == "/api/user/password" and "POST" in methods for path, methods in routes)
     assert any(path == "/api/manage/user/pin" and "POST" in methods for path, methods in routes)
+    assert any(path == "/api/manage/user/{user_id}" and "GET" in methods for path, methods in routes)
 
     from app.domains.users import avatar_router
     from app.domains.users import audit_log_router
@@ -132,6 +133,7 @@ def test_users_router_includes_child_routes_and_compat_exports():
     from app.domains.users import library_visibility_router
     from app.domains.users import pin_router
     from app.domains.users import self_password_router
+    from app.domains.users import single_user_router
 
     assert router.get_user_avatar is avatar_router.get_user_avatar
     assert router.api_update_user_image is avatar_router.api_update_user_image
@@ -160,6 +162,7 @@ def test_users_router_includes_child_routes_and_compat_exports():
     assert router.api_update_hidden_libraries is library_visibility_router.api_update_hidden_libraries
     assert router.PinUserModel is pin_router.PinUserModel
     assert router.api_pin_user is pin_router.api_pin_user
+    assert router.api_get_single_user is single_user_router.api_get_single_user
 
     admin_index = next(
         i for i, (path, methods) in enumerate(routes) if path == "/api/manage/user/admin_list" and "GET" in methods
@@ -189,6 +192,9 @@ def test_users_router_includes_child_routes_and_compat_exports():
     manage_users_index = next(
         i for i, (path, methods) in enumerate(routes) if path == "/api/manage/users" and "GET" in methods
     )
+    single_user_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/manage/user/{user_id}" and "GET" in methods
+    )
     avatar_image_index = next(
         i for i, (path, methods) in enumerate(routes) if path == "/api/user/image/{user_id}" and "GET" in methods
     )
@@ -215,9 +221,114 @@ def test_users_router_includes_child_routes_and_compat_exports():
     )
     assert admin_index < audit_index < verify_index
     assert avatar_image_index < avatar_update_index < self_avatar_index < password_index
-    assert manage_libraries_index < manage_users_index
+    assert manage_libraries_index < manage_users_index < single_user_index
     assert verify_index < user_libraries_index < hidden_libraries_index < invitation_index < library_index
     assert template_index < pin_index < users_list_index
+
+
+def test_single_user_denies_non_admin_before_media_or_dao_call(monkeypatch):
+    from app.domains.users import router
+
+    request = SimpleNamespace(session={"user": {"id": "user-1", "role": "viewer"}})
+
+    class MediaApiMustNotRun:
+        def get(self, *_args, **_kwargs):
+            raise AssertionError("media_api.get should not run before admin authorization")
+
+    class UserDaoMustNotRun:
+        def get_user_meta(self, *_args, **_kwargs):
+            raise AssertionError("user_dao.get_user_meta should not run before admin authorization")
+
+    monkeypatch.setattr(router, "is_admin_user", lambda _request: False)
+    monkeypatch.setattr(router, "media_api", MediaApiMustNotRun())
+    monkeypatch.setattr(router, "user_dao", UserDaoMustNotRun())
+
+    result = router.api_get_single_user("u1", request)
+
+    assert result == {"status": "error", "message": "需要管理员权限"}
+
+
+def test_single_user_preserves_response_mapping_and_error_branches(monkeypatch):
+    from app.domains.users import router
+
+    request = SimpleNamespace(session={"user": {"id": "admin-1", "role": "admin"}})
+
+    class MetaRow(dict):
+        pass
+
+    class SuccessResponse:
+        status_code = 200
+
+        def json(self):
+            return {
+                "Id": "u1",
+                "Name": "Alice",
+                "Policy": {
+                    "EnableAllFolders": False,
+                    "EnabledFolders": ["lib-1"],
+                    "ExcludedSubFolders": ["sub-1"],
+                    "EnableContentDownloading": False,
+                    "EnableVideoPlaybackTranscoding": False,
+                    "EnableAudioPlaybackTranscoding": False,
+                    "MaxParentalRating": 9,
+                    "BlockUnratedItems": True,
+                    "BlockedTags": ["tag-a", "tag-b"],
+                },
+            }
+
+    class ErrorResponse:
+        status_code = 500
+
+    class MediaApi:
+        def __init__(self):
+            self.response = SuccessResponse()
+
+        def get(self, *_args, **_kwargs):
+            return self.response
+
+    media_api = MediaApi()
+    meta_row = MetaRow(
+        max_concurrent=2,
+        is_vip=1,
+        remark="note",
+        req_free=1,
+        req_free_count=3,
+    )
+    monkeypatch.setattr(router, "is_admin_user", lambda _request: True)
+    monkeypatch.setattr(router, "media_api", media_api)
+    monkeypatch.setattr(router, "user_dao", SimpleNamespace(get_user_meta=lambda _user_id: meta_row))
+
+    assert router.api_get_single_user("u1", request) == {
+        "status": "success",
+        "data": {
+            "Id": "u1",
+            "Name": "Alice",
+            "EnableAllFolders": False,
+            "EnabledFolders": ["lib-1"],
+            "ExcludedSubFolders": ["sub-1"],
+            "EnableDownloading": False,
+            "EnableVideoTranscoding": False,
+            "EnableAudioTranscoding": False,
+            "MaxParentalRating": 9,
+            "BlockUnratedItems": True,
+            "BlockedTags": "tag-a,tag-b",
+            "MaxConcurrent": 2,
+            "IsVIP": True,
+            "Remark": "note",
+            "req_free": 1,
+            "req_free_count": 3,
+        },
+    }
+
+    media_api.response = ErrorResponse()
+    assert router.api_get_single_user("u1", request) == {"status": "error"}
+
+    monkeypatch.setattr(
+        router,
+        "media_api",
+        SimpleNamespace(get=lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("boom"))),
+    )
+    assert router.api_get_single_user("u1", request) == {"status": "error"}
 
 
 def test_manage_libraries_denies_non_admin_before_media_call(monkeypatch):
