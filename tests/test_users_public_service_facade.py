@@ -94,6 +94,7 @@ def test_users_router_includes_child_routes_and_compat_exports():
     routes = [(route.path, route.methods) for route in router.router.routes if hasattr(route, "methods")]
 
     assert any(path == "/api/users" and "GET" in methods for path, methods in routes)
+    assert any(path == "/api/manage/libraries" and "GET" in methods for path, methods in routes)
     assert any(path == "/api/manage/user/admin_list" and "GET" in methods for path, methods in routes)
     assert any(path == "/api/manage/audit_logs" and "GET" in methods for path, methods in routes)
     assert any(path == "/api/manage/audit_logs/stats" and "GET" in methods for path, methods in routes)
@@ -127,6 +128,7 @@ def test_users_router_includes_child_routes_and_compat_exports():
     from app.domains.users import audit_log_router
     from app.domains.users import delete_verification_router
     from app.domains.users import invitation_router
+    from app.domains.users import libraries_router
     from app.domains.users import library_visibility_router
     from app.domains.users import pin_router
     from app.domains.users import self_password_router
@@ -136,6 +138,7 @@ def test_users_router_includes_child_routes_and_compat_exports():
     assert router.api_user_self_avatar is avatar_router.api_user_self_avatar
     assert router.UserPasswordChangeModel is self_password_router.UserPasswordChangeModel
     assert router.api_user_self_password is self_password_router.api_user_self_password
+    assert router.api_get_libraries is libraries_router.api_get_libraries
     assert router.api_get_audit_logs is audit_log_router.api_get_audit_logs
     assert router.api_get_audit_stats is audit_log_router.api_get_audit_stats
     assert router.api_delete_audit_log is audit_log_router.api_delete_audit_log
@@ -180,6 +183,12 @@ def test_users_router_includes_child_routes_and_compat_exports():
     invitation_index = next(
         i for i, (path, methods) in enumerate(routes) if path == "/api/manage/invite/gen" and "POST" in methods
     )
+    manage_libraries_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/manage/libraries" and "GET" in methods
+    )
+    manage_users_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/manage/users" and "GET" in methods
+    )
     avatar_image_index = next(
         i for i, (path, methods) in enumerate(routes) if path == "/api/user/image/{user_id}" and "GET" in methods
     )
@@ -206,8 +215,26 @@ def test_users_router_includes_child_routes_and_compat_exports():
     )
     assert admin_index < audit_index < verify_index
     assert avatar_image_index < avatar_update_index < self_avatar_index < password_index
+    assert manage_libraries_index < manage_users_index
     assert verify_index < user_libraries_index < hidden_libraries_index < invitation_index < library_index
     assert template_index < pin_index < users_list_index
+
+
+def test_manage_libraries_denies_non_admin_before_media_call(monkeypatch):
+    from app.domains.users import router
+
+    request = SimpleNamespace(session={"user": {"id": "user-1", "role": "viewer"}})
+
+    class MediaApiMustNotRun:
+        def get(self, *_args, **_kwargs):
+            raise AssertionError("media_api.get should not run before admin authorization")
+
+    monkeypatch.setattr(router, "is_admin_user", lambda _request: False)
+    monkeypatch.setattr(router, "media_api", MediaApiMustNotRun())
+
+    result = router.api_get_libraries(request)
+
+    assert result == {"status": "error", "message": "需要管理员权限"}
 
 
 def test_avatar_fetch_denies_non_admin_before_media_call(monkeypatch):

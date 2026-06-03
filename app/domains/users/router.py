@@ -49,6 +49,11 @@ from app.domains.users.library_visibility_router import (
     router as library_visibility_router,
     set_dependency_providers as set_library_visibility_dependency_providers,
 )
+from app.domains.users.libraries_router import (
+    api_get_libraries,
+    router as libraries_router,
+    set_dependency_providers as set_libraries_dependency_providers,
+)
 from app.domains.users.list_router import (
     api_get_users,
     router as list_router,
@@ -116,6 +121,11 @@ set_library_visibility_dependency_providers(
     media_api_provider=lambda: media_api,
     user_dao_provider=lambda: user_dao,
     logger_provider=lambda: logging,
+)
+set_libraries_dependency_providers(
+    media_api_provider=lambda: media_api,
+    is_admin_user_provider=lambda: is_admin_user,
+    safe_error_message_provider=lambda: safe_error_message,
 )
 set_avatar_dependency_providers(
     media_api_provider=lambda: media_api,
@@ -290,16 +300,7 @@ def check_expired_users():
                 except Exception as e: pass
     except Exception as e: pass
 
-@router.get("/api/manage/libraries")
-def api_get_libraries(request: Request):
-    if not is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    try:
-        res = media_api.get("/Library/VirtualFolders", timeout=5)
-        if res.status_code == 200:
-            libs = [{"Id": item["Guid"], "Name": item["Name"]} for item in res.json() if "Guid" in item]
-            return {"status": "success", "data": libs}
-        return {"status": "error", "message": "媒体服务器 API 返回异常"}
-    except Exception as e: return {"status": "error", "message": safe_error_message(e)}
+router.include_router(libraries_router)
 
 @router.get("/api/manage/users")
 def api_manage_users(request: Request, refresh: bool = False):
