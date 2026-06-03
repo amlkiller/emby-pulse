@@ -1127,3 +1127,36 @@ Extracted NotificationBot.on_library_new_episode into a domain-local notificatio
 ### Next Steps
 
 - None - task complete
+
+
+## Session 214: Extract notification bot pending sync service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot pending sync service
+**Branch**: `main`
+
+### Summary
+
+Extracted SystemDaemon pending request sync logic into a notification-domain pending sync service with lazy legacy providers, kept the daemon wrapper, updated stop-hook inspection, and added focused boundary tests for empty/missing admin, movie, update-series, new-series, stop wait, and error paths. Verification passed: compileall changed files, focused pytest, import check, git diff --check, and full pytest tests/.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `052afb8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
