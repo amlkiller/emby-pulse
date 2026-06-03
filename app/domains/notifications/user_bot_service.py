@@ -19,6 +19,7 @@ from app.domains.users import user_bot_dao
 from app.domains.notifications import user_bot_binding_service
 from app.domains.notifications import user_bot_concurrency_service
 from app.domains.notifications import user_bot_menu_service
+from app.domains.notifications import user_bot_message_cleanup_service
 from app.domains.notifications import user_bot_registration_queue_service
 from app.domains.notifications import user_bot_registration_quota_service
 from app.domains.notifications import user_bot_restriction_service
@@ -262,6 +263,14 @@ user_bot_concurrency_service.set_dependency_providers(
 
 user_bot_menu_service.set_dependency_providers(
     portal_url_provider=lambda: get_user_bot_portal_url(),
+)
+
+user_bot_message_cleanup_service.set_dependency_providers(
+    threading_provider=lambda: threading,
+    time_provider=lambda: time,
+    token_provider=lambda: get_user_bot_token(),
+    telegram_client_provider=lambda: telegram_client,
+    safe_proxies_provider=lambda: get_safe_proxies(),
 )
 
 user_bot_telegram_service.set_dependency_providers(
@@ -1110,21 +1119,11 @@ def cmd_checkin(chat_id, tg_user_id, msg_id=None, is_group=False, group_name="",
 
 
 def _delete_messages_later(chat_id, message_ids, delay_seconds=30):
-    """延迟删除消息（用于群聊签到自动清理）"""
-    import threading
-    def delete_messages():
-        import time
-        time.sleep(delay_seconds)
-        token = get_user_bot_token()
-        if not token:
-            return
-        for msg_id in message_ids:
-            if msg_id:
-                try:
-                    telegram_client.post_api(token, "deleteMessage", json={"chat_id": chat_id, "message_id": msg_id}, proxies=get_safe_proxies(), timeout=10)
-                except:
-                    pass
-    threading.Thread(target=delete_messages, daemon=True).start()
+    return user_bot_message_cleanup_service.delete_messages_later(
+        chat_id,
+        message_ids,
+        delay_seconds=delay_seconds,
+    )
 
 
 def cmd_points(chat_id, tg_user_id, msg_id=None, is_group=False):
