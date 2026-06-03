@@ -995,3 +995,36 @@ Extracted NotificationBot user login notification handling into a notification-d
 ### Next Steps
 
 - None - task complete
+
+
+## Session 210: Extract notification bot item deleted service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot item deleted service
+**Branch**: `main`
+
+### Summary
+
+Extracted NotificationBot item-deleted notification handling into a notification-domain service with lazy providers for legacy monkeypatch compatibility. Kept NotificationBot.on_item_deleted as a wrapper and added boundary tests for enablement, user-deletion skips, duplicate suppression, cache pruning, deletion type formatting, image fallback order, TMDB poster fallback, swallowed TMDB exceptions, and outer error logging. Verification passed: compileall, focused item-deleted tests, import check, git diff --check, and full tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `27cd501` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
