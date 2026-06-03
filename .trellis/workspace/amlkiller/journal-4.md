@@ -170,3 +170,36 @@ Extracted UserBot scheduled lottery/PK expiry loop into a domain-local scheduler
 ### Next Steps
 
 - None - task complete
+
+
+## Session 185: Extract notification user bot polling service
+
+**Date**: 2026-06-03
+**Task**: Extract notification user bot polling service
+**Branch**: `main`
+
+### Summary
+
+Extracted UserBot Telegram getUpdates polling into a domain-local polling service with lazy dependency providers; added boundary tests for update submission, offset advancement, queue-full feedback, and retry waits.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f981de7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
