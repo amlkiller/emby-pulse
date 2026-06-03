@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend spec index and verification checklist for this refactor."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Verify new module remains inside the reports domain boundary."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Verify exception behavior remains compatible."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Verify logging additions/retention match project guidance."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verify focused tests and full suite coverage."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared guide index required by Trellis checks."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Check for duplication or unnecessary abstraction."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Check cross-layer and cross-domain dependency direction."}

@@ -1,0 +1,8 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend spec index and pre-development checklist for domain refactoring."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Domain-local module placement and dependency direction guidance."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Preserve existing exception boundary behavior during extraction."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Keep report data-preparation logging consistent."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Testing and maintainability bar for behavior-preserving refactors."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared guide index required by Trellis before development."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Reuse existing report query/settings helpers instead of duplicating behavior."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Check extracted service boundaries and cross-domain/plugin interactions."}
