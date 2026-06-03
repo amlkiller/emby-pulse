@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend guideline index for checking the dispatcher refactor."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Verify the extracted dispatcher stays within the notification domain boundary."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Verify preserved callback exception swallowing behavior."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Quality gate and command conventions for final verification."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Check that no inappropriate logging was added."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared thinking guide index for review."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Check consistency with existing callback dispatcher patterns."}

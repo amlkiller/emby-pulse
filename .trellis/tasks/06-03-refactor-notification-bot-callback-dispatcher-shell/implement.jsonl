@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend guideline index for the notification callback dispatcher refactor."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Module organization rules for splitting a large domain service into domain-local services."}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Callback ACK and cleanup exceptions must preserve existing swallow behavior."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Verification and uv command conventions for implementation."}
+{"file": ".trellis/spec/backend/logging-guidelines.md", "reason": "Check that the refactor does not introduce noisy or sensitive logging."}
+{"file": ".trellis/spec/guides/index.md", "reason": "Shared thinking guide index for reuse and boundary checks."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Follow existing callback dispatcher and callback service patterns."}
