@@ -632,3 +632,36 @@ Extracted NotificationBot /now and /recent playback query commands into notifica
 ### Next Steps
 
 - None - task complete
+
+
+## Session 199: Extract notification bot emby restart command service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot emby restart command service
+**Branch**: `main`
+
+### Summary
+
+Extracted NotificationBot /emby_restart command and emby_restart callback handling into notification_bot_emby_restart_command_service with lazy plugin/logger providers; kept old command wrapper and callback dispatcher branch, and added boundary tests for plugin disabled/empty config, keyboard payloads, restart-all, single-server restart, invalid index, callback errors, and legacy dynamic plugin compatibility.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `02241e4` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

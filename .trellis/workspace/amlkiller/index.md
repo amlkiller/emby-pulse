@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-4.md`
-- **Total Sessions**: 198
+- **Total Sessions**: 199
 - **Last Active**: 2026-06-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-4.md` | ~634 | Active |
+| `journal-4.md` | ~667 | Active |
 | `journal-3.md` | ~1987 | Archived |
 | `journal-2.md` | ~1993 | Archived |
 | `journal-1.md` | ~1973 | Archived |
@@ -32,6 +32,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 199 | 2026-06-03 | Extract notification bot emby restart command service | `02241e4` | `main` |
 | 198 | 2026-06-03 | Extract notification bot playback command service | `65a9e30` | `main` |
 | 197 | 2026-06-03 | Extract notification bot check command service | `0843949` | `main` |
 | 196 | 2026-06-03 | Extract notification bot whois command service | `b9c3efd` | `main` |
