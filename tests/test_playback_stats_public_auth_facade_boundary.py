@@ -80,6 +80,99 @@ def test_playback_stats_includes_latest_child_route_and_compat_export():
     assert recent_index < latest_index < live_index
 
 
+def test_playback_stats_includes_live_child_routes_and_compat_exports():
+    from app.domains.playback import live_router
+    from app.domains.playback import stats
+
+    routes = [
+        (route.path, route.methods)
+        for route in stats.router.routes
+        if hasattr(route, "methods")
+    ]
+
+    assert any(path == "/api/stats/live" and "GET" in methods for path, methods in routes)
+    assert any(path == "/api/live" and "GET" in methods for path, methods in routes)
+    assert stats.api_live_sessions is live_router.api_live_sessions
+    assert stats.api_live_sessions_legacy is live_router.api_live_sessions_legacy
+
+    latest_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/latest" and "GET" in methods
+    )
+    live_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/live" and "GET" in methods
+    )
+    legacy_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/live" and "GET" in methods
+    )
+    top_movies_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/top_movies" and "GET" in methods
+    )
+    assert latest_index < live_index < legacy_index < top_movies_index
+
+
+def test_live_sessions_denies_non_admin_before_media_side_effects(monkeypatch):
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"Id": "u1"}})
+    calls = []
+
+    def fake_is_admin_user(seen_request):
+        calls.append(seen_request)
+        return False
+
+    def fail_media_get(*args, **kwargs):
+        raise AssertionError("live sessions should not be read without admin permission")
+
+    monkeypatch.setattr(stats.user_service, "is_admin_user", fake_is_admin_user)
+    monkeypatch.setattr(stats.media_api, "get", fail_media_get)
+
+    response = stats.api_live_sessions(request)
+
+    assert response == {"status": "error", "message": "需要管理员权限"}
+    assert calls == [request]
+
+
+def test_live_sessions_legacy_allows_admin_through_stats_monkeypatches(monkeypatch):
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"Id": "admin"}})
+    calls = []
+
+    class SessionsResponse:
+        status_code = 200
+
+        def json(self):
+            calls.append(("sessions_json",))
+            return [
+                {"Id": "s1", "NowPlayingItem": {"Name": "Movie One"}},
+                {"Id": "s2"},
+            ]
+
+    def fake_is_admin_user(seen_request):
+        calls.append(("is_admin_user", seen_request))
+        return True
+
+    def fake_media_get(path, timeout=None):
+        calls.append(("media_get", path, timeout))
+        return SessionsResponse()
+
+    monkeypatch.setattr(stats.user_service, "is_admin_user", fake_is_admin_user)
+    monkeypatch.setattr(stats.media_api, "get", fake_media_get)
+
+    response = stats.api_live_sessions_legacy(request)
+
+    assert response == {
+        "status": "success",
+        "data": [{"Id": "s1", "NowPlayingItem": {"Name": "Movie One"}}],
+    }
+    assert calls == [
+        ("is_admin_user", request),
+        ("is_admin_user", request),
+        ("media_get", "/Sessions", 5),
+        ("sessions_json",),
+    ]
+
+
 def test_latest_media_denies_unauthenticated_before_media_side_effects(monkeypatch):
     from app.domains.playback import stats
 

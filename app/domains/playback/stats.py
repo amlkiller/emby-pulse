@@ -6,6 +6,12 @@ from app.domains.playback.latest_router import (
     router as latest_router,
     set_dependency_providers as set_latest_dependency_providers,
 )
+from app.domains.playback.live_router import (
+    api_live_sessions,
+    api_live_sessions_legacy,
+    router as live_router,
+    set_dependency_providers as set_live_dependency_providers,
+)
 from app.domains.playback.libraries_router import (
     api_get_libraries,
     router as libraries_router,
@@ -59,6 +65,11 @@ set_latest_dependency_providers(
     media_api_provider=lambda: media_api,
     tmdb_client_provider=lambda: tmdb_client,
     get_safe_proxies_provider=lambda: get_safe_proxies,
+)
+
+set_live_dependency_providers(
+    user_service_provider=lambda: user_service,
+    media_api_provider=lambda: media_api,
 )
 
 
@@ -165,24 +176,7 @@ def api_recent_activity(request: Request, user_id: Optional[str] = None):
 
 router.include_router(latest_router)
 
-@router.get("/api/stats/live")
-def api_live_sessions(request: Request):
-    # 🔒 安全检查：必须管理员
-    if not user_service.is_admin_user(request):
-        return {"status": "error", "message": "需要管理员权限"}
-    try:
-        # 🚀 替换为 media_api
-        res = media_api.get("/Sessions", timeout=5)
-        if res.status_code == 200: return {"status": "success", "data": [s for s in res.json() if s.get("NowPlayingItem")]}
-    except Exception: pass
-    return {"status": "success", "data": []}
-
-@router.get("/api/live")
-def api_live_sessions_legacy(request: Request):
-    # 🔒 安全检查：必须管理员
-    if not user_service.is_admin_user(request):
-        return {"status": "error", "message": "需要管理员权限"}
-    return api_live_sessions(request)
+router.include_router(live_router)
 
 @router.get("/api/stats/top_movies")
 def api_top_movies(request: Request = None, user_id: Optional[str] = None, category: str = 'all', sort_by: str = 'count', exclude_types: Optional[str] = None, period: str = 'all'):
