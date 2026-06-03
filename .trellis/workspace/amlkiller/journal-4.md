@@ -335,3 +335,36 @@ Extracted request-admin Telegram message-copy synchronization helpers from notif
 ### Next Steps
 
 - None - task complete
+
+
+## Session 190: Extract notification bot media quality service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot media quality service
+**Branch**: `main`
+
+### Summary
+
+Extracted notification bot media admin lookup and media quality parsing into a domain-local service with lazy legacy providers; added boundary tests for admin lookup, filename parsing, stream fallback, and legacy monkeypatch compatibility.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `83d4f66` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
