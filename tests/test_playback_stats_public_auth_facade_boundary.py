@@ -30,6 +30,180 @@ def test_playback_stats_does_not_import_private_users_auth():
     assert violations == []
 
 
+def test_playback_stats_includes_dashboard_child_route_and_compat_export():
+    from app.domains.playback import dashboard_router
+    from app.domains.playback import stats
+
+    routes = [
+        (route.path, route.methods)
+        for route in stats.router.routes
+        if hasattr(route, "methods")
+    ]
+
+    assert any(path == "/api/stats/dashboard" and "GET" in methods for path, methods in routes)
+    assert stats.api_dashboard is dashboard_router.api_dashboard
+
+    dashboard_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/dashboard" and "GET" in methods
+    )
+    libraries_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/libraries" and "GET" in methods
+    )
+    assert dashboard_index < libraries_index
+
+
+def test_dashboard_denies_unauthenticated_before_cache_query_or_media_side_effects(monkeypatch):
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"Id": "u1"}})
+    calls = []
+
+    def fake_check_login(seen_request):
+        calls.append(seen_request)
+        return False
+
+    def fail_get_cached_stats(*args, **kwargs):
+        raise AssertionError("dashboard should not read cache without login")
+
+    def fail_build_stats_base_filter(*args, **kwargs):
+        raise AssertionError("dashboard should not build stats filter without login")
+
+    def fail_query(*args, **kwargs):
+        raise AssertionError("dashboard should not query playback stats without login")
+
+    def fail_media_get(*args, **kwargs):
+        raise AssertionError("dashboard should not read media counts without login")
+
+    monkeypatch.setattr(stats, "check_login", fake_check_login)
+    monkeypatch.setattr(stats, "get_cached_stats", fail_get_cached_stats)
+    monkeypatch.setattr(stats, "build_stats_base_filter", fail_build_stats_base_filter)
+    monkeypatch.setattr(stats.playback_store, "query", fail_query)
+    monkeypatch.setattr(stats.media_api, "get", fail_media_get)
+
+    response = stats.api_dashboard(request)
+
+    assert response == {"status": "error", "message": "请先登录"}
+    assert calls == [request]
+
+
+def test_dashboard_cache_hit_uses_scoped_key_and_skips_query_or_media(monkeypatch):
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"id": "local-u"}})
+    calls = []
+    cached_response = {"status": "success", "data": {"cached": True}}
+
+    def fake_check_login(seen_request):
+        calls.append(("check_login", seen_request))
+        return True
+
+    def fake_get_cached_stats(cache_key):
+        calls.append(("get_cached_stats", cache_key))
+        return cached_response
+
+    def fail_build_stats_base_filter(*args, **kwargs):
+        raise AssertionError("dashboard cache hit should not build stats filter")
+
+    def fail_query(*args, **kwargs):
+        raise AssertionError("dashboard cache hit should not query playback stats")
+
+    def fail_media_get(*args, **kwargs):
+        raise AssertionError("dashboard cache hit should not read media counts")
+
+    monkeypatch.setattr(stats, "check_login", fake_check_login)
+    monkeypatch.setattr(stats, "get_cached_stats", fake_get_cached_stats)
+    monkeypatch.setattr(stats, "build_stats_base_filter", fail_build_stats_base_filter)
+    monkeypatch.setattr(stats.playback_store, "query", fail_query)
+    monkeypatch.setattr(stats.media_api, "get", fail_media_get)
+
+    response = stats.api_dashboard(request, user_id="all")
+
+    assert response is cached_response
+    assert calls == [
+        ("check_login", request),
+        ("get_cached_stats", "dashboard_local-u"),
+    ]
+
+
+def test_dashboard_cache_miss_allows_non_admin_through_stats_monkeypatches(monkeypatch):
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"id": "local-u"}})
+    calls = []
+
+    class CountsResponse:
+        status_code = 200
+
+        def json(self):
+            calls.append(("counts_json",))
+            return {"MovieCount": 4, "SeriesCount": 2, "EpisodeCount": 9}
+
+    def fake_check_login(seen_request):
+        calls.append(("check_login", seen_request))
+        return True
+
+    def fake_get_cached_stats(cache_key):
+        calls.append(("get_cached_stats", cache_key))
+        return None
+
+    def fake_build_stats_base_filter(user_id):
+        calls.append(("build_stats_base_filter", user_id))
+        return "WHERE UserId = ?", [user_id]
+
+    def fake_query(sql, params):
+        normalized_sql = " ".join(sql.split())
+        calls.append(("query", normalized_sql, list(params)))
+        if "COUNT(*) as c" in normalized_sql:
+            return [{"c": 11}]
+        if "COUNT(DISTINCT UserId) as c" in normalized_sql:
+            return [{"c": 1}]
+        if "SUM(PlayDuration) as c" in normalized_sql:
+            return [{"c": 3600}]
+        raise AssertionError(f"unexpected dashboard query: {normalized_sql}")
+
+    def fake_media_get(path, timeout=None):
+        calls.append(("media_get", path, timeout))
+        return CountsResponse()
+
+    def fake_set_cached_stats(cache_key, value):
+        calls.append(("set_cached_stats", cache_key, value))
+
+    monkeypatch.setattr(stats, "check_login", fake_check_login)
+    monkeypatch.setattr(stats, "get_cached_stats", fake_get_cached_stats)
+    monkeypatch.setattr(stats, "build_stats_base_filter", fake_build_stats_base_filter)
+    monkeypatch.setattr(stats.playback_store, "query", fake_query)
+    monkeypatch.setattr(stats.media_api, "get", fake_media_get)
+    monkeypatch.setattr(stats, "set_cached_stats", fake_set_cached_stats)
+
+    response = stats.api_dashboard(request, user_id="all")
+
+    expected_response = {
+        "status": "success",
+        "data": {
+            "total_plays": 11,
+            "active_users": 1,
+            "total_duration": 3600,
+            "library": {"movie": 4, "series": 2, "episode": 9},
+        },
+    }
+    assert response == expected_response
+    assert calls == [
+        ("check_login", request),
+        ("get_cached_stats", "dashboard_local-u"),
+        ("build_stats_base_filter", "local-u"),
+        ("query", "SELECT COUNT(*) as c FROM PlaybackActivity WHERE UserId = ?", ["local-u"]),
+        (
+            "query",
+            "SELECT COUNT(DISTINCT UserId) as c FROM PlaybackActivity WHERE UserId = ? AND DateCreated > date('now', 'localtime', '-30 days')",
+            ["local-u"],
+        ),
+        ("query", "SELECT SUM(PlayDuration) as c FROM PlaybackActivity WHERE UserId = ?", ["local-u"]),
+        ("media_get", "/Items/Counts", 5),
+        ("counts_json",),
+        ("set_cached_stats", "dashboard_local-u", expected_response),
+    ]
+
+
 def test_playback_stats_includes_libraries_child_route_and_compat_export():
     from app.domains.playback import libraries_router
     from app.domains.playback import stats

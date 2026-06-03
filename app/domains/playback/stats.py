@@ -11,6 +11,11 @@ from app.domains.playback.chart_router import (
     router as chart_router,
     set_dependency_providers as set_chart_dependency_providers,
 )
+from app.domains.playback.dashboard_router import (
+    api_dashboard,
+    router as dashboard_router,
+    set_dependency_providers as set_dashboard_dependency_providers,
+)
 from app.domains.playback.latest_router import (
     api_latest_media,
     router as latest_router,
@@ -196,52 +201,16 @@ set_system_monitor_dependency_providers(
     safe_error_message_provider=lambda: safe_error_message,
 )
 
+set_dashboard_dependency_providers(
+    check_login_provider=lambda: check_login,
+    build_stats_base_filter_provider=lambda: build_stats_base_filter,
+    playback_store_provider=lambda: playback_store,
+    get_cached_stats_provider=lambda: get_cached_stats,
+    set_cached_stats_provider=lambda: set_cached_stats,
+    media_api_provider=lambda: media_api,
+)
 
-@router.get("/api/stats/dashboard")
-def api_dashboard(request: Request, user_id: Optional[str] = None):
-    # 🔒 安全检查：必须登录
-    if not check_login(request):
-        return {"status": "error", "message": "请先登录"}
-
-    # 🔒 权限检查：普通用户只能查看自己的数据
-    admin_user = request.session.get("user", {})
-    req_user = request.session.get("req_user", {})
-    is_admin = admin_user.get("auth_type") == "emby" or admin_user.get("role") == "admin"
-
-    if not is_admin:
-        if req_user:
-            user_id = req_user.get("Id")
-        elif admin_user:
-            user_id = admin_user.get("id")
-
-    # 🔥 尝试使用缓存（仅全局统计，不缓存特定用户）
-    cache_key = f"dashboard_{user_id or 'all'}"
-    cached = get_cached_stats(cache_key)
-    if cached:
-        return cached
-    
-    try:
-        where, params = build_stats_base_filter(user_id)
-        plays = playback_store.query(f"SELECT COUNT(*) as c FROM PlaybackActivity {where}", params)[0]['c']
-        # 🔥 时区修复
-        users = playback_store.query(f"SELECT COUNT(DISTINCT UserId) as c FROM PlaybackActivity {where} AND DateCreated > date('now', 'localtime', '-30 days')", params)[0]['c']
-        dur = playback_store.query(f"SELECT SUM(PlayDuration) as c FROM PlaybackActivity {where}", params)[0]['c'] or 0
-        base = {"total_plays": plays, "active_users": users, "total_duration": dur}
-        lib = {"movie": 0, "series": 0, "episode": 0}
-        
-        try:
-            # 🚀 替换为 media_api
-            res = media_api.get("/Items/Counts", timeout=5)
-            if res.status_code == 200:
-                d = res.json()
-                lib = {"movie": d.get("MovieCount", 0), "series": d.get("SeriesCount", 0), "episode": d.get("EpisodeCount", 0)}
-        except Exception: pass
-        
-        result = {"status": "success", "data": {**base, "library": lib}}
-        # 🔥 缓存结果
-        set_cached_stats(cache_key, result)
-        return result
-    except: return {"status": "error", "data": {"total_plays":0, "library": {}}}
+router.include_router(dashboard_router)
 
 router.include_router(libraries_router)
 
