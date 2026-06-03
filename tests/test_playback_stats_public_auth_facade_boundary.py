@@ -697,6 +697,97 @@ def test_badges_allows_non_admin_through_stats_monkeypatches(monkeypatch):
     ]
 
 
+def test_playback_stats_includes_monthly_child_route_and_compat_export():
+    from app.domains.playback import monthly_router
+    from app.domains.playback import stats
+
+    routes = [
+        (route.path, route.methods)
+        for route in stats.router.routes
+        if hasattr(route, "methods")
+    ]
+
+    assert any(path == "/api/stats/monthly_stats" and "GET" in methods for path, methods in routes)
+    assert stats.api_monthly_stats is monthly_router.api_monthly_stats
+
+    badges_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/badges" and "GET" in methods
+    )
+    monthly_stats_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/monthly_stats" and "GET" in methods
+    )
+    recent_added_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/stats/recent_added" and "GET" in methods
+    )
+    assert badges_index < monthly_stats_index < recent_added_index
+
+
+def test_monthly_stats_denies_unauthenticated_before_query_side_effects(monkeypatch):
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"Id": "u1"}})
+    calls = []
+
+    def fake_check_login(seen_request):
+        calls.append(seen_request)
+        return False
+
+    def fail_build_stats_base_filter(*args, **kwargs):
+        raise AssertionError("monthly stats should not build stats filter without login")
+
+    def fail_query(*args, **kwargs):
+        raise AssertionError("monthly stats should not query playback stats without login")
+
+    monkeypatch.setattr(stats, "check_login", fake_check_login)
+    monkeypatch.setattr(stats, "build_stats_base_filter", fail_build_stats_base_filter)
+    monkeypatch.setattr(stats.playback_store, "query", fail_query)
+
+    response = stats.api_monthly_stats(request)
+
+    assert response == {"status": "error", "message": "请先登录"}
+    assert calls == [request]
+
+
+def test_monthly_stats_allows_non_admin_through_stats_monkeypatches(monkeypatch):
+    from app.domains.playback import stats
+
+    request = SimpleNamespace(session={"user": {"id": "local-u"}})
+    calls = []
+
+    def fake_check_login(seen_request):
+        calls.append(("check_login", seen_request))
+        return True
+
+    def fake_build_stats_base_filter(user_id):
+        calls.append(("build_stats_base_filter", user_id))
+        return "WHERE UserId = ?", [user_id]
+
+    def fake_query(sql, params):
+        normalized_sql = " ".join(sql.split())
+        calls.append(("query", normalized_sql, list(params)))
+        return [
+            {"Month": "2026-05", "Duration": 120},
+            {"Month": "2026-06", "Duration": None},
+        ]
+
+    monkeypatch.setattr(stats, "check_login", fake_check_login)
+    monkeypatch.setattr(stats, "build_stats_base_filter", fake_build_stats_base_filter)
+    monkeypatch.setattr(stats.playback_store, "query", fake_query)
+
+    response = stats.api_monthly_stats(request, user_id="all")
+
+    assert response == {"status": "success", "data": {"2026-05": 120, "2026-06": 0}}
+    assert calls == [
+        ("check_login", request),
+        ("build_stats_base_filter", "local-u"),
+        (
+            "query",
+            "SELECT substr(replace(DateCreated, 'T', ' '), 1, 7) as Month, SUM(PlayDuration) as Duration FROM PlaybackActivity WHERE UserId = ? AND DateCreated > date('now', 'localtime', '-12 months') GROUP BY Month ORDER BY Month",
+            ["local-u"],
+        ),
+    ]
+
+
 def test_user_details_denies_unauthenticated_before_query_or_media_side_effects(monkeypatch):
     from app.domains.playback import stats
 

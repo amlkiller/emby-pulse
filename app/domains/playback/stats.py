@@ -22,6 +22,11 @@ from app.domains.playback.live_router import (
     router as live_router,
     set_dependency_providers as set_live_dependency_providers,
 )
+from app.domains.playback.monthly_router import (
+    api_monthly_stats,
+    router as monthly_router,
+    set_dependency_providers as set_monthly_dependency_providers,
+)
 from app.domains.playback.poster_router import (
     api_poster_data,
     router as poster_router,
@@ -151,6 +156,12 @@ set_badges_dependency_providers(
     playback_store_provider=lambda: playback_store,
 )
 
+set_monthly_dependency_providers(
+    check_login_provider=lambda: check_login,
+    build_stats_base_filter_provider=lambda: build_stats_base_filter,
+    playback_store_provider=lambda: playback_store,
+)
+
 
 @router.get("/api/stats/dashboard")
 def api_dashboard(request: Request, user_id: Optional[str] = None):
@@ -270,33 +281,7 @@ router.include_router(top_users_router)
 
 router.include_router(badges_router)
 
-@router.get("/api/stats/monthly_stats")
-def api_monthly_stats(request: Request, user_id: Optional[str] = None):
-    # 🔒 安全检查
-    if not check_login(request):
-        return {"status": "error", "message": "请先登录"}
-
-    # 🔒 权限检查：普通用户只能查看自己的数据
-    admin_user = request.session.get("user", {})
-    req_user = request.session.get("req_user", {})
-    is_admin = admin_user.get("auth_type") == "emby" or admin_user.get("role") == "admin"
-
-    if not is_admin:
-        if req_user:
-            user_id = req_user.get("Id")
-        elif admin_user:
-            user_id = admin_user.get("id")
-
-    try:
-        where_base, params = build_stats_base_filter(user_id)
-        # 🔥 时区修复
-        where = where_base + " AND DateCreated > date('now', 'localtime', '-12 months')"
-        sql = f"SELECT substr(replace(DateCreated, 'T', ' '), 1, 7) as Month, SUM(PlayDuration) as Duration FROM PlaybackActivity {where} GROUP BY Month ORDER BY Month"
-        results = playback_store.query(sql, params); data = {}
-        if results: 
-            for r in results: data[r['Month']] = int(r['Duration'] or 0)
-        return {"status": "success", "data": data}
-    except: return {"status": "error", "data": {}}
+router.include_router(monthly_router)
 
 # ==========================================
 # ==========================================
