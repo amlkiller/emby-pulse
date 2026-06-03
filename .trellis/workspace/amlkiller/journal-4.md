@@ -1952,3 +1952,36 @@ Extracted the admin users libraries route into a users-domain child router with 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 239: Extract users single user route
+
+**Date**: 2026-06-04
+**Task**: Extract users single user route
+**Branch**: `main`
+
+### Summary
+
+Extracted GET /api/manage/user/{user_id} into app/domains/users/single_user_router.py, preserved users/router.py compatibility export and dynamic route order, added regression coverage for non-admin short-circuit plus success/error response mapping. Verification: compileall for changed files, import compatibility check, users facade tests 19 passed, full suite 898 passed with 3 warnings.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `79b20d1` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
