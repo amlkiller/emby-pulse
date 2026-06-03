@@ -27,7 +27,7 @@ from app.infra.config.user_bot_settings import (
     is_user_bot_open_reg_notify_user_enabled,
     set_user_bot_registration_batch_used,
 )
-from app.domains.notifications.bot_admin_dao import (
+from app.bot.bot_admin_dao import (
     adjust_lottery_pool,
     clear_active_scratch_card,
     clear_registration_logs,

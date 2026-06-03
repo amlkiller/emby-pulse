@@ -15,8 +15,8 @@ def register_static_assets(app: FastAPI) -> None:
 
 def register_routes(app: FastAPI) -> None:
     from app.domains.media_requests import router as media_request
+    from app.bot import bot as bot_router
     from app.domains.notifications import (
-        bot as bot_router,
         calendar_notify,
         messages,
         notify_admin,

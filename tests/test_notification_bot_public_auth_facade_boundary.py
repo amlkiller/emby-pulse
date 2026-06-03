@@ -11,7 +11,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 
 def test_notification_bot_does_not_import_private_users_auth():
-    path = _REPO_ROOT / "app/domains/notifications/bot.py"
+    path = _REPO_ROOT / "app/bot/bot.py"
     rel_path = path.relative_to(_REPO_ROOT).as_posix()
     tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(rel_path))
     violations = []
@@ -42,7 +42,7 @@ def test_notification_bot_does_not_import_private_users_auth():
 
 
 def test_get_bot_settings_denies_non_admin_before_config_read(monkeypatch):
-    from app.domains.notifications import bot as notification_bot
+    from app.bot import bot as notification_bot
 
     request = SimpleNamespace(session={"user": {"Id": "u1"}})
     calls = []
@@ -64,7 +64,7 @@ def test_get_bot_settings_denies_non_admin_before_config_read(monkeypatch):
 
 
 def test_get_user_blacklist_allows_admin_through_public_facade(monkeypatch):
-    from app.domains.notifications import bot as notification_bot
+    from app.bot import bot as notification_bot
 
     request = SimpleNamespace(session={"user": {"Id": "admin"}})
     rows = [{"tg_user_id": "1001", "reason": "spam"}]
@@ -91,7 +91,7 @@ def test_get_user_blacklist_allows_admin_through_public_facade(monkeypatch):
 
 
 def test_add_user_blacklist_denies_non_admin_before_request_body(monkeypatch):
-    from app.domains.notifications import bot as notification_bot
+    from app.bot import bot as notification_bot
 
     calls = []
 
@@ -115,7 +115,7 @@ def test_add_user_blacklist_denies_non_admin_before_request_body(monkeypatch):
 
 
 def test_test_bot_allows_admin_through_public_facade(monkeypatch):
-    from app.domains.notifications import bot as notification_bot
+    from app.bot import bot as notification_bot
 
     request = SimpleNamespace(session={"user": {"Id": "admin"}})
     calls = []
@@ -157,7 +157,7 @@ def test_test_bot_allows_admin_through_public_facade(monkeypatch):
 
 
 def test_lottery_pool_uses_point_dao_config_owner(monkeypatch):
-    from app.domains.notifications import bot as notification_bot
+    from app.bot import bot as notification_bot
 
     request = SimpleNamespace(session={"user": {"Id": "admin"}})
     calls = []
