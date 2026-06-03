@@ -533,3 +533,36 @@ Extracted NotificationBot message center reply/block/unblock callback helpers in
 ### Next Steps
 
 - None - task complete
+
+
+## Session 196: Extract notification bot whois command service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot whois command service
+**Branch**: `main`
+
+### Summary
+
+Extracted NotificationBot /whois command validation, expire-date formatting, result formatting, DAO lookup, and error handling into notification_bot_whois_command_service with lazy legacy providers; kept old NotificationBot wrappers and added boundary tests for usage errors, no-match output, single and multiple result formatting, date cases, error logging, and legacy monkeypatch compatibility.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b9c3efd` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
