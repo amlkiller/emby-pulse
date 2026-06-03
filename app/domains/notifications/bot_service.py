@@ -17,6 +17,7 @@ from app.domains.notifications import notification_bot_channel_service
 from app.domains.notifications import notification_bot_check_command_service
 from app.domains.notifications import notification_bot_delivery_service
 from app.domains.notifications import notification_bot_emby_restart_command_service
+from app.domains.notifications import notification_bot_latest_command_service
 from app.domains.notifications import notification_bot_message_center_callback_service
 from app.domains.notifications import notification_bot_media_helper_service
 from app.domains.notifications import notification_bot_media_quality_service
@@ -159,6 +160,12 @@ notification_bot_playback_command_service.set_dependency_providers(
 )
 
 notification_bot_emby_restart_command_service.set_dependency_providers(
+    logger_provider=lambda: logger,
+)
+
+notification_bot_latest_command_service.set_dependency_providers(
+    media_api_provider=lambda: media_api,
+    admin_id_provider=lambda: get_admin_id,
     logger_provider=lambda: logger,
 )
 
@@ -1736,40 +1743,7 @@ class NotificationBot:
             bus.publish("bot.admin_message", text, cid, platform)
 
     def _cmd_latest(self, cid, platform):
-        try:
-            user_id = get_admin_id()
-            if not user_id: return self.send_message(cid, "❌ 错误: 无法获取 Emby 用户身份", platform=platform)
-            fields = "DateCreated,Name,SeriesName,Type,ParentIndexNumber,IndexNumber"
-            params = {"IncludeItemTypes": "Movie,Episode", "Limit": 8, "Fields": fields}
-            
-            res = media_api.get(f"/Users/{user_id}/Items/Latest", params=params, timeout=10)
-            if res.status_code != 200: return self.send_message(cid, f"❌ 查询失败", platform=platform)
-            
-            items = res.json()
-            if not items: return self.send_message(cid, "📭 最近没有新入库的资源", platform=platform)
-
-            msg = "🆕 <b>最近入库 (Top 8)</b>\n\n"
-            for i in items:
-                name = i.get("Name", "未知")
-                item_type = i.get("Type")
-                
-                if item_type == "Episode" and i.get("SeriesName"):
-                    s_idx = str(i.get("ParentIndexNumber", 0)).zfill(2) if i.get("ParentIndexNumber") is not None else "01"
-                    e_idx = str(i.get("IndexNumber", 0)).zfill(2) if i.get("IndexNumber") is not None else "XX"
-                    name = f"《{i.get('SeriesName')}》 S{s_idx}E{e_idx} {name}"
-                elif item_type == "Movie":
-                    name = f"《{name}》"
-                
-                date_raw = i.get("DateCreated")
-                date_str = date_raw[:10] if date_raw else "未知时间"
-                type_icon = "🎬" if item_type == "Movie" else "📺"
-                
-                msg += f"{type_icon} <code>{date_str}</code> | <b>{name}</b>\n"
-                
-            self.send_message(cid, msg.strip(), platform=platform)
-        except Exception as e:
-            logger.error(f"[Bot] latest query error: {e}")
-            self.send_message(cid, f"❌ 查询异常", platform=platform)
+        return notification_bot_latest_command_service.cmd_latest(self, cid, platform)
 
     def _extract_tech_info(self, item):
         sources = item.get("MediaSources", [])
