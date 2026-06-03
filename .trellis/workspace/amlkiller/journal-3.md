@@ -1391,3 +1391,36 @@ Extracted user bot Telegram API, send, edit, and reply helpers into a focused no
 ### Next Steps
 
 - None - task complete
+
+
+## Session 162: Refactor notification user bot concurrency service
+
+**Date**: 2026-06-03
+**Task**: Refactor notification user bot concurrency service
+**Branch**: `main`
+
+### Summary
+
+Extracted user bot rate-limit and username-lock helpers into a focused notification service while preserving legacy user_bot_service globals, time/threading/logger provider behavior, lock cleanup, and monkeypatch compatibility.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ef973d9` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
