@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend guideline index for domain-local service refactor work."}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "Directory and module organization guidance for splitting notification domain code."}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "Project command and quality conventions for implementation and verification."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Reuse guidance for following existing extracted notification bot service patterns."}
