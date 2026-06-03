@@ -28,6 +28,7 @@ from app.domains.notifications import user_bot_lottery_draw_service
 from app.domains.notifications import user_bot_menu_service
 from app.domains.notifications import user_bot_message_cleanup_service
 from app.domains.notifications import user_bot_message_dispatcher_service
+from app.domains.notifications import user_bot_new_chat_member_service
 from app.domains.notifications import user_bot_open_registration_service
 from app.domains.notifications import user_bot_open_reg_notify_service
 from app.domains.notifications import user_bot_password_commands_service
@@ -604,6 +605,12 @@ user_bot_callback_dispatcher_service.set_dependency_providers(
     submit_request_provider=lambda: _submit_request,
     cmd_myrequests_provider=lambda: cmd_myrequests,
     handle_scratch_provider=lambda: _handle_scratch,
+)
+
+user_bot_new_chat_member_service.set_dependency_providers(
+    user_bot_token_provider=lambda: get_user_bot_token(),
+    welcome_msg_provider=lambda: get_user_bot_welcome_msg(),
+    send_provider=lambda: _send,
 )
 
 user_bot_message_dispatcher_service.set_dependency_providers(
@@ -1278,20 +1285,7 @@ class UserBot:
         return user_bot_callback_dispatcher_service.handle_callback(cq)
 
     def _on_new_chat_members(self, chat_id, new_members, group_name):
-        """处理新成员入群"""
-        for member in new_members:
-            # 检查是否是机器人自己被加入群
-            if member.get("is_bot") and str(member.get("id")) == str(get_user_bot_token().split(":")[0] if ":" in get_user_bot_token() else ""):
-                # 机器人被加入群，发送欢迎消息
-                welcome_msg = get_user_bot_welcome_msg()
-                if welcome_msg:
-                    _send(chat_id, welcome_msg)
-                else:
-                    _send(chat_id, f"👋 你好！我是 EmbyPulse 用户机器人，已加入 <b>{group_name}</b>\n\n"
-                          "✅ 发送 /checkin 或 /签到 获取积分\n"
-                          "✅ 发送 /help 查看群内可用指令\n\n"
-                          "💡 更多功能请私聊机器人使用")
-                break
+        return user_bot_new_chat_member_service.handle_new_chat_members(chat_id, new_members, group_name)
 
 
 user_bot = UserBot()
