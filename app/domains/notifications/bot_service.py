@@ -39,6 +39,7 @@ from app.domains.notifications import notification_bot_playback_command_service
 from app.domains.notifications import notification_bot_plugin_callback_service
 from app.domains.notifications import notification_bot_polling_service
 from app.domains.notifications import notification_bot_request_admin_message_sync_service
+from app.domains.notifications import notification_bot_request_approval_menu_callback_service
 from app.domains.notifications import notification_bot_risk_alert_service
 from app.domains.notifications import notification_bot_risk_ban_callback_service
 from app.domains.notifications import notification_bot_search_command_service
@@ -362,6 +363,13 @@ notification_bot_feedback_callback_service.set_dependency_providers(
 notification_bot_risk_ban_callback_service.set_dependency_providers(
     telegram_client_provider=lambda: telegram_client,
     username_lookup_provider=lambda bot, user_id: bot._get_username(user_id),
+)
+
+notification_bot_request_approval_menu_callback_service.set_dependency_providers(
+    media_request_dao_provider=lambda: media_request_dao,
+    telegram_client_provider=lambda: telegram_client,
+    pulse_url_provider=lambda: get_pulse_url,
+    get_plugin_provider=lambda: get_plugin,
 )
 
 def _submit_bot_task(fn, *args):
@@ -897,44 +905,7 @@ class NotificationBot:
                     except Exception: pass
                 return
             
-            if action == "reject" and len(parts) > 2 and parts[2] == "menu":
-                tid = parts[3]
-                reasons = ["影片未上映", "剧集未开播", "未找到可用资源", "质量太差等待洗版"]
-                keyboard = {"inline_keyboard": [
-                    [{"text": reasons[0], "callback_data": f"req_reject_do_{tid}_0"}, {"text": reasons[1], "callback_data": f"req_reject_do_{tid}_1"}],
-                    [{"text": reasons[2], "callback_data": f"req_reject_do_{tid}_2"}, {"text": reasons[3], "callback_data": f"req_reject_do_{tid}_3"}],
-                    [{"text": "🔙 取消返回", "callback_data": f"req_back_{tid}"}]
-                ]}
-                try: telegram_client.post_api(token, "editMessageReplyMarkup", json={"chat_id": cid, "message_id": mid, "reply_markup": keyboard}, proxies=proxies, timeout=5)
-                except Exception: pass
-                return
-            
-            elif action == "back":
-                tid = parts[2]; admin_url = get_pulse_url() or "http://127.0.0.1:10307"
-                # 检查影巢插件是否启用
-                hdhive_enabled = False
-                try:
-                    from app.plugins import get_plugin
-                    hdhive_plugin = get_plugin("hdhive")
-                    hdhive_enabled = hdhive_plugin and hdhive_plugin.enabled
-                except:
-                    pass
-                # 尝试从数据库获取求片信息以构建影巢搜索按钮
-                r = media_request_dao.get_request_summary_by_tmdb(tid)
-                if hdhive_enabled and r:
-                    title_safe = r["title"].replace("_", "-").replace(" ", "-")
-                    keyboard = {"inline_keyboard": [
-                        [{"text": "🚀 推送 MP", "callback_data": f"req_approve_{tid}"}, {"text": "✋ 手动接单", "callback_data": f"req_manual_{tid}"}],
-                        [{"text": "🔍 影巢搜索", "callback_data": f"req_hdhive_{tid}_{r['media_type']}_0_{title_safe}"}, {"text": "❌ 拒绝求片", "callback_data": f"req_reject_menu_{tid}"}],
-                        [{"text": "💻 网页审批", "url": f"{admin_url}/requests_admin"}]
-                    ]}
-                else:
-                    keyboard = {"inline_keyboard": [
-                        [{"text": "🚀 推送 MP", "callback_data": f"req_approve_{tid}"}, {"text": "✋ 手动接单", "callback_data": f"req_manual_{tid}"}],
-                        [{"text": "❌ 拒绝求片", "callback_data": f"req_reject_menu_{tid}"}, {"text": "💻 网页审批", "url": f"{admin_url}/requests_admin"}]
-                    ]}
-                try: telegram_client.post_api(token, "editMessageReplyMarkup", json={"chat_id": cid, "message_id": mid, "reply_markup": keyboard}, proxies=proxies, timeout=5)
-                except Exception: pass
+            if notification_bot_request_approval_menu_callback_service.handle_request_approval_menu_callback(data, cid, mid, token, proxies):
                 return
 
             tid = parts[2]; reject_reason = None
