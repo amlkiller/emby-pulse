@@ -467,3 +467,36 @@ Extracted safe media list endpoints into app/domains/media_requests/safe_media_r
 ### Next Steps
 
 - None - task complete
+
+
+## Session 134: Refactor media requests discovery router
+
+**Date**: 2026-06-03
+**Task**: Refactor media requests discovery router
+**Branch**: `main`
+
+### Summary
+
+Extracted media request discovery and browse endpoints into app/domains/media_requests/discovery_router.py, included the child router from media_requests/router.py at the original route position, and preserved media_requests.router compatibility exports for discovery routes and helper functions. Verified compile/import route checks, git diff checks, focused media request boundary tests, and the full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d7c30f9` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
