@@ -4,6 +4,14 @@ from datetime import date
 from fastapi import APIRouter, Request, Depends, BackgroundTasks
 from fastapi.responses import JSONResponse
 from app.domains.media_requests import community_cache_service
+from app.domains.media_requests.auth_router import (
+    RequestLoginModel,
+    check_auth,
+    request_system_login,
+    request_system_logout,
+    router as auth_router,
+    set_dependency_providers as set_auth_dependency_providers,
+)
 from app.domains.users import public_service as user_service
 from app.core.security import validate_password_strength  # 🔒 统一密码强度校验
 from pydantic import BaseModel
@@ -106,6 +114,18 @@ def _check_user_exists(user_id: str) -> bool:
         pass
     return True  # 网络异常时不误判，允许继续操作
 
+
+set_auth_dependency_providers(
+    media_api_provider=lambda: media_api,
+    main_server_url_provider=lambda: get_media_server_main_public_or_host,
+    user_routes_provider=lambda: get_media_server_user_routes,
+    user_status_meta_provider=lambda: get_user_status_meta,
+    user_password_hash_provider=lambda: get_user_password_hash,
+    update_user_password_hash_provider=lambda: update_user_password_hash,
+    user_expire_date_provider=lambda: get_user_expire_date,
+    check_user_exists_provider=lambda: _check_user_exists,
+)
+
 def get_tmdb_season_info(tmdb_id: int, season: int) -> tuple:
     """获取 TMDB 季信息（总集数、未播出集数）
     
@@ -177,9 +197,6 @@ class BulkAdminActionModel(BaseModel):
     action: str
     reject_reason: Optional[str] = None
 
-class RequestLoginModel(BaseModel):
-    username: str; password: str
-
 class FeedbackSubmitModel(BaseModel):
     item_name: str
     issue_type: str
@@ -194,172 +211,7 @@ class BulkFeedbackActionModel(BaseModel):
     items: List[int]
     action: str
 
-@router.post("/api/requests/auth")
-def request_system_login(data: RequestLoginModel, request: Request):
-    # 🔒 端口隔离检查：用户社区登录只能从用户端口访问
-    host_header = request.headers.get("host", "")
-    is_user_port = ":10308" in host_header or host_header.endswith(":10308")
-    is_admin_port = ":10307" in host_header or host_header.endswith(":10307")
-    
-    # 如果从管理端口访问，拒绝用户社区登录
-    if is_admin_port:
-        return {"status": "error", "message": "请从用户社区端口(10308)登录"}
-    
-    host = get_media_server_main_public_or_host()
-    if not host: return {"status": "error", "message": "未配置 Emby 服务器"}
-    
-    # 先获取用户列表，找到匹配的用户
-    from datetime import date as date_module
-    
-    matched_user = None
-    try:
-        users_res = media_api.get("/Users", timeout=5)
-        if users_res.status_code == 200:
-            for u in users_res.json():
-                if u.get("Name", "").lower() == data.username.lower():
-                    matched_user = u
-                    break
-    except Exception as e:
-        print(f"[用户社区登录] 获取用户列表失败: {e}")
-    
-    if not matched_user:
-        return {"status": "error", "message": "账号或密码错误"}
-    
-    user_id = matched_user.get("Id")
-    user_name = matched_user.get("Name")
-    has_password = matched_user.get("HasPassword", False)
-    is_emby_disabled = matched_user.get("Policy", {}).get("IsDisabled", False)
-    
-    # 检查数据库中的状态
-    admin_disabled = 0
-    expire_date = None
-    try:
-        row = get_user_status_meta(user_id)
-        if row:
-            admin_disabled, expire_date = row["admin_disabled"], row["expire_date"]
-    except Exception as e:
-        print(f"[用户社区登录] 检查用户状态失败: {e}")
-    
-    # 管理员封禁 - 拒绝登录
-    if admin_disabled == 1:
-        return {"status": "error", "message": "您的账号已被禁用，如需启用请联系管理员", "disabled": True}
-    
-    # 检查是否过期
-    is_expired = False
-    if expire_date:
-        try:
-            exp_date = date_module.fromisoformat(expire_date)
-            if exp_date < date_module.today():
-                is_expired = True
-        except:
-            pass
-    
-    # 验证密码
-    if not has_password:
-        return {"status": "error", "message": "安全要求：请先在 Emby 中为账号设置密码"}
-
-    password_valid = False
-    if has_password:
-        if is_emby_disabled:
-            # 🔒 安全修复：已禁用账号不修改 Emby IsDisabled 状态，使用本地哈希验证
-            stored_hash = None
-            try:
-                row = get_user_password_hash(user_id)
-                if row and row["emby_pw_hash"]:
-                    stored_hash = row["emby_pw_hash"]
-            except:
-                pass
-
-            if stored_hash:
-                try:
-                    import bcrypt
-                    password_valid = bcrypt.checkpw(data.password.encode('utf-8'), stored_hash.encode('utf-8'))
-                except:
-                    password_valid = False
-            else:
-                # 无哈希缓存（用户从未成功登录过），安全拒绝
-                return {"status": "error", "message": "账号已过期，请联系管理员续费后登录", "disabled": True, "need_renew": True}
-        else:
-            # 正常账号：通过 Emby API 验证密码
-            try:
-                res = media_api.authenticate_by_name(data.username, data.password, timeout=8)
-                password_valid = res.status_code == 200
-            except Exception as e:
-                print(f"[用户社区登录] 验证密码失败: {e}")
-
-    if not password_valid:
-        return {"status": "error", "message": "账号或密码错误"}
-
-    # 🔒 登录成功后缓存密码哈希（用于过期账号本地验证，永不修改 Emby IsDisabled）
-    if has_password and data.password:
-        try:
-            import bcrypt
-            pw_hash = bcrypt.hashpw(data.password.encode('utf-8'), bcrypt.gensalt(rounds=12)).decode('utf-8')
-            update_user_password_hash(user_id, pw_hash)
-        except:
-            pass
-
-    # 登录成功 - 清除整个 Session，防止残留其他用户数据
-    request.session.clear()
-    request.session["req_user"] = {"Id": user_id, "Name": user_name, "expired": is_expired}
-    
-    if is_expired:
-        return {"status": "success", "expired": True, "message": f"您的账号已于 {expire_date} 过期，请及时续费"}
-    return {"status": "success"}
-
-@router.get("/api/requests/check")
-def check_auth(request: Request):
-    user = request.session.get("req_user")
-    if user: 
-        user_id = user.get("Id")
-        
-        # 检查 Emby 账号是否仍然存在
-        if not _check_user_exists(user_id):
-            request.session.pop("req_user", None)
-            return {"status": "error", "message": "账号已被删除", "account_deleted": True}
-        
-        # 检查是否被封禁（实时检查，防止被封后仍能使用）
-        try:
-            row = get_user_status_meta(user_id)
-            
-            if row and row["admin_disabled"] == 1:
-                # 被管理员封禁，强制登出
-                request.session.pop("req_user", None)
-                return {"status": "error", "message": "您的账号已被禁用，如需启用请联系管理员", "disabled": True}
-        except:
-            pass
-        
-        expire_date = "永久有效"
-        is_expired = False
-        if user_id:
-            try:
-                row = get_user_expire_date(user_id)
-                if row and row["expire_date"]:
-                    expire_date = row["expire_date"]
-                    from datetime import date
-                    try:
-                        exp_date = date.fromisoformat(expire_date)
-                        if exp_date < date.today():
-                            is_expired = True
-                    except:
-                        pass
-            except Exception: pass
-            
-        # 返回用户可见的线路（根据权限过滤）
-        user_routes = get_media_server_user_routes(user.get("Id"))
-        server_url = json.dumps(user_routes) if user_routes else get_media_server_main_public_or_host()
-        return {
-            "status": "success",
-            "user": {**user, "expire_date": expire_date, "expired": is_expired},
-            "server_url": server_url
-        }
-    return {"status": "error"}
-
-@router.post("/api/requests/logout")
-def request_system_logout(request: Request):
-    # 🔥 完全清除 session，不只是 pop req_user
-    request.session.clear()
-    return {"status": "success"}
+router.include_router(auth_router)
 
 @router.get("/api/requests/item_info")
 def get_item_info(item_id: str, request: Request):

@@ -31,6 +31,39 @@ def test_media_requests_router_does_not_import_private_users_auth():
     assert violations == []
 
 
+def test_media_requests_router_includes_auth_child_routes_and_compat_exports():
+    from app.domains.media_requests import auth_router
+    from app.domains.media_requests import router as media_requests_router
+
+    routes = [
+        (route.path, route.methods)
+        for route in media_requests_router.router.routes
+        if hasattr(route, "methods")
+    ]
+
+    assert any(path == "/api/requests/auth" and "POST" in methods for path, methods in routes)
+    assert any(path == "/api/requests/check" and "GET" in methods for path, methods in routes)
+    assert any(path == "/api/requests/logout" and "POST" in methods for path, methods in routes)
+    assert media_requests_router.RequestLoginModel is auth_router.RequestLoginModel
+    assert media_requests_router.request_system_login is auth_router.request_system_login
+    assert media_requests_router.check_auth is auth_router.check_auth
+    assert media_requests_router.request_system_logout is auth_router.request_system_logout
+
+    auth_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/requests/auth" and "POST" in methods
+    )
+    check_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/requests/check" and "GET" in methods
+    )
+    logout_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/requests/logout" and "POST" in methods
+    )
+    item_info_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/requests/item_info" and "GET" in methods
+    )
+    assert auth_index < check_index < logout_index < item_info_index
+
+
 def test_get_all_requests_denies_non_admin_before_dao_reads(monkeypatch):
     from app.domains.media_requests import router as media_requests_router
 
