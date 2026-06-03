@@ -7,7 +7,6 @@ import time
 import datetime
 import secrets
 import logging
-import re
 import random
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
@@ -26,6 +25,7 @@ from app.domains.notifications import user_bot_dice_pk_commands_service
 from app.domains.notifications import user_bot_game_commands_service
 from app.domains.notifications import user_bot_menu_service
 from app.domains.notifications import user_bot_message_cleanup_service
+from app.domains.notifications import user_bot_open_registration_service
 from app.domains.notifications import user_bot_open_reg_notify_service
 from app.domains.notifications import user_bot_password_commands_service
 from app.domains.notifications import user_bot_pk_callback_service
@@ -310,6 +310,39 @@ user_bot_basic_commands_service.set_dependency_providers(
     media_api_provider=lambda: media_api,
     open_reg_enabled_provider=lambda: is_user_bot_open_reg_enabled(),
     user_state_provider=lambda: _user_state,
+    safe_error_message_provider=lambda: safe_error_message,
+    logger_provider=lambda: logger,
+)
+
+user_bot_open_registration_service.set_dependency_providers(
+    enter_reg_queue_provider=lambda: _enter_reg_queue,
+    leave_reg_queue_provider=lambda: _leave_reg_queue,
+    open_reg_enabled_provider=lambda: is_user_bot_open_reg_enabled(),
+    send_provider=lambda: _send,
+    reg_quota_mode_provider=lambda: get_user_bot_reg_quota_mode(),
+    reg_quota_provider=lambda: get_user_bot_reg_quota(),
+    reserve_quota_slot_provider=lambda: _reserve_quota_slot,
+    release_quota_slot_provider=lambda: _release_quota_slot,
+    set_open_reg_enabled_provider=lambda: set_user_bot_open_reg_enabled,
+    send_open_reg_closed_notify_provider=lambda: _send_open_reg_closed_notify,
+    max_reg_provider=lambda: get_user_bot_max_reg(),
+    user_bot_dao_provider=lambda: user_bot_dao,
+    user_state_provider=lambda: _user_state,
+    secrets_provider=lambda: secrets,
+    get_username_lock_provider=lambda: _get_username_lock,
+    get_users_list_cached_provider=lambda: get_users_list_cached,
+    quota_lock_provider=lambda: _quota_lock,
+    refresh_user_count_cache_locked_provider=lambda: _refresh_user_count_cache_locked,
+    user_count_cache_provider=lambda: _user_count_cache,
+    media_api_provider=lambda: media_api,
+    template_user_provider=lambda: get_user_bot_template_user(),
+    datetime_provider=lambda: datetime,
+    reg_days_provider=lambda: get_user_bot_reg_days(),
+    allow_routes_provider=lambda: get_user_bot_allow_routes(),
+    block_routes_provider=lambda: get_user_bot_block_routes(),
+    user_dao_provider=lambda: user_dao,
+    bind_user_provider=lambda: _bind_user,
+    main_menu_keyboard_provider=lambda: _main_menu_keyboard,
     safe_error_message_provider=lambda: safe_error_message,
     logger_provider=lambda: logger,
 )
@@ -751,165 +784,13 @@ def _inc_batch_used(quota):
 
 
 def _do_register(chat_id, tg_user_id, custom_name, tg_username="", tg_display_name=""):
-    """执行注册逻辑"""
-    # 🚀 进入注册队列（FIFO 排队，超出 MAX_CONCURRENT_REG 时阻塞等待）
-    if not _enter_reg_queue(chat_id):
-        return
-
-    reserved = False
-    committed = False
-    quota_mode = "total"
-    quota = 0
-    try:
-        # 检查开放注册是否开启
-        if not is_user_bot_open_reg_enabled():
-            _send(chat_id, "❌ 开放注册已关闭，请联系管理员获取注册码后使用 /code 注册码")
-            return
-
-        # 🎯 支持两种名额模式
-        quota_mode = get_user_bot_reg_quota_mode()
-        quota = get_user_bot_reg_quota()
-
-        # 🔒 软预占 quota（在调用 Emby 建号前先占槽，杜绝并发超额）
-        if quota > 0:
-            ok, reason = _reserve_quota_slot(quota_mode, quota)
-            if not ok:
-                if reason == "batch_full":
-                    _send(chat_id, "❌ 本次开放注册名额已用完，请联系管理员")
-                    try:
-                        set_user_bot_open_reg_enabled(False)
-                    except Exception:
-                        pass
-                    _send_open_reg_closed_notify("批次名额已满")
-                elif reason == "total_full":
-                    _send(chat_id, "❌ 用户数量已达上限，开放注册已自动关闭")
-                    try:
-                        set_user_bot_open_reg_enabled(False)
-                    except Exception:
-                        pass
-                    _send_open_reg_closed_notify("用户总数已达上限")
-                else:
-                    _send(chat_id, "❌ 暂时无法检查注册名额，请稍后重试")
-                return
-            reserved = True
-
-        max_reg = get_user_bot_max_reg()
-        if max_reg > 0 and quota <= 0:
-            try:
-                count = user_bot_dao.count_bindings()
-                if count >= max_reg:
-                    _send(chat_id, "❌ 注册名额已满，请联系管理员")
-                    return
-            except Exception: pass
-
-        # 验证用户名格式
-        # 检查用户名长度限制
-        if len(custom_name) > 16:
-            _send(chat_id, f"❌ 用户名最多 16 个字符，当前 {len(custom_name)} 个字符")
-            return
-        
-        safe_name = re.sub(r'[^a-zA-Z0-9\u4e00-\u9fa5_\-.@]', '', custom_name)
-        
-        if safe_name != custom_name:
-            invalid_chars = set(re.findall(r'[^a-zA-Z0-9\u4e00-\u9fa5_\-.@]', custom_name))
-            invalid_str = ', '.join(f"'{c}'" for c in list(invalid_chars)[:5])
-            _send(chat_id, f"❌ 用户名包含不支持的字符: {invalid_str}\n\n只允许字母、数字、中文、下划线(_)、连字符(-)、@ 和 .")
-            return
-        
-        if not safe_name:
-            _send(chat_id, "❌ 用户名无效，请使用字母、数字、中文、下划线(_)、连字符(-)、@ 或 .")
-            return
-        
-        password = secrets.token_urlsafe(8)
-
-        # 🚀 获取用户名锁
-        username_lock = _get_username_lock(safe_name.lower())
-        
-        with username_lock:
-            try:
-                # 优先复用缓存的用户列表（减少 Emby /Users 调用）
-                users = get_users_list_cached() or []
-                if any(u.get('Name', '').lower() == safe_name.lower() for u in users):
-                    # 缓存可能过时，force 拉一次确认
-                    with _quota_lock:
-                        _refresh_user_count_cache_locked(force=True)
-                        users = _user_count_cache.get("users") or []
-                    if any(u.get('Name', '').lower() == safe_name.lower() for u in users):
-                        _send(chat_id, f"❌ 用户名 <b>{safe_name}</b> 已被占用，请换一个")
-                        _user_state[str(tg_user_id)] = {"action": "register_name"}
-                        return
-
-                create_res = media_api.post("/Users/New", json={"Name": safe_name}, timeout=10)
-                if create_res.status_code not in [200, 201]:
-                    _send(chat_id, "❌ 创建账号失败，请稍后重试")
-                    return
-                new_user = create_res.json()
-                uid = new_user.get("Id")
-                media_api.post(f"/Users/{uid}/Password", json={"NewPw": password}, timeout=5)
-
-                template_id = get_user_bot_template_user()
-                if template_id:
-                    try:
-                        tpl = media_api.get(f"/Users/{template_id}", timeout=5).json()
-                        if tpl.get("Policy"):
-                            policy = tpl["Policy"]
-                            policy["IsAdministrator"] = False
-                            policy["IsDisabled"] = False
-                            media_api.post(f"/Users/{uid}/Policy", json=policy, timeout=5)
-                    except Exception: pass
-                else:
-                    try:
-                        media_api.post(f"/Users/{uid}/Policy", json={"IsDisabled": False}, timeout=3)
-                    except Exception: pass
-
-                reg_days = get_user_bot_reg_days()
-                expire = (datetime.date.today() + datetime.timedelta(days=reg_days)).strftime("%Y-%m-%d")
-
-                allow_routes = get_user_bot_allow_routes()
-                block_routes = get_user_bot_block_routes()
-
-                if allow_routes or block_routes:
-                    user_dao.save_user_expire_routes(uid, expire, allow_routes, block_routes)
-                else:
-                    template_routes = None
-                    if template_id:
-                        try:
-                            template_meta = user_dao.get_user_routes(template_id)
-                            if template_meta and (template_meta.get('allow_routes') or template_meta.get('block_routes')):
-                                template_routes = template_meta
-                        except Exception: pass
-
-                    if template_routes:
-                        user_dao.save_user_expire_routes(uid, expire, template_routes.get('allow_routes', ''), template_routes.get('block_routes', ''))
-                    else:
-                        user_dao.save_user_expire(uid, expire)
-
-                _bind_user(tg_user_id, uid, safe_name, init_password=password, tg_username=tg_username or tg_display_name, tg_display_name=tg_display_name or str(tg_user_id))
-
-                try:
-                    user_bot_dao.create_registration_log(tg_user_id, safe_name, uid, "open")
-                except Exception as e:
-                    logger.error(f"记录注册日志失败: {e}")
-
-                # ✅ 标记为已提交：finally 中将调用 _release_quota_slot(committed=True, ...)
-                committed = True
-
-                _send(chat_id, f"🎉 <b>注册成功！</b>\n\n"
-                      f"👤 用户名：<code>{safe_name}</code>\n"
-                      f"🔑 密码：<code>{password}</code>\n"
-                      f"📅 有效期至：{expire}\n\n"
-                      f"💡 密码可在「个人中心」随时查看",
-                      reply_markup=_main_menu_keyboard({"emby_user_id": uid, "emby_username": safe_name}))
-            except Exception as e:
-                logger.error(f"[注册] 执行异常: {e}")
-                _send(chat_id, f"❌ 注册异常：{safe_error_message(e, '注册操作异常，请稍后重试')}")
-    finally:
-        if reserved:
-            try:
-                _release_quota_slot(committed, quota_mode, quota)
-            except Exception:
-                logger.exception("[UserBot] 释放 quota 预占失败")
-        _leave_reg_queue()
+    return user_bot_open_registration_service.do_register(
+        chat_id,
+        tg_user_id,
+        custom_name,
+        tg_username=tg_username,
+        tg_display_name=tg_display_name,
+    )
 
 
 def cmd_check(chat_id, tg_user_id):
