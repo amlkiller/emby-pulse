@@ -1226,3 +1226,36 @@ Extracted GET /api/stats/item_detail from app/domains/playback/stats.py into app
 ### Next Steps
 
 - None - task complete
+
+
+## Session 157: Refactor notification user bot binding service
+
+**Date**: 2026-06-03
+**Task**: Refactor notification user bot binding service
+**Branch**: `main`
+
+### Summary
+
+Extracted binding, blacklist, channel binding, bot-user tracking, and Emby account existence cache helpers from app/domains/notifications/user_bot_service.py into app/domains/notifications/user_bot_binding_service.py. Preserved legacy user_bot_service wrapper functions, cache state, TTL behavior, DAO/media side effects, logger behavior, and monkeypatch compatibility through provider lambdas. Verified with compileall, import check, focused binding-service tests, related lifecycle/concurrency tests, git diff --check, and full tests/ suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a28c33d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
