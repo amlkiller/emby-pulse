@@ -324,6 +324,16 @@ user_bot_code_commands_service.set_dependency_providers(
     user_state_provider=lambda: _user_state,
     safe_error_message_provider=lambda: safe_error_message,
     logger_provider=lambda: logger,
+    enter_reg_queue_provider=lambda: _enter_reg_queue,
+    leave_reg_queue_provider=lambda: _leave_reg_queue,
+    get_username_lock_provider=lambda: _get_username_lock,
+    media_api_provider=lambda: media_api,
+    restore_invitation_code_provider=lambda: _restore_invitation_code,
+    bind_user_provider=lambda: _bind_user,
+    secrets_provider=lambda: secrets,
+    datetime_provider=lambda: datetime,
+    invalidate_users_cache_provider=lambda: _invalidate_users_cache_after_code_registration,
+    send_registration_notifications_provider=lambda: _send_code_registration_notifications,
 )
 
 user_bot_points_commands_service.set_dependency_providers(
@@ -914,126 +924,39 @@ def _restore_invitation_code(code):
     return user_bot_code_commands_service.restore_invitation_code(code)
 
 
-def _do_code_register(chat_id, tg_user_id, custom_name, code, days, tpl_id, routes=None, route_mode=None, tg_username="", tg_display_name=""):
-    """执行注册码激活创建账号逻辑"""
-    # 🚀 进入注册队列
-    if not _enter_reg_queue(chat_id):
-        return
-    
+def _invalidate_users_cache_after_code_registration():
     try:
-        # 验证用户名格式
-        # 检查用户名长度限制
-        if len(custom_name) > 16:
-            _send(chat_id, f"❌ 用户名最多 16 个字符，当前 {len(custom_name)} 个字符")
-            _user_state[str(tg_user_id)] = {"action": "code_input_name", "code": code, "days": days, "tpl_id": tpl_id, "routes": routes, "route_mode": route_mode}
-            return
-        
-        safe_name = re.sub(r'[^a-zA-Z0-9\u4e00-\u9fa5_\-.@]', '', custom_name)
-        
-        if safe_name != custom_name:
-            invalid_chars = set(re.findall(r'[^a-zA-Z0-9\u4e00-\u9fa5_\-.@]', custom_name))
-            invalid_str = ', '.join(f"'{c}'" for c in list(invalid_chars)[:5])
-            _send(chat_id, f"❌ 用户名包含不支持的字符: {invalid_str}\n\n只允许字母、数字、中文、下划线(_)、连字符(-)、@ 和 .")
-            _user_state[str(tg_user_id)] = {"action": "code_input_name", "code": code, "days": days, "tpl_id": tpl_id, "routes": routes, "route_mode": route_mode}
-            return
-        
-        if not safe_name:
-            _send(chat_id, "❌ 用户名无效，请使用字母、数字、中文、下划线(_)、连字符(-)、@ 或 .")
-            _user_state[str(tg_user_id)] = {"action": "code_input_name", "code": code, "days": days, "tpl_id": tpl_id, "routes": routes, "route_mode": route_mode}
-            return
-        
-        password = secrets.token_urlsafe(8)
+        from app.domains.users import public_service as user_service
+        user_service.invalidate_emby_users_cache()
+    except:
+        pass
 
-        # 🚀 获取用户名锁
-        username_lock = _get_username_lock(safe_name.lower())
-        
-        with username_lock:
-            try:
-                users = media_api.get("/Users", timeout=5).json()
-                if any(u['Name'].lower() == safe_name.lower() for u in users):
-                    _send(chat_id, f"❌ 用户名 <b>{safe_name}</b> 已被占用，请换一个")
-                    _user_state[str(tg_user_id)] = {"action": "code_input_name", "code": code, "days": days, "tpl_id": tpl_id, "routes": routes, "route_mode": route_mode}
-                    return
 
-                # 原子抢占注册码（防 TOCTOU 竞态）
-                if not invitation_dao.claim_invitation_usage(code, safe_name):
-                    _send(chat_id, "❌ 注册码已失效或已达到使用上限")
-                    return
+def _send_code_registration_notifications(safe_name, days, code, tg_user_id):
+    try:
+        from app.domains.notifications.bot_service import bot
+        from app.infra.db.notification_dao import add_system_notification
+        days_display = "永久" if (days == -1 or days == 0 or days >= 36500) else f"{days} 天"
+        msg = f"🎟️ <b>新用户注册</b>\n\n👤 {safe_name}\n📅 有效期：{days_display}\n🔗 邀请码：{code}\n📱 注册渠道：TG机器人\n🆔 TG：{tg_user_id}"
+        bot.notifier.send_message("sys_notify", msg, platform="all")
+        add_system_notification("user", f"新用户注册: {safe_name}", f"TG机器人注册，有效期 {days_display}", "/users_manage")
+    except Exception:
+        pass
 
-                create_res = media_api.post("/Users/New", json={"Name": safe_name}, timeout=10)
-                if create_res.status_code not in [200, 201]:
-                    # Emby 创建失败，回滚注册码消费
-                    _restore_invitation_code(code)
-                    _send(chat_id, "❌ 创建账号失败")
-                    return
-                new_user = create_res.json()
-                uid = new_user.get("Id")
-                media_api.post(f"/Users/{uid}/Password", json={"NewPw": password}, timeout=5)
 
-                if tpl_id:
-                    try:
-                        tpl = media_api.get(f"/Users/{tpl_id}", timeout=5).json()
-                        if tpl.get("Policy"):
-                            policy = tpl["Policy"]
-                            policy["IsAdministrator"] = False
-                            policy["IsDisabled"] = False
-                            media_api.post(f"/Users/{uid}/Policy", json=policy, timeout=5)
-                    except Exception: pass
-                else:
-                    try:
-                        media_api.post(f"/Users/{uid}/Policy", json={"IsDisabled": False}, timeout=3)
-                    except Exception: pass
-
-                if days == -1 or days == 0 or days >= 36500:
-                    expire = None  # 永久有效用 None 表示
-                else:
-                    expire = (datetime.date.today() + datetime.timedelta(days=days)).strftime("%Y-%m-%d")
-
-                allow_routes = ""
-                block_routes = ""
-                if routes:
-                    if route_mode == 'allow':
-                        allow_routes = routes
-                    else:
-                        block_routes = routes
-
-                invitation_dao.save_code_registration_meta_and_finish_invitation(
-                    code,
-                    uid,
-                    expire,
-                    allow_routes,
-                    block_routes,
-                )
-
-                # 清除用户列表缓存
-                try:
-                    from app.domains.users import public_service as user_service
-                    user_service.invalidate_emby_users_cache()
-                except:
-                    pass
-
-                _bind_user(tg_user_id, uid, safe_name, init_password=password, tg_username=tg_username or tg_display_name, tg_display_name=tg_display_name or str(tg_user_id))
-                
-                if days == -1 or days == 0 or days >= 36500:
-                    expire_display = "♾️ 永久有效"
-                else:
-                    expire_display = f"{days} 天（至 {expire}）"
-                
-                _send(chat_id, f"🎉 <b>注册码激活成功！</b>\n\n👤 用户名：<code>{safe_name}</code>\n🔑 密码：<code>{password}</code>\n📅 有效期：{expire_display}\n\n💡 密码可在「个人中心」随时查看")
-
-                try:
-                    from app.domains.notifications.bot_service import bot
-                    from app.infra.db.notification_dao import add_system_notification
-                    days_display = "永久" if (days == -1 or days == 0 or days >= 36500) else f"{days} 天"
-                    msg = f"🎟️ <b>新用户注册</b>\n\n👤 {safe_name}\n📅 有效期：{days_display}\n🔗 邀请码：{code}\n📱 注册渠道：TG机器人\n🆔 TG：{tg_user_id}"
-                    bot.notifier.send_message("sys_notify", msg, platform="all")
-                    add_system_notification("user", f"新用户注册: {safe_name}", f"TG机器人注册，有效期 {days_display}", "/users_manage")
-                except Exception: pass
-            except Exception as e:
-                logger.error(f"[注册码] 使用失败: {e}")
-                _send(chat_id, f"❌ 注册码使用失败：{safe_error_message(e, '注册操作异常，请稍后重试')}")
-    finally:
-        _leave_reg_queue()
+def _do_code_register(chat_id, tg_user_id, custom_name, code, days, tpl_id, routes=None, route_mode=None, tg_username="", tg_display_name=""):
+    return user_bot_code_commands_service.do_code_register(
+        chat_id,
+        tg_user_id,
+        custom_name,
+        code,
+        days,
+        tpl_id,
+        routes=routes,
+        route_mode=route_mode,
+        tg_username=tg_username,
+        tg_display_name=tg_display_name,
+    )
 
 
 def cmd_renew(chat_id, tg_user_id, args):
