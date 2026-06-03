@@ -500,3 +500,36 @@ Extracted media request discovery and browse endpoints into app/domains/media_re
 ### Next Steps
 
 - None - task complete
+
+
+## Session 135: Refactor media requests management router
+
+**Date**: 2026-06-03
+**Task**: Refactor media requests management router
+**Branch**: `main`
+
+### Summary
+
+Extracted media request management and approval endpoints into app/domains/media_requests/management_router.py, included the child router from media_requests/router.py at the original route position, and preserved media_requests.router compatibility exports for management routes and models. Verified compile/import route checks, git diff checks, focused media request boundary tests, and the full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4a2f5c6` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
