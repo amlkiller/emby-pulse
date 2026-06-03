@@ -64,6 +64,60 @@ def test_media_requests_router_includes_auth_child_routes_and_compat_exports():
     assert auth_index < check_index < logout_index < item_info_index
 
 
+def test_media_requests_router_includes_feedback_child_routes_and_compat_exports():
+    from app.domains.media_requests import feedback_router
+    from app.domains.media_requests import router as media_requests_router
+
+    routes = [
+        (route.path, route.methods)
+        for route in media_requests_router.router.routes
+        if hasattr(route, "methods")
+    ]
+
+    assert any(path == "/api/requests/feedback/submit" and "POST" in methods for path, methods in routes)
+    assert any(path == "/api/requests/feedback/my" and "GET" in methods for path, methods in routes)
+    assert any(path == "/api/manage/feedback" and "GET" in methods for path, methods in routes)
+    assert any(path == "/api/manage/feedback/action" and "POST" in methods for path, methods in routes)
+    assert any(path == "/api/manage/feedback/batch" and "POST" in methods for path, methods in routes)
+    assert media_requests_router.FeedbackSubmitModel is feedback_router.FeedbackSubmitModel
+    assert media_requests_router.FeedbackActionModel is feedback_router.FeedbackActionModel
+    assert media_requests_router.BulkFeedbackActionModel is feedback_router.BulkFeedbackActionModel
+    assert media_requests_router.submit_feedback is feedback_router.submit_feedback
+    assert media_requests_router.get_my_feedback is feedback_router.get_my_feedback
+    assert media_requests_router.get_all_feedback is feedback_router.get_all_feedback
+    assert media_requests_router.manage_feedback_action is feedback_router.manage_feedback_action
+    assert media_requests_router.batch_feedback_action is feedback_router.batch_feedback_action
+
+    pending_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/requests/pending_notify" and "GET" in methods
+    )
+    submit_index = next(
+        i
+        for i, (path, methods) in enumerate(routes)
+        if path == "/api/requests/feedback/submit" and "POST" in methods
+    )
+    my_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/requests/feedback/my" and "GET" in methods
+    )
+    all_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/manage/feedback" and "GET" in methods
+    )
+    action_index = next(
+        i
+        for i, (path, methods) in enumerate(routes)
+        if path == "/api/manage/feedback/action" and "POST" in methods
+    )
+    batch_index = next(
+        i
+        for i, (path, methods) in enumerate(routes)
+        if path == "/api/manage/feedback/batch" and "POST" in methods
+    )
+    safe_top_index = next(
+        i for i, (path, methods) in enumerate(routes) if path == "/api/requests/safe_top" and "GET" in methods
+    )
+    assert pending_index < submit_index < my_index < all_index < action_index < batch_index < safe_top_index
+
+
 def test_get_all_requests_denies_non_admin_before_dao_reads(monkeypatch):
     from app.domains.media_requests import router as media_requests_router
 

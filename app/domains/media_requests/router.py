@@ -12,6 +12,18 @@ from app.domains.media_requests.auth_router import (
     router as auth_router,
     set_dependency_providers as set_auth_dependency_providers,
 )
+from app.domains.media_requests.feedback_router import (
+    BulkFeedbackActionModel,
+    FeedbackActionModel,
+    FeedbackSubmitModel,
+    batch_feedback_action,
+    get_all_feedback,
+    get_my_feedback,
+    manage_feedback_action,
+    router as feedback_router,
+    set_dependency_providers as set_feedback_dependency_providers,
+    submit_feedback,
+)
 from app.domains.users import public_service as user_service
 from app.core.security import validate_password_strength  # 🔒 统一密码强度校验
 from pydantic import BaseModel
@@ -126,6 +138,25 @@ set_auth_dependency_providers(
     check_user_exists_provider=lambda: _check_user_exists,
 )
 
+
+set_feedback_dependency_providers(
+    user_service_provider=lambda: user_service,
+    media_api_provider=lambda: media_api,
+    check_user_exists_provider=lambda: _check_user_exists,
+    pulse_url_provider=lambda: get_pulse_url,
+    report_cover_url_provider=lambda: REPORT_COVER_URL,
+    find_poster_for_feedback_provider=lambda: find_poster_for_feedback,
+    create_media_feedback_provider=lambda: create_media_feedback,
+    list_my_feedback_provider=lambda: list_my_feedback,
+    list_all_feedback_provider=lambda: list_all_feedback,
+    update_feedback_status_provider=lambda: update_feedback_status,
+    update_feedback_status_batch_provider=lambda: update_feedback_status_batch,
+    notify_admin_provider=lambda: notify_admin,
+    notification_service_provider=lambda: notification_service,
+    system_notification_provider=lambda: add_system_notification,
+    logger_provider=lambda: logger,
+)
+
 def get_tmdb_season_info(tmdb_id: int, season: int) -> tuple:
     """获取 TMDB 季信息（总集数、未播出集数）
     
@@ -196,20 +227,6 @@ class BulkAdminActionModel(BaseModel):
     items: List[dict]
     action: str
     reject_reason: Optional[str] = None
-
-class FeedbackSubmitModel(BaseModel):
-    item_name: str
-    issue_type: str
-    description: Optional[str] = ""
-    poster_path: Optional[str] = ""
-
-class FeedbackActionModel(BaseModel):
-    id: int
-    action: str 
-
-class BulkFeedbackActionModel(BaseModel):
-    items: List[int]
-    action: str
 
 router.include_router(auth_router)
 
@@ -790,111 +807,7 @@ def get_pending_notify(request: Request):
         return {"status": "success", "count": req_count + feed_count, "items": items[:5]}
     except Exception as e: return {"status": "error", "message": safe_error_message(e)}
 
-@router.post("/api/requests/feedback/submit")
-def submit_feedback(data: FeedbackSubmitModel, request: Request):
-    user = request.session.get("req_user")
-    if not user: return {"status": "error", "message": "请重新登录"}
-    
-    # 检查 Emby 账号是否仍然存在
-    if not _check_user_exists(user.get("Id")):
-        request.session.pop("req_user", None)
-        return {"status": "error", "message": "账号已被删除，请重新登录", "account_deleted": True}
-    
-    uid = str(user.get("Id", "")); uname = user.get("Name") or "未知用户"
-    
-    actual_poster = data.poster_path
-    if actual_poster and actual_poster.startswith("/"):
-        base_url = get_pulse_url() or str(request.base_url).rstrip('/')
-        actual_poster = f"{base_url}{actual_poster}"
-        
-    if not actual_poster or 'undefined' in actual_poster:
-        r = find_poster_for_feedback(data.item_name)
-        if r and r["poster_path"]: actual_poster = r["poster_path"]
-        
-    if not actual_poster or 'undefined' in actual_poster: actual_poster = ""
-
-    feed_id = create_media_feedback(data.item_name, uid, uname, data.issue_type, data.description, actual_poster)
-    
-    msg = (f"🚨 <b>新资源报错提醒</b>\n\n"
-           f"👤 <b>用户</b>：{uname}\n"
-           f"🎬 <b>媒体</b>：{data.item_name}\n"
-           f"🏷️ <b>问题</b>：{data.issue_type}\n"
-           f"📝 <b>描述</b>：{data.description or '无'}")
-    
-    admin_url = get_pulse_url() or str(request.base_url).rstrip('/')
-    keyboard = {"inline_keyboard": [
-        [{"text": "🛠️ 标记修复中", "callback_data": f"feed_fix_{feed_id}"},
-         {"text": "✅ 标记已修复", "callback_data": f"feed_done_{feed_id}"}],
-        [{"text": "❌ 暂不处理(忽略)", "callback_data": f"feed_reject_{feed_id}"},
-         {"text": "💻 网页处理", "url": f"{admin_url}/requests_admin"}]
-    ]}
-    
-    img_url = actual_poster or REPORT_COVER_URL
-    
-    # 🔥 使用 notify_rules 配置控制通知渠道
-    try:
-        rule = notify_admin.get_notify_rule('feedback_new')
-        
-        if rule and rule.get('enabled'):
-            channels = rule.get('channels', [])
-            platform = "none"
-            if 'tg_bot' in channels and 'wecom' in channels:
-                platform = "all"
-            elif 'tg_bot' in channels:
-                platform = "tg"
-            elif 'wecom' in channels:
-                platform = "wecom"
-            
-            if platform != "none":
-                notification_service.send_photo("sys_notify", img_url, msg, reply_markup=keyboard, platform=platform)
-            
-            # Web 通知中心
-            if 'web' in channels:
-                add_system_notification(
-                    notify_type="system",
-                    title=f"⚠️ 资源报错: {uname}",
-                    message=f"{data.item_name} - {data.issue_type}",
-                    action_url="/requests_admin?tab=feedback"
-                )
-        else:
-            # 默认不发送（关闭状态）
-            pass
-    except Exception as e:
-        logger.error(f"[报错通知] 发送失败: {e}")
-    
-    return {"status": "success", "message": "反馈已提交，感谢您的协助！"}
-
-@router.get("/api/requests/feedback/my")
-def get_my_feedback(request: Request):
-    user = request.session.get("req_user")
-    if not user: return {"status": "error", "message": "未登录"}
-    uid = str(user.get("Id", ""))
-    rows = list_my_feedback(uid)
-    results = [{"id": r[0], "item_name": r[1], "issue_type": r[2], "description": r[3], "status": r[4], "created_at": r[5]} for r in rows]
-    return {"status": "success", "data": results}
-
-@router.get("/api/manage/feedback")
-def get_all_feedback(request: Request):
-    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    rows = list_all_feedback()
-    results = [{"id": r[0], "item_name": r[1], "username": r[2], "issue_type": r[3], "description": r[4], "status": r[5], "created_at": r[6]} for r in rows]
-    return {"status": "success", "data": results}
-
-@router.post("/api/manage/feedback/action")
-def manage_feedback_action(data: FeedbackActionModel, request: Request):
-    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    status_map = {"fix": 1, "done": 2, "reject": 3, "delete": -1}
-    st = status_map.get(data.action, 0)
-    update_feedback_status(data.id, st)
-    return {"status": "success", "message": "已更新工单状态"}
-
-@router.post("/api/manage/feedback/batch")
-def batch_feedback_action(data: BulkFeedbackActionModel, request: Request):
-    if not user_service.is_admin_user(request): return {"status": "error", "message": "需要管理员权限"}
-    status_map = {"fix": 1, "done": 2, "reject": 3, "delete": -1}
-    st = status_map.get(data.action, 0)
-    update_feedback_status_batch(data.items, st)
-    return {"status": "success", "message": "批量操作已完成"}
+router.include_router(feedback_router)
 
 @router.get("/api/requests/safe_top")
 def get_safe_top_media(category: str, request: Request):
