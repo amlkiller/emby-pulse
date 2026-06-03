@@ -203,3 +203,37 @@ Extracted the users library permission save route into app/domains/users/library
 ### Next Steps
 
 - None - task complete
+
+
+## Session 246: Move notification bot package
+
+**Date**: 2026-06-04
+**Task**: Move notification bot package
+**Branch**: `main`
+
+### Summary
+
+Moved notification bot service modules, bot_service, and bot_service_dao into app/bot/notification_bot; updated production/test imports and documented the new backend package layout.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ab35b08` | (see git log) |
+| `6d3d0a5` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
