@@ -30,6 +30,7 @@ from app.domains.notifications import notification_bot_request_admin_message_syn
 from app.domains.notifications import notification_bot_risk_alert_service
 from app.domains.notifications import notification_bot_search_command_service
 from app.domains.notifications import notification_bot_stats_command_service
+from app.domains.notifications import notification_bot_user_login_service
 from app.domains.notifications import notification_bot_wecom_service
 from app.domains.notifications import notification_bot_whois_command_service
 from app.domains.notifications import notify_admin_dao, notify_rule_dao
@@ -224,6 +225,16 @@ notification_bot_risk_alert_service.set_dependency_providers(
     logger_provider=lambda: logger,
 )
 
+notification_bot_user_login_service.set_dependency_providers(
+    notify_rule_provider=lambda: get_notify_rule,
+    notify_user_login_provider=lambda: get_notify_user_login,
+    location_provider=lambda: get_location,
+    add_system_notification_provider=lambda: add_system_notification,
+    datetime_provider=lambda: datetime,
+    quote_provider=lambda: urllib.parse.quote,
+    logger_provider=lambda: logger,
+)
+
 def _submit_bot_task(fn, *args):
     if not _bot_executor_slots.acquire(blocking=False):
         logger.warning("[Bot] 后台任务队列已满，丢弃本次异步任务")
@@ -231,6 +242,11 @@ def _submit_bot_task(fn, *args):
     future = _bot_executor.submit(fn, *args)
     future.add_done_callback(lambda _f: _bot_executor_slots.release())
     return True
+
+def get_notify_rule(rule_type):
+    from app.domains.notifications.notify_admin import get_notify_rule as _get_notify_rule
+
+    return _get_notify_rule(rule_type)
 
 def _ensure_request_admin_messages_table():
     return notification_bot_request_admin_message_sync_service.ensure_request_admin_messages_table()
@@ -1155,63 +1171,7 @@ class NotificationBot:
             logger.error(f"[Bot] Playback event error: {e}")
 
     def on_user_login(self, data):
-        # 检查通知规则配置
-        try:
-            from app.domains.notifications.notify_admin import get_notify_rule
-            rule = get_notify_rule('user_login')
-            if not rule or not rule.get('enabled'):
-                return
-        except:
-            # 兜底：使用旧配置
-            if not get_notify_user_login(): return
-        
-        try:
-            user = data.get("User") or {}
-            session = data.get("Session") or {}
-            user_id = user.get("Id") or data.get("UserId")
-            user_name = user.get("Name") or data.get("Title") or data.get("UserName") or "未知账号"
-            
-            if self._is_muted(user_id, "login"):
-                logger.info(f"🔇 [静音规则] 拦截了用户 {user_name} 的登录通知")
-                return
-
-            ip = session.get("RemoteEndPoint") or data.get("RemoteEndPoint") or "127.0.0.1"
-            loc = get_location(ip)
-            client = session.get("Client") or data.get("Client") or data.get("AppName") or "未知设备"
-            dev_name = session.get("DeviceName") or data.get("DeviceName") or "未知终端"
-            
-            msg = (f"🔐 <b>安全预警：账号登录</b>\n\n"
-                   f"👤 <b>用户：</b>{user_name}\n"
-                   f"🌐 <b>网络：</b>{ip} ({loc})\n"
-                   f"📱 <b>设备：</b>{client} ({dev_name})\n"
-                   f"🕒 <b>时间：</b>{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            
-            # 根据规则发送到指定渠道
-            try:
-                from app.domains.notifications.notify_admin import get_notify_rule
-                rule = get_notify_rule('user_login')
-                channels = rule.get('channels', []) if rule else []
-                
-                # TG机器人/企业微信
-                if 'tg_bot' in channels or 'wecom' in channels:
-                    avatar_io = self._download_user_image(user_id) if user_id else None
-                    fallback_img = "https://api.dicebear.com/9.x/notionists/png?seed=" + urllib.parse.quote(user_name)
-                    tg_img = avatar_io or fallback_img
-                    platform = "all" if ('tg_bot' in channels and 'wecom' in channels) else ("tg" if 'tg_bot' in channels else "wecom")
-                    self.send_photo("sys_notify", tg_img, msg, platform=platform, wecom_photo_io=tg_img)
-                
-                # Web通知中心
-                if 'web' in channels:
-                    from app.infra.db.notification_dao import add_system_notification
-                    add_system_notification("user", f"用户登录: {user_name}", f"{ip} ({loc}) - {client}", "/users_manage")
-            except Exception as e:
-                logger.error(f"[用户登录通知] 发送失败: {e}")
-                # 兜底：使用旧方式
-                avatar_io = self._download_user_image(user_id) if user_id else None
-                fallback_img = "https://api.dicebear.com/9.x/notionists/png?seed=" + urllib.parse.quote(user_name)
-                tg_img = avatar_io or fallback_img
-                self.send_photo("sys_notify", tg_img, msg, platform="all", wecom_photo_io=tg_img)
-        except Exception as e: logger.error(f"登录通知组装异常: {e}")
+        return notification_bot_user_login_service.handle_user_login(self, data)
 
     def on_item_deleted(self, data):
         if not get_notify_item_deleted(): return
