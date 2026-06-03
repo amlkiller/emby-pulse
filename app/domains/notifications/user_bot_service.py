@@ -17,6 +17,7 @@ from app.domains.system import invitation_dao
 from app.domains.users import user_dao
 from app.domains.users import user_bot_dao
 from app.domains.notifications import user_bot_binding_service
+from app.domains.notifications import user_bot_concurrency_service
 from app.domains.notifications import user_bot_registration_queue_service
 from app.domains.notifications import user_bot_registration_quota_service
 from app.domains.notifications import user_bot_restriction_service
@@ -248,6 +249,16 @@ user_bot_registration_queue_service.set_dependency_providers(
     logger_provider=lambda: logger,
 )
 
+user_bot_concurrency_service.set_dependency_providers(
+    rate_limit_provider=lambda: _rate_limit,
+    username_locks_provider=lambda: _username_locks,
+    username_locks_lock_provider=lambda: _username_locks_lock,
+    username_lock_max_size_provider=lambda: _USERNAME_LOCK_MAX_SIZE,
+    threading_provider=lambda: threading,
+    time_provider=lambda: time,
+    logger_provider=lambda: logger,
+)
+
 user_bot_telegram_service.set_dependency_providers(
     telegram_client_provider=lambda: telegram_client,
     get_token_provider=lambda: get_user_bot_token,
@@ -474,11 +485,7 @@ def _bind_user(tg_user_id, emby_user_id, emby_username, init_password="", tg_use
 
 
 def _rate_check(tg_user_id, cooldown=3):
-    now = time.time()
-    if now - _rate_limit[tg_user_id] < cooldown:
-        return False
-    _rate_limit[tg_user_id] = now
-    return True
+    return user_bot_concurrency_service.rate_check(tg_user_id, cooldown=cooldown)
 
 
 def _is_blacklisted(tg_user_id):
@@ -494,19 +501,7 @@ def _check_emby_account(binding):
 
 
 def _get_username_lock(username_lower):
-    """获取用户名锁（防止并发注册时用户名冲突），带清理机制"""
-    with _username_locks_lock:
-        # 如果锁数量超过上限，清理一半（简单的清理策略）
-        if len(_username_locks) > _USERNAME_LOCK_MAX_SIZE:
-            # 保留最近一半的锁
-            keys_to_remove = list(_username_locks.keys())[:_USERNAME_LOCK_MAX_SIZE // 2]
-            for key in keys_to_remove:
-                del _username_locks[key]
-            logger.info(f"[UserBot] 清理用户名锁，移除 {len(keys_to_remove)} 个")
-        
-        if username_lower not in _username_locks:
-            _username_locks[username_lower] = threading.Lock()
-        return _username_locks[username_lower]
+    return user_bot_concurrency_service.get_username_lock(username_lower)
 
 # ==========================================
 # 可视化卡片菜单
