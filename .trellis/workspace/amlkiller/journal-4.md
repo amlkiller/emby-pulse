@@ -1820,3 +1820,36 @@ Extracted the film-strip daily poster rendering layout from report_service into 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 235: Extract users avatar routes
+
+**Date**: 2026-06-04
+**Task**: Extract users avatar routes
+**Branch**: `main`
+
+### Summary
+
+Extracted users avatar HTTP handlers into a users-domain child router with dynamic provider wiring for legacy monkeypatch compatibility; kept route paths and compatibility exports; added focused route inclusion and authorization short-circuit tests. Verification passed: compileall, focused users facade tests, import check, git diff --check, and full pytest suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2dd1b49` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
