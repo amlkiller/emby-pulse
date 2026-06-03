@@ -731,3 +731,36 @@ Extracted the playback stats latest-media endpoint into app/domains/playback/lat
 ### Next Steps
 
 - None - task complete
+
+
+## Session 142: Refactor playback stats live router
+
+**Date**: 2026-06-03
+**Task**: Refactor playback stats live router
+**Branch**: `main`
+
+### Summary
+
+Extracted the playback stats live session endpoints into app/domains/playback/live_router.py, included the child router from playback/stats.py at the original route position, and preserved playback.stats compatibility exports plus old-module monkeypatch behavior for user_service and media_api. Verified compile checks, import/route compatibility, git diff checks, focused playback stats boundary tests, and the full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1b5c560` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
