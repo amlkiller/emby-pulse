@@ -1688,3 +1688,36 @@ Extracted the notification bot Telegram callback dispatcher shell from bot_servi
 ### Next Steps
 
 - None - task complete
+
+
+## Session 231: Extract media request gap download service
+
+**Date**: 2026-06-03
+**Task**: Extract media request gap download service
+**Branch**: `main`
+
+### Summary
+
+Extracted gap download and torrent interception behavior from media_requests/gaps.py into a domain-local gap_download_service with compatibility wrappers and focused boundary tests. Verified compileall, focused tests, related gap tests, import check, diff check, and full tests before committing.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `18a8888` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
