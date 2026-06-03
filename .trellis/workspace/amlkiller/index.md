@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-3.md`
-- **Total Sessions**: 148
+- **Total Sessions**: 149
 - **Last Active**: 2026-06-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-3.md` | ~964 | Active |
+| `journal-3.md` | ~997 | Active |
 | `journal-2.md` | ~1993 | Archived |
 | `journal-1.md` | ~1973 | Archived |
 <!-- @@@/auto:active-documents -->
@@ -31,6 +31,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 149 | 2026-06-03 | Refactor playback stats monthly router | `82895f9` | `main` |
 | 148 | 2026-06-03 | Refactor playback stats badges router | `c1b2025` | `main` |
 | 147 | 2026-06-03 | Refactor playback stats top users router | `143b96c` | `main` |
 | 146 | 2026-06-03 | Refactor playback stats poster router | `607caa0` | `main` |

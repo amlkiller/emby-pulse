@@ -962,3 +962,36 @@ Extracted the playback stats badges endpoint into app/domains/playback/badges_ro
 ### Next Steps
 
 - None - task complete
+
+
+## Session 149: Refactor playback stats monthly router
+
+**Date**: 2026-06-03
+**Task**: Refactor playback stats monthly router
+**Branch**: `main`
+
+### Summary
+
+Extracted the playback stats monthly_stats endpoint into app/domains/playback/monthly_router.py, included the child router from playback/stats.py at the original route position, preserved playback.stats compatibility export and old-module monkeypatch behavior for login, stats filter, and playback store dependencies, and verified compile checks, import/route compatibility, git diff checks, focused boundary tests, and the full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `82895f9` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
