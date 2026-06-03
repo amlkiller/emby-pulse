@@ -20,6 +20,7 @@ from app.domains.notifications import user_bot_binding_service
 from app.domains.notifications import user_bot_registration_queue_service
 from app.domains.notifications import user_bot_registration_quota_service
 from app.domains.notifications import user_bot_restriction_service
+from app.domains.notifications import user_bot_telegram_service
 from app.domains.playback import stats_queries
 from app.utils.proxy_helper import get_safe_proxies  # 🔒 SSRF 安全代理读取
 from app.infra.clients.media_server_client import media_api
@@ -247,6 +248,15 @@ user_bot_registration_queue_service.set_dependency_providers(
     logger_provider=lambda: logger,
 )
 
+user_bot_telegram_service.set_dependency_providers(
+    telegram_client_provider=lambda: telegram_client,
+    get_token_provider=lambda: get_user_bot_token,
+    get_safe_proxies_provider=lambda: get_safe_proxies,
+    tg_api_provider=lambda: _tg_api,
+    send_provider=lambda: _send,
+    edit_provider=lambda: _edit,
+)
+
 user_bot_restriction_service.set_dependency_providers(
     tg_api_provider=lambda: _tg_api,
     restriction_enabled_provider=lambda: is_user_bot_restriction_enabled,
@@ -334,15 +344,7 @@ def _ensure_user_bot_tables():
 
 
 def _tg_api(method, data=None, token=None):
-    tk = token or get_user_bot_token()
-    if not tk:
-        return None
-    try:
-        # 缩短超时时间，快速失败
-        r = telegram_client.post_api(tk, method, json=data, proxies=get_safe_proxies(), timeout=8)
-        return r.json() if r.status_code == 200 else None
-    except:
-        return None
+    return user_bot_telegram_service.tg_api(method, data=data, token=token)
 
 
 def _check_user_in_chat(user_id: str, chat_id: str) -> bool:
@@ -362,28 +364,15 @@ def _format_restriction_message(check_result: dict) -> str:
 
 
 def _send(chat_id, text, reply_markup=None):
-    data = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
-    if reply_markup:
-        data["reply_markup"] = reply_markup
-    return _tg_api("sendMessage", data)
+    return user_bot_telegram_service.send(chat_id, text, reply_markup=reply_markup)
 
 
 def _edit(chat_id, message_id, text, reply_markup=None):
-    """编辑已有消息，实现同一对话内交互"""
-    data = {"chat_id": chat_id, "message_id": message_id, "text": text, "parse_mode": "HTML"}
-    if reply_markup:
-        data["reply_markup"] = reply_markup
-    result = _tg_api("editMessageText", data)
-    if not result or not result.get("ok"):
-        return _send(chat_id, text, reply_markup)
-    return result
+    return user_bot_telegram_service.edit(chat_id, message_id, text, reply_markup=reply_markup)
 
 
 def _reply(chat_id, text, reply_markup=None, msg_id=None):
-    """统一回复：有 msg_id 时编辑原消息，否则发新消息"""
-    if msg_id:
-        return _edit(chat_id, msg_id, text, reply_markup)
-    return _send(chat_id, text, reply_markup)
+    return user_bot_telegram_service.reply(chat_id, text, reply_markup=reply_markup, msg_id=msg_id)
 
 
 # 用户会话状态（用于多步交互，如注册输入用户名）
