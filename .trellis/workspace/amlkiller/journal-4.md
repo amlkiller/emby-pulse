@@ -368,3 +368,36 @@ Extracted notification bot media admin lookup and media quality parsing into a d
 ### Next Steps
 
 - None - task complete
+
+
+## Session 191: Extract notification bot channel service
+
+**Date**: 2026-06-03
+**Task**: Extract notification bot channel service
+**Branch**: `main`
+
+### Summary
+
+Extracted NotificationBot channel fan-out helpers into a domain-local notification_bot_channel_service with lazy legacy providers; kept old class method wrappers and added boundary tests for text/photo sending, channel filtering, item-type filtering, and legacy monkeypatch compatibility.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1c696e4` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
