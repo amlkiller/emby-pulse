@@ -9,7 +9,7 @@ RUN find app/ -name "*.py" -delete
 FROM python:3.12-slim
 WORKDIR /workspace
 # 修改这里自定义版本号
-ENV APP_VERSION=1.5.0-beta
+ENV APP_VERSION=1.5.0
 ENV TZ=Asia/Shanghai
 ENV PATH="/workspace/.venv/bin:$PATH"
 ENV UV_COMPILE_BYTECODE=1

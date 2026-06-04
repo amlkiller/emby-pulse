@@ -1,6 +1,6 @@
 [project]
 name = "embypulse-next"
-version = "1.5.0-beta"
+version = "1.5.0"
 description = "FastAPI management and monitoring hub for Emby media servers."
 requires-python = ">=3.12"
 dependencies = [
