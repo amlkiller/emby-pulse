@@ -141,7 +141,7 @@ from app.domains.users import public_service as user_service
 
 from app.domains.users.auth import is_admin_user  # 🔒 引入管理员权限检查
 from app.core.security import validate_password_strength  # 🔒 统一密码强度校验
-from app.utils.image_validator import check_magic_bytes  # 🔒 头像魔数校验
+from app.utils.image_validator import validate_image_bytes  # 🔒 头像强校验
 import datetime
 import logging
 from app.core.security_utils import safe_error_message
@@ -239,7 +239,7 @@ set_avatar_dependency_providers(
     media_api_provider=lambda: media_api,
     network_client_provider=lambda: network_client,
     is_admin_user_provider=lambda: is_admin_user,
-    check_magic_bytes_provider=lambda: check_magic_bytes,
+    validate_image_bytes_provider=lambda: validate_image_bytes,
     safe_error_message_provider=lambda: safe_error_message,
     client_ip_provider=lambda: get_client_ip,
     audit_log_provider=lambda: add_audit_log,

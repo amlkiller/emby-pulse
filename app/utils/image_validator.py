@@ -33,6 +33,51 @@ def check_magic_bytes(content: bytes) -> bool:
     return False
 
 
+def validate_image_bytes(content: bytes, max_bytes: int = 2 * 1024 * 1024) -> tuple[bytes, str]:
+    """校验并重写原始图片字节。
+
+    Returns:
+        ``(rebuilt_bytes, mime_type)``，其中 MIME 来自 PIL 解析出的真实格式。
+
+    Raises:
+        ValueError: 校验失败（超限 / 非图片 / 格式不允许）
+    """
+    if len(content) > max_bytes:
+        raise ValueError(f"头像不能超过 {max_bytes // 1024} KB")
+
+    if not check_magic_bytes(content):
+        raise ValueError("头像文件头校验失败，疑似伪造")
+
+    try:
+        from PIL import Image
+    except ImportError:
+        raise ValueError("服务端缺少图像处理库")
+
+    try:
+        img = Image.open(BytesIO(content))
+        img.verify()
+    except Exception:
+        raise ValueError("头像解析失败")
+
+    img = Image.open(BytesIO(content))
+    fmt = (img.format or "").upper()
+    if fmt not in _ALLOWED_FORMATS:
+        raise ValueError(f"不支持的图片格式：{fmt or '未知'}")
+
+    out = BytesIO()
+    save_kwargs = {"format": fmt}
+    if fmt == "JPEG":
+        save_kwargs["quality"] = 90
+        save_kwargs["optimize"] = True
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+    elif fmt == "PNG":
+        save_kwargs["optimize"] = True
+    img.save(out, **save_kwargs)
+
+    return out.getvalue(), _MIME_BY_FORMAT[fmt]
+
+
 def validate_base64_image(data_url: str, max_bytes: int = 2 * 1024 * 1024) -> str:
     """校验并重写 base64 头像数据。
 
@@ -67,40 +112,6 @@ def validate_base64_image(data_url: str, max_bytes: int = 2 * 1024 * 1024) -> st
     except Exception:
         raise ValueError("头像 base64 解码失败")
 
-    if len(raw) > max_bytes:
-        raise ValueError(f"头像不能超过 {max_bytes // 1024} KB")
-
-    if not check_magic_bytes(raw):
-        raise ValueError("头像文件头校验失败，疑似伪造")
-
-    try:
-        from PIL import Image
-    except ImportError:
-        raise ValueError("服务端缺少图像处理库")
-
-    try:
-        img = Image.open(BytesIO(raw))
-        img.verify()
-    except Exception:
-        raise ValueError("头像解析失败")
-
-    img = Image.open(BytesIO(raw))
-    fmt = (img.format or "").upper()
-    if fmt not in _ALLOWED_FORMATS:
-        raise ValueError(f"不支持的图片格式：{fmt or '未知'}")
-
-    out = BytesIO()
-    save_kwargs = {"format": fmt}
-    if fmt == "JPEG":
-        save_kwargs["quality"] = 90
-        save_kwargs["optimize"] = True
-        if img.mode not in ("RGB", "L"):
-            img = img.convert("RGB")
-    elif fmt == "PNG":
-        save_kwargs["optimize"] = True
-    img.save(out, **save_kwargs)
-    rebuilt = out.getvalue()
-
-    mime = _MIME_BY_FORMAT[fmt]
+    rebuilt, mime = validate_image_bytes(raw, max_bytes=max_bytes)
     new_b64 = base64.b64encode(rebuilt).decode("ascii")
     return f"data:{mime};base64,{new_b64}"

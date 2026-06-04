@@ -1,5 +1,6 @@
 import ast
 import asyncio
+import base64
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -1320,6 +1321,108 @@ def test_avatar_update_denies_non_admin_before_side_effects(monkeypatch):
     assert result == {"status": "error", "message": "需要管理员权限"}
 
 
+def test_avatar_update_file_uses_validated_bytes_and_mime(monkeypatch):
+    from app.domains.users import router
+
+    request = SimpleNamespace(session={"user": {"id": "admin-1", "name": "Admin"}})
+    posts = []
+
+    class FakeMediaApi:
+        def get(self, path, timeout):
+            assert path == "/Users/u1"
+            assert timeout == 5
+            return SimpleNamespace(status_code=200, json=lambda: {"Name": "Target"})
+
+        def delete(self, path):
+            assert path == "/Users/u1/Images/Primary"
+
+        def post(self, path, data, headers):
+            posts.append((path, data, headers))
+
+    class FakeFile:
+        content_type = "text/html"
+
+        async def read(self):
+            return b"raw-upload"
+
+    seen = []
+
+    def fake_validate_image_bytes(content, max_bytes):
+        seen.append((content, max_bytes))
+        return b"sanitized-upload", "image/png"
+
+    monkeypatch.setattr(router, "is_admin_user", lambda _request: True)
+    monkeypatch.setattr(router, "media_api", FakeMediaApi())
+    monkeypatch.setattr(router, "validate_image_bytes", fake_validate_image_bytes)
+    monkeypatch.setattr(router, "get_client_ip", lambda _request: "127.0.0.1")
+    monkeypatch.setattr(router, "add_audit_log", lambda **_kwargs: None)
+
+    result = asyncio.run(router.api_update_user_image(request, user_id="u1", url=None, file=FakeFile()))
+
+    assert result == {"status": "success"}
+    assert seen == [(b"raw-upload", 10 * 1024 * 1024)]
+    assert posts == [
+        (
+            "/Users/u1/Images/Primary",
+            base64.b64encode(b"sanitized-upload"),
+            {"Content-Type": "image/png"},
+        )
+    ]
+
+
+def test_avatar_update_url_uses_validated_mime_not_response_content_type(monkeypatch):
+    from app.domains.users import router
+
+    request = SimpleNamespace(session={"user": {"id": "admin-1", "name": "Admin"}})
+    posts = []
+
+    class FakeMediaApi:
+        def get(self, path, timeout):
+            assert path == "/Users/u1"
+            assert timeout == 5
+            return SimpleNamespace(status_code=404, json=lambda: {})
+
+        def delete(self, path):
+            assert path == "/Users/u1/Images/Primary"
+
+        def post(self, path, data, headers):
+            posts.append((path, data, headers))
+
+    class FakeNetworkClient:
+        def get(self, url, timeout, allow_redirects, stream):
+            assert url == "https://93.184.216.34/avatar"
+            assert timeout == 10
+            assert allow_redirects is False
+            assert stream is True
+            return SimpleNamespace(
+                status_code=200,
+                content=b"downloaded-image",
+                headers={"Content-Type": "application/octet-stream"},
+            )
+
+    monkeypatch.setattr(router, "is_admin_user", lambda _request: True)
+    monkeypatch.setattr(router, "media_api", FakeMediaApi())
+    monkeypatch.setattr(router, "network_client", FakeNetworkClient())
+    monkeypatch.setattr(
+        router,
+        "validate_image_bytes",
+        lambda content, max_bytes: (b"sanitized-download", "image/webp"),
+    )
+    monkeypatch.setattr(router, "get_client_ip", lambda _request: "127.0.0.1")
+    monkeypatch.setattr(router, "add_audit_log", lambda **_kwargs: None)
+
+    result = asyncio.run(router.api_update_user_image(request, user_id="u1", url="https://93.184.216.34/avatar"))
+
+    assert result == {"status": "success"}
+    assert posts == [
+        (
+            "/Users/u1/Images/Primary",
+            base64.b64encode(b"sanitized-download"),
+            {"Content-Type": "image/webp"},
+        )
+    ]
+
+
 def test_self_avatar_denies_missing_req_user_before_file_read():
     from app.domains.users import router
 
@@ -1334,6 +1437,74 @@ def test_self_avatar_denies_missing_req_user_before_file_read():
     result = asyncio.run(router.api_user_self_avatar(request, file=FileMustNotRead()))
 
     assert result == {"status": "error", "message": "请先登录"}
+
+
+def test_self_avatar_uses_validated_bytes_and_mime(monkeypatch):
+    from app.domains.users import router
+
+    request = SimpleNamespace(session={"req_user": {"Id": "u1"}})
+    posts = []
+
+    class FakeMediaApi:
+        def delete(self, path):
+            assert path == "/Users/u1/Images/Primary"
+
+        def post(self, path, data, headers):
+            posts.append((path, data, headers))
+
+    class FakeFile:
+        content_type = "application/x-msdownload"
+
+        async def read(self):
+            return b"raw-self-upload"
+
+    seen = []
+
+    def fake_validate_image_bytes(content, max_bytes):
+        seen.append((content, max_bytes))
+        return b"sanitized-self-upload", "image/jpeg"
+
+    monkeypatch.setattr(router, "media_api", FakeMediaApi())
+    monkeypatch.setattr(router, "validate_image_bytes", fake_validate_image_bytes)
+
+    result = asyncio.run(router.api_user_self_avatar(request, file=FakeFile()))
+
+    assert result == {"status": "success", "message": "头像已更新"}
+    assert seen == [(b"raw-self-upload", 10 * 1024 * 1024)]
+    assert posts == [
+        (
+            "/Users/u1/Images/Primary",
+            base64.b64encode(b"sanitized-self-upload"),
+            {"Content-Type": "image/jpeg"},
+        )
+    ]
+
+
+def test_self_avatar_validation_error_prevents_media_mutation(monkeypatch):
+    from app.domains.users import router
+
+    request = SimpleNamespace(session={"req_user": {"Id": "u1"}})
+
+    class MediaApiMustNotMutate:
+        def delete(self, *_args, **_kwargs):
+            raise AssertionError("media_api.delete should not run after validation failure")
+
+        def post(self, *_args, **_kwargs):
+            raise AssertionError("media_api.post should not run after validation failure")
+
+    class FakeFile:
+        async def read(self):
+            return b"not-an-image"
+
+    def fake_validate_image_bytes(_content, max_bytes):
+        raise ValueError("头像解析失败")
+
+    monkeypatch.setattr(router, "media_api", MediaApiMustNotMutate())
+    monkeypatch.setattr(router, "validate_image_bytes", fake_validate_image_bytes)
+
+    result = asyncio.run(router.api_user_self_avatar(request, file=FakeFile()))
+
+    assert result == {"status": "error", "message": "头像解析失败"}
 
 
 def test_self_password_denies_missing_req_user_before_validation_or_media(monkeypatch):

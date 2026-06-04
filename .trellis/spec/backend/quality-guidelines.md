@@ -76,6 +76,64 @@ $env:PYTHONIOENCODING='utf-8'; uv run python -c "import app.domains.notification
 
 ---
 
+## Scenario: User-Supplied Image Validation
+
+### 1. Scope / Trigger
+
+- Trigger: any backend endpoint that accepts user-provided image bytes, base64 image data, or image bytes downloaded from a user-provided URL.
+- Applies to avatar upload paths and future image upload APIs.
+
+### 2. Signatures
+
+- Raw bytes: `app.utils.image_validator.validate_image_bytes(content: bytes, max_bytes: int) -> tuple[bytes, str]`
+- Data URL: `app.utils.image_validator.validate_base64_image(data_url: str, max_bytes: int) -> str`
+
+### 3. Contracts
+
+- Validate decoded bytes with magic bytes and PIL parsing before any persistence or external-service mutation.
+- Re-encode the parsed image and use the rebuilt bytes, not the original upload bytes.
+- Use the MIME type returned by `validate_image_bytes` or embedded in `validate_base64_image`; do not trust `UploadFile.content_type` or remote response `Content-Type`.
+- Keep route authorization checks before reading uploaded file bodies.
+
+### 4. Validation & Error Matrix
+
+- Payload exceeds the endpoint size limit -> return the existing route size-limit error.
+- Magic bytes fail -> reject as a forged or invalid image.
+- PIL cannot parse/verify -> reject as an invalid image.
+- Parsed format is not PNG, JPEG, WEBP, or GIF -> reject as unsupported.
+
+### 5. Good/Base/Bad Cases
+
+- Good: avatar route calls `validate_image_bytes(raw, max_bytes=...)`, then uploads `base64.b64encode(rebuilt)` with `{"Content-Type": mime}`.
+- Base: local-account base64 avatar storage calls `validate_base64_image(...)` and stores the rebuilt data URL.
+- Bad: route checks only magic bytes, then forwards original bytes with `file.content_type` or downloaded `Content-Type`.
+
+### 6. Tests Required
+
+- Add a validator unit test for new image-validation helpers.
+- Add a route regression test asserting media/storage mutation uses rebuilt bytes and validator-derived MIME.
+- Add a rejection test asserting invalid images fail before persistence or external-service mutation.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+img_data = await file.read()
+c_type = file.content_type or "image/jpeg"
+media.post(path, data=base64.b64encode(img_data), headers={"Content-Type": c_type})
+```
+
+#### Correct
+
+```python
+img_data = await file.read()
+safe_img_data, c_type = validate_image_bytes(img_data, max_bytes=10 * 1024 * 1024)
+media.post(path, data=base64.b64encode(safe_img_data), headers={"Content-Type": c_type})
+```
+
+---
+
 ## Required Patterns
 
 - Use `pyproject.toml` and `uv.lock` as the dependency source of truth.

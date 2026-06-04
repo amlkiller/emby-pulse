@@ -7,7 +7,7 @@ from app.core.security_utils import safe_error_message
 from app.domains.users.auth import is_admin_user
 from app.infra.clients.media_server_client import media_api
 from app.infra.clients.network_client import network_client
-from app.utils.image_validator import check_magic_bytes
+from app.utils.image_validator import validate_image_bytes
 
 
 router = APIRouter()
@@ -20,7 +20,7 @@ def _noop_audit_log(**_kwargs):
 _media_api_provider = lambda: media_api
 _network_client_provider = lambda: network_client
 _is_admin_user_provider = lambda: is_admin_user
-_check_magic_bytes_provider = lambda: check_magic_bytes
+_validate_image_bytes_provider = lambda: validate_image_bytes
 _safe_error_message_provider = lambda: safe_error_message
 _client_ip_provider = lambda: get_client_ip
 _audit_log_provider = lambda: _noop_audit_log
@@ -31,7 +31,7 @@ def set_dependency_providers(
     media_api_provider=None,
     network_client_provider=None,
     is_admin_user_provider=None,
-    check_magic_bytes_provider=None,
+    validate_image_bytes_provider=None,
     safe_error_message_provider=None,
     client_ip_provider=None,
     audit_log_provider=None,
@@ -39,7 +39,7 @@ def set_dependency_providers(
     global _media_api_provider
     global _network_client_provider
     global _is_admin_user_provider
-    global _check_magic_bytes_provider
+    global _validate_image_bytes_provider
     global _safe_error_message_provider
     global _client_ip_provider
     global _audit_log_provider
@@ -50,8 +50,8 @@ def set_dependency_providers(
         _network_client_provider = network_client_provider
     if is_admin_user_provider is not None:
         _is_admin_user_provider = is_admin_user_provider
-    if check_magic_bytes_provider is not None:
-        _check_magic_bytes_provider = check_magic_bytes_provider
+    if validate_image_bytes_provider is not None:
+        _validate_image_bytes_provider = validate_image_bytes_provider
     if safe_error_message_provider is not None:
         _safe_error_message_provider = safe_error_message_provider
     if client_ip_provider is not None:
@@ -110,7 +110,6 @@ async def api_update_user_image(
             pass
 
         img_data = None
-        c_type = "image/png"
         if url:
             from app.utils.url_validator import validate_url
 
@@ -120,17 +119,17 @@ async def api_update_user_image(
             d_res = _network_client_provider().get(url, timeout=10, allow_redirects=False, stream=True)
             if d_res.status_code == 200:
                 img_data = d_res.content
-                c_type = d_res.headers.get("Content-Type", "image/png")
         elif file:
             img_data = await file.read()
-            c_type = file.content_type or "image/jpeg"
         if not img_data:
             return {"status": "error", "message": "无图片数据"}
         if len(img_data) > 10 * 1024 * 1024:
             return {"status": "error", "message": "图片不能超过 10MB"}
-        if not _check_magic_bytes_provider()(img_data):
-            return {"status": "error", "message": "文件头校验失败，请上传有效的图片文件"}
-        b64 = base64.b64encode(img_data)
+        try:
+            safe_img_data, c_type = _validate_image_bytes_provider()(img_data, max_bytes=10 * 1024 * 1024)
+        except ValueError as ve:
+            return {"status": "error", "message": str(ve)}
+        b64 = base64.b64encode(safe_img_data)
         media.delete(f"/Users/{user_id}/Images/Primary")
         media.post(f"/Users/{user_id}/Images/Primary", data=b64, headers={"Content-Type": c_type})
 
@@ -161,10 +160,11 @@ async def api_user_self_avatar(request: Request, file: UploadFile = File(...)):
         img_data = await file.read()
         if len(img_data) > 10 * 1024 * 1024:
             return {"status": "error", "message": "图片不能超过 10MB"}
-        if not _check_magic_bytes_provider()(img_data):
-            return {"status": "error", "message": "文件头校验失败，请上传有效的图片文件"}
-        c_type = file.content_type or "image/jpeg"
-        b64 = base64.b64encode(img_data)
+        try:
+            safe_img_data, c_type = _validate_image_bytes_provider()(img_data, max_bytes=10 * 1024 * 1024)
+        except ValueError as ve:
+            return {"status": "error", "message": str(ve)}
+        b64 = base64.b64encode(safe_img_data)
         media = _media_api_provider()
         media.delete(f"/Users/{user_id}/Images/Primary")
         media.post(f"/Users/{user_id}/Images/Primary", data=b64, headers={"Content-Type": c_type})
