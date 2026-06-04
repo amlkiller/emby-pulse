@@ -340,3 +340,37 @@ Fixed Telegram user bot shop item lookup to read nested points config store_item
 ### Next Steps
 
 - None - task complete
+
+
+## Session 250: Update Python runtime to 3.12
+
+**Date**: 2026-06-05
+**Task**: Update Python runtime to 3.12
+**Branch**: `main`
+
+### Summary
+
+Updated project Python baseline and Docker runtime to 3.12, regenerated uv lock/export files, fixed Starlette template autoescape compatibility, documented the template construction convention, and verified the full test suite.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e0ddd62` | (see git log) |
+| `f16ad3d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

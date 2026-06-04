@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-5.md`
-- **Total Sessions**: 249
-- **Last Active**: 2026-06-04
+- **Total Sessions**: 250
+- **Last Active**: 2026-06-05
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-5.md` | ~342 | Active |
+| `journal-5.md` | ~376 | Active |
 | `journal-4.md` | ~1987 | Archived |
 | `journal-3.md` | ~1987 | Archived |
 | `journal-2.md` | ~1993 | Archived |
@@ -33,6 +33,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 250 | 2026-06-05 | Update Python runtime to 3.12 | `e0ddd62`, `f16ad3d` | `main` |
 | 249 | 2026-06-04 | Fix TG points shop items | `2d21d68`, `fcac0e4`, `888bc03` | `main` |
 | 248 | 2026-06-04 | Fix Telegram userbot polling startup | `5f6e8f8`, `59795be`, `e04f4fd` | `main` |
 | 247 | 2026-06-04 | Fix points game balance lookup | `8addde9` | `main` |
