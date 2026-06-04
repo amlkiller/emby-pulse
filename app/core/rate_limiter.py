@@ -6,8 +6,9 @@ import os
 import time
 from collections import defaultdict
 from threading import Lock
-from fastapi import Request, HTTPException
+from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 
 # 可信代理列表（从环境变量读取，逗号分隔）
 TRUSTED_PROXIES = set(os.getenv("TRUSTED_PROXIES", "127.0.0.1").split(","))
@@ -154,9 +155,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         allowed, retry_after = rate_limiter.is_allowed(client_ip, path)
 
         if not allowed:
-            raise HTTPException(
+            return JSONResponse(
                 status_code=429,
-                detail=f"请求过于频繁，请 {retry_after} 秒后再试",
+                content={"detail": f"请求过于频繁，请 {retry_after} 秒后再试"},
                 headers={"Retry-After": str(retry_after)}
             )
 
