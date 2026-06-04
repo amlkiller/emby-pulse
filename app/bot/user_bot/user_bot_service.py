@@ -95,6 +95,7 @@ from app.infra.config.media_server_settings import (
     get_media_server_main_public_url,
     get_media_server_user_routes,
 )
+from app.infra.config.notification_settings import get_tg_bot_token as get_notify_tg_bot_token
 from app.infra.config.user_visibility_settings import get_hidden_users
 from app.core.security import validate_password_strength  # 🔒 统一密码强度校验
 from app.core.security_utils import safe_error_message  # 🔒 错误脱敏
@@ -651,9 +652,12 @@ class UserBot:
         if not _is_pro():
             logger.info("🤖 [UserBot] 非 Pro 用户，用户机器人未启动")
             return
-        token = get_user_bot_token()
+        token = (get_user_bot_token() or "").strip()
         if not token:
             return
+        notify_token = (get_notify_tg_bot_token() or "").strip()
+        if notify_token and notify_token == token:
+            logger.warning("[UserBot] 用户机器人 Token 与管理员机器人 Token 相同，两个 polling 服务会互相抢更新；请使用单独的 BotFather token")
         if self.running:
             return
         for attr in ("poll_thread", "scheduler_thread"):
@@ -664,6 +668,7 @@ class UserBot:
                 setattr(self, attr, None)
         self._stop_event.clear()
         self.running = True
+        self._clear_webhook()
         self._set_commands()
         self.poll_thread = threading.Thread(
             target=self._polling_loop,
@@ -682,6 +687,13 @@ class UserBot:
         user_bot_registration_quota_service.load_batch_used_from_cfg()
         user_bot_registration_quota_service.start_batch_flush_thread()
         logger.info("🤖 [Pro] 用户 TG 机器人已启动")
+
+    def _clear_webhook(self):
+        result = user_bot_telegram_service.tg_api("deleteWebhook", {"drop_pending_updates": False})
+        if not result or not result.get("ok"):
+            logger.warning("[UserBot] 清理 Telegram webhook 失败，polling 可能无法收到更新；请检查 token、代理或 Telegram API 连通性")
+            return
+        logger.info("[UserBot] Telegram webhook 已清理，使用 polling 接收消息")
 
     def stop(self):
         self.running = False

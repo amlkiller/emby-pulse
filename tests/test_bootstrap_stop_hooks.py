@@ -323,6 +323,7 @@ def test_user_bot_worker_threads_stop_and_restart(monkeypatch):
     monkeypatch.setattr(user_bot_service, "_is_pro", lambda: True)
     monkeypatch.setattr(user_bot_service, "get_user_bot_token", lambda: "token")
     monkeypatch.setattr(user_bot_service.UserBot, "_set_commands", lambda self: None)
+    monkeypatch.setattr(user_bot_service.UserBot, "_clear_webhook", lambda self: None)
     monkeypatch.setattr(user_bot_registration_quota_service, "load_batch_used_from_cfg", lambda: None)
     user_bot_registration_quota_service._batch_flush_thread = None
     user_bot_registration_quota_service._batch_flush_stop.clear()

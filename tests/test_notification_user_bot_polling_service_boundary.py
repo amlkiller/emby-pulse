@@ -8,11 +8,14 @@ if str(_REPO_ROOT) not in sys.path:
 
 
 class FakeResponse:
-    def __init__(self, status_code, result=None):
+    def __init__(self, status_code, result=None, payload=None):
         self.status_code = status_code
         self.result = result or []
+        self.payload = payload
 
     def json(self):
+        if self.payload is not None:
+            return self.payload
         return {"result": self.result}
 
 
@@ -44,12 +47,16 @@ class FakeLogger:
     def __init__(self):
         self.errors = []
         self.debugs = []
+        self.warnings = []
 
     def error(self, message):
         self.errors.append(message)
 
     def debug(self, message):
         self.debugs.append(message)
+
+    def warning(self, message):
+        self.warnings.append(message)
 
 
 def test_polling_loop_preserves_update_submit_offset_and_busy_message_via_legacy_providers(monkeypatch):
@@ -107,6 +114,7 @@ def test_polling_loop_preserves_update_submit_offset_and_busy_message_via_legacy
     assert sent == [("123", "⏳ 当前请求人数过多，请稍后再试...", None)]
     assert logger.errors == []
     assert logger.debugs == []
+    assert logger.warnings == []
 
 
 def test_polling_loop_preserves_retry_waits_for_non_200_and_exceptions(monkeypatch):
@@ -115,7 +123,11 @@ def test_polling_loop_preserves_retry_waits_for_non_200_and_exceptions(monkeypat
 
     logger = FakeLogger()
     stop_event = FakeStopEvent()
-    monkeypatch.setattr(user_bot_service, "telegram_client", FakeTelegramClient(FakeResponse(500)))
+    monkeypatch.setattr(
+        user_bot_service,
+        "telegram_client",
+        FakeTelegramClient(FakeResponse(409, payload={"error_code": 409, "description": "Conflict: webhook active"})),
+    )
     monkeypatch.setattr(user_bot_service, "get_safe_proxies", lambda: {})
     monkeypatch.setattr(user_bot_service, "logger", logger)
 
@@ -131,6 +143,7 @@ def test_polling_loop_preserves_retry_waits_for_non_200_and_exceptions(monkeypat
 
     assert stop_event.waits == [3]
     assert logger.debugs == []
+    assert logger.warnings == ["[UserBot] getUpdates 返回异常: status=409 error_code=409 description=Conflict: webhook active"]
 
     class RaisingTelegramClient:
         def get_updates(self, *args, **kwargs):
@@ -152,4 +165,5 @@ def test_polling_loop_preserves_retry_waits_for_non_200_and_exceptions(monkeypat
     )
 
     assert stop_event.waits == [5]
-    assert logger.debugs == ["[UserBot] polling 异常: network down"]
+    assert logger.debugs == []
+    assert logger.warnings == ["[UserBot] polling 请求异常: network down"]

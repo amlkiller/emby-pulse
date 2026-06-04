@@ -96,6 +96,65 @@ already owns that behavior and the data is known to be non-sensitive.
 
 ---
 
+## Scenario: Telegram Polling Bot Diagnostics
+
+### 1. Scope / Trigger
+
+- Trigger: a Telegram bot service receives updates through Bot API polling (`getUpdates`) instead of Telegram webhooks.
+- Applies to notification/user bot polling loops and startup code that prepares a bot token for polling.
+
+### 2. Signatures
+
+- Startup preparation: `deleteWebhook` through the shared Telegram client/service before starting `getUpdates`.
+- Polling request: `getUpdates(token, params={"offset": <int>, "timeout": 30}, timeout=35, proxies=<safe proxies>)`.
+- Logging calls must use `logging.getLogger("uvicorn")` or the module's injected logger provider.
+
+### 3. Contracts
+
+- Polling-mode bots must clear Telegram webhook state during startup because Telegram rejects `getUpdates` while a webhook is active.
+- Logs may include the Telegram API method name, HTTP status code, `error_code`, and `description`.
+- Logs must not include raw bot tokens, proxy URLs, request URLs containing tokens, or full third-party response bodies.
+- If two local polling services can consume the same bot token, startup code should warn operators because the services can race and consume each other's updates.
+
+### 4. Validation & Error Matrix
+
+- `deleteWebhook` returns missing/false/exception -> warning: polling may not receive updates; mention token/proxy/API connectivity without printing secrets.
+- `getUpdates` returns non-200 -> warning with sanitized status and Telegram error detail; retry remains allowed.
+- Polling request raises a network exception -> warning with the exception summary; retry remains allowed.
+- Same repeated polling failure -> avoid log spam by logging only when the warning signature changes or by otherwise rate-limiting.
+
+### 5. Good/Base/Bad Cases
+
+- Good: `"[UserBot] getUpdates 返回异常: status=409 error_code=409 description=Conflict: webhook active"`
+- Base: `"[UserBot] polling 请求异常: network down"`
+- Bad: silently sleeping after a non-200 `getUpdates` response.
+- Bad: logging `https://api.telegram.org/bot<token>/getUpdates` or raw config containing token/proxy values.
+
+### 6. Tests Required
+
+- Regression tests must cover non-200 `getUpdates` responses and assert a warning is emitted with status/error detail.
+- Regression tests must cover polling exceptions and assert they are warning-level and retry waits still happen.
+- Startup tests that stub command registration should also stub webhook cleanup so they do not perform real Telegram API calls.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+if res.status_code != 200:
+    stop_event.wait(3)
+```
+
+#### Correct
+
+```python
+if res.status_code != 200:
+    logger.warning("[UserBot] getUpdates 返回异常: status=%s", res.status_code)
+    stop_event.wait(3)
+```
+
+---
+
 ## Audit Logging
 
 Security and administrative events should use `app.core.audit_logger.log_audit`

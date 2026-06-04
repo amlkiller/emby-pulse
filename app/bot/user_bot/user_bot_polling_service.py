@@ -13,6 +13,20 @@ _send_provider = lambda: (lambda chat_id, text, reply_markup=None: None)
 _logger_provider = lambda: logger
 
 
+def _telegram_error_detail(response):
+    try:
+        payload = response.json()
+    except Exception:
+        return ""
+    description = payload.get("description") if isinstance(payload, dict) else None
+    error_code = payload.get("error_code") if isinstance(payload, dict) else None
+    if description and error_code:
+        return f" error_code={error_code} description={description}"
+    if description:
+        return f" description={description}"
+    return ""
+
+
 def set_dependency_providers(
     *,
     telegram_client_provider=None,
@@ -48,6 +62,7 @@ def run_polling_loop(
     message_handler_provider,
     callback_handler_provider,
 ):
+    last_warning = None
     while running_provider() and not stop_event.is_set():
         try:
             res = _telegram_client_provider().get_updates(
@@ -72,9 +87,16 @@ def run_polling_loop(
                     except Exception as e:
                         _logger_provider().error(f"[UserBot] 处理消息异常: {e}")
             else:
+                warning = f"[UserBot] getUpdates 返回异常: status={res.status_code}{_telegram_error_detail(res)}"
+                if warning != last_warning:
+                    _logger_provider().warning(warning)
+                    last_warning = warning
                 if stop_event.wait(3):
                     return
         except Exception as e:
-            _logger_provider().debug(f"[UserBot] polling 异常: {e}")
+            warning = f"[UserBot] polling 请求异常: {e}"
+            if warning != last_warning:
+                _logger_provider().warning(warning)
+                last_warning = warning
             if stop_event.wait(5):
                 return
