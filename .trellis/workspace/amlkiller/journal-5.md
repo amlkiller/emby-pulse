@@ -270,3 +270,38 @@ Replaced missing points row lookup in game endpoints with existing balance DAO h
 ### Next Steps
 
 - None - task complete
+
+
+## Session 248: Fix Telegram userbot polling startup
+
+**Date**: 2026-06-04
+**Task**: Fix Telegram userbot polling startup
+**Branch**: `main`
+
+### Summary
+
+Hardened Telegram userbot polling startup by clearing webhook state, warning on shared bot tokens, surfacing sanitized getUpdates failures, updating regression tests and logging spec.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5f6e8f8` | (see git log) |
+| `59795be` | (see git log) |
+| `e04f4fd` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
