@@ -55,8 +55,7 @@ def slot_spin(request: Request):
             return {"status": "error", "message": f"今日次数已用完（{max_per_day}次/天）"}
 
         # 获取用户积分
-        points_row = point_dao.get_user_points_row(user['Id'])
-        current_points = points_row[0] if points_row else 0
+        current_points = point_dao.get_user_points_balance(user['Id'])
 
         # 🔥 修复：当 daily_free = 0 时，永远不免费
         # 当 daily_free > 0 时，前 daily_free 次免费
@@ -262,8 +261,7 @@ def buy_scratch_card(request: Request):
             return {"status": "error", "message": f"今日次数已用完（{max_per_day}次/天）"}
         
         # 获取用户积分
-        points_row = point_dao.get_user_points_row(user['Id'])
-        current_points = points_row[0] if points_row else 0
+        current_points = point_dao.get_user_points_balance(user['Id'])
         
         # 检查积分
         if current_points < cost:
@@ -435,8 +433,7 @@ async def spin_wheel(request: Request):
             return {"status": "error", "message": "今日次数已用完"}
         
         # 获取当前积分
-        points_row = point_dao.get_user_points_row(user['Id'])
-        current_points = points_row[0] if points_row else 0
+        current_points = point_dao.get_user_points_balance(user['Id'])
         
         # 🔥 修复：当 daily_free = 0 时，永远不免费
         is_free = False
@@ -527,8 +524,7 @@ async def start_guess_game(request: Request):
         if used_today >= max_per_day:
             return {"status": "error", "message": f"今日次数已用完（{max_per_day}次/天）"}
         
-        points_row = point_dao.get_user_points_row(user['Id'])
-        current_points = points_row[0] if points_row else 0
+        current_points = point_dao.get_user_points_balance(user['Id'])
 
         # 扣除积分
         if current_points < cost:
