@@ -7,23 +7,27 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 
+def _sample_store_items():
+    return [
+        {"id": "renew30", "name": "续期30天", "cost": 100, "desc": "延长账号", "type": "renew"},
+        {
+            "id": "blind",
+            "name": "续期盲盒",
+            "cost": 80,
+            "desc": "随机延期",
+            "type": "random_renew",
+            "base_days": 30,
+            "random_min": -5,
+            "random_max": 20,
+        },
+    ]
+
+
 class FakePointDao:
     def __init__(self):
         self.points_info = {
             "points": 188,
-            "store_items": [
-                {"id": "renew30", "name": "续期30天", "cost": 100, "desc": "延长账号", "type": "renew"},
-                {
-                    "id": "blind",
-                    "name": "续期盲盒",
-                    "cost": 80,
-                    "desc": "随机延期",
-                    "type": "random_renew",
-                    "base_days": 30,
-                    "random_min": -5,
-                    "random_max": 20,
-                },
-            ],
+            "store_items": _sample_store_items(),
         }
         self.redeem_result = {
             "status": "success",
@@ -120,6 +124,31 @@ def _reset_shop_state(monkeypatch):
 
 def test_cmd_shop_renders_store_items_and_random_renew_details(monkeypatch):
     user_bot_service, _sent, replies, _tg_calls, _unbound, _notifications, point_dao, _media_api, _logger = _reset_shop_state(monkeypatch)
+
+    user_bot_service.cmd_shop(10, "tg1", msg_id=5)
+
+    assert point_dao.points_calls == ["u1"]
+    assert replies == [(
+        10,
+        "🏪 <b>积分商城</b>\n💰 你的余额：<b>188</b> 积分\n\n"
+        "• <b>续期30天</b> — 100 积分\n  延长账号\n\n"
+        "🎲 <b>续期盲盒</b> — 80 积分\n  随机延期\n  ⚡ 基础30天 + 随机-5~20天 (25~50天)",
+        {
+            "inline_keyboard": [
+                [{"text": "🛒 续期30天 (100积分)", "callback_data": "ub_redeem_renew30"}],
+                [{"text": "🛒 续期盲盒 (80积分)", "callback_data": "ub_redeem_blind"}],
+                [{"text": "🔙 主菜单", "callback_data": "ub_back_menu"}],
+            ]
+        },
+        5,
+    )]
+
+
+def test_cmd_shop_renders_config_store_items(monkeypatch):
+    user_bot_service, _sent, replies, _tg_calls, _unbound, _notifications, point_dao, _media_api, _logger = (
+        _reset_shop_state(monkeypatch)
+    )
+    point_dao.points_info = {"points": 188, "config": {"store_items": _sample_store_items()}}
 
     user_bot_service.cmd_shop(10, "tg1", msg_id=5)
 

@@ -102,6 +102,18 @@ def _reply_deleted_binding(chat_id, tg_user_id, *, use_reply=False, msg_id=None)
     _send_provider()(chat_id, text, reply_markup=_main_menu_keyboard_provider()(None))
 
 
+def _get_store_items(points_info):
+    items = points_info.get("store_items")
+    if items is not None:
+        return items
+
+    config = points_info.get("config")
+    if isinstance(config, dict):
+        return config.get("store_items", [])
+
+    return []
+
+
 def cmd_shop(chat_id, tg_user_id, msg_id=None):
     binding = _get_binding_provider()(tg_user_id)
     if not binding:
@@ -115,7 +127,7 @@ def cmd_shop(chat_id, tg_user_id, msg_id=None):
     try:
         points_info = _point_dao_provider().get_user_points_info(binding["emby_user_id"])
         pts = points_info.get("points", 0)
-        items = points_info.get("store_items", [])
+        items = _get_store_items(points_info)
         if not items:
             _reply_provider()(chat_id, "🏪 积分商城暂无商品", reply_markup=_BACK_MENU, msg_id=msg_id)
             return
