@@ -81,8 +81,8 @@ def test_audit_page_allows_admin_through_public_facade(monkeypatch):
         calls.append(("is_admin_user", seen_request))
         return True
 
-    def fake_template_response(template_name, context):
-        calls.append(("TemplateResponse", template_name, context))
+    def fake_template_response(seen_request, template_name, context):
+        calls.append(("TemplateResponse", seen_request, template_name, context))
         return {"template": template_name, "context": context}
 
     monkeypatch.setattr(audit.user_service, "is_admin_user", fake_is_admin_user)
@@ -96,7 +96,7 @@ def test_audit_page_allows_admin_through_public_facade(monkeypatch):
     }
     assert calls == [
         ("is_admin_user", request),
-        ("TemplateResponse", "audit.html", {"request": request, "version": audit.APP_VERSION}),
+        ("TemplateResponse", request, "audit.html", {"request": request, "version": audit.APP_VERSION}),
     ]
 
 

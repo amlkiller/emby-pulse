@@ -1,6 +1,6 @@
 import os
 import json
-from app.shared.template_factory import create_templates
+from fastapi.templating import Jinja2Templates
 
 # ================= 🔥 加载 .env 文件(本地开发) =================
 # Docker 环境不需要,直接使用环境变量
@@ -370,7 +370,7 @@ class ConfigManager:
         return self.get_env_source(key) == "env"
 
 cfg = ConfigManager()
-templates = create_templates("templates")
+templates = Jinja2Templates(directory="templates")
 
 # 🔒 安全：SECRET_KEY 每次启动随机生成（存储在内存中）
 import secrets

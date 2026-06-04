@@ -78,7 +78,7 @@ class TempAccountPlugin(PluginBase):
             from fastapi.templating import Jinja2Templates
             templates = Jinja2Templates(directory="templates")
             
-            return templates.TemplateResponse("temp_account.html", {"request": request})
+            return templates.TemplateResponse(request, "temp_account.html", {"request": request})
 
         @self.router.get("/accounts")
         async def api_get_accounts(request: Request):

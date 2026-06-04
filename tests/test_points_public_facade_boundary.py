@@ -72,8 +72,8 @@ def test_points_page_uses_permission_facade_and_direct_template_context(monkeypa
         calls.append(("get_common_vars", seen_request, active_page, extra_vars))
         return {"active_page": active_page, **extra_vars}
 
-    def fake_template_response(template_name, context):
-        calls.append(("TemplateResponse", template_name, context))
+    def fake_template_response(seen_request, template_name, context):
+        calls.append(("TemplateResponse", seen_request, template_name, context))
         return {"template": template_name, "context": context}
 
     monkeypatch.setattr(points_router.user_service, "check_permission", fake_check_permission)
@@ -100,6 +100,7 @@ def test_points_page_uses_permission_facade_and_direct_template_context(monkeypa
         ),
         (
             "TemplateResponse",
+            request,
             "points.html",
             {
                 "active_page": "points",

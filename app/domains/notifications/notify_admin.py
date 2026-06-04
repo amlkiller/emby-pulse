@@ -13,11 +13,11 @@ from app.infra.config.notification_settings import (
     set_notification_channels_config,
 )
 from app.shared.version import APP_VERSION
-from app.shared.template_factory import create_templates
+from fastapi.templating import Jinja2Templates
 import json
 
 router = APIRouter()
-templates = create_templates("templates")
+templates = Jinja2Templates(directory="templates")
 
 # ==================== 通知规则读取函数 ====================
 def get_notify_rule(notify_type: str) -> dict:
@@ -97,6 +97,7 @@ def notify_admin_page(request: Request):
     is_pro = True
     
     return templates.TemplateResponse(
+        request,
         "notify_admin.html",
         {
             "request": request,

@@ -37,7 +37,7 @@ async def points_page(request: Request):
     if not user_service.check_permission(request, "points"):
         return RedirectResponse("/?no_permission=1", status_code=303)
 
-    return templates.TemplateResponse("points.html", get_common_vars(request, "points", {
+    return templates.TemplateResponse(request, "points.html", get_common_vars(request, "points", {
         "user": request.session.get("user"),
         "is_pro": True
     }))

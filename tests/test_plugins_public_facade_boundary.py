@@ -60,8 +60,8 @@ def test_plugins_page_uses_permission_facade_and_direct_template_context(monkeyp
         calls.append(("get_common_vars", seen_request, active_page))
         return {"active_page": active_page}
 
-    def fake_template_response(template_name, context):
-        calls.append(("TemplateResponse", template_name, context))
+    def fake_template_response(seen_request, template_name, context):
+        calls.append(("TemplateResponse", seen_request, template_name, context))
         return {"template": template_name, "context": context}
 
     monkeypatch.setattr(plugins_router.user_service, "check_permission", fake_check_permission)
@@ -77,7 +77,7 @@ def test_plugins_page_uses_permission_facade_and_direct_template_context(monkeyp
     assert calls == [
         ("check_permission", request, "plugins"),
         ("get_common_vars", request, "plugins"),
-        ("TemplateResponse", "plugins.html", {"active_page": "plugins"}),
+        ("TemplateResponse", request, "plugins.html", {"active_page": "plugins"}),
     ]
 
 

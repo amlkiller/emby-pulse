@@ -60,8 +60,8 @@ def test_calendar_page_uses_permission_facade_and_direct_template_context(monkey
         calls.append(("get_common_vars", seen_request, active_page, extra_vars))
         return {"active_page": active_page, **extra_vars}
 
-    def fake_template_response(template_name, context):
-        calls.append(("TemplateResponse", template_name, context))
+    def fake_template_response(seen_request, template_name, context):
+        calls.append(("TemplateResponse", seen_request, template_name, context))
         return {"template": template_name, "context": context}
 
     monkeypatch.setattr(calendar_router.user_service, "check_permission", fake_check_permission)
@@ -89,6 +89,7 @@ def test_calendar_page_uses_permission_facade_and_direct_template_context(monkey
         ),
         (
             "TemplateResponse",
+            request,
             "calendar.html",
             {
                 "active_page": "calendar",

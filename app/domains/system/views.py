@@ -26,14 +26,13 @@ from app.infra.config.request_portal_settings import (
     get_user_portal_url,
     is_redirect_to_community_enabled,
 )
+from app.core.config import templates
 from app.domains.users import public_service as user_service
-from app.shared.template_factory import create_templates
 from app.shared.view_context import get_common_vars
 import logging
 import random
 
 logger = logging.getLogger("uvicorn")
-templates = create_templates("templates")
 router = APIRouter()
 
 from app.shared.version import APP_VERSION
@@ -376,7 +375,7 @@ async def index(request: Request):
         if first_page and first_page != "/":
             return RedirectResponse(first_page, status_code=303)
         return perm_check
-    return templates.TemplateResponse("index.html", get_common_vars(request, "dashboard"))
+    return templates.TemplateResponse(request, "index.html", get_common_vars(request, "dashboard"))
 
 @router.get("/logout")
 async def logout(request: Request):
@@ -387,7 +386,7 @@ async def logout(request: Request):
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     if check_login(request): return RedirectResponse("/")
-    return templates.TemplateResponse("login.html", {"request": request, "version": APP_VERSION})
+    return templates.TemplateResponse(request, "login.html", {"request": request, "version": APP_VERSION})
 
 @router.get("/invite/{code}", response_class=HTMLResponse)
 async def invite_page(code: str, request: Request):
@@ -408,7 +407,7 @@ async def invite_page(code: str, request: Request):
     
     # 原来的独立注册页面
     client_url = get_client_download_url_or_default()
-    return templates.TemplateResponse("register.html", {"request": request, "code": code, "valid": valid, "days": days, "client_download_url": client_url, "version": APP_VERSION})
+    return templates.TemplateResponse(request, "register.html", {"request": request, "code": code, "valid": valid, "days": days, "client_download_url": client_url, "version": APP_VERSION})
 
 
 # ==================== 注册 API ====================
@@ -594,28 +593,28 @@ async def content_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
     perm_check = check_page_permission(request, "/content")
     if perm_check: return perm_check
-    return templates.TemplateResponse("content.html", get_common_vars(request, "content"))
+    return templates.TemplateResponse(request, "content.html", get_common_vars(request, "content"))
 
 @router.get("/details", response_class=HTMLResponse)
 async def details_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
     perm_check = check_page_permission(request, "/details")
     if perm_check: return perm_check
-    return templates.TemplateResponse("details.html", get_common_vars(request, "details"))
+    return templates.TemplateResponse(request, "details.html", get_common_vars(request, "details"))
 
 @router.get("/report", response_class=HTMLResponse)
 async def report_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
     perm_check = check_page_permission(request, "/report")
     if perm_check: return perm_check
-    return templates.TemplateResponse("report.html", get_common_vars(request, "report"))
+    return templates.TemplateResponse(request, "report.html", get_common_vars(request, "report"))
 
 @router.get("/bot", response_class=HTMLResponse)
 async def bot_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
     perm_check = check_page_permission(request, "/bot")
     if perm_check: return perm_check
-    return templates.TemplateResponse("bot.html", get_common_vars(request, "bot"))
+    return templates.TemplateResponse(request, "bot.html", get_common_vars(request, "bot"))
 
 @router.get("/users_manage", response_class=HTMLResponse)
 @router.get("/users", response_class=HTMLResponse)
@@ -623,14 +622,14 @@ async def users_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
     perm_check = check_page_permission(request, "/users_manage")
     if perm_check: return perm_check
-    return templates.TemplateResponse("users.html", get_common_vars(request, "users"))
+    return templates.TemplateResponse(request, "users.html", get_common_vars(request, "users"))
 
 @router.get("/messages", response_class=HTMLResponse)
 async def messages_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
     perm_check = check_page_permission(request, "/messages")
     if perm_check: return perm_check
-    return templates.TemplateResponse("messages.html", get_common_vars(request, "messages"))
+    return templates.TemplateResponse(request, "messages.html", get_common_vars(request, "messages"))
 
 @router.get("/settings", response_class=HTMLResponse)
 @router.get("/system", response_class=HTMLResponse)
@@ -638,21 +637,21 @@ async def system_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
     perm_check = check_page_permission(request, "/settings")
     if perm_check: return perm_check
-    return templates.TemplateResponse("settings.html", get_common_vars(request, "settings"))
+    return templates.TemplateResponse(request, "settings.html", get_common_vars(request, "settings"))
 
 @router.get("/insight", response_class=HTMLResponse)
 async def insight_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
     perm_check = check_page_permission(request, "/insight")
     if perm_check: return perm_check
-    return templates.TemplateResponse("insight.html", get_common_vars(request, "insight"))
+    return templates.TemplateResponse(request, "insight.html", get_common_vars(request, "insight"))
 
 @router.get("/tasks", response_class=HTMLResponse)
 async def tasks_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
     perm_check = check_page_permission(request, "/tasks")
     if perm_check: return perm_check
-    return templates.TemplateResponse("tasks.html", get_common_vars(request, "tasks"))
+    return templates.TemplateResponse(request, "tasks.html", get_common_vars(request, "tasks"))
 
 @router.get("/history", response_class=HTMLResponse)
 async def history_page(request: Request):
@@ -660,12 +659,12 @@ async def history_page(request: Request):
     if not user: return RedirectResponse(url="/login", status_code=303)
     perm_check = check_page_permission(request, "/history")
     if perm_check: return perm_check
-    return templates.TemplateResponse("history.html", get_common_vars(request, "history", {"user": user}))
+    return templates.TemplateResponse(request, "history.html", get_common_vars(request, "history", {"user": user}))
 
 @router.get("/request", response_class=HTMLResponse)
 async def request_page(request: Request):
     req_user = request.session.get("req_user")
-    response = templates.TemplateResponse("request.html", {"request": request, "req_user": req_user, "version": APP_VERSION})
+    response = templates.TemplateResponse(request, "request.html", {"request": request, "req_user": req_user, "version": APP_VERSION})
     # 🔥 强制禁止缓存（防止 CDN/代理缓存导致用户数据混乱）
     response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0, private'
     response.headers['Pragma'] = 'no-cache'
@@ -676,42 +675,42 @@ async def request_page(request: Request):
 @router.get("/request_login", response_class=HTMLResponse)
 async def request_login_page(request: Request):
     if request.session.get("req_user"): return RedirectResponse("/request")
-    return templates.TemplateResponse("request_login.html", {"request": request, "version": APP_VERSION})
+    return templates.TemplateResponse(request, "request_login.html", {"request": request, "version": APP_VERSION})
 
 @router.get("/requests_admin", response_class=HTMLResponse)
 async def requests_admin_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
     perm_check = check_page_permission(request, "/requests_admin")
     if perm_check: return perm_check
-    return templates.TemplateResponse("requests_admin.html", get_common_vars(request, "requests_admin"))
+    return templates.TemplateResponse(request, "requests_admin.html", get_common_vars(request, "requests_admin"))
 
 @router.get("/clients", response_class=HTMLResponse)
 async def clients_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
     perm_check = check_page_permission(request, "/clients")
     if perm_check: return perm_check
-    return templates.TemplateResponse("clients.html", get_common_vars(request, "clients"))
+    return templates.TemplateResponse(request, "clients.html", get_common_vars(request, "clients"))
 
 @router.get("/about", response_class=HTMLResponse)
 async def about_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
     perm_check = check_page_permission(request, "/about")
     if perm_check: return perm_check
-    return templates.TemplateResponse("about.html", get_common_vars(request, "about"))
+    return templates.TemplateResponse(request, "about.html", get_common_vars(request, "about"))
 
 @router.get("/gaps", response_class=HTMLResponse)
 async def gaps_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
     perm_check = check_page_permission(request, "/gaps")
     if perm_check: return perm_check
-    return templates.TemplateResponse("gaps.html", get_common_vars(request, "gaps"))
+    return templates.TemplateResponse(request, "gaps.html", get_common_vars(request, "gaps"))
 
 @router.get("/risk", response_class=HTMLResponse)
 async def risk_control_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
     perm_check = check_page_permission(request, "/risk")
     if perm_check: return perm_check
-    return templates.TemplateResponse("risk.html", get_common_vars(request, "risk", {"title": "风险管控中心"}))
+    return templates.TemplateResponse(request, "risk.html", get_common_vars(request, "risk", {"title": "风险管控中心"}))
 
 @router.get("/api/wallpaper")
 async def get_wallpaper():
@@ -741,4 +740,4 @@ async def dedupe_page(request: Request):
     if not check_login(request): return RedirectResponse("/login")
     perm_check = check_page_permission(request, "/dedupe")
     if perm_check: return perm_check
-    return templates.TemplateResponse("dedupe.html", get_common_vars(request, "dedupe"))
+    return templates.TemplateResponse(request, "dedupe.html", get_common_vars(request, "dedupe"))

@@ -30,7 +30,7 @@ async def plugins_page(request: Request):
     if not user_service.check_permission(request, "plugins"):
         return RedirectResponse("/?no_permission=1", status_code=303)
     
-    return templates.TemplateResponse("plugins.html", get_common_vars(request, "plugins"))
+    return templates.TemplateResponse(request, "plugins.html", get_common_vars(request, "plugins"))
 
 
 @router.get("/api/plugins")

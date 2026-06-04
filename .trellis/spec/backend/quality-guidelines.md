@@ -84,57 +84,56 @@ $env:PYTHONIOENCODING='utf-8'; uv run python -c "import app.domains.notification
 
 ---
 
-## Scenario: Jinja Template Construction
+## Scenario: Jinja Template Construction And Responses
 
 ### 1. Scope / Trigger
 
-- Trigger: any backend code that creates or changes a FastAPI/Starlette `Jinja2Templates` instance.
+- Trigger: any backend code that creates or changes a FastAPI/Starlette `Jinja2Templates` instance or `TemplateResponse` call.
 - Applies to shared config, system views, notification views, and any future HTML-rendering route or plugin.
 
 ### 2. Signatures
 
-- Use `app.shared.template_factory.create_templates(directory: str = "templates", *, autoescape: bool = True) -> Jinja2Templates`.
-- Direct Starlette signature in the current dependency set is `Jinja2Templates(directory=..., context_processors=..., env=...)`; it does not accept `autoescape=...`.
+- Use `Jinja2Templates(directory="templates")` for normal app template rendering.
+- Current Starlette construction signature is `Jinja2Templates(directory=..., context_processors=..., env=...)`; it does not accept `autoescape=...`.
+- Current Starlette response signature is `TemplateResponse(request, name, context=None, status_code=200, headers=None, media_type=None, background=None)`.
 
 ### 3. Contracts
 
-- Keep autoescaping enabled for app templates unless a task explicitly changes rendering safety.
-- Use the shared factory when an app-owned template instance needs autoescape behavior.
-- The factory owns the Jinja `Environment` and `FileSystemLoader`; callers should not recreate that setup locally.
+- Prefer the direct Starlette constructor unless a task needs a custom Jinja `Environment`.
+- Pass `request` as the first `TemplateResponse` argument. Existing context dicts should still include `"request": request` when templates rely on that value.
+- Do not add compatibility wrappers for old positional signatures when the call sites are practical to migrate.
 
 ### 4. Validation & Error Matrix
 
 - `Jinja2Templates(directory="templates", autoescape=True)` -> invalid on current Starlette; raises `TypeError` during import/test collection.
-- Missing autoescape when replacing old calls -> potential HTML escaping behavior change; use `create_templates("templates")`.
-- Custom template directory needed -> pass the directory to `create_templates(<directory>)`.
+- `templates.TemplateResponse("page.html", {"request": request})` -> invalid on current Starlette; the context dict is treated as the template name and can raise `TypeError: unhashable type: 'dict'`.
+- Custom template directory needed -> pass the directory to `Jinja2Templates(directory=<directory>)`.
 
 ### 5. Good/Base/Bad Cases
 
-- Good: `templates = create_templates("templates")`
-- Base: `templates = Jinja2Templates(directory="templates")` only when the caller intentionally accepts Starlette's default environment behavior.
+- Good: `templates = Jinja2Templates(directory="templates")`
+- Good: `templates.TemplateResponse(request, "page.html", {"request": request})`
 - Bad: `templates = Jinja2Templates(directory="templates", autoescape=True)`
+- Bad: `templates.TemplateResponse("page.html", {"request": request})`
 
 ### 6. Tests Required
 
-- For template construction changes, run `uv run python -m compileall <changed files>`.
-- If imports previously failed, run `uv run pytest tests/ -v` or the affected import-heavy test subset.
+- For template construction or response-call changes, run `uv run python -m compileall <changed files>`.
+- Add or update a focused test for any route that previously failed during rendering.
+- Run `uv run pytest tests/ -v` or the affected import/rendering-heavy test subset.
 
 ### 7. Wrong vs Correct
 
 #### Wrong
 
 ```python
-from fastapi.templating import Jinja2Templates
-
-templates = Jinja2Templates(directory="templates", autoescape=True)
+return templates.TemplateResponse("request.html", {"request": request})
 ```
 
 #### Correct
 
 ```python
-from app.shared.template_factory import create_templates
-
-templates = create_templates("templates")
+return templates.TemplateResponse(request, "request.html", {"request": request})
 ```
 
 ---

@@ -1,3 +1,4 @@
+import asyncio
 import ast
 import sys
 from pathlib import Path
@@ -148,3 +149,37 @@ def test_get_first_allowed_page_keeps_admin_fast_path(monkeypatch):
     monkeypatch.setattr(views.user_service, "get_page_permission_map", fail_get_page_permission_map)
 
     assert views.get_first_allowed_page(request) == "/"
+
+
+def test_request_page_uses_current_template_response_signature(monkeypatch):
+    from app.domains.system import views
+
+    request = SimpleNamespace(session={"req_user": {"name": "request user"}})
+    calls = []
+    response = SimpleNamespace(headers={})
+
+    class FakeTemplates:
+        def TemplateResponse(self, seen_request, name, context):
+            calls.append((seen_request, name, context))
+            return response
+
+    monkeypatch.setattr(views, "templates", FakeTemplates())
+
+    result = asyncio.run(views.request_page(request))
+
+    assert result is response
+    assert calls == [
+        (
+            request,
+            "request.html",
+            {
+                "request": request,
+                "req_user": {"name": "request user"},
+                "version": views.APP_VERSION,
+            },
+        )
+    ]
+    assert response.headers["Cache-Control"] == "no-store, no-cache, must-revalidate, max-age=0, private"
+    assert response.headers["Pragma"] == "no-cache"
+    assert response.headers["Expires"] == "0"
+    assert response.headers["Vary"] == "Cookie, Authorization"

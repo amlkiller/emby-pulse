@@ -3,11 +3,11 @@
 """
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
 from app.core.audit_logger import get_audit_logs, get_audit_stats, AUDIT_ACTIONS
 from app.infra.db.audit_dao import list_user_audit_logs_since
 from app.domains.users import public_service as user_service
 from app.shared.version import APP_VERSION
+from fastapi.templating import Jinja2Templates
 import time
 import os
 
@@ -29,6 +29,7 @@ async def audit_page(request: Request):
         return RedirectResponse("/login")
 
     return templates.TemplateResponse(
+        request,
         "audit.html",
         {"request": request, "version": APP_VERSION}
     )
