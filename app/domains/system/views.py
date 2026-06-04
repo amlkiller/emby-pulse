@@ -4,7 +4,6 @@ import re
 import datetime
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from app.domains.system.invitation_dao import (
     claim_registration_invitation,
@@ -28,12 +27,13 @@ from app.infra.config.request_portal_settings import (
     is_redirect_to_community_enabled,
 )
 from app.domains.users import public_service as user_service
+from app.shared.template_factory import create_templates
 from app.shared.view_context import get_common_vars
 import logging
 import random
 
 logger = logging.getLogger("uvicorn")
-templates = Jinja2Templates(directory="templates", autoescape=True)
+templates = create_templates("templates")
 router = APIRouter()
 
 from app.shared.version import APP_VERSION

@@ -2,7 +2,6 @@
 from fastapi import APIRouter, Request
 from app.domains.users import public_service as user_service
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from app.domains.notifications.notify_admin_dao import (
     ensure_notify_rules_table,
     get_notify_rule_row,
@@ -14,10 +13,11 @@ from app.infra.config.notification_settings import (
     set_notification_channels_config,
 )
 from app.shared.version import APP_VERSION
+from app.shared.template_factory import create_templates
 import json
 
 router = APIRouter()
-templates = Jinja2Templates(directory="templates", autoescape=True)
+templates = create_templates("templates")
 
 # ==================== 通知规则读取函数 ====================
 def get_notify_rule(notify_type: str) -> dict:

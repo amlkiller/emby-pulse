@@ -1,12 +1,12 @@
 # syntax=docker/dockerfile:1.7
 
-FROM python:3.9-slim AS builder
+FROM python:3.12-slim AS builder
 WORKDIR /build
 COPY app/ ./app/
 RUN python -m compileall -b app/
 RUN find app/ -name "*.py" -delete
 
-FROM python:3.9-slim
+FROM python:3.12-slim
 WORKDIR /workspace
 # 修改这里自定义版本号
 ENV APP_VERSION=1.5.0-beta

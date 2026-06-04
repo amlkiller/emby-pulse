@@ -84,6 +84,61 @@ $env:PYTHONIOENCODING='utf-8'; uv run python -c "import app.domains.notification
 
 ---
 
+## Scenario: Jinja Template Construction
+
+### 1. Scope / Trigger
+
+- Trigger: any backend code that creates or changes a FastAPI/Starlette `Jinja2Templates` instance.
+- Applies to shared config, system views, notification views, and any future HTML-rendering route or plugin.
+
+### 2. Signatures
+
+- Use `app.shared.template_factory.create_templates(directory: str = "templates", *, autoescape: bool = True) -> Jinja2Templates`.
+- Direct Starlette signature in the current dependency set is `Jinja2Templates(directory=..., context_processors=..., env=...)`; it does not accept `autoescape=...`.
+
+### 3. Contracts
+
+- Keep autoescaping enabled for app templates unless a task explicitly changes rendering safety.
+- Use the shared factory when an app-owned template instance needs autoescape behavior.
+- The factory owns the Jinja `Environment` and `FileSystemLoader`; callers should not recreate that setup locally.
+
+### 4. Validation & Error Matrix
+
+- `Jinja2Templates(directory="templates", autoescape=True)` -> invalid on current Starlette; raises `TypeError` during import/test collection.
+- Missing autoescape when replacing old calls -> potential HTML escaping behavior change; use `create_templates("templates")`.
+- Custom template directory needed -> pass the directory to `create_templates(<directory>)`.
+
+### 5. Good/Base/Bad Cases
+
+- Good: `templates = create_templates("templates")`
+- Base: `templates = Jinja2Templates(directory="templates")` only when the caller intentionally accepts Starlette's default environment behavior.
+- Bad: `templates = Jinja2Templates(directory="templates", autoescape=True)`
+
+### 6. Tests Required
+
+- For template construction changes, run `uv run python -m compileall <changed files>`.
+- If imports previously failed, run `uv run pytest tests/ -v` or the affected import-heavy test subset.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```python
+from fastapi.templating import Jinja2Templates
+
+templates = Jinja2Templates(directory="templates", autoescape=True)
+```
+
+#### Correct
+
+```python
+from app.shared.template_factory import create_templates
+
+templates = create_templates("templates")
+```
+
+---
+
 ## Testing Requirements
 
 - Focused refactors need at least compile checks for changed Python files.
