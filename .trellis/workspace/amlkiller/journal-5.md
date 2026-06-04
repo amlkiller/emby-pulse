@@ -237,3 +237,36 @@ Moved notification bot service modules, bot_service, and bot_service_dao into ap
 ### Next Steps
 
 - None - task complete
+
+
+## Session 247: Fix points game balance lookup
+
+**Date**: 2026-06-04
+**Task**: Fix points game balance lookup
+**Branch**: `main`
+
+### Summary
+
+Replaced missing points row lookup in game endpoints with existing balance DAO helper and verified targeted tests.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8addde9` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

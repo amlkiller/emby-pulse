@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-5.md`
-- **Total Sessions**: 246
+- **Total Sessions**: 247
 - **Last Active**: 2026-06-04
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-5.md` | ~239 | Active |
+| `journal-5.md` | ~272 | Active |
 | `journal-4.md` | ~1987 | Archived |
 | `journal-3.md` | ~1987 | Archived |
 | `journal-2.md` | ~1993 | Archived |
@@ -33,6 +33,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 247 | 2026-06-04 | Fix points game balance lookup | `8addde9` | `main` |
 | 246 | 2026-06-04 | Move notification bot package | `ab35b08`, `6d3d0a5` | `main` |
 | 245 | 2026-06-04 | Refactor users library route | `e80d071` | `main` |
 | 244 | 2026-06-04 | Refactor users update route | `bff6fc5` | `main` |
