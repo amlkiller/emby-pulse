@@ -305,3 +305,38 @@ Hardened Telegram userbot polling startup by clearing webhook state, warning on 
 ### Next Steps
 
 - None - task complete
+
+
+## Session 249: Fix TG points shop items
+
+**Date**: 2026-06-04
+**Task**: Fix TG points shop items
+**Branch**: `main`
+
+### Summary
+
+Fixed Telegram user bot shop item lookup to read nested points config store_items while preserving top-level compatibility; added regression coverage and verified compile, focused tests, full pytest, and diff whitespace.
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2d21d68` | (see git log) |
+| `fcac0e4` | (see git log) |
+| `888bc03` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
